@@ -138,7 +138,7 @@ def _security_gate():
     if app.config.get("TESTING"):
         app.config["WTF_CSRF_ENABLED"] = False
         return
-    exempt = {"/login", "/logout", "/setup", "/setup/hash", "/setup/check", "/favicon.ico"}
+    exempt = {"/login", "/logout", "/setup", "/setup/hash", "/setup/check", "/favicon.ico", "/health"}
     if request.path in exempt or request.path.startswith("/static/"):
         return
     # Parola yapılandırılmamışsa sihirbaza yönlendir
@@ -599,6 +599,27 @@ def _build_daily_report(config: dict | None) -> dict[str, Any]:
 # ══════════════════════════════════════════════════════════════════════════════
 # Kimlik doğrulama rotaları
 # ══════════════════════════════════════════════════════════════════════════════
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Sağlık kontrolü (kimlik doğrulamasız — izleme araçları için)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_APP_START_TIME = time.time()
+
+
+@app.get("/health")
+def health():
+    """Basit sağlık kontrol uç noktası.
+
+    Yanıt: HTTP 200 + JSON  {"status": "ok", "uptime_s": <float>, "pid": <int>}
+    Kimlik doğrulama gerektirmez; izleme araçları ve yük dengeleyiciler için.
+    """
+    return {
+        "status": "ok",
+        "uptime_s": round(time.time() - _APP_START_TIME, 1),
+        "pid": os.getpid(),
+    }, 200
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # İlk kurulum sihirbazı
