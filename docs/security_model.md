@@ -22,11 +22,19 @@ değerler asla loglanmaz/gösterilmez.
 
 ## Borsa güvenliği
 - Tüm borsa secret'ları sunucu tarafındadır; frontend'e hiçbir secret geçmez.
-- Salt-okunur geçit (`exchange_gateway.py`): yalnızca GET, allowlist ağ
-  isteğinden önce; emir/transfer/çekim/kaldıraç kod yolu yok.
-- API anahtarları yalnızca maskeli (ilk4…son4) görüntülenir.
-- Rota haritasında order/transfer/withdraw/leverage içeren hiçbir yol
-  bulunmadığı test ile doğrulanır.
+- Salt-okunur geçitler (`exchange_gateway.py`, `dashboard_api.py`): yalnızca
+  GET, allowlist ağ isteğinden önce zorunlu; emir/transfer/çekim/kaldıraç
+  kod yolu yok. Sınırlı yeniden deneme yalnızca güvenli GET'lerde; oran
+  sınırı (429/418) hatasında tekrar deneme yapılmaz.
+- API anahtarları yalnızca maskeli (ilk4…son4) görüntülenir; ham borsa
+  yanıtları, imzalar ve başlıklar asla dışarı verilmez veya loglanmaz.
+- Yazma sayaçları (`order/transfer/withdrawal/other`) sistem durumunda
+  raporlanır ve testle 0 olduğu doğrulanır.
+- Rota haritası testi: order/transfer/withdraw/leverage kelimesini içeren
+  rotalar YALNIZCA açık izinli salt-okunur GET rotası olabilir (tek istisna:
+  `GET /api/v1/global/orders`); POST/PUT/DELETE yasaktır.
+- `POST /api/v1/refresh` CSRF korumalıdır ve yalnızca uygulama-yerel okuma
+  önbelleklerini temizler; denetim kaydı üretir.
 
 ## Denetim (audit)
 `security.log` şu olayları maskelenmiş meta verilerle kaydeder: giriş

@@ -237,12 +237,19 @@ class TestSecurity:
         blob = json.dumps(d)
         assert "/home/" not in blob and "balance" not in blob.lower()
 
+    # Mission 1400.2: açıkça salt-okunur (yalnızca GET) izinli rotalar.
+    READ_ONLY_ALLOWED = {"/api/v1/global/orders"}
+
     def test_no_binance_write_route_exists(self):
         for rule in flask_app.app.url_map.iter_rules():
             path = str(rule).lower()
-            assert not any(w in path for w in
-                           ("order", "transfer", "withdraw", "leverage")), \
-                f"yasak rota: {rule}"
+            if not any(w in path for w in
+                       ("order", "transfer", "withdraw", "leverage")):
+                continue
+            # Hassas kelime içeren rota YALNIZCA açık izinli + GET-only olabilir
+            assert path in self.READ_ONLY_ALLOWED, f"yasak rota: {rule}"
+            methods = (rule.methods or set()) - {"HEAD", "OPTIONS"}
+            assert methods == {"GET"}, f"yazma metodu yasak: {rule} {methods}"
 
     def test_csp_hardened_directives(self, client):
         r = client.get("/api/v1/health")

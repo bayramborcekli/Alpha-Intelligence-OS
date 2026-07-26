@@ -8,6 +8,8 @@ açık talimatla etkinleştirilebilir.
 - `app.py` — Flask web uygulaması (kabuk, kimlik doğrulama, v1 API'ler)
 - `alpha20_v1/` — işlem motoru, yapılandırma, görev kanıtları (değiştirilmez)
 - `exchange_gateway.py` — salt-okunur borsa geçidi (yalnızca GET + allowlist)
+- `dashboard_api.py` — canlı pano servis katmanı (tipli modeller, önbellek,
+  tazelik politikası, yazma sayaçları — Mission 1400.2)
 - `tools/` — görev (mission) betikleri
 - `tests/` — test paketi (`python -m pytest tests/ -q`)
 

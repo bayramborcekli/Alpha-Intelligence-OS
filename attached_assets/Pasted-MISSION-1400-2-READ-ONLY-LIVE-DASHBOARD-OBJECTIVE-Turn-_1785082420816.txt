@@ -1,0 +1,845 @@
+MISSION 1400.2 — READ-ONLY LIVE DASHBOARD
+
+OBJECTIVE
+
+Turn the existing authenticated Alpha Intelligence OS shell into a secure,
+read-only live dashboard for Binance Global, Binance Global Futures and
+Binance TR.
+
+This sprint must display live account and connection data after owner login.
+
+It must not create, submit, modify or cancel orders.
+It must not transfer or withdraw funds.
+It must not change leverage, margin mode or position mode.
+
+BASELINE
+
+Mission 1400.1 is complete and closed.
+
+Preserve:
+
+- single-owner authentication
+- secure sessions
+- CSRF protection
+- rate limiting
+- request IDs
+- Turkish UI
+- current application shell
+- existing feature flags
+- existing Binance clients
+- existing deterministic ledger
+- existing mission reports
+- all 413 passing tests
+- current Git history
+
+Current application status:
+
+- setup_state = READY
+- owner login works
+- PAPER mode active
+- live trading disabled
+- transfers disabled
+- withdrawals disabled
+- Binance write routes = 0
+
+Do not redesign or replace the authentication architecture.
+
+PRIMARY GOAL
+
+After login, the owner must see a useful live “Genel Bakış” page showing:
+
+- Binance Global read-only connection
+- Binance Global Futures account status
+- Binance Global trading-key authentication status
+- Binance TR connection
+- important balances
+- open position count
+- open order count
+- data freshness
+- request latency
+- warnings
+- last successful refresh
+
+READ-ONLY GUARANTEE
+
+All exchange access in this sprint must use explicitly allowlisted GET requests.
+
+Forbidden:
+
+- POST exchange requests
+- PUT exchange requests
+- PATCH exchange requests
+- DELETE exchange requests
+- order creation
+- order cancellation
+- transfer
+- withdrawal
+- leverage changes
+- margin mode changes
+- position mode changes
+- asset conversion
+- futures wallet transfer
+- automatic trading
+
+Track and report:
+
+- ORDER ENDPOINT REQUESTS
+- TRANSFER ENDPOINT REQUESTS
+- WITHDRAWAL ENDPOINT REQUESTS
+- OTHER EXCHANGE WRITE REQUESTS
+
+All must remain zero.
+
+EXISTING /panel ROUTE
+
+Inspect the existing read-only /panel implementation before changing anything.
+
+There must be only one primary dashboard experience.
+
+Choose one safe approach:
+
+A. Integrate useful /panel functionality into the authenticated application shell,
+then redirect /panel to /overview.
+
+or
+
+B. Reuse /panel as the implementation behind the new Genel Bakış page while
+preserving the current shell.
+
+Do not leave two independent dashboards with different data or security rules.
+
+Do not remove a working route without a compatibility redirect.
+
+BACKEND ROUTES
+
+Implement authenticated, versioned, typed routes:
+
+- GET /api/v1/overview
+- GET /api/v1/global/account
+- GET /api/v1/global/positions
+- GET /api/v1/global/orders
+- GET /api/v1/tr/account
+- GET /api/v1/tr/movements/summary
+- GET /api/v1/system/status
+- POST /api/v1/refresh
+
+The refresh route is an application-local authenticated action only.
+
+It may:
+
+- invalidate safe read caches
+- initiate fresh server-side GET requests
+- record an audit event
+
+It must not call any exchange write endpoint.
+
+Keep existing:
+
+- GET /api/v1/health
+- GET /api/v1/application/config
+- authentication routes
+
+All new routes require a valid owner session.
+
+CSRF-protect POST /api/v1/refresh.
+
+Do not expose raw exchange payloads directly.
+
+TYPED RESPONSE CONTRACT
+
+Create stable response models.
+
+Suggested common metadata:
+
+{
+  "source": "BINANCE_GLOBAL",
+  "retrieved_at": "ISO-8601 UTC",
+  "age_seconds": "decimal/integer",
+  "freshness": "FRESH | STALE | UNAVAILABLE",
+  "latency_ms": "integer",
+  "request_id": "string"
+}
+
+Use Decimal-compatible serialization for financial values.
+
+Do not calculate balances with binary float.
+
+OVERVIEW RESPONSE
+
+GET /api/v1/overview must aggregate sanitized data:
+
+Application:
+
+- mode
+- setup state
+- live trading enabled
+- dry-run enabled
+- transfers enabled
+- withdrawals enabled
+- server timestamp
+
+Binance Global read-only:
+
+- authentication status
+- account status where available
+- asset count
+- last success
+- latency
+- freshness
+
+Binance Global Futures:
+
+- authentication status
+- trading-key authentication status
+- exchange canTrade value
+- application live execution status
+- USDT wallet balance
+- USDT available balance
+- margin balance where available
+- unrealized PnL
+- open position count
+- open order count
+- position mode
+- last success
+- latency
+- freshness
+
+Binance TR:
+
+- authentication status
+- account status
+- TRY free balance
+- USDT free balance
+- asset count
+- deposit record count
+- withdrawal record count
+- internal transfer count if already derived
+- reconciliation status
+- last success
+- latency
+- freshness
+
+System:
+
+- backend health
+- ledger integrity status
+- warnings
+- order endpoint request count
+- other exchange write request count
+- last successful full refresh
+
+Do not create a misleading combined portfolio total.
+
+BINANCE GLOBAL ACCOUNT ROUTE
+
+GET /api/v1/global/account
+
+Return sanitized read-only data:
+
+- read-only key authentication status
+- trading-key authentication status
+- account canTrade value
+- application live-execution flag
+- position mode
+- Futures USDT wallet balance
+- available balance
+- margin balance
+- unrealized PnL
+- asset count
+- open position count
+- open order count
+- masked API key identifiers only
+- freshness metadata
+
+Never return:
+
+- full API keys
+- secrets
+- signatures
+- request headers
+- listen keys
+- raw exchange payloads
+
+POSITIONS ROUTE
+
+GET /api/v1/global/positions
+
+Return read-only active positions and optionally zero positions only when
+explicitly requested through a safe query parameter.
+
+Fields:
+
+- symbol
+- position amount
+- interpreted direction:
+  - LONG
+  - SHORT
+  - FLAT
+- entry price
+- mark price
+- unrealized PnL
+- leverage
+- liquidation price if available
+- margin type
+- isolated wallet if available
+- update time
+- freshness metadata
+
+ONE-WAY MODE REQUIREMENTS
+
+- Correctly interpret positive amount as LONG.
+- Correctly interpret negative amount as SHORT.
+- Correctly interpret zero amount as FLAT.
+- Do not manufacture simultaneous LONG and SHORT rows.
+- Display the actual position mode in the UI.
+
+ORDERS ROUTE
+
+GET /api/v1/global/orders
+
+Return current open orders only in this sprint unless a stable existing
+read-only recent-order client already exists.
+
+Fields:
+
+- symbol
+- side
+- type
+- status
+- original quantity
+- executed quantity
+- price
+- stop price where available
+- reduce-only
+- time
+- update time
+- freshness metadata
+
+No cancel or edit controls.
+
+BINANCE TR ACCOUNT ROUTE
+
+GET /api/v1/tr/account
+
+Return:
+
+- authentication status
+- account status
+- TRY free balance
+- TRY locked balance if available
+- USDT free balance
+- USDT locked balance if available
+- asset count
+- non-zero asset count
+- retrieved time
+- latency
+- freshness
+
+BINANCE TR MOVEMENT SUMMARY
+
+GET /api/v1/tr/movements/summary
+
+Reuse Mission 1310A and 1310B logic where practical.
+
+Return:
+
+- deposit count
+- withdrawal count
+- internal transfer count
+- earliest known movement
+- latest known movement
+- reconciliation result
+- unexplained balance differences
+- historical coverage warning
+- ledger event count
+- duplicate-block count
+
+Do not re-ingest or mutate the ledger merely because the dashboard was opened.
+
+If fresh movement ingestion is required, keep it separate and explicitly
+read-only/idempotent.
+
+SYSTEM STATUS ROUTE
+
+GET /api/v1/system/status
+
+Return:
+
+- application status
+- backend uptime
+- version
+- current mode
+- setup state
+- Binance Global status
+- Binance Futures status
+- Binance TR status
+- ledger integrity status
+- last successful refresh
+- recent sanitized error count
+- order endpoint request count
+- transfer endpoint request count
+- withdrawal endpoint request count
+- other exchange write request count
+- secret exposure count from latest security scan evidence, if available
+
+Do not expose stack traces, local paths or sensitive log contents.
+
+DATA FRESHNESS
+
+Every exchange-derived component must display:
+
+- source
+- retrieval timestamp
+- age
+- status:
+  - GÜNCEL
+  - ESKİ VERİ
+  - KULLANILAMIYOR
+
+Suggested thresholds:
+
+Market or mark price:
+- fresh: 0–10 seconds
+- stale: over 10 seconds
+
+Account, balances, positions and orders:
+- fresh: 0–60 seconds
+- stale: over 60 seconds
+
+Binance TR movement history:
+- fresh: 0–15 minutes
+- stale: over 15 minutes
+
+Use a centralized freshness policy.
+
+Never label unavailable or stale data as live.
+
+CACHING
+
+Implement small, server-side read caches to reduce exchange rate-limit risk.
+
+Requirements:
+
+- cache only sanitized read models or safe raw data held server-side
+- never cache secrets
+- separate cache keys per source
+- visible retrieved timestamps
+- manual refresh invalidates only relevant safe caches
+- safe GET retry only
+- bounded retry count
+- exponential or controlled backoff
+- no retries for future write operations
+- fail safely when rate-limited
+
+Suggested cache TTL:
+
+- overview/account: 15 seconds
+- positions/orders: 10 seconds
+- Binance TR account: 30 seconds
+- movement summary: 5 minutes
+
+Do not hide cached-data age.
+
+ERROR HANDLING
+
+Normalize safe errors:
+
+- EXCHANGE_AUTH_FAILED
+- EXCHANGE_UNAVAILABLE
+- EXCHANGE_RATE_LIMITED
+- EXCHANGE_TIMEOUT
+- INVALID_EXCHANGE_RESPONSE
+- STALE_DATA
+- APPLICATION_LOCKED
+- UNAUTHORIZED
+- CSRF_FAILED
+
+UI messages must be Turkish and user-friendly.
+
+Do not show raw exchange messages unless safely mapped.
+
+FRONTEND — GENEL BAKIŞ PAGE
+
+Replace the current static “Genel Bakış” placeholder with a real dashboard.
+
+Top status strip:
+
+- Uygulama modu: PAPER
+- Canlı emir: DEVRE DIŞI
+- Son yenileme
+- “Tümünü Yenile” button
+- global warning banner when any source is unavailable
+
+Primary cards:
+
+1. Binance Global
+   - Bağlantı
+   - Read-only doğrulama
+   - Son başarılı istek
+   - Gecikme
+   - Veri durumu
+
+2. Binance Futures
+   - Trading API doğrulama
+   - Exchange canTrade
+   - Uygulama canlı emir durumu
+   - USDT cüzdan bakiyesi
+   - Kullanılabilir bakiye
+   - Gerçekleşmemiş PnL
+   - Açık pozisyon sayısı
+   - Açık emir sayısı
+
+3. Binance TR
+   - Bağlantı
+   - Hesap durumu
+   - TRY bakiyesi
+   - USDT bakiyesi
+   - Varlık sayısı
+   - Yatırma sayısı
+   - Çekim sayısı
+   - Mutabakat sonucu
+
+4. Sistem Sağlığı
+   - Backend
+   - Ledger bütünlüğü
+   - Son tam yenileme
+   - Write request counters
+   - Son güvenli hata durumu
+
+Visual states:
+
+- green indicator: Bağlı / Güncel
+- amber indicator: Eski Veri / Kısmi Mutabakat
+- red indicator: Bağlantı Yok / Kullanılamıyor
+- neutral indicator: Devre Dışı
+
+Do not rely on color alone; include text and accessible labels.
+
+BALANCE DISPLAY
+
+Use Turkish locale formatting.
+
+Examples:
+
+- ₺1,39
+- 20,9685 USDT
+- 0,001 BTC
+- 64.442,20 USDT
+
+Keep exact source precision available through title text, tooltip or detail row.
+
+Do not round values before backend calculations.
+
+LOADING AND EMPTY STATES
+
+Implement:
+
+- initial skeleton or spinner
+- per-card loading state
+- no-position empty state
+- no-open-order empty state
+- exchange unavailable state
+- stale-data warning
+- partial reconciliation warning
+- last known cached data display with explicit age
+
+Do not blank the whole dashboard when one source fails.
+
+MANUAL REFRESH
+
+“Tümünü Yenile” must:
+
+- call POST /api/v1/refresh
+- require CSRF
+- disable while active
+- prevent repeated clicking
+- show completion status
+- update retrieved timestamps
+- preserve last known data when a source fails
+- record a sanitized audit event
+
+Optional card-specific refresh is allowed if it remains simple.
+
+AUTO REFRESH
+
+For this sprint:
+
+- default off, or
+- maximum once every 30 seconds
+
+Do not create aggressive polling.
+
+Pause auto-refresh when the browser tab is hidden where practical.
+
+ACCESSIBILITY
+
+- semantic headings
+- keyboard-accessible refresh control
+- status text in addition to icons
+- aria-live for refresh/error status
+- visible focus states
+- sufficient contrast
+- responsive tables/cards
+- no horizontal overflow on mobile
+
+MOBILE EXPERIENCE
+
+At widths below the existing mobile breakpoint:
+
+- cards stack vertically
+- key values remain readable
+- navigation remains collapsible
+- refresh control remains touch-friendly
+- no dense desktop-only tables on overview
+- warning banners wrap correctly
+
+AUDIT
+
+Record sanitized audit events for:
+
+- overview opened
+- manual refresh requested
+- refresh completed
+- source refresh failed
+- exchange authentication failure
+- stale-data display
+- rate-limit response
+
+Do not audit every passive UI repaint.
+
+SECURITY
+
+Verify:
+
+- no secret values in API responses
+- no secret values in HTML
+- no secret values in frontend JavaScript
+- full API keys never shown
+- API key masks reveal at most a safe prefix/suffix
+- exchange errors are sanitized
+- authentication required for all new routes
+- refresh requires CSRF
+- no CORS expansion unless proven necessary
+- no Binance write client is instantiated
+- no write endpoints exist
+
+TESTING
+
+Run the existing full suite first.
+
+Add tests for:
+
+BACKEND
+
+- overview requires authentication
+- global account requires authentication
+- positions requires authentication
+- orders requires authentication
+- Binance TR account requires authentication
+- movement summary requires authentication
+- system status requires authentication
+- refresh requires authentication
+- refresh requires CSRF
+- typed response validation
+- Decimal serialization
+- safe error schema
+- request IDs
+- cache TTL
+- manual cache invalidation
+- stale-data classification
+- partial-source failure
+- non-JSON exchange response
+- timeout
+- rate limit
+- safe GET retry
+- no retry beyond configured bound
+
+BINANCE GLOBAL MOCKS
+
+- successful read-only auth
+- successful trading-key auth
+- canTrade true but application live execution false
+- USDT balance mapping
+- no open positions
+- LONG position mapping
+- SHORT position mapping
+- ONE-WAY mode mapping
+- open orders mapping
+- unavailable exchange
+
+BINANCE TR MOCKS
+
+- TRY and USDT balance mapping
+- missing TRY or USDT returns zero safely
+- account status mapping
+- movement summary mapping
+- PARTIAL reconciliation warning
+- unavailable exchange
+
+WRITE-SAFETY
+
+- order endpoint request count remains zero
+- transfer endpoint request count remains zero
+- withdrawal endpoint request count remains zero
+- other exchange write request count remains zero
+- route map contains no exchange write routes
+- HTTP method allowlist rejects non-GET exchange client calls
+
+FRONTEND
+
+- overview renders after login
+- loading state
+- success state
+- stale state
+- unavailable state
+- partial reconciliation warning
+- manual refresh
+- refresh button disabled while active
+- mobile card layout
+- Turkish labels
+- no raw API keys
+- no secret variables in rendered page
+- canTrade does not display as live execution enabled
+- one failed source does not hide other cards
+
+REGRESSION
+
+- all Mission 1400.1 authentication tests remain passing
+- setup remains closed
+- logout remains working
+- session security remains unchanged
+- /panel cannot bypass authentication
+
+DOCUMENTATION
+
+Update:
+
+- README.md
+- docs/live_application.md
+- docs/security_model.md
+- docs/operator_guide_tr.md
+
+Document:
+
+- dashboard sections
+- data sources
+- freshness meanings
+- manual refresh
+- cached-data behavior
+- difference between exchange canTrade and application live execution
+- PARTIAL Binance TR reconciliation
+- expected behavior during API outages
+
+Do not include secret values.
+
+DEPLOYMENT
+
+This sprint may run in Replit Preview.
+
+Do not publish publicly unless explicitly authorized by the owner.
+
+Ensure:
+
+- current production start command still works
+- health endpoint remains healthy
+- dashboard loads through the existing authenticated shell
+- no new startup regressions
+- no development-only API origin is hardcoded
+
+CODE REVIEW
+
+Review specifically for:
+
+- duplicate dashboard architecture
+- accidental raw payload exposure
+- float usage in financial calculations
+- stale data presented as current
+- `canTrade=true` incorrectly treated as live enabled
+- unsafe exchange retry behavior
+- missing authentication
+- missing CSRF on refresh
+- hidden write path
+- frontend secret leakage
+- mobile overflow
+
+MISSION SUCCESS CRITERIA
+
+Mission 1400.2 may declare PASS only if:
+
+1. Genel Bakış displays live Binance Global data.
+2. Binance Futures data is displayed safely.
+3. Binance TR data is displayed safely.
+4. Data freshness appears on every source.
+5. Manual refresh works.
+6. One source failure does not break the entire dashboard.
+7. Existing /panel is safely unified or redirected.
+8. All new API routes require authentication.
+9. Refresh requires CSRF.
+10. No raw exchange payload is exposed.
+11. No API secret is exposed.
+12. Order requests remain zero.
+13. Transfer requests remain zero.
+14. Withdrawal requests remain zero.
+15. Other exchange write requests remain zero.
+16. Existing tests remain passing.
+17. New backend and frontend tests pass.
+18. Mobile dashboard works.
+19. Code review passes.
+20. Changes are committed and pushed to GitHub.
+21. Application is not publicly published without owner authorization.
+
+EXPECTED FINAL REPORT
+
+MISSION 1400.2: PASS / FAIL
+BASELINE COMMIT:
+NEW COMMIT:
+GITHUB PUSH:
+APPLICATION START:
+APPLICATION PUBLISHED:
+OWNER LOGIN:
+OVERVIEW PAGE:
+PANEL UNIFICATION:
+BINANCE GLOBAL READ-ONLY:
+BINANCE GLOBAL TRADING AUTH:
+BINANCE FUTURES ACCOUNT:
+BINANCE TR:
+POSITIONS READ:
+ORDERS READ:
+MOVEMENT SUMMARY:
+MANUAL REFRESH:
+CSRF ON REFRESH:
+CACHE:
+DATA FRESHNESS:
+PARTIAL SOURCE FAILURE:
+MOBILE DASHBOARD:
+ACCESSIBILITY:
+ORDER ENDPOINT REQUESTS:
+TRANSFER ENDPOINT REQUESTS:
+WITHDRAWAL ENDPOINT REQUESTS:
+OTHER EXCHANGE WRITE REQUESTS:
+RAW PAYLOAD EXPOSED:
+SECRETS EXPOSED:
+BASELINE TESTS:
+NEW BACKEND TESTS:
+NEW FRONTEND TESTS:
+TOTAL TESTS:
+SECURITY SCAN:
+CODE REVIEW:
+RUN_ID:
+KNOWN LIMITATIONS:
+NEXT ACTION:
+
+FINAL RESTRICTIONS
+
+- Do not submit orders.
+- Do not create order submission routes.
+- Do not cancel orders.
+- Do not transfer funds.
+- Do not withdraw funds.
+- Do not change leverage.
+- Do not change margin mode.
+- Do not change position mode.
+- Do not enable live trading.
+- Do not expose secrets.
+- Do not publish without explicit owner authorization.
+- Do not declare PASS without tests, security scan, code review, commit and push.

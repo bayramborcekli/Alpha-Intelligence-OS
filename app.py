@@ -1399,6 +1399,103 @@ def api_v1_application_config():
     return resp
 
 
+# ── Mission 1400.2 — Salt-okunur canlı pano API'leri ────────────────────────
+# Tüm rotalar güvenlik kapısından geçer (sahip oturumu zorunlu).
+
+def _dashboard_app_info() -> dict:
+    from version import get_version
+    import alpha_platform as ap
+    flags = ap.feature_flags()
+    return {
+        "version": get_version(),
+        "mode": ap.app_mode(),
+        "setup_state": ap.setup_state(),
+        "dry_run_enabled": flags.get("ALPHA_ENABLE_DRY_RUN", False),
+    }
+
+
+def _dash_json(payload: dict, status: int = 200):
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = "no-store, private"
+    return resp, status
+
+
+@app.get("/api/v1/overview")
+def api_v1_overview():
+    import dashboard_api as dapi
+    return _dash_json(dapi.overview(_dashboard_app_info()))
+
+
+@app.get("/api/v1/global/account")
+def api_v1_global_account():
+    import dashboard_api as dapi
+    return _dash_json(dapi.global_account())
+
+
+@app.get("/api/v1/global/positions")
+def api_v1_global_positions():
+    import dashboard_api as dapi
+    include_zero = request.args.get("include_zero", "false").lower() == "true"
+    return _dash_json(dapi.global_positions(include_zero=include_zero))
+
+
+@app.get("/api/v1/global/orders")
+def api_v1_global_orders():
+    import dashboard_api as dapi
+    return _dash_json(dapi.global_orders())
+
+
+@app.get("/api/v1/tr/account")
+def api_v1_tr_account():
+    import dashboard_api as dapi
+    return _dash_json(dapi.tr_account())
+
+
+@app.get("/api/v1/tr/movements/summary")
+def api_v1_tr_movements_summary():
+    import dashboard_api as dapi
+    return _dash_json(dapi.tr_movements_summary())
+
+
+@app.get("/api/v1/system/status")
+def api_v1_system_status():
+    import dashboard_api as dapi
+    return _dash_json(dapi.system_status(_dashboard_app_info()))
+
+
+@app.post("/api/v1/refresh")
+def api_v1_refresh():
+    """Uygulama-yerel yenileme: yalnızca güvenli okuma önbelleklerini
+    temizler ve yeni GET istekleri başlatır. CSRF korumalıdır (Flask-WTF
+    POST'ları otomatik doğrular). Hiçbir borsa yazma ucu çağrılmaz."""
+    import dashboard_api as dapi
+    cleared = dapi.invalidate_caches()
+    ip = auth.get_client_ip()
+    slog.log_event(slog.STARTUP, ip=ip,
+                   detail=f"manual refresh: {len(cleared)} cache cleared")
+    data = dapi.overview(_dashboard_app_info())
+    ts = dapi.mark_full_refresh()
+    data["last_full_refresh"] = ts
+    slog.log_event(slog.STARTUP, ip=ip, detail="manual refresh completed")
+    return _dash_json({"ok": True, "refreshed_at": ts, "overview": data})
+
+
+@app.get("/overview")
+def overview_page():
+    """Genel Bakış — tek birincil pano deneyimi (Mission 1400.2)."""
+    from version import get_version
+    import alpha_platform as ap
+    return render_template(
+        "overview.html",
+        app_mode=ap.app_mode(),
+        app_version=get_version(),
+        setup_state=ap.setup_state(),
+        owner=session.get("username", ""),
+        server_time=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        flags=ap.feature_flags(),
+    )
+
+
 @app.get("/api/exchange/summary")
 def api_exchange_summary():
     """Salt-okunur borsa özeti (Mission 1400). Tüm borsa istekleri
