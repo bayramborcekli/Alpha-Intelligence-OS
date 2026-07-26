@@ -1,0 +1,280 @@
+ALPHA INTELLIGENCE OS
+MISSION 1600 — INTELLIGENCE AUTOMATION
+AGENT 03 — SERVICE LAYER
+
+ROL
+
+Sen MISSION 1600'ün Service Layer agentısın.
+
+Görevin, Agent 02 tarafından geliştirilen Automation Core'u mevcut
+Intelligence katmanına güvenli biçimde bağlamaktır.
+
+Bu agent;
+
+• REST API geliştirmeyecek,
+• UI geliştirmeyecek,
+• Export geliştirmeyecek,
+• Scheduler'ın uygulama başlangıcına bağlanmasını yapmayacak,
+• Dokümantasyon hazırlamayacaktır.
+
+────────────────────────────────────────
+BASELINE
+
+MISSION 1500.2 ve MISSION 1600 / AGENT 02 referans alınacaktır.
+
+Son referans:
+
+Commit:
+454bff2
+
+Test:
+1011 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request:
+0
+
+Secret Exposure:
+0
+
+────────────────────────────────────────
+AMAÇ
+
+Automation Core ile mevcut Intelligence Engine arasında servis katmanını
+oluştur.
+
+Automation Core doğrudan Engine implementasyonunu bilmeyecek.
+
+Servis katmanı;
+
+Automation Core
+↓
+
+Intelligence Service
+
+↓
+
+Mevcut Intelligence Engine
+
+şeklinde çalışmalıdır.
+
+────────────────────────────────────────
+SORUMLULUKLAR
+
+Servis katmanı aşağıdakileri sağlamalıdır.
+
+1.
+
+Automation isteğini alır.
+
+2.
+
+Intelligence çalışmasını başlatır.
+
+3.
+
+Risk Engine'i mevcut sözleşme ile kullanır.
+
+4.
+
+Recommendation üretimini mevcut sistemden alır.
+
+5.
+
+Sonucu normalize eder.
+
+6.
+
+Automation Core'a döndürür.
+
+Automation Core gerekli görürse
+append_snapshot()
+
+çağıracaktır.
+
+Service Layer snapshot yazmayacaktır.
+
+────────────────────────────────────────
+KESİNLİKLE YASAK
+
+Bu agent;
+
+YAPMAYACAK
+
+• REST endpoint
+• Blueprint
+• Flask Route
+• UI
+• HTML
+• Javascript
+• Export
+• Scheduler startup
+• Gunicorn post_fork
+• Background daemon
+• Exchange entegrasyonu
+• Emir gönderme
+• Ledger değişikliği
+• Audit değişikliği
+• Workspace değişikliği
+• Timeline değişikliği
+
+────────────────────────────────────────
+INTELLIGENCE
+
+Yeni hesaplama algoritması
+oluşturulmayacaktır.
+
+Var olan
+
+Risk Engine
+
+Recommendation
+
+Insight
+
+altyapısı kullanılacaktır.
+
+Repository'de bulunan mevcut servisler
+yeniden kullanılmalıdır.
+
+────────────────────────────────────────
+SONUÇ SÖZLEŞMESİ
+
+Automation Core'a dönen sonuç
+deterministik olmalıdır.
+
+Önerilen yapı:
+
+status
+
+timestamp
+
+recommendations
+
+risk
+
+summary
+
+metadata
+
+Repository sözleşmesi farklıysa
+mevcut sözleşme korunacaktır.
+
+Yeni alan ekleme ancak zorunluysa yapılmalıdır.
+
+────────────────────────────────────────
+HATA YÖNETİMİ
+
+Exception dışarı taşınmayacaktır.
+
+Sterile hata modeli korunacaktır.
+
+Automation Core;
+
+OK
+
+FAILED
+
+UNAVAILABLE
+
+TIMEOUT
+
+gibi standart durumları alabilmelidir.
+
+────────────────────────────────────────
+DEPENDENCY
+
+Yeni framework eklenmeyecektir.
+
+Yeni queue eklenmeyecektir.
+
+Yeni broker eklenmeyecektir.
+
+Mevcut repository yapısı kullanılacaktır.
+
+────────────────────────────────────────
+TESTLER
+
+En az aşağıdaki testler bulunmalıdır.
+
+• service success
+
+• service unavailable
+
+• intelligence exception
+
+• timeout propagation
+
+• deterministic output
+
+• recommendation mapping
+
+• risk mapping
+
+• summary generation
+
+• sterile error
+
+• duplicate call protection
+
+• integration with automation core
+
+────────────────────────────────────────
+TESLİMAT
+
+Rapor aşağıdakileri içermelidir.
+
+• oluşturulan dosyalar
+
+• değiştirilen dosyalar
+
+• yeni testler
+
+• servis akış diyagramı
+
+• PASS
+
+• FAIL
+
+• SKIP
+
+• Exchange Write Request
+
+• Secret Exposure
+
+• commit
+
+────────────────────────────────────────
+PASS
+
+PASS için;
+
+• Service Layer tamamlanmış olmalıdır.
+
+• Automation Core ile gerçek entegrasyon kurulmuş olmalıdır.
+
+• Automation Core değiştirilmemelidir.
+
+• Workspace değişmemelidir.
+
+• Timeline değişmemelidir.
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+• Tüm testler PASS olmalıdır.
+
+• Commit oluşturulmalı ve raporlanmalıdır.
+
+Kod tamamlanmadan PASS verilmez.
+
+────────────────────────────────────────
+SONRAKİ AGENT
+
+MISSION 1600
+AGENT 04 — API
+
+Bu agent yalnız Service Layer'ı tamamlar.
+API, Scheduler Startup ve Gunicorn entegrasyonu sonraki agent kapsamındadır.
