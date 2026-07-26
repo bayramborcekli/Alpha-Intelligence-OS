@@ -125,55 +125,74 @@ def get_security_summary(hours: int = 24, max_events: int = 10) -> dict:
         "last_lockout": None,
         "recent": [],
     }
-    if not LOG_PATH.exists():
-        return summary
-
-    try:
-        lines = LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return summary
-
     from datetime import timedelta
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     locked_ips: set[str] = set()
     events: list[tuple[datetime, dict]] = []
     last_lockout_ts: datetime | None = None
 
-    for line in reversed(lines):
-        m = _LINE_RE.match(line.strip())
-        if not m:
+    # security.log önce (en yeni), sonra rotasyonlanmış yedekler
+    # (security.log.1 en yeni yedek, security.log.5 en eski).
+    log_files = [LOG_PATH] + [
+        LOG_PATH.with_name(f"{LOG_PATH.name}.{i}") for i in range(1, 6)
+    ]
+
+    reached_cutoff = False
+    for path in log_files:
+        if reached_cutoff:
+            break
+        if not path.exists():
             continue
         try:
-            ts = datetime.strptime(m.group("ts"), "%Y-%m-%dT%H:%M:%S").replace(
-                tzinfo=timezone.utc)
-        except ValueError:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
             continue
-        if ts < cutoff:
-            # Satırlar kronolojik sırada olmayabilir (saat değişimi, birleşik
-            # dosyalar); erken durmak yerine pencere dışı satırı atla.
-            continue
-        fields: dict[str, str] = {}
-        for part in m.group("rest").split(" | "):
-            if "=" in part:
-                k, _, v = part.partition("=")
-                fields[k.strip()] = v.strip()
-        if fields.get("event") != LOGIN_FAIL:
-            continue
-        ip     = fields.get("ip", "")
-        detail = fields.get("detail", "")
-        summary["fail_count"] += 1
-        is_lockout = detail.lower().startswith("rate limited")
-        if is_lockout:
-            if ip:
-                locked_ips.add(ip)
-            if last_lockout_ts is None or ts > last_lockout_ts:
-                last_lockout_ts = ts
-        events.append((ts, {
-            "time":    ts.strftime("%Y-%m-%d %H:%M:%S"),
-            "event":   "Kilitlendi" if is_lockout else "Başarısız giriş",
-            "ip":      ip or "—",
-            "lockout": is_lockout,
-        }))
+
+        file_had_in_window = False
+        file_had_parsed = False
+        for line in reversed(lines):
+            m = _LINE_RE.match(line.strip())
+            if not m:
+                continue
+            try:
+                ts = datetime.strptime(m.group("ts"), "%Y-%m-%dT%H:%M:%S").replace(
+                    tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            file_had_parsed = True
+            if ts < cutoff:
+                # Satırlar kronolojik sırada olmayabilir (saat değişimi,
+                # birleşik dosyalar); erken durmak yerine pencere dışı
+                # satırı atla.
+                continue
+            file_had_in_window = True
+            fields: dict[str, str] = {}
+            for part in m.group("rest").split(" | "):
+                if "=" in part:
+                    k, _, v = part.partition("=")
+                    fields[k.strip()] = v.strip()
+            if fields.get("event") != LOGIN_FAIL:
+                continue
+            ip     = fields.get("ip", "")
+            detail = fields.get("detail", "")
+            summary["fail_count"] += 1
+            is_lockout = detail.lower().startswith("rate limited")
+            if is_lockout:
+                if ip:
+                    locked_ips.add(ip)
+                if last_lockout_ts is None or ts > last_lockout_ts:
+                    last_lockout_ts = ts
+            events.append((ts, {
+                "time":    ts.strftime("%Y-%m-%d %H:%M:%S"),
+                "event":   "Kilitlendi" if is_lockout else "Başarısız giriş",
+                "ip":      ip or "—",
+                "lockout": is_lockout,
+            }))
+
+        # Dosyalar rotasyon sırasına göre yeniden eskiye gider; bu dosyadaki
+        # hiçbir satır pencere içinde değilse daha eski yedeklere bakma.
+        if file_had_parsed and not file_had_in_window:
+            reached_cutoff = True
 
     # Satırlar dosyada kronolojik olmayabilir; zaman damgasına göre yeniden sırala
     events.sort(key=lambda item: item[0], reverse=True)
