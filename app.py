@@ -203,6 +203,9 @@ def _security_headers(response: Response) -> Response:
         "img-src 'self' data:; "
         "font-src 'self'; "
         "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
         "frame-ancestors 'none';"
     )
     response.headers["Content-Security-Policy"] = csp
@@ -684,6 +687,14 @@ def setup_generate_hash():
     """
     if auth.password_hash_configured():
         return {"error": "Kurulum tamamlanmış. Bu endpoint artık devre dışı."}, 403
+    # Hız sınırı (Mission 1400.1-R): sihirbaz hash üretimi de login ile aynı
+    # IP bazlı sınırı kullanır — anonim uçta kaba kuvvet/istismar önlenir.
+    _ip = auth.get_client_ip()
+    _allowed, _secs = auth.check_rate_limit(_ip)
+    if not _allowed:
+        return {"error": f"Çok fazla istek. {_secs} saniye sonra tekrar "
+                         "deneyin."}, 429
+    auth.record_attempt(_ip, success=False)
     data = request.get_json(silent=True) or {}
     password = data.get("password", "")
     if not password or not isinstance(password, str):

@@ -244,6 +244,48 @@ class TestSecurity:
                            ("order", "transfer", "withdraw", "leverage")), \
                 f"yasak rota: {rule}"
 
+    def test_csp_hardened_directives(self, client):
+        r = client.get("/api/v1/health")
+        csp = r.headers.get("Content-Security-Policy", "")
+        assert "object-src 'none'" in csp
+        assert "base-uri 'self'" in csp
+        assert "form-action 'self'" in csp
+        assert "frame-ancestors 'none'" in csp
+        assert "unsafe-eval" not in csp
+
+    def test_setup_hash_endpoint_rate_limited(self, monkeypatch):
+        for k in ("ADMIN_PASSWORD_HASH", "ALPHA_OWNER_USERNAME",
+                  "ALPHA_OWNER_PASSWORD_HASH"):
+            monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv("LOGIN_ATTEMPTS_DB", "/tmp/test_m14001r_rl.db")
+        auth._ATTEMPTS.clear()
+        flask_app.app.config["TESTING"] = False
+        flask_app.app.config["WTF_CSRF_ENABLED"] = False
+        try:
+            with flask_app.app.test_client() as c:
+                for _ in range(auth.MAX_ATTEMPTS):
+                    c.post("/setup/hash", json={"password": "abcdef123"})
+                r = c.post("/setup/hash", json={"password": "abcdef123"})
+                assert r.status_code == 429
+        finally:
+            flask_app.app.config["TESTING"] = True
+            auth._ATTEMPTS.clear()
+
+    def test_owner_config_persists_across_simulated_restart(self, client):
+        """Env tabanlı model: sahip kimliği yalnızca ortamdan okunur; süreç
+        yeniden başlasa da (yeni istemci) yapılandırma READY kalır."""
+        assert auth.password_hash_configured() is True
+        with flask_app.app.test_client() as fresh:
+            r = fresh.get("/api/v1/health")
+            assert r.get_json()["setup_state"] == "READY"
+
+    def test_shell_has_mobile_and_desktop_navigation(self, client):
+        _login(client)
+        body = client.get("/").get_data(as_text=True)
+        assert 'id="menu-btn"' in body          # mobil menü düğmesi
+        assert 'class="sidebar"' in body        # masaüstü kenar çubuğu
+        assert "aria-expanded" in body          # erişilebilirlik
+
     def test_frontend_templates_have_no_secret_names_as_values(self):
         from pathlib import Path
         for tpl in Path("templates").glob("*.html"):

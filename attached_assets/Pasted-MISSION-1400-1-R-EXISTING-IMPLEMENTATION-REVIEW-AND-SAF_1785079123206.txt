@@ -1,0 +1,319 @@
+MISSION 1400.1-R — EXISTING IMPLEMENTATION REVIEW AND SAFE COMPLETION
+
+IMPORTANT
+
+A previous Mission 1400 task continued running after cancellation and created
+a working application foundation.
+
+Do not restart Mission 1400.1 from scratch.
+Do not replace the current architecture.
+Do not rewrite working authentication or setup flows.
+Do not publish the application yet.
+Do not delete or overwrite existing files unless a verified defect requires it.
+
+OBJECTIVE
+
+Inspect the current repository and determine exactly which Mission 1400.1
+requirements are already complete, partially complete or missing.
+
+Then implement only the missing or defective items required to safely complete
+Sprint 1400.1.
+
+CURRENT OBSERVATION
+
+The existing application reportedly:
+
+- starts successfully
+- uses a first-run administrator setup wizard
+- stores only a password hash, not plaintext
+- includes browser-level Content Security Policy
+- presents a Replit publish interface
+
+Treat these statements as unverified until confirmed from source code and tests.
+
+PHASE 1 — READ-ONLY REVIEW
+
+Before modifying code, inspect:
+
+- current Git status
+- latest commits
+- application entry points
+- frontend stack
+- backend stack
+- login implementation
+- first-run setup wizard
+- password hashing implementation
+- session implementation
+- cookie settings
+- CSRF protection
+- rate limiting
+- protected routes
+- feature flags
+- health endpoint
+- audit logging
+- production start command
+- existing tests
+- generated documentation
+
+Produce a concise gap matrix:
+
+REQUIREMENT | STATUS | EVIDENCE | ACTION
+
+Allowed status values:
+
+- COMPLETE
+- PARTIAL
+- MISSING
+- DEFECTIVE
+- NOT APPLICABLE
+
+Do not modify files until the gap matrix is complete.
+
+PHASE 2 — ARCHITECTURE DECISION
+
+The current application may use either:
+
+A. Environment-based owner credentials:
+- ALPHA_OWNER_USERNAME
+- ALPHA_OWNER_PASSWORD_HASH
+
+or
+
+B. First-run owner setup wizard with server-side password hash storage.
+
+Do not implement both systems simultaneously.
+
+If the current first-run setup wizard is secure and already working, preserve it
+and document it as the chosen single-owner authentication model.
+
+The setup wizard is acceptable only if:
+
+- it is available only while no owner account exists
+- it cannot be reopened after setup
+- it never stores plaintext passwords
+- it uses Argon2id or bcrypt
+- it stores the hash server-side only
+- setup requests are CSRF protected where applicable
+- setup is rate limited
+- setup state fails closed
+- owner data is persistent across application restarts
+- the database or persistence file is excluded from Git
+- there is no default username or default password
+- logs and API responses never expose the hash
+- deleting cookies does not reopen setup
+- concurrent setup attempts cannot create multiple owners
+
+If any of these conditions fail, repair the existing setup wizard rather than
+adding a second authentication system.
+
+SESSION_SECRET must remain required through environment configuration.
+
+PHASE 3 — SAFE COMPLETION
+
+Implement only confirmed gaps relating to:
+
+- single-owner authentication
+- secure sessions
+- logout
+- session expiration
+- session fixation prevention
+- login rate limiting
+- generic login errors
+- CSRF protection
+- locked or uninitialized setup state
+- protected API routes
+- request IDs
+- safe error responses
+- safe audit events
+- health endpoint
+- safe feature flag defaults
+- responsive authenticated shell
+- Turkish default interface
+- production startup configuration
+
+Do not implement:
+
+- exchange dashboards
+- balances
+- portfolio
+- positions
+- orders
+- ledger UI
+- risk UI
+- dry-run UI
+- live trading
+- transfers
+- withdrawals
+
+SECURITY REQUIREMENTS
+
+Verify and enforce:
+
+- HttpOnly session cookie
+- SameSite=Lax or stricter
+- Secure cookie in production
+- no authentication tokens in localStorage
+- no plaintext password storage
+- no password hash in browser responses
+- no secrets in frontend bundle
+- no stack traces shown to users
+- no debug mode in production
+- no Binance write routes
+- ALPHA_ENABLE_LIVE_TRADING defaults to false
+- ALPHA_ENABLE_TRANSFERS defaults to false
+- ALPHA_ENABLE_WITHDRAWALS defaults to false
+
+CONTENT SECURITY POLICY
+
+Review the reported CSP configuration.
+
+Confirm that:
+
+- script-src does not allow unsafe-eval in production
+- object-src is set to none
+- base-uri is restricted
+- frame-ancestors is restricted
+- connect-src permits only required application destinations
+- development-only origins are not present in production
+- inline scripts and styles are minimized or protected by nonce/hash where practical
+
+Do not weaken CSP merely to silence browser errors.
+
+PUBLISHING RESTRICTION
+
+Do not click or trigger Replit Publish.
+
+Do not declare the application production-ready merely because the publish
+dialog is available.
+
+Before publishing, confirm:
+
+- authentication is complete
+- initial setup is complete
+- sessions persist correctly
+- secure cookies work behind Replit HTTPS
+- storage persists across deployment restarts
+- health endpoint passes
+- all tests pass
+- security scan passes
+- secret exposure is zero
+
+TESTS
+
+Run all existing tests first and record the baseline.
+
+Add or repair tests only for confirmed gaps.
+
+Required coverage:
+
+- first-run setup success
+- setup cannot run twice
+- concurrent setup protection
+- password stored only as hash
+- successful login
+- failed login
+- generic error response
+- rate limiting
+- secure session cookie
+- session expiration
+- logout invalidation
+- session fixation prevention
+- unauthenticated protected-route rejection
+- CSRF rejection
+- locked or uninitialized setup behavior
+- persistence after simulated restart
+- feature flags default safely
+- secrets absent from frontend bundle
+- live trading routes absent
+- mobile and desktop shell rendering
+
+SECURITY SCAN
+
+Scan source, build output, logs and reports for:
+
+- plaintext passwords
+- password hashes exposed outside secure persistence
+- session tokens
+- Binance API keys
+- Binance secrets
+- signatures
+- authorization headers
+- environment dumps
+
+Do not print secret values during scanning.
+
+COMMIT POLICY
+
+Before changes:
+
+- record current commit
+- record Git status
+- create a recovery point if there are uncommitted working changes
+
+After changes:
+
+- create one focused commit for Mission 1400.1-R
+- do not squash or rewrite previous mission evidence
+- do not push until tests and review pass
+
+EXPECTED FINAL REPORT
+
+MISSION 1400.1-R: PASS / FAIL
+PREVIOUS IMPLEMENTATION FOUND:
+CURRENT COMMIT:
+WORKTREE BEFORE:
+AUTH MODEL SELECTED:
+FIRST-RUN SETUP:
+SETUP SINGLE-USE:
+PASSWORD HASHING:
+PASSWORD PLAINTEXT STORAGE:
+OWNER PERSISTENCE:
+SESSION SECURITY:
+SESSION EXPIRATION:
+SESSION FIXATION:
+LOGOUT:
+CSRF:
+LOGIN RATE LIMIT:
+PROTECTED ROUTES:
+HEALTH ENDPOINT:
+REQUEST IDS:
+AUDIT EVENTS:
+CSP REVIEW:
+DESKTOP SHELL:
+MOBILE SHELL:
+LIVE TRADING FLAG:
+TRANSFER FLAG:
+WITHDRAWAL FLAG:
+BINANCE WRITE ROUTES:
+ORDER ENDPOINT REQUESTS:
+OTHER EXCHANGE WRITE REQUESTS:
+SECRETS EXPOSED:
+BASELINE TESTS:
+NEW OR UPDATED TESTS:
+TOTAL TESTS:
+SECURITY SCAN:
+CODE REVIEW:
+APPLICATION PUBLISHED:
+RUN_ID:
+NEW COMMIT:
+GITHUB PUSH:
+KNOWN LIMITATIONS:
+NEXT ACTION:
+
+PASS CONDITIONS
+
+Declare PASS only if:
+
+1. Existing work was reviewed before modification.
+2. No duplicate authentication architecture was added.
+3. The selected single-owner authentication flow is secure.
+4. Setup cannot be repeated after owner creation.
+5. Password plaintext is never stored.
+6. Sessions are secure and invalidated on logout.
+7. Protected routes fail closed.
+8. Live trading remains disabled.
+9. No Binance write route exists.
+10. Tests pass.
+11. Security scan reports zero secret exposure.
+12. The application has not been published.
+13. A focused recovery-safe commit exists.
