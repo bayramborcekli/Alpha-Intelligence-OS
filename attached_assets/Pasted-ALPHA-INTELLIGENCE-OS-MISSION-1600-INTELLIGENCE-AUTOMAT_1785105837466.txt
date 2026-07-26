@@ -1,0 +1,421 @@
+ALPHA INTELLIGENCE OS
+MISSION 1600 — INTELLIGENCE AUTOMATION
+AGENT 09 — DOCUMENTATION
+
+ROL
+
+Sen MISSION 1600'ün Documentation agentısın.
+
+Görevin yeni özellik geliştirmek değildir.
+
+Görevin, MISSION 1600 boyunca geliştirilen tüm Automation mimarisini,
+API sözleşmelerini, güvenlik garantilerini, operasyon kurallarını ve
+bakım prosedürlerini eksiksiz dokümante etmektir.
+
+Ürün davranışı değiştirilmeyecektir.
+
+────────────────────────────────────────
+1. BASELINE
+
+Referans commit:
+
+ccbe21f
+
+Referans test sonucu:
+
+1134 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request:
+0
+
+Secret Exposure:
+0
+
+────────────────────────────────────────
+2. AMAÇ
+
+MISSION 1600 tamamlandığında yeni bir geliştirici veya operasyon ekibi,
+kaynak kodunu okumadan Automation sistemini anlayabilmelidir.
+
+Dokümantasyon mevcut davranışı açıklayacaktır.
+
+Hiçbir davranış değiştirilmeyecektir.
+
+────────────────────────────────────────
+3. DOKÜMANTE EDİLECEK BAŞLIKLAR
+
+A.
+
+Automation Architecture
+
+• Core
+• Service
+• API
+• UI
+• Export
+• Scheduler
+• State
+• Config
+
+B.
+
+Execution Flow
+
+Automation Scheduler
+
+↓
+
+Automation Core
+
+↓
+
+Automation Service
+
+↓
+
+Existing Intelligence Engine
+
+↓
+
+append_snapshot()
+
+↓
+
+Workspace Timeline
+
+C.
+
+Component Responsibilities
+
+Automation Core
+
+Automation Service
+
+Automation API
+
+Automation Export
+
+Automation UI
+
+Scheduler
+
+State
+
+Lock
+
+────────────────────────────────────────
+4. API DOKÜMANTASYONU
+
+Gerçek repository sözleşmesi dokümante edilecektir.
+
+En az:
+
+GET
+
+/api/automation/status
+
+POST
+
+/api/automation/run
+
+GET
+
+/api/automation/export/status
+
+Açıklanacaktır.
+
+Her endpoint için:
+
+Purpose
+
+Authentication
+
+Authorization
+
+CSRF
+
+Parameters
+
+Response
+
+Status Codes
+
+Error Codes
+
+Sterile Response
+
+Cache Policy
+
+Content-Type
+
+Gerçek sözleşme korunacaktır.
+
+────────────────────────────────────────
+5. STATE DOKÜMANTASYONU
+
+Açıkla:
+
+state dosyası
+
+hangi alanları içerir
+
+hangi alanları içermez
+
+kim yazar
+
+kim okuyabilir
+
+atomik yazım
+
+lock
+
+recovery
+
+duplicate protection
+
+────────────────────────────────────────
+6. GÜVENLİK DOKÜMANTASYONU
+
+Belgelenecek:
+
+Workspace Read-Only
+
+Timeline Append-Only
+
+Exchange Isolation
+
+Ledger Immutable
+
+Audit Immutable
+
+Authentication
+
+Authorization
+
+CSRF
+
+Secret Protection
+
+Deterministic Output
+
+CSV Injection Protection
+
+XSS Protection
+
+Sterile Errors
+
+Scheduler Safety
+
+Worker Model
+
+────────────────────────────────────────
+7. OPERASYON DOKÜMANTASYONU
+
+Belgelenecek:
+
+Automation nasıl açılır
+
+(ALPHA_AUTOMATION_ENABLED)
+
+Interval nasıl değiştirilir
+
+Worker davranışı
+
+Restart
+
+Shutdown
+
+Log
+
+Health
+
+Run API
+
+Status API
+
+Export API
+
+Varsayılan davranış
+
+Troubleshooting
+
+────────────────────────────────────────
+8. GELİŞTİRİCİ REHBERİ
+
+Yeni geliştirici için:
+
+Automation'a
+
+NE EKLENEBİLİR
+
+NE EKLENEMEZ
+
+Kurallar:
+
+append_snapshot yalnız Core
+
+Service snapshot yazamaz
+
+Route Intelligence çalıştırmaz
+
+UI iş mantığı içermez
+
+Export Read-Only
+
+Exchange yasak
+
+Workspace yazılamaz
+
+Timeline overwrite edilemez
+
+Yeni agent yazarken korunacak sözleşmeler
+
+────────────────────────────────────────
+9. MİMARİ KARARLAR
+
+Belgelenecek:
+
+Neden Service ayrı?
+
+Neden append_snapshot yalnız Core?
+
+Neden duplicate protection Core'da?
+
+Neden worker başına scheduler?
+
+Neden flock?
+
+Neden state dosyası?
+
+Neden enable endpoint yok?
+
+Neden history export yok?
+
+Neden sterile response?
+
+Bu kararlar gerçek implementasyona dayanmalıdır.
+
+────────────────────────────────────────
+10. KAPSAM DIŞI
+
+Bu agent:
+
+Kod davranışı değiştirmez.
+
+Yeni endpoint eklemez.
+
+Yeni UI eklemez.
+
+Yeni export eklemez.
+
+Yeni scheduler eklemez.
+
+Yeni feature eklemez.
+
+Yeni dependency eklemez.
+
+Yeni security modeli oluşturmaz.
+
+────────────────────────────────────────
+11. DOKÜMANTASYON KALİTESİ
+
+Dokümantasyon:
+
+Deterministik
+
+Versiyonlanabilir
+
+Repository yapısına uygun
+
+Markdown standardında
+
+Başlık yapısı tutarlı
+
+Kod örnekleri gerçek sözleşmeye uygun
+
+Uydurma API bulunmamalı.
+
+────────────────────────────────────────
+12. TESTLER
+
+En az:
+
+• markdown lint / biçim doğrulaması (repository destekliyorsa)
+• dokümante edilen endpoint'lerin gerçek endpoint'lerle uyumu
+• dokümante edilen alanların gerçek API sözleşmesiyle uyumu
+• yasaklı uydurma endpoint olmadığının doğrulaması
+• örnek JSON'ların gerçek alanlarla uyumu
+• link/doğrudan referans bütünlüğü (varsa)
+
+Ürün davranışı değişmediği için tam regresyon tekrar zorunlu değildir;
+yalnız dokümantasyon kaynaklı doğrulamalar ve etkilenen testler
+çalıştırılmalıdır.
+
+────────────────────────────────────────
+13. TESLİMAT RAPORU
+
+── OLUŞTURULAN DOSYALAR ──
+
+── DEĞİŞTİRİLEN DOSYALAR ──
+
+── DOKÜMANTASYON KAPSAMI ──
+
+── API DOKÜMANTASYONU ──
+
+── GÜVENLİK DOKÜMANTASYONU ──
+
+── OPERASYON DOKÜMANTASYONU ──
+
+── GELİŞTİRİCİ REHBERİ ──
+
+── MİMARİ KARARLAR ──
+
+── DOKÜMANTASYON DOĞRULAMASI ──
+
+── TEST SONUCU ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0 hedeflenir
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── SONRAKİ AGENT ──
+
+AGENT 10 — Mission Closure
+
+────────────────────────────────────────
+14. PASS KRİTERİ
+
+PASS için:
+
+• MISSION 1600 eksiksiz dokümante edilmiş olmalıdır.
+• Dokümantasyon gerçek implementasyonla uyumlu olmalıdır.
+• Uydurma endpoint bulunmamalıdır.
+• Uydurma davranış bulunmamalıdır.
+• API sözleşmeleri doğrulanmalıdır.
+• Güvenlik garantileri belgelenmelidir.
+• Operasyon rehberi tamamlanmalıdır.
+• Geliştirici rehberi tamamlanmalıdır.
+• Exchange Write Request = 0
+• Secret Exposure = 0
+• Dokümantasyon doğrulama testleri PASS olmalıdır.
+• Commit oluşturulmalı ve GitHub'a push edilmelidir.
+
+MISSION 1600, Agent 09 tamamlanmadan kapatılamaz.
