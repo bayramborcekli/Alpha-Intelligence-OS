@@ -379,8 +379,9 @@
     box.innerHTML = '<span class="spinner"></span>Kontrol ediliyor…';
     try {
       const resp = await fetch('/setup/check');
-      const data = await resp.json();
-      if (data.configured) {
+      // Kurulum tamamlandığında endpoint güvenlik nedeniyle 404 döndürür.
+      const configured = resp.status === 404 ? true : (await resp.json()).configured;
+      if (configured) {
         box.innerHTML = '<div class="info-box ok" style="margin-top:12px;">✅ Kurulum tamamlandı! Giriş sayfasına gidebilirsiniz.</div>';
         document.getElementById('login-link').style.display = 'block';
         document.getElementById('ind-3').classList.add('done');

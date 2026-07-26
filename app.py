@@ -661,8 +661,17 @@ def setup_generate_hash():
 
 @app.get("/setup/check")
 def setup_check():
-    """Parola yapılandırılmış mı diye kontrol et (sihirbaz doğrulama adımı)."""
-    return {"configured": auth.password_hash_configured()}
+    """Parola yapılandırılmış mı diye kontrol et (sihirbaz doğrulama adımı).
+
+    Güvenlik kararı: Kurulum tamamlandıktan sonra bu endpoint /setup ile
+    aynı şekilde 404 döndürür. Böylece anonim bir istemci, yapılandırma
+    durumunu (parolanın ayarlı olup olmadığını) sorgulayamaz ve endpoint'in
+    varlığı ifşa edilmez. Yalnızca kurulum sihirbazı aktifken (parola
+    yapılandırılmamışken) JSON durum döndürür.
+    """
+    if auth.password_hash_configured():
+        return "", 404
+    return {"configured": False}
 
 
 @app.route("/login", methods=["GET", "POST"])

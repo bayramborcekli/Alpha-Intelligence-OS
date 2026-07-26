@@ -97,6 +97,41 @@ class TestSetupAccess:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# /setup/check — Yapılandırma durumu ifşası (bilgi sızıntısı incelemesi)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSetupCheckDisclosure:
+
+    def test_setup_check_returns_status_only_when_not_configured(self, unconfigured_client):
+        """GET /setup/check, parola YOKKEN JSON durum döndürmeli (sihirbaz için)."""
+        resp = unconfigured_client.get("/setup/check")
+        assert resp.status_code == 200, (
+            f"/setup/check, parola eksikken 200 bekleniyor; {resp.status_code} alındı"
+        )
+        body = resp.get_json()
+        assert body == {"configured": False}
+
+    def test_setup_check_hidden_after_configuration(self, configured_client):
+        """
+        GET /setup/check, parola yapılandırıldıktan sonra 404 dönmeli.
+        Anonim istemciler yapılandırma durumunu sorgulayamamalı; endpoint
+        var olmayan bir route ile ayırt edilememeli (/setup ile aynı davranış).
+        """
+        resp = configured_client.get("/setup/check")
+        assert resp.status_code == 404, (
+            f"/setup/check, kurulum sonrası 404 bekleniyor; {resp.status_code} alındı"
+        )
+        assert resp.get_json() is None, "404 yanıtı JSON durum bilgisi içermemeli"
+        assert b"configured" not in resp.data
+
+    def test_setup_check_matches_setup_page_after_configuration(self, configured_client):
+        """Kurulum sonrası /setup/check, /setup ile aynı 404 davranışını göstermeli."""
+        check = configured_client.get("/setup/check")
+        setup = configured_client.get("/setup")
+        assert check.status_code == setup.status_code == 404
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # /login → /setup yönlendirmesi (parola eksikken)
 # ══════════════════════════════════════════════════════════════════════════════
 
