@@ -1,0 +1,209 @@
+{% extends "dash_base.html" %}
+{% block title %}Automation{% endblock %}
+{% block heading %}⚙️ Intelligence Automation{% endblock %}
+{% block subheading %}Kontrollü otomatik Intelligence çalıştırma — yalnız izleme ve manuel tetik{% endblock %}
+
+{% block content %}
+<style>
+  .au-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+             margin-bottom:18px; }
+  .au-card { background:var(--panel); border:1px solid var(--border); border-radius:10px;
+             padding:12px 14px; }
+  .au-card h3 { font-size:.72rem; color:var(--muted); text-transform:uppercase;
+                letter-spacing:.05em; margin-bottom:6px; font-weight:600; }
+  .au-card .v { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .au-sec { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+            padding:16px; margin-bottom:18px; }
+  .au-sec h2 { font-size:.9rem; margin-bottom:12px; }
+  .au-note { color:var(--muted); font-size:.76rem; margin-top:8px; }
+  .au-banner { border-left:3px solid var(--warn); background:rgba(210,153,34,.08);
+               padding:10px 14px; border-radius:6px; margin-bottom:14px;
+               font-size:.85rem; display:none; }
+  .au-badge { display:inline-block; border-radius:12px; padding:2px 10px;
+              font-size:.74rem; font-weight:700; border:1px solid var(--border); }
+  .st-disabled  { color:var(--muted); }
+  .st-scheduled { color:var(--accent); border-color:rgba(88,166,255,.5); }
+  .st-running   { color:var(--warn); border-color:rgba(210,153,34,.5); }
+  .st-succeeded { color:var(--ok); border-color:rgba(63,185,80,.5); }
+  .st-failed, .st-interrupted { color:var(--danger); border-color:rgba(248,81,73,.5); }
+  .st-unknown   { color:var(--muted); }
+  table.au { width:100%; border-collapse:collapse; font-size:.8rem; }
+  table.au th, table.au td { padding:5px 8px; text-align:left;
+    border-bottom:1px solid rgba(48,54,61,.5); }
+  table.au th { color:var(--muted); font-weight:600; }
+  .au-btn { background:rgba(88,166,255,.12); border:1px solid rgba(88,166,255,.45);
+            color:var(--accent); border-radius:8px; padding:8px 16px; font-size:.85rem;
+            font-weight:600; cursor:pointer; }
+  .au-btn:disabled { opacity:.45; cursor:not-allowed; }
+  .au-btn.ghost { background:var(--soft); border-color:var(--border); color:var(--fg); }
+  .advisory-tag { background:rgba(88,166,255,.1); border:1px solid rgba(88,166,255,.4);
+                  color:var(--accent); border-radius:12px; padding:2px 10px;
+                  font-size:.72rem; font-weight:700; }
+</style>
+
+<p class="au-note" style="margin-bottom:12px">
+  <span class="advisory-tag">SALT İZLEME</span>
+  Bu panel yalnız Automation durumunu gösterir ve manuel tetik gönderir.
+  Hiçbir hesaplama tarayıcıda yapılmaz; hiçbir emir oluşturulmaz.
+</p>
+
+<div class="au-banner" id="au-disabled-banner" role="alert">
+  ℹ️ Automation kapalı (ALPHA_AUTOMATION_ENABLED). Zamanlayıcı çalışmıyor;
+  manuel tetik de devre dışıdır. Açma/kapatma yalnız sunucu
+  yapılandırmasıyla yapılır.
+</div>
+<div class="au-banner" id="au-error-banner" role="alert">
+  ⚠️ Automation durumu alınamadı. Değerler tahmin edilmez — alanlar boş
+  bırakıldı.
+</div>
+
+<div class="au-grid" aria-live="polite">
+  <div class="au-card"><h3>Automation</h3><div class="v" id="a-enabled">—</div></div>
+  <div class="au-card"><h3>Durum</h3><div class="v" id="a-state">—</div></div>
+  <div class="au-card"><h3>Çalışıyor mu</h3><div class="v" id="a-running">—</div></div>
+  <div class="au-card"><h3>Aralık</h3><div class="v" id="a-interval">—</div></div>
+  <div class="au-card"><h3>Sonraki Koşu</h3>
+    <div class="v" style="font-size:.85rem" id="a-next">—</div></div>
+</div>
+
+<section class="au-sec" aria-labelledby="h-actions">
+  <h2 id="h-actions">▶️ İşlemler</h2>
+  <button type="button" class="au-btn" id="btn-run">Şimdi Çalıştır</button>
+  <button type="button" class="au-btn ghost" id="btn-refresh">Yenile</button>
+  <span class="au-note" id="run-result" role="status" style="margin-left:10px"></span>
+  <p class="au-note">Manuel tetik mevcut güvenlik modeliyle (oturum +
+  CSRF) korunur; aynı anda ikinci koşu başlatılamaz. Etkinleştirme /
+  devre dışı bırakma bu ekrandan yapılamaz (sunucu yapılandırması).</p>
+</section>
+
+<section class="au-sec" aria-labelledby="h-last">
+  <h2 id="h-last">🕒 Son Çalıştırma</h2>
+  <div style="overflow-x:auto"><table class="au" aria-describedby="h-last">
+    <thead><tr><th scope="col">Başlangıç</th><th scope="col">Bitiş</th>
+      <th scope="col">Sonuç</th><th scope="col">Süre (sn)</th>
+      <th scope="col">Hata Kodu</th><th scope="col">Snapshot</th></tr></thead>
+    <tbody id="last-run-body"><tr><td colspan="6">Yükleniyor…</td></tr></tbody>
+  </table></div>
+  <p class="au-note">Yalnız son koşu bilgisi tutulur; tam geçmiş
+  Workspace zaman çizelgesindeki snapshot kayıtlarındadır. Hata kodları
+  sterildir — ayrıntı metni saklanmaz ve gösterilmez.</p>
+</section>
+
+<script>
+(function () {
+  "use strict";
+  function el(id) { return document.getElementById(id); }
+  function txt(v, suffix) {
+    return (v === null || v === undefined || v === "")
+      ? "—" : String(v) + (suffix || "");
+  }
+  var ST_TR = { disabled: "Kapalı", scheduled: "Zamanlandı",
+                running: "Çalışıyor", succeeded: "Başarılı",
+                failed: "Başarısız" };
+  var ERR_TR = { INTERRUPTED: "INTERRUPTED", TIMEOUT: "TIMEOUT",
+                 EXECUTION_FAILED: "FAILED", INVALID_RESULT: "UNAVAILABLE",
+                 APPEND_FAILED: "APPEND_FAILED",
+                 DUPLICATE_RUN: "DUPLICATE_RUN" };
+
+  function durationOf(start, end) {
+    if (!start || !end) { return "—"; }
+    var a = Date.parse(start), b = Date.parse(end);
+    if (isNaN(a) || isNaN(b) || b < a) { return "—"; }
+    return String(Math.round((b - a) / 100) / 10);
+  }
+
+  function stBadge(state) {
+    var known = ST_TR[state] ? state : "unknown";
+    var label = ST_TR[state] || "Bilinmiyor";
+    var node = document.createElement("span");
+    node.className = "au-badge st-" + known;
+    node.textContent = label;
+    return node.outerHTML;
+  }
+
+  function renderStatus(d) {
+    el("a-enabled").textContent = d.enabled ? "Açık" : "Kapalı";
+    el("a-state").innerHTML = stBadge(d.state);
+    el("a-running").textContent = d.running ? "Evet" : "Hayır";
+    el("a-interval").textContent = txt(d.interval_minutes, " dk");
+    el("a-next").textContent = d.enabled
+      ? txt((d.next_due || "").replace("T", " ")) : "—";
+    el("au-disabled-banner").style.display = d.enabled ? "none" : "block";
+    el("btn-run").disabled = !d.enabled || d.running;
+
+    var tb = el("last-run-body");
+    if (!d.last_run_started_at) {
+      tb.innerHTML = "<tr><td colspan='6'>Henüz koşu yok</td></tr>";
+      return;
+    }
+    var row = document.createElement("tr");
+    [txt((d.last_run_started_at || "").replace("T", " ")),
+     txt((d.last_run_finished_at || "").replace("T", " ")),
+     ST_TR[d.last_run_status] || txt(d.last_run_status),
+     durationOf(d.last_run_started_at, d.last_run_finished_at),
+     d.last_error_code ? (ERR_TR[d.last_error_code] || d.last_error_code) : "—",
+     d.last_snapshot_recorded === true ? "Kaydedildi"
+       : (d.last_snapshot_recorded === false ? "Yazılmadı" : "—")
+    ].forEach(function (v) {
+      var td = document.createElement("td");
+      td.textContent = v;                 // yalnız textContent — XSS yok
+      row.appendChild(td);
+    });
+    tb.innerHTML = "";
+    tb.appendChild(row);
+  }
+
+  function failState() {
+    el("au-error-banner").style.display = "block";
+    ["a-enabled", "a-state", "a-running", "a-interval", "a-next"]
+      .forEach(function (i) { el(i).textContent = "—"; });
+    el("last-run-body").innerHTML = "<tr><td colspan='6'>Veri Yok</td></tr>";
+    el("btn-run").disabled = true;
+  }
+
+  function refresh() {
+    fetch("/api/automation/status", { credentials: "same-origin" })
+      .then(function (r) { if (!r.ok) { throw new Error(); } return r.json(); })
+      .then(function (d) {
+        if (!d || d.ok !== true) { failState(); return; }
+        el("au-error-banner").style.display = "none";
+        renderStatus(d);
+      })
+      .catch(failState);
+  }
+
+  el("btn-refresh").addEventListener("click", refresh);
+
+  el("btn-run").addEventListener("click", function () {
+    var btn = el("btn-run"), out = el("run-result");
+    btn.disabled = true;
+    out.textContent = "Çalıştırılıyor…";
+    var csrf = document.querySelector('meta[name="csrf-token"]');
+    fetch("/api/automation/run", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json",
+                 "X-CSRFToken": csrf ? csrf.content : "" },
+      body: "{}"
+    }).then(function (r) { return r.json().then(function (d) {
+        return { status: r.status, body: d }; }); })
+      .then(function (res) {
+        var d = res.body || {};
+        if (res.status === 409) { out.textContent = "DUPLICATE_RUN — zaten çalışıyor."; }
+        else if (res.status === 503) { out.textContent = "Kapalı — tetik devre dışı."; }
+        else if (d.ok === true) {
+          out.textContent = d.appended
+            ? "Başarılı — snapshot kaydedildi."
+            : "Tamamlandı: " + (ERR_TR[d.error_code] || d.error_code || "—") +
+              " — snapshot yazılmadı.";
+        } else { out.textContent = "Çalıştırılamadı."; }
+      })
+      .catch(function () { out.textContent = "Çalıştırılamadı."; })
+      .finally(function () { refresh(); });
+  });
+
+  refresh();
+  // Yalnız status ucu, sabit aralıkla okunur (yeni polling sistemi yok)
+  setInterval(refresh, 30000);
+})();
+</script>
+{% endblock %}

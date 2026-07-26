@@ -1840,6 +1840,11 @@ def _automation_json(payload: dict, status: int = 200):
     return (resp, status) if status != 200 else resp
 
 
+@app.get("/automation")
+def automation_page():
+    return _render_workspace("automation.html", "automation")
+
+
 @app.get("/api/automation/status")
 @app.get("/api/v1/automation/status")
 def api_automation_status():
