@@ -26,6 +26,7 @@ ENV/
 # ── Sırlar ve kimlik bilgileri (ASLA commit edilmemeli) ──────────────
 .env
 .env.*
+!.env.example
 secrets/
 *.key
 *.pem

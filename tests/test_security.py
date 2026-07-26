@@ -131,14 +131,12 @@ class TestAuthentication:
         assert "/login" in resp2.headers.get("Location", "")
 
     def test_no_password_hash_blocks_login(self, auth_client, monkeypatch):
-        """ADMIN_PASSWORD_HASH tanımlı değilse giriş imkansız olmalı."""
+        """ADMIN_PASSWORD_HASH tanımlı değilse /login kurulum sihirbazına yönlendirmeli."""
         monkeypatch.delenv("ADMIN_PASSWORD_HASH", raising=False)
-        resp = auth_client.post("/login", data={
-            "username": "testadmin",
-            "password": "testpass1234",
-        })
-        # 200 ile login sayfasında kalmalı (302 yönlendirmesi olmamalı)
-        assert resp.status_code == 200
+        resp = auth_client.get("/login")
+        # Parola yokken /login → /setup yönlendirmesi (302)
+        assert resp.status_code == 302
+        assert "/setup" in resp.headers.get("Location", "")
 
     def test_next_url_redirect_relative_only(self, auth_client):
         """next parametresi yalnızca göreceli URL'lere yönlendirmeli."""

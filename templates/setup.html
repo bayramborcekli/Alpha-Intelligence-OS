@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alpha Intelligence OS — İlk Kurulum</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1117; --panel: #161b22; --soft: #1c2430;
+      --border: #30363d; --text: #f0f6fc; --muted: #8b949e;
+      --accent: #58a6ff; --success: #3fb950; --warn: #d29922;
+      --danger: #f85149;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at top, #17243a 0, var(--bg) 48%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      min-height: 100vh; padding: 32px 20px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    /* ── Üst bant ── */
+    .top-bar {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 32px; width: 100%; max-width: 520px;
+    }
+    .eyebrow { color: var(--accent); font-size: .72rem; font-weight: 800;
+      letter-spacing: .15em; text-transform: uppercase; }
+    .paper-badge {
+      margin-left: auto;
+      background: rgba(63,185,80,.13); border: 1px solid rgba(63,185,80,.45);
+      border-radius: 6px; color: #7ee787; font-size: .72rem; font-weight: 700;
+      padding: 4px 9px;
+    }
+    /* ── Kart ── */
+    .card {
+      background: rgba(22,27,34,.97); border: 1px solid var(--border);
+      border-radius: 16px; box-shadow: 0 24px 64px rgba(0,0,0,.35);
+      padding: 32px 36px; width: 100%; max-width: 520px;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .subtitle { color: var(--muted); font-size: .85rem; margin-bottom: 28px; line-height: 1.5; }
+    /* ── Adım göstergesi ── */
+    .steps {
+      display: flex; gap: 0; margin-bottom: 28px; border-radius: 10px;
+      overflow: hidden; border: 1px solid var(--border);
+    }
+    .step {
+      flex: 1; padding: 10px 8px; text-align: center; font-size: .72rem;
+      font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+      color: var(--muted); background: var(--soft); border-right: 1px solid var(--border);
+      transition: background .2s, color .2s;
+    }
+    .step:last-child { border-right: none; }
+    .step.active { background: rgba(88,166,255,.14); color: var(--accent); }
+    .step.done   { background: rgba(63,185,80,.10); color: #7ee787; }
+    /* ── Adım panelleri ── */
+    .step-panel { display: none; }
+    .step-panel.active { display: block; }
+    /* ── Form elemanları ── */
+    .field { margin-bottom: 18px; }
+    label { display: block; font-size: .84rem; font-weight: 700; margin-bottom: 7px; }
+    .label-hint { font-weight: 400; color: var(--muted); font-size: .78rem; }
+    input[type="password"], input[type="text"] {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font: inherit; padding: 11px 13px; width: 100%;
+      transition: border-color .15s;
+    }
+    input:focus-visible {
+      outline: 3px solid rgba(88,166,255,.4); outline-offset: 2px;
+      border-color: var(--accent);
+    }
+    .strength-bar { height: 3px; border-radius: 3px; margin-top: 6px;
+      background: var(--border); overflow: hidden; }
+    .strength-fill { height: 100%; border-radius: 3px; width: 0;
+      transition: width .25s, background .25s; }
+    .strength-label { font-size: .73rem; color: var(--muted); margin-top: 4px; }
+    /* ── Butonlar ── */
+    .btn {
+      border: none; border-radius: 9px; cursor: pointer;
+      font: 700 .92rem/1 inherit; padding: 12px 20px;
+      transition: filter .15s;
+    }
+    .btn:focus-visible { outline: 3px solid rgba(88,166,255,.4); outline-offset: 2px; }
+    .btn-primary { background: var(--accent); color: #08111d; width: 100%; }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+    .btn-secondary { background: var(--soft); border: 1px solid var(--border);
+      color: var(--text); }
+    .btn-secondary:hover { filter: brightness(1.15); }
+    .btn-row { display: flex; gap: 10px; margin-top: 6px; }
+    .btn-row .btn-primary { flex: 1; }
+    /* ── Hash kutusu ── */
+    .hash-box {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px; margin-bottom: 18px; display: none;
+    }
+    .hash-box.visible { display: block; }
+    .hash-label { font-size: .74rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px; }
+    .hash-value {
+      font-family: 'Courier New', Courier, monospace; font-size: .78rem;
+      word-break: break-all; color: #7ee787; line-height: 1.5;
+      user-select: all;
+    }
+    .copy-btn {
+      margin-top: 10px; background: rgba(63,185,80,.15);
+      border: 1px solid rgba(63,185,80,.4); border-radius: 7px;
+      color: #7ee787; cursor: pointer; font: 700 .78rem/1 inherit;
+      padding: 7px 14px; transition: filter .15s;
+    }
+    .copy-btn:hover { filter: brightness(1.2); }
+    .copy-feedback { display: none; color: #7ee787; font-size: .77rem;
+      margin-top: 6px; font-weight: 700; }
+    /* ── Talimat kutusu ── */
+    .instruction-box {
+      background: var(--soft); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; margin-bottom: 18px;
+    }
+    .instruction-box h3 { font-size: .88rem; margin-bottom: 10px; color: var(--accent); }
+    .instruction-box ol { padding-left: 18px; }
+    .instruction-box li { font-size: .84rem; line-height: 1.7; color: var(--text); }
+    .instruction-box code {
+      background: rgba(88,166,255,.12); border-radius: 4px;
+      color: var(--accent); font-family: monospace; font-size: .82rem;
+      padding: 1px 5px;
+    }
+    /* ── Uyarı / bilgi kutusu ── */
+    .info-box {
+      border-radius: 9px; font-size: .84rem; line-height: 1.5;
+      padding: 11px 14px; margin-bottom: 18px;
+    }
+    .info-box.warn  { background: rgba(210,153,34,.10); border: 1px solid rgba(210,153,34,.4); color: #f0c040; }
+    .info-box.info  { background: rgba(88,166,255,.10); border: 1px solid rgba(88,166,255,.35); color: #a5d6ff; }
+    .info-box.ok    { background: rgba(63,185,80,.10); border: 1px solid rgba(63,185,80,.35); color: #7ee787; }
+    .info-box.error { background: rgba(248,81,73,.10); border: 1px solid rgba(248,81,73,.4); color: #ffaaa5; }
+    /* ── Doğrulama durumu ── */
+    #check-status { font-size: .84rem; margin-top: 14px; min-height: 20px; }
+    /* ── Spinner ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.2); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin .6s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @media (max-width: 560px) {
+      .card { padding: 24px 18px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="top-bar">
+  <span class="eyebrow">Alpha Intelligence OS</span>
+  <span class="paper-badge">PAPER</span>
+</div>
+
+<div class="card">
+  <h1>İlk Kurulum</h1>
+  <p class="subtitle">Paneli kullanmadan önce bir yönetici parolası belirlemeniz gerekiyor.<br>Bu işlem yalnızca bir kez yapılır.</p>
+
+  <!-- Adım göstergesi -->
+  <div class="steps" role="tablist">
+    <div class="step active" id="ind-1">1 · Parola Oluştur</div>
+    <div class="step"        id="ind-2">2 · Kaydet</div>
+    <div class="step"        id="ind-3">3 · Doğrula</div>
+  </div>
+
+  <!-- ── ADIM 1: Hash oluştur ── -->
+  <div class="step-panel active" id="panel-1">
+    <div class="info-box warn">
+      Parola hiçbir zaman sunucuda saklanmaz — yalnızca kriptografik özeti (hash) kaydedilir.
+    </div>
+
+    <div class="field">
+      <label for="pw1">
+        Yeni Parola
+        <span class="label-hint">— en az 10 karakter önerilir</span>
+      </label>
+      <input id="pw1" type="password" autocomplete="new-password"
+             placeholder="Güçlü bir parola seçin" oninput="checkStrength()">
+      <div class="strength-bar"><div class="strength-fill" id="sbar"></div></div>
+      <div class="strength-label" id="slabel"></div>
+    </div>
+
+    <div class="field">
+      <label for="pw2">Parola Tekrar</label>
+      <input id="pw2" type="password" autocomplete="new-password"
+             placeholder="Aynı parolayı tekrar girin" oninput="checkMatch()">
+      <div id="match-msg" style="font-size:.77rem;margin-top:5px;"></div>
+    </div>
+
+    <div id="gen-error" class="info-box error" style="display:none;"></div>
+
+    <button class="btn btn-primary" id="gen-btn" onclick="generateHash()" disabled>
+      Hash Oluştur
+    </button>
+
+    <div class="hash-box" id="hash-box">
+      <div class="hash-label">ADMIN_PASSWORD_HASH değeri — kopyalayın</div>
+      <div class="hash-value" id="hash-val"></div>
+      <button class="copy-btn" onclick="copyHash()">📋 Kopyala</button>
+      <div class="copy-feedback" id="copy-feedback">✅ Panoya kopyalandı!</div>
+    </div>
+
+    <div class="btn-row" id="step1-next" style="display:none;">
+      <button class="btn btn-primary" onclick="goStep(2)">Devam — Kaydet →</button>
+    </div>
+  </div>
+
+  <!-- ── ADIM 2: Kaydet ── -->
+  <div class="step-panel" id="panel-2">
+    <div class="instruction-box">
+      <h3>🔐 Hash değerini Replit Secrets'a kaydedin</h3>
+      <ol>
+        <li>Replit editörünün sol panelinde <strong>Tools → Secrets</strong> bölümünü açın.</li>
+        <li>Yeni secret ekle:
+          <ul style="margin-top:4px;padding-left:18px;">
+            <li>Anahtar: <code>ADMIN_PASSWORD_HASH</code></li>
+            <li>Değer: Önceki adımda kopyaladığınız hash</li>
+          </ul>
+        </li>
+        <li>Kaydedin.</li>
+        <li>Uygulamayı yeniden başlatın (Replit'te <strong>Run</strong> düğmesine basın).</li>
+      </ol>
+    </div>
+
+    <div class="info-box info">
+      Hash değeri zaten pano'da. Gerekirse önceki adıma dönüp tekrar kopyalayabilirsiniz.
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(1)">← Geri</button>
+      <button class="btn btn-primary" onclick="goStep(3)">Kaydettim →</button>
+    </div>
+  </div>
+
+  <!-- ── ADIM 3: Doğrula ── -->
+  <div class="step-panel" id="panel-3">
+    <div class="info-box info">
+      Uygulamayı yeniden başlattıktan sonra aşağıdaki düğmeye tıklayarak kurulumun
+      tamamlandığını doğrulayın.
+    </div>
+
+    <button class="btn btn-primary" onclick="checkSetup()">
+      Kurulumu Doğrula
+    </button>
+
+    <div id="check-status"></div>
+
+    <div class="btn-row" style="margin-top:18px;">
+      <button class="btn btn-secondary" onclick="goStep(2)">← Geri</button>
+      <a id="login-link" href="/login" style="display:none;">
+        <button class="btn btn-primary" style="background:#3fb950;color:#08111d;">
+          ✅ Giriş Sayfasına Git →
+        </button>
+      </a>
+    </div>
+  </div>
+</div><!-- /card -->
+
+<script>
+  // ── Parola gücü ──────────────────────────────────────────────────────────────
+  function checkStrength() {
+    const pw = document.getElementById('pw1').value;
+    const bar = document.getElementById('sbar');
+    const lbl = document.getElementById('slabel');
+    let score = 0;
+    if (pw.length >= 8)  score++;
+    if (pw.length >= 12) score++;
+    if (/[A-Z]/.test(pw)) score++;
+    if (/[0-9]/.test(pw)) score++;
+    if (/[^A-Za-z0-9]/.test(pw)) score++;
+    const pct   = Math.min(100, score * 20);
+    const color = score <= 1 ? '#f85149' : score <= 2 ? '#d29922' : score <= 3 ? '#58a6ff' : '#3fb950';
+    const text  = score <= 1 ? 'Çok zayıf' : score <= 2 ? 'Zayıf' : score <= 3 ? 'Orta' : score === 4 ? 'Güçlü' : 'Çok güçlü';
+    bar.style.width = pct + '%';
+    bar.style.background = color;
+    lbl.textContent = pw.length ? text : '';
+    lbl.style.color = color;
+    checkMatch();
+    updateGenBtn();
+  }
+
+  function checkMatch() {
+    const pw1 = document.getElementById('pw1').value;
+    const pw2 = document.getElementById('pw2').value;
+    const msg = document.getElementById('match-msg');
+    if (!pw2) { msg.textContent = ''; return; }
+    if (pw1 === pw2) {
+      msg.textContent = '✅ Parolalar eşleşiyor';
+      msg.style.color = '#3fb950';
+    } else {
+      msg.textContent = '❌ Parolalar eşleşmiyor';
+      msg.style.color = '#f85149';
+    }
+    updateGenBtn();
+  }
+
+  function updateGenBtn() {
+    const pw1 = document.getElementById('pw1').value;
+    const pw2 = document.getElementById('pw2').value;
+    const btn = document.getElementById('gen-btn');
+    btn.disabled = !(pw1 && pw1 === pw2 && pw1.length >= 6);
+  }
+
+  // ── Hash oluştur ─────────────────────────────────────────────────────────────
+  async function generateHash() {
+    const pw = document.getElementById('pw1').value;
+    const errBox = document.getElementById('gen-error');
+    const btn = document.getElementById('gen-btn');
+    errBox.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Oluşturuluyor…';
+
+    try {
+      const resp = await fetch('/setup/hash', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        errBox.textContent = data.error || 'Sunucu hatası.';
+        errBox.style.display = 'block';
+        return;
+      }
+      document.getElementById('hash-val').textContent = data.hash;
+      document.getElementById('hash-box').classList.add('visible');
+      document.getElementById('step1-next').style.display = 'flex';
+      // Otomatik kopyala
+      try { await navigator.clipboard.writeText(data.hash); } catch(_) {}
+    } catch (e) {
+      errBox.textContent = 'Ağ hatası: ' + e.message;
+      errBox.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Tekrar Oluştur';
+    }
+  }
+
+  // ── Panoya kopyala ───────────────────────────────────────────────────────────
+  async function copyHash() {
+    const val = document.getElementById('hash-val').textContent;
+    const fb  = document.getElementById('copy-feedback');
+    try {
+      await navigator.clipboard.writeText(val);
+      fb.style.display = 'block';
+      setTimeout(() => { fb.style.display = 'none'; }, 2200);
+    } catch(_) {
+      // Fallback: seç
+      const range = document.createRange();
+      range.selectNode(document.getElementById('hash-val'));
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+    }
+  }
+
+  // ── Adım geçişleri ───────────────────────────────────────────────────────────
+  function goStep(n) {
+    [1,2,3].forEach(i => {
+      document.getElementById('panel-' + i).classList.toggle('active', i === n);
+      const ind = document.getElementById('ind-' + i);
+      ind.classList.remove('active', 'done');
+      if (i < n) ind.classList.add('done');
+      if (i === n) ind.classList.add('active');
+    });
+  }
+
+  // ── Kurulum doğrulama ────────────────────────────────────────────────────────
+  async function checkSetup() {
+    const box = document.getElementById('check-status');
+    box.innerHTML = '<span class="spinner"></span>Kontrol ediliyor…';
+    try {
+      const resp = await fetch('/setup/check');
+      const data = await resp.json();
+      if (data.configured) {
+        box.innerHTML = '<div class="info-box ok" style="margin-top:12px;">✅ Kurulum tamamlandı! Giriş sayfasına gidebilirsiniz.</div>';
+        document.getElementById('login-link').style.display = 'block';
+        document.getElementById('ind-3').classList.add('done');
+      } else {
+        box.innerHTML = '<div class="info-box error" style="margin-top:12px;">⚠️ <code>ADMIN_PASSWORD_HASH</code> henüz algılanamadı. Secrets\'ı kaydettiğinizden ve uygulamayı yeniden başlattığınızdan emin olun.</div>';
+      }
+    } catch(e) {
+      box.innerHTML = '<div class="info-box error" style="margin-top:12px;">Sunucuya ulaşılamadı.</div>';
+    }
+  }
+
+  // Enter tuşu desteği
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const btn = document.getElementById('gen-btn');
+      if (!btn.disabled && document.getElementById('panel-1').classList.contains('active')) {
+        generateHash();
+      }
+    }
+  });
+</script>
+</body>
+</html>

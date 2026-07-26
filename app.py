@@ -138,9 +138,12 @@ def _security_gate():
     if app.config.get("TESTING"):
         app.config["WTF_CSRF_ENABLED"] = False
         return
-    exempt = {"/login", "/logout", "/favicon.ico"}
+    exempt = {"/login", "/logout", "/setup", "/setup/hash", "/setup/check", "/favicon.ico"}
     if request.path in exempt or request.path.startswith("/static/"):
         return
+    # Parola yapılandırılmamışsa sihirbaza yönlendir
+    if not auth.password_hash_configured():
+        return redirect(url_for("setup_wizard"))
     if not session.get("logged_in"):
         return redirect(url_for("login", next=request.path))
     if auth._session_expired():
@@ -597,8 +600,53 @@ def _build_daily_report(config: dict | None) -> dict[str, Any]:
 # Kimlik doğrulama rotaları
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════════════════════════
+# İlk kurulum sihirbazı
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/setup")
+def setup_wizard():
+    """İlk çalıştırma sihirbazı — yalnızca parola yapılandırılmamışsa erişilebilir."""
+    if auth.password_hash_configured():
+        return redirect(url_for("login"))
+    return render_template("setup.html")
+
+
+@app.post("/setup/hash")
+def setup_generate_hash():
+    """
+    Girilen paroladan Werkzeug PBKDF2 hash üret ve döndür.
+    Parola sunucuda saklanmaz; yalnızca hash döndürülür.
+    Yalnızca ADMIN_PASSWORD_HASH yapılandırılmamışken erişilebilir.
+    """
+    if auth.password_hash_configured():
+        return {"error": "Kurulum tamamlanmış. Bu endpoint artık devre dışı."}, 403
+    data = request.get_json(silent=True) or {}
+    password = data.get("password", "")
+    if not password or not isinstance(password, str):
+        return {"error": "Parola boş olamaz."}, 400
+    if len(password) < 6:
+        return {"error": "Parola en az 6 karakter olmalıdır."}, 400
+    if len(password) > 1024:
+        return {"error": "Parola çok uzun."}, 400
+    from werkzeug.security import generate_password_hash
+    pw_hash = generate_password_hash(password)
+    ip = auth.get_client_ip()
+    slog.log_event(slog.STARTUP, detail="setup: hash generated", ip=ip)
+    return {"hash": pw_hash}
+
+
+@app.get("/setup/check")
+def setup_check():
+    """Parola yapılandırılmış mı diye kontrol et (sihirbaz doğrulama adımı)."""
+    return {"configured": auth.password_hash_configured()}
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    # Parola yapılandırılmamışsa sihirbaza yönlendir
+    if not auth.password_hash_configured():
+        return redirect(url_for("setup_wizard"))
     if session.get("logged_in"):
         return redirect(url_for("index"))
 
