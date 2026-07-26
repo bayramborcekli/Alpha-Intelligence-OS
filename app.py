@@ -1639,36 +1639,39 @@ def risk_page():
     return _render_workspace("risk.html", "risk")
 
 
+@app.get("/api/v1/risk/summary")
 @app.get("/api/risk/summary")
 def api_risk_summary():
     import risk_api as ra
     return _risk_json(ra.summary)
 
 
+@app.get("/api/v1/risk/exposure")
 @app.get("/api/risk/exposure")
 def api_risk_exposure():
     import risk_api as ra
     return _risk_json(ra.exposure)
 
 
+@app.get("/api/v1/risk/alerts")
 @app.get("/api/risk/alerts")
 def api_risk_alerts():
     import risk_api as ra
     return _risk_json(ra.alerts)
 
 
+@app.get("/api/v1/risk/history")
 @app.get("/api/risk/history")
 def api_risk_history():
     import risk_api as ra
     return _risk_json(ra.history)
 
 
-@app.get("/api/risk/simulator")
-def api_risk_simulator():
-    """Salt-okunur yerel simülasyon — borsaya HİÇBİR istek atılmaz."""
+def _run_simulator(params: dict):
+    """Salt-okunur YEREL simülasyon — borsaya HİÇBİR istek atılmaz."""
     import risk_api as ra
     try:
-        return jsonify(ra.simulate(request.args.to_dict()))
+        return jsonify(ra.simulate(params))
     except ValueError as exc:
         return jsonify({"ok": False, "error": {
             "code": "INVALID_PARAMETER", "message": str(exc)}}), 400
@@ -1677,6 +1680,22 @@ def api_risk_simulator():
         return jsonify({"ok": False, "error": {
             "code": "RISK_ENGINE_ERROR",
             "message": "Simülasyon tamamlanamadı."}}), 500
+
+
+@app.post("/api/v1/risk/simulator")
+def api_risk_simulator_post():
+    """Spec 6.8: POST — yalnızca yerel hesap; CSRF korumalı, borsa yok."""
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "error": {
+            "code": "INVALID_PARAMETER",
+            "message": "JSON gövde bekleniyor."}}), 400
+    return _run_simulator(body)
+
+
+@app.get("/api/risk/simulator")
+def api_risk_simulator():
+    return _run_simulator(request.args.to_dict())
 
 
 @app.get("/api/v1/executive/summary")

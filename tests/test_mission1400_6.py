@@ -301,9 +301,100 @@ class TestFrontend:
 
 class TestWriteSafety:
     def test_risk_routes_get_only(self, client):
+        # Tek istisna: spec 6.8 POST /api/v1/risk/simulator — YALNIZCA
+        # yerel hesap yapar, borsa iletişimi yoktur (ayrıca testli).
         for rule in flask_app.app.url_map.iter_rules():
-            if "risk" in rule.rule:
+            if "risk" not in rule.rule:
+                continue
+            if rule.rule == "/api/v1/risk/simulator":
+                assert rule.methods <= {"POST", "HEAD", "OPTIONS"}, rule.rule
+            else:
                 assert rule.methods <= {"GET", "HEAD", "OPTIONS"}, rule.rule
+
+    def test_post_simulator_local_only(self, client, monkeypatch):
+        # POST simülatör: borsa modelleri tuzaklı, önbellek boş → sıfır çağrı
+        called = []
+        for fn in ("global_account", "global_positions", "global_orders",
+                   "tr_account"):
+            monkeypatch.setattr(ra.dapi, fn,
+                                lambda *a, **k: called.append(1) or
+                                {"ok": False})
+        monkeypatch.setattr(ra.dapi, "_cache", {}, raising=False)
+        _login(client)
+        r = client.post("/api/v1/risk/simulator", json={
+            "exchange": "BINANCE_GLOBAL_FUTURES", "symbol": "BTCUSDT",
+            "direction": "SHORT", "entry_price": "100", "quantity": "2",
+            "leverage": "4"})
+        assert r.status_code == 200
+        d = r.get_json()
+        assert not called
+        assert Decimal(d["position_value_usdt"]) == Decimal("200.00")
+        assert Decimal(d["estimated_margin_usdt"]) == Decimal("50.00")
+
+    def test_post_simulator_bad_exchange(self, client, monkeypatch):
+        _fake_sources(monkeypatch)
+        _login(client)
+        r = client.post("/api/v1/risk/simulator", json={
+            "exchange": "KRAKEN", "symbol": "BTCUSDT", "direction": "LONG",
+            "entry_price": "1", "quantity": "1", "leverage": "1"})
+        assert r.status_code == 400
+        assert r.get_json()["error"]["code"] == "INVALID_PARAMETER"
+
+    def test_v1_aliases(self, client, monkeypatch):
+        _fake_sources(monkeypatch)
+        _login(client)
+        for p in ("summary", "exposure", "alerts", "history"):
+            assert client.get(f"/api/v1/risk/{p}").status_code == 200
+
+
+class TestThresholdConfig:
+    def test_thresholds_loaded_from_config(self, client, monkeypatch,
+                                           tmp_path):
+        cfg = tmp_path / "risk_config.json"
+        cfg.write_text('{"MAX_POSITION_PERCENT": "5", '
+                       '"POSITION_HIGH_PERCENT": "6", '
+                       '"POSITION_CRITICAL_PERCENT": "7"}',
+                       encoding="utf-8")
+        monkeypatch.setattr(ra, "CONFIG_PATH", cfg)
+        monkeypatch.setattr(ra, "_cfg_cache",
+                            {"mtime": None, "values": None})
+        th = ra.thresholds()
+        assert th["MAX_POSITION_PERCENT"] == Decimal("5")
+        assert th["RISK_HIGH_MARGIN"] == Decimal("60")   # varsayılan korunur
+        # %66.67'lik pozisyon artık Critical eşiği (7) üstünde
+        _fake_sources(monkeypatch)
+        conc = ra.concentration()
+        assert conc["warnings"] and conc["warnings"][0]["level"] == "Critical"
+
+    def test_open_orders_threshold_configurable(self, monkeypatch, tmp_path):
+        cfg = tmp_path / "risk_config.json"
+        cfg.write_text('{"MAX_OPEN_ORDERS": "2"}', encoding="utf-8")
+        monkeypatch.setattr(ra, "CONFIG_PATH", cfg)
+        monkeypatch.setattr(ra, "_cfg_cache",
+                            {"mtime": None, "values": None})
+        _fake_sources(monkeypatch, orders=3)   # 3 > 2 → ceza uygulanır
+        hs = ra.health_score(ra.exposure(), ra.concentration(),
+                             ra._account(), 3, None)
+        assert any(c["factor"] == "open_orders" for c in hs["components"])
+
+    def test_invalid_config_falls_back(self, monkeypatch, tmp_path):
+        cfg = tmp_path / "risk_config.json"
+        cfg.write_text("{bozuk json", encoding="utf-8")
+        monkeypatch.setattr(ra, "CONFIG_PATH", cfg)
+        monkeypatch.setattr(ra, "_cfg_cache",
+                            {"mtime": None, "values": None})
+        th = ra.thresholds()
+        assert th["RISK_CRITICAL_MARGIN"] == Decimal("80")
+
+    def test_alert_fields_complete(self, client, monkeypatch):
+        # Her uyarı: timestamp + severity + source + explanation (spec 6.5)
+        _fake_sources(monkeypatch, margin="1000", avail="50")
+        _login(client)
+        d = client.get("/api/risk/alerts").get_json()
+        assert d["alerts"]
+        for a in d["alerts"]:
+            for f in ("timestamp", "severity", "source", "explanation"):
+                assert a.get(f), (a["code"], f)
 
     def test_write_counters_zero(self, client, monkeypatch):
         _fake_sources(monkeypatch)

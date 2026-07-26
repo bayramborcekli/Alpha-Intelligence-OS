@@ -88,6 +88,12 @@
   <h2 id="h-trend">📈 Risk Trendi (yerel ekle-yalnız geçmiş)</h2>
   <svg class="rk-chart" id="trend-chart" role="img"
        aria-label="Günlük risk skoru trend grafiği"></svg>
+  <h3>Marj Kullanımı (%)</h3>
+  <svg class="rk-chart" id="margin-chart" role="img"
+       aria-label="Günlük marj kullanımı grafiği"></svg>
+  <h3>Günlük Düşüş (%)</h3>
+  <svg class="rk-chart" id="dd-chart" role="img"
+       aria-label="Günlük düşüş grafiği"></svg>
   <div style="overflow-x:auto;margin-top:10px"><table class="rk" id="hist-table">
     <thead><tr><th scope="col">Tarih</th><th scope="col">Skor</th>
       <th scope="col">Maruziyet (USDT)</th><th scope="col">Maruziyet %</th>
@@ -101,6 +107,10 @@
   <h2 id="h-sim">🧮 İşlem Öncesi Risk Simülatörü (borsa iletişimi YOK)</h2>
   <form id="sim-form">
     <div class="sim-grid">
+      <div><label for="sim-exchange">Borsa</label>
+        <select id="sim-exchange" name="exchange">
+          <option value="BINANCE_GLOBAL_FUTURES">Binance Global Futures</option>
+        </select></div>
       <div><label for="sim-symbol">Sembol</label>
         <input id="sim-symbol" name="symbol" required maxlength="20"
                pattern="[A-Za-z0-9]{2,20}" placeholder="BTCUSDT"></div>
@@ -133,6 +143,25 @@
     return d.innerHTML; }
   function vy(v, suffix) { return (v === null || v === undefined)
     ? "Veri Yok" : esc(v) + (suffix || ""); }
+  function spark(id, snaps, key, color) {
+    var svg = el(id); if (!svg) { return; }
+    var pts = (snaps || []).map(function (s) { return s[key]; })
+      .filter(function (v) { return v !== null && v !== undefined; })
+      .map(Number).filter(isFinite);
+    if (pts.length < 2) {
+      svg.innerHTML = "<text x='12' y='40' fill='#8b949e' font-size='12'>" +
+        "En az 2 günlük kayıt gerekir.</text>"; return; }
+    var w = 600, h = 80, pad = 6;
+    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+    var mn = Math.min.apply(null, pts), mx = Math.max.apply(null, pts);
+    var rng = (mx - mn) || 1, step = (w - 2 * pad) / (pts.length - 1);
+    svg.innerHTML = "<path fill='none' stroke='" + color +
+      "' stroke-width='2' d='" + pts.map(function (v, i) {
+        var x = pad + i * step;
+        var y = h - pad - ((v - mn) / rng) * (h - 2 * pad);
+        return (i ? "L" : "M") + x.toFixed(1) + "," + y.toFixed(1);
+      }).join(" ") + "'/>";
+  }
 
   fetch("/api/risk/summary", { credentials: "same-origin" })
     .then(function (r) { return r.json(); })
@@ -183,7 +212,12 @@
       }
       var cw = el("conc-warn");
       cw.innerHTML = (d.concentration_warnings || []).map(function (w) {
-        return "<div class='rk-alert'>" + esc(w) + "</div>";
+        var lvl = w && w.level ? w.level : "";
+        var msg = w && w.message ? w.message : w;
+        var cls = lvl === "Critical" || lvl === "High" ? " h" : "";
+        return "<div class='rk-alert" + cls + "'>" +
+          (lvl ? "<strong>" + esc(lvl) + "</strong> — " : "") +
+          esc(msg) + "</div>";
       }).join("");
     });
 
@@ -242,6 +276,9 @@
       if (!d.ok || !d.snapshots.length) {
         tb.innerHTML = "<tr><td colspan='6'>Henüz geçmiş kaydı yok — ilk anlık " +
           "görüntü bugün eklendi veya eklenecek.</td></tr>"; return; }
+      // Marj kullanımı ve düşüş mini grafikleri (animasyonsuz)
+      spark("margin-chart", d.snapshots, "margin_usage_pct", "#d29922");
+      spark("dd-chart", d.snapshots, "daily_drawdown_pct", "#f85149");
       var snaps = d.snapshots.slice().reverse();
       tb.innerHTML = snaps.slice(0, 60).map(function (s) {
         return "<tr><td>" + esc(s.date) + "</td><td>" + vy(s.risk_score) +
@@ -272,14 +309,21 @@
 
   el("sim-form").addEventListener("submit", function (ev) {
     ev.preventDefault();
-    var q = new URLSearchParams({
+    var body = {
+      exchange: el("sim-exchange").value,
       symbol: el("sim-symbol").value.trim().toUpperCase(),
       direction: el("sim-direction").value,
       entry_price: el("sim-price").value.trim(),
       quantity: el("sim-qty").value.trim(),
       leverage: el("sim-lev").value.trim()
-    });
-    fetch("/api/risk/simulator?" + q.toString(), { credentials: "same-origin" })
+    };
+    var csrf = document.querySelector('meta[name="csrf-token"]');
+    // POST yalnızca YEREL hesap yapar — borsaya hiçbir istek atılmaz.
+    fetch("/api/v1/risk/simulator", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json",
+                 "X-CSRFToken": csrf ? csrf.content : "" },
+      body: JSON.stringify(body) })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         var box = el("sim-result");
@@ -298,6 +342,9 @@
           "<tr><td>İşlem Sonrası Konsantrasyon</td><td>" +
             (d.concentration_after_pct === null ? "Veri Yok"
              : "%" + esc(d.concentration_after_pct)) + "</td></tr>" +
+          "<tr><td>İşlem Sonrası En Büyük Pozisyon</td><td>" +
+            (d.largest_position_after_pct === null ? "Veri Yok"
+             : "%" + esc(d.largest_position_after_pct)) + "</td></tr>" +
           "<tr><td>Tahmini Tasfiye Tamponu</td><td>%" +
             esc(d.estimated_liquidation_buffer_pct) + "</td></tr>" +
           "</tbody></table><p class='rk-note'>" + esc(d.liquidation_note) + "</p>";

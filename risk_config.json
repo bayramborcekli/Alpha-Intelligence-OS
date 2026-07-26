@@ -1,0 +1,13 @@
+{
+  "_comment": "Mission 1400.6 — Risk Motoru eşikleri (yüzde). Değerler string veya sayı olabilir; geçersiz değerler güvenli varsayılana düşer.",
+  "RISK_HIGH_MARGIN": "60",
+  "RISK_CRITICAL_MARGIN": "80",
+  "MAX_POSITION_PERCENT": "25",
+  "POSITION_HIGH_PERCENT": "40",
+  "POSITION_CRITICAL_PERCENT": "60",
+  "MAX_EXCHANGE_PERCENT": "100",
+  "HIGH_EXPOSURE_PERCENT": "150",
+  "LOW_AVAILABLE_PERCENT": "20",
+  "DRAWDOWN_WARN_PERCENT": "-10",
+  "MAX_OPEN_ORDERS": "20"
+}

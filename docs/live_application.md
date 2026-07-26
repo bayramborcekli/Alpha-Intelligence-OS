@@ -39,7 +39,8 @@
 | `GET /api/v1/reports`, `/api/v1/reports/{id}`, `/{id}/download` | korumalı | görev raporu kayıt defteri |
 | `GET /api/v1/ledger/export.csv`, `/api/v1/audit/export.csv` | korumalı | defter/denetim CSV dışa aktarımı |
 | `GET /risk` | korumalı | Risk İstihbarat Motoru çalışma alanı (1400.6) |
-| `GET /api/risk/{summary,exposure,alerts,history,simulator}` | korumalı | salt-okunur risk analizi (tavsiye niteliğinde) |
+| `GET /api/v1/risk/{summary,exposure,alerts,history}` | korumalı | salt-okunur risk analizi (tavsiye niteliğinde; `/api/risk/*` eski takma adları korunur) |
+| `POST /api/v1/risk/simulator` | korumalı + CSRF | işlem-öncesi simülatör — YALNIZCA yerel hesap, borsa iletişimi yok |
 | `GET /api/v1/executive/summary` | korumalı | yönetici üst çubuğu özeti (1400.5) |
 
 Kimliksiz istek: API'de `401` (kilitli kurulumda `403`), tarayıcı
@@ -164,8 +165,17 @@ kod yolu yoktur.
   emir önizlemesi/gönderimi yoktur. Tasfiye tamponu 1/kaldıraç yaklaşımıdır
   ve açıkça öyle etiketlenir.
 - **Geçmiş** `risk_history.jsonl` dosyasında ekle-yalnız tutulur: günde en
-  çok bir kayıt, önceki kayıtların üzerine asla yazılmaz, bozuk satırlar
-  izole edilir (dosya onarılmaz). Tüm para matematiği Decimal'dir.
+  çok bir kayıt (skor, maruziyet, marj kullanımı, düşüş ve uyarı kodları),
+  önceki kayıtların üzerine asla yazılmaz, bozuk satırlar izole edilir
+  (dosya onarılmaz). Tüm para matematiği Decimal'dir.
+- **Eşikler yapılandırılabilir:** `risk_config.json` içinde
+  `RISK_HIGH_MARGIN`, `RISK_CRITICAL_MARGIN`, `MAX_POSITION_PERCENT`,
+  `POSITION_HIGH_PERCENT`, `POSITION_CRITICAL_PERCENT`,
+  `MAX_EXCHANGE_PERCENT`, `HIGH_EXPOSURE_PERCENT`, `LOW_AVAILABLE_PERCENT`,
+  `DRAWDOWN_WARN_PERCENT`. İş mantığında sabit kodlu eşik yoktur; dosya
+  eksik/bozuksa güvenli varsayılanlar kullanılır.
+- **Skor sınıf bantları:** 90-100 Mükemmel, 75-89 İyi, 60-74 Orta,
+  40-59 Yüksek Risk, 0-39 Kritik.
 - Yönetici üst çubuğundaki "Risk Seviyesi" artık bu motorun doğrulanmış
   skorundan beslenir.
 

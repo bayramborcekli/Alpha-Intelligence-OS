@@ -30,15 +30,51 @@ _HISTORY_LOCK = threading.Lock()
 _MAX_HISTORY_LINES = 5000                   # sınırsız okuma yok
 
 STABLECOINS = {"USDT", "USDC", "FDUSD", "BUSD", "TUSD", "DAI", "USDP"}
+KNOWN_EXCHANGES = {"BINANCE_GLOBAL_FUTURES"}
 
-# Konsantrasyon eşikleri (tavsiye uyarıları için)
-SINGLE_POSITION_WARN_PCT = Decimal("25")
-SINGLE_POSITION_HIGH_PCT = Decimal("40")
-EXPOSURE_WARN_PCT = Decimal("150")          # brüt maruziyet / marj bakiyesi
-MARGIN_USAGE_WARN_PCT = Decimal("60")
-MARGIN_USAGE_HIGH_PCT = Decimal("80")
-LOW_AVAILABLE_PCT = Decimal("20")
-DRAWDOWN_WARN_PCT = Decimal("-10")
+# ── PAKET 6.10 — Yapılandırılabilir eşikler ────────────────────────────────
+# İş mantığında sabit kodlanmış eşik YOKTUR; tüm değerler risk_config.json
+# üzerinden yüklenir (dosya yoksa/geçersizse aşağıdaki varsayılanlar).
+CONFIG_PATH = Path("risk_config.json")
+
+_DEFAULT_THRESHOLDS = {
+    "RISK_HIGH_MARGIN": "60",          # marj kullanımı uyarı eşiği (%)
+    "RISK_CRITICAL_MARGIN": "80",      # marj kullanımı kritik eşiği (%)
+    "MAX_POSITION_PERCENT": "25",      # tek pozisyon Medium eşiği (%)
+    "POSITION_HIGH_PERCENT": "40",     # tek pozisyon High eşiği (%)
+    "POSITION_CRITICAL_PERCENT": "60", # tek pozisyon Critical eşiği (%)
+    "MAX_EXCHANGE_PERCENT": "100",     # tek borsa payı eşiği (%)
+    "HIGH_EXPOSURE_PERCENT": "150",    # brüt maruziyet / marj eşiği (%)
+    "LOW_AVAILABLE_PERCENT": "20",     # düşük kullanılabilir bakiye (%)
+    "DRAWDOWN_WARN_PERCENT": "-10",    # günlük düşüş uyarı eşiği (%)
+    "MAX_OPEN_ORDERS": "20",           # açık emir yoğunluğu eşiği (adet)
+}
+
+_cfg_cache: dict = {"mtime": None, "values": None}
+
+
+def thresholds() -> dict[str, Decimal]:
+    """Eşikleri yapılandırmadan yükler (mtime önbellekli, fail-safe)."""
+    vals = {k: Decimal(v) for k, v in _DEFAULT_THRESHOLDS.items()}
+    try:
+        mtime = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else None
+    except OSError:
+        mtime = None
+    if mtime is not None:
+        if _cfg_cache["mtime"] == mtime and _cfg_cache["values"]:
+            return dict(_cfg_cache["values"])
+        try:
+            raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                for k in vals:
+                    d = _dec(raw.get(k))
+                    if d is not None:
+                        vals[k] = d
+        except (OSError, json.JSONDecodeError, ValueError):
+            pass    # geçersiz yapılandırma → güvenli varsayılanlar
+        _cfg_cache["mtime"] = mtime
+        _cfg_cache["values"] = dict(vals)
+    return vals
 
 _SYMBOL_RE = re.compile(r"^[A-Z0-9]{2,20}$")
 
@@ -192,6 +228,9 @@ def exposure() -> dict:
             "long_pct": _pct(long_notional, gross) if gross else None,
             "short_pct": _pct(short_notional, gross) if gross else None,
         },
+        "by_quote_currency": [{"quote": "USDT",
+                               "exposure_value_usdt": _q2(gross),
+                               "exposure_pct": "100.00" if gross else None}],
         "by_exchange": [{"exchange": "BINANCE_GLOBAL_FUTURES",
                          "exposure_value_usdt": _q2(gross),
                          "exposure_pct": "100.00" if gross else None}],
@@ -223,13 +262,23 @@ def concentration() -> dict:
            for p in rows[:5]]
     largest_pct = _dec(top[0]["share_pct"]) if top and top[0]["share_pct"] \
         else None
+    th = thresholds()
     warnings = []
-    if largest_pct is not None and largest_pct >= SINGLE_POSITION_HIGH_PCT:
-        warnings.append(f"Tek pozisyon payı %{largest_pct} — yüksek "
-                        f"konsantrasyon (eşik %{SINGLE_POSITION_HIGH_PCT}).")
-    elif largest_pct is not None and largest_pct >= SINGLE_POSITION_WARN_PCT:
-        warnings.append(f"Tek pozisyon payı %{largest_pct} — eşik "
-                        f"%{SINGLE_POSITION_WARN_PCT} aşıldı.")
+    if largest_pct is not None:
+        if largest_pct >= th["POSITION_CRITICAL_PERCENT"]:
+            warnings.append({"level": "Critical",
+                             "message": f"Tek pozisyon payı %{largest_pct} — "
+                             f"kritik eşik %{th['POSITION_CRITICAL_PERCENT']}"
+                             f" aşıldı."})
+        elif largest_pct >= th["POSITION_HIGH_PERCENT"]:
+            warnings.append({"level": "High",
+                             "message": f"Tek pozisyon payı %{largest_pct} — "
+                             f"yüksek eşik %{th['POSITION_HIGH_PERCENT']} "
+                             f"aşıldı."})
+        elif largest_pct >= th["MAX_POSITION_PERCENT"]:
+            warnings.append({"level": "Medium",
+                             "message": f"Tek pozisyon payı %{largest_pct} — "
+                             f"eşik %{th['MAX_POSITION_PERCENT']} aşıldı."})
     return {
         "ok": True, "read_only": True, "as_of": _now_iso(),
         "largest_position": top[0] if top else None,
@@ -306,13 +355,14 @@ def _drawdown(window_days: int, current_balance: Decimal | None) -> str | None:
 # ── PAKET 6.4 — Hesap Sağlığı Skoru (deterministik) ────────────────────────
 
 def _classify(score: int) -> str:
-    if score >= 85:
+    # Spec bantları: 90-100 / 75-89 / 60-74 / 40-59 / 0-39
+    if score >= 90:
         return "Mükemmel"
-    if score >= 70:
+    if score >= 75:
         return "İyi"
-    if score >= 55:
+    if score >= 60:
         return "Orta"
-    if score >= 35:
+    if score >= 40:
         return "Yüksek Risk"
     return "Kritik"
 
@@ -334,6 +384,7 @@ def health_score(exp: dict, conc: dict, acc: dict | None,
         comps.append({"factor": name, "penalty": str(points),
                       "reason": reason})
 
+    th = thresholds()
     margin = _dec(acc.get("usdt_margin_balance"))
     avail = _dec(acc.get("usdt_available_balance"))
     gross = _dec(exp.get("gross_exposure_usdt")) or Decimal(0)
@@ -341,36 +392,39 @@ def health_score(exp: dict, conc: dict, acc: dict | None,
     # 1) Marj kullanımı
     if margin and margin > 0 and avail is not None:
         usage = (margin - avail) / margin * 100
-        if usage >= MARGIN_USAGE_HIGH_PCT:
+        if usage >= th["RISK_CRITICAL_MARGIN"]:
             penalty("margin_usage", Decimal(30), f"Marj kullanımı %{_q2(usage)}")
-        elif usage >= MARGIN_USAGE_WARN_PCT:
+        elif usage >= th["RISK_HIGH_MARGIN"]:
             penalty("margin_usage", Decimal(15), f"Marj kullanımı %{_q2(usage)}")
     # 2) Brüt maruziyet / marj
     if margin and margin > 0:
         exp_pct = gross / margin * 100
-        if exp_pct >= EXPOSURE_WARN_PCT * 2:
+        if exp_pct >= th["HIGH_EXPOSURE_PERCENT"] * 2:
             penalty("exposure", Decimal(25), f"Maruziyet %{_q2(exp_pct)}")
-        elif exp_pct >= EXPOSURE_WARN_PCT:
+        elif exp_pct >= th["HIGH_EXPOSURE_PERCENT"]:
             penalty("exposure", Decimal(12), f"Maruziyet %{_q2(exp_pct)}")
     # 3) Konsantrasyon
     sp = _dec(conc.get("single_position_pct"))
     if sp is not None:
-        if sp >= SINGLE_POSITION_HIGH_PCT:
+        if sp >= th["POSITION_CRITICAL_PERCENT"]:
+            penalty("concentration", Decimal(20), f"Tek pozisyon %{sp}")
+        elif sp >= th["POSITION_HIGH_PERCENT"]:
             penalty("concentration", Decimal(15), f"Tek pozisyon %{sp}")
-        elif sp >= SINGLE_POSITION_WARN_PCT:
+        elif sp >= th["MAX_POSITION_PERCENT"]:
             penalty("concentration", Decimal(7), f"Tek pozisyon %{sp}")
     # 4) Kullanılabilir bakiye oranı
     if margin and margin > 0 and avail is not None:
         avail_pct = avail / margin * 100
-        if avail_pct <= LOW_AVAILABLE_PCT:
+        if avail_pct <= th["LOW_AVAILABLE_PERCENT"]:
             penalty("available_balance", Decimal(15),
                     f"Kullanılabilir bakiye %{_q2(avail_pct)}")
     # 5) Açık emir yoğunluğu
-    if open_orders is not None and open_orders > 20:
+    if open_orders is not None and Decimal(open_orders) > \
+            th["MAX_OPEN_ORDERS"]:
         penalty("open_orders", Decimal(5), f"{open_orders} açık emir")
     # 6) Günlük düşüş
     dd = _dec(dd_day)
-    if dd is not None and dd <= DRAWDOWN_WARN_PCT:
+    if dd is not None and dd <= th["DRAWDOWN_WARN_PERCENT"]:
         penalty("drawdown", Decimal(15), f"Günlük düşüş %{dd}")
 
     final = max(0, min(100, int(score)))
@@ -385,12 +439,15 @@ def alerts() -> dict:
     exp = exposure()
     conc = concentration()
     acc = _account()
+    th = thresholds()
     out: dict[str, dict] = {}    # kod → uyarı (tekrar imkânsız)
 
-    def add(code: str, severity: str, message: str):
+    def add(code: str, severity: str, source: str, message: str):
         if code not in out:
             out[code] = {"code": code, "severity": severity,
-                         "message": message, "advisory_only": True}
+                         "source": source, "explanation": message,
+                         "message": message, "timestamp": _now_iso(),
+                         "advisory_only": True}
 
     if exp.get("ok") and acc:
         margin = _dec(acc.get("usdt_margin_balance"))
@@ -398,37 +455,41 @@ def alerts() -> dict:
         gross = _dec(exp.get("gross_exposure_usdt")) or Decimal(0)
         if margin and margin > 0:
             exp_pct = gross / margin * 100
-            if exp_pct >= EXPOSURE_WARN_PCT:
-                add("HIGH_EXPOSURE", "WARNING",
-                    f"Brüt maruziyet marj bakiyesinin %{_q2(exp_pct)}'i.")
+            if exp_pct >= th["HIGH_EXPOSURE_PERCENT"]:
+                add("HIGH_EXPOSURE", "WARNING", "exposure",
+                    f"Brüt maruziyet marj bakiyesinin %{_q2(exp_pct)}'i "
+                    f"(eşik %{th['HIGH_EXPOSURE_PERCENT']}).")
             if avail is not None:
                 usage = (margin - avail) / margin * 100
-                if usage >= MARGIN_USAGE_HIGH_PCT:
-                    add("HIGH_MARGIN_USAGE", "HIGH",
-                        f"Marj kullanımı %{_q2(usage)}.")
-                elif usage >= MARGIN_USAGE_WARN_PCT:
-                    add("HIGH_MARGIN_USAGE", "WARNING",
-                        f"Marj kullanımı %{_q2(usage)}.")
-                if avail / margin * 100 <= LOW_AVAILABLE_PCT:
-                    add("LOW_AVAILABLE_BALANCE", "WARNING",
-                        "Kullanılabilir bakiye marjın %20'sinin altında.")
+                if usage >= th["RISK_CRITICAL_MARGIN"]:
+                    add("HIGH_MARGIN_USAGE", "HIGH", "margin",
+                        f"Marj kullanımı %{_q2(usage)} "
+                        f"(kritik eşik %{th['RISK_CRITICAL_MARGIN']}).")
+                elif usage >= th["RISK_HIGH_MARGIN"]:
+                    add("HIGH_MARGIN_USAGE", "WARNING", "margin",
+                        f"Marj kullanımı %{_q2(usage)} "
+                        f"(eşik %{th['RISK_HIGH_MARGIN']}).")
+                if avail / margin * 100 <= th["LOW_AVAILABLE_PERCENT"]:
+                    add("LOW_AVAILABLE_BALANCE", "WARNING", "balance",
+                        f"Kullanılabilir bakiye marjın "
+                        f"%{th['LOW_AVAILABLE_PERCENT']}'sinin altında.")
     if conc.get("ok"):
         sp = _dec(conc.get("single_position_pct"))
-        if sp is not None and sp >= SINGLE_POSITION_WARN_PCT:
+        if sp is not None and sp >= th["MAX_POSITION_PERCENT"]:
             add("SINGLE_ASSET_CONCENTRATION",
-                "HIGH" if sp >= SINGLE_POSITION_HIGH_PCT else "WARNING",
-                f"En büyük pozisyonun payı %{sp}.")
+                "HIGH" if sp >= th["POSITION_HIGH_PERCENT"] else "WARNING",
+                "concentration", f"En büyük pozisyonun payı %{sp}.")
     margin_now = _dec((acc or {}).get("usdt_margin_balance")) if acc else None
     dd_day = _drawdown(1, margin_now)
     dd = _dec(dd_day)
-    if dd is not None and dd <= DRAWDOWN_WARN_PCT:
-        add("LARGE_DRAWDOWN", "HIGH", f"Günlük düşüş %{dd}.")
+    if dd is not None and dd <= th["DRAWDOWN_WARN_PERCENT"]:
+        add("LARGE_DRAWDOWN", "HIGH", "drawdown", f"Günlük düşüş %{dd}.")
     upnl = None
     gp = pf.positions_view()
     if gp.get("ok"):
         upnl = _dec((gp.get("summary") or {}).get("total_unrealized_pnl"))
     if upnl is not None and upnl < 0:
-        add("NEGATIVE_UNREALIZED_PNL", "INFO",
+        add("NEGATIVE_UNREALIZED_PNL", "INFO", "pnl",
             f"Toplam gerçekleşmemiş PnL negatif ({_q2(upnl)} USDT).")
 
     return {"ok": True, "read_only": True, "advisory_only": True,
@@ -472,8 +533,11 @@ def summary() -> dict:
 
     # Günlük ekle-yalnız anlık görüntü (varsa dokunulmaz)
     if hs["score"] is not None and margin is not None:
+        alert_model = alerts()
         _append_snapshot({
             "date": _today(), "recorded_at": _now_iso(),
+            "alert_codes": [a["code"] for a in alert_model["alerts"]]
+            if alert_model.get("ok") else [],
             "risk_score": hs["score"],
             "classification": hs["classification"],
             "gross_exposure_usdt": exp.get("gross_exposure_usdt"),
@@ -520,6 +584,11 @@ def summary() -> dict:
 
 def simulate(params: dict) -> dict:
     """Tamamen yerel hesap — borsaya istek atılmaz, emir önizlemesi yok."""
+    exchange = (params.get("exchange") or
+                "BINANCE_GLOBAL_FUTURES").strip().upper()
+    if exchange not in KNOWN_EXCHANGES:
+        raise ValueError("exchange: yalnızca BINANCE_GLOBAL_FUTURES "
+                         "desteklenir")
     symbol = (params.get("symbol") or "").strip().upper()
     direction = (params.get("direction") or "").strip().upper()
     if not _SYMBOL_RE.match(symbol):
@@ -542,16 +611,21 @@ def simulate(params: dict) -> dict:
     # KESİNLİKLE YEREL: yalnızca zaten bellekte olan önbellek okunur;
     # önbellek boşsa borsa ÇAĞRILMAZ, ilgili alanlar null döner.
     after_exposure_pct = after_concentration_pct = None
+    largest_position_after_pct = None
     acc = _cached_model("global_account")
     pos = _cached_model("global_positions")
     if acc is not None and pos is not None:
         margin_bal = _dec(acc.get("usdt_margin_balance"))
-        gross = sum((_notional(p) for p in pos.get("positions_all") or []
-                     if p.get("direction") != "FLAT"), Decimal(0))
+        actives = [p for p in pos.get("positions_all") or []
+                   if p.get("direction") != "FLAT"]
+        gross = sum((_notional(p) for p in actives), Decimal(0))
         if margin_bal and margin_bal > 0:
             after_exposure_pct = _pct(gross + value, margin_bal)
         if gross + value > 0:
             after_concentration_pct = _pct(value, gross + value)
+            # İşlem sonrası EN BÜYÜK pozisyonun payı (yeni işlem dahil)
+            notionals = [_notional(p) for p in actives] + [value]
+            largest_position_after_pct = _pct(max(notionals), gross + value)
 
     # Yaklaşık tasfiye tamponu: 1/kaldıraç (bakım marjı hariç, açıkça etiketli)
     liq_buffer_pct = _q2(Decimal(100) / lev)
@@ -560,13 +634,15 @@ def simulate(params: dict) -> dict:
         "ok": True, "read_only": True, "simulation_only": True,
         "no_exchange_communication": True,
         "as_of": _now_iso(),
-        "input": {"symbol": symbol, "direction": direction,
+        "input": {"exchange": exchange, "symbol": symbol,
+                  "direction": direction,
                   "entry_price": str(price), "quantity": str(qty),
                   "leverage": str(int(lev))},
         "position_value_usdt": _q2(value),
         "estimated_margin_usdt": _q2(est_margin),
         "portfolio_exposure_after_pct": after_exposure_pct,
         "concentration_after_pct": after_concentration_pct,
+        "largest_position_after_pct": largest_position_after_pct,
         "estimated_liquidation_buffer_pct": liq_buffer_pct,
         "liquidation_note": "Yaklaşık değer (1/kaldıraç); bakım marjı ve "
                             "fonlama hariç — emir önizlemesi DEĞİLDİR.",
