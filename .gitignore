@@ -105,3 +105,6 @@ coverage.xml
 ehthumbs.db
 desktop.ini
 $RECYCLE.BIN/
+
+# Runtime state files
+alpha20_v1/risk_events.jsonl
