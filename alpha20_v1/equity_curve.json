@@ -1,0 +1,23 @@
+[
+  {
+    "timestamp": null,
+    "equity": 10000.0,
+    "trade_index": 0,
+    "symbol": null,
+    "pnl": 0.0
+  },
+  {
+    "timestamp": "2026-07-26T06:15:19.767165+00:00",
+    "equity": 9950.0,
+    "trade_index": 1,
+    "symbol": "SOLUSDT",
+    "pnl": -50.0
+  },
+  {
+    "timestamp": "2026-07-26T09:58:12.943974+00:00",
+    "equity": 9830.33190688,
+    "trade_index": 2,
+    "symbol": "BTCUSDT",
+    "pnl": -119.66809312
+  }
+]
