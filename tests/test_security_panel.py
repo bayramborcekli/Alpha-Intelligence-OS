@@ -178,6 +178,40 @@ class TestSummaryWindows:
         assert s["locked_ip_count"] == 1
         assert s["last_lockout"] is not None
 
+    def test_shuffled_timestamps_sorted_newest_first(self, sec_log):
+        """Dosya sırası karışık olsa bile recent listesi zaman damgasına göre
+        en yeniden eskiye sıralanmalı; last_lockout en son kilitlenme olmalı."""
+        import security_log as slog
+        sec_log([
+            _line(7,  "event=LOGIN_FAIL | ip=10.0.0.7 | detail=x"),
+            _line(1,  "event=LOGIN_FAIL | ip=10.0.0.1 | detail=x"),
+            _line(9,  "event=LOGIN_FAIL | ip=10.0.0.9 | detail=rate limited eski"),
+            _line(3,  "event=LOGIN_FAIL | ip=10.0.0.3 | detail=rate limited yeni"),
+            _line(5,  "event=LOGIN_FAIL | ip=10.0.0.5 | detail=x"),
+        ])
+        s = slog.get_security_summary()
+        assert [e["ip"] for e in s["recent"]] == [
+            "10.0.0.1", "10.0.0.3", "10.0.0.5", "10.0.0.7", "10.0.0.9"]
+        # last_lockout, taramada ilk görülen değil, en YENİ kilitlenme olmalı
+        expected = (datetime.now(timezone.utc) - timedelta(minutes=3))
+        assert s["last_lockout"].startswith(expected.strftime("%Y-%m-%d %H:%M"))
+
+    def test_shuffled_timestamps_max_events_keeps_newest(self, sec_log):
+        """max_events sınırı, dosya sırasına göre değil en yeni olaylara göre
+        uygulanmalı."""
+        import security_log as slog
+        lines = [_line(i + 1, f"event=LOGIN_FAIL | ip=10.1.0.{i} | detail=x")
+                 for i in range(15)]
+        # Deterministik karıştırma
+        shuffled = lines[1::2] + lines[::-2]
+        sec_log(shuffled)
+        s = slog.get_security_summary(max_events=10)
+        assert s["fail_count"] == 15
+        assert len(s["recent"]) == 10
+        # En yeni 10 olay (i=0..9) tutulmalı, en yenisi ilk sırada
+        assert [e["ip"] for e in s["recent"]] == [
+            f"10.1.0.{i}" for i in range(10)]
+
     def test_non_login_fail_events_ignored(self, sec_log):
         import security_log as slog
         sec_log([

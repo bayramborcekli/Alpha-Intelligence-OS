@@ -136,7 +136,8 @@ def get_security_summary(hours: int = 24, max_events: int = 10) -> dict:
     from datetime import timedelta
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     locked_ips: set[str] = set()
-    recent: list[dict] = []
+    events: list[tuple[datetime, dict]] = []
+    last_lockout_ts: datetime | None = None
 
     for line in reversed(lines):
         m = _LINE_RE.match(line.strip())
@@ -165,18 +166,21 @@ def get_security_summary(hours: int = 24, max_events: int = 10) -> dict:
         if is_lockout:
             if ip:
                 locked_ips.add(ip)
-            if summary["last_lockout"] is None:
-                summary["last_lockout"] = ts.strftime("%Y-%m-%d %H:%M:%S UTC")
-        if len(recent) < max_events:
-            recent.append({
-                "time":    ts.strftime("%Y-%m-%d %H:%M:%S"),
-                "event":   "Kilitlendi" if is_lockout else "Başarısız giriş",
-                "ip":      ip or "—",
-                "lockout": is_lockout,
-            })
+            if last_lockout_ts is None or ts > last_lockout_ts:
+                last_lockout_ts = ts
+        events.append((ts, {
+            "time":    ts.strftime("%Y-%m-%d %H:%M:%S"),
+            "event":   "Kilitlendi" if is_lockout else "Başarısız giriş",
+            "ip":      ip or "—",
+            "lockout": is_lockout,
+        }))
 
+    # Satırlar dosyada kronolojik olmayabilir; zaman damgasına göre yeniden sırala
+    events.sort(key=lambda item: item[0], reverse=True)
+    summary["recent"] = [ev for _, ev in events[:max_events]]
+    if last_lockout_ts is not None:
+        summary["last_lockout"] = last_lockout_ts.strftime("%Y-%m-%d %H:%M:%S UTC")
     summary["locked_ip_count"] = len(locked_ips)
-    summary["recent"] = recent
     return summary
 
 
