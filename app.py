@@ -1796,6 +1796,150 @@ def api_intelligence_settings():
     return resp
 
 
+# ── Mission 1500.2: Workspace Read-Only API ──────────────────────────
+# YALNIZCA GET. Veri tek kaynaktan gelir: intelligence_workspace_service
+# (timeline modülüne doğrudan erişilmez). Kimlik doğrulama _security_gate
+# ile zorunludur. Yanıtlar her zaman no-store, private taşır.
+
+def _ws_json(payload, status_code=200):
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = "no-store, private"
+    return (resp, status_code) if status_code != 200 else resp
+
+
+def _ws_int(name, default=None, required=False):
+    """Sorgu parametresini katı tamsayı olarak çözer; bozuksa ValueError."""
+    raw = request.args.get(name)
+    if raw is None or raw == "":
+        if required:
+            raise ValueError(name)
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(name)
+    if value < 0:
+        raise ValueError(name)
+    return value
+
+
+def _ws_bool(name):
+    """'true'/'false' dışındaki değerler geçersizdir (katı çözümleme)."""
+    raw = request.args.get(name)
+    if raw is None or raw == "":
+        return None
+    low = raw.strip().lower()
+    if low == "true":
+        return True
+    if low == "false":
+        return False
+    raise ValueError(name)
+
+
+def _ws_bad_request(param):
+    return _ws_json({"ok": False, "error": {
+        "code": "INVALID_PARAMETER",
+        "message": f"Geçersiz parametre: {param}"}}, 400)
+
+
+@app.get("/api/workspace/timeline")
+@app.get("/api/v1/workspace/timeline")
+def api_workspace_timeline():
+    import intelligence_workspace_service as wss
+    try:
+        limit = _ws_int("limit")
+        offset = _ws_int("offset", default=0)
+    except ValueError as e:
+        return _ws_bad_request(str(e))
+    return _ws_json(wss.get_timeline(limit=limit, offset=offset))
+
+
+@app.get("/api/workspace/snapshot/<snapshot_id>")
+@app.get("/api/v1/workspace/snapshot/<snapshot_id>")
+def api_workspace_snapshot(snapshot_id: str):
+    import intelligence_workspace_service as wss
+    # Katı id çözümleme: tamsayı olmayan/pozitif olmayan id → 400
+    try:
+        sid = int(snapshot_id)
+    except (TypeError, ValueError):
+        return _ws_bad_request("snapshot_id")
+    if sid < 1:
+        return _ws_bad_request("snapshot_id")
+    out = wss.get_snapshot(sid)
+    if not out.get("ok") and \
+            out.get("error", {}).get("code") == "SNAPSHOT_NOT_FOUND":
+        return _ws_json(out, 404)
+    return _ws_json(out)
+
+
+@app.get("/api/workspace/compare")
+@app.get("/api/v1/workspace/compare")
+def api_workspace_compare():
+    import intelligence_workspace_service as wss
+    try:
+        a = _ws_int("a", required=True)
+        b = _ws_int("b", required=True)
+    except ValueError as e:
+        return _ws_bad_request(str(e))
+    if a < 1 or b < 1:
+        return _ws_bad_request("a" if a < 1 else "b")
+    out = wss.compare_snapshots(a, b)
+    if not out.get("ok") and \
+            out.get("error", {}).get("code") == "SNAPSHOT_NOT_FOUND":
+        return _ws_json(out, 404)
+    return _ws_json(out)
+
+
+@app.get("/api/workspace/recommendations")
+@app.get("/api/v1/workspace/recommendations")
+def api_workspace_recommendations():
+    import intelligence_workspace_service as wss
+    return _ws_json(wss.get_recommendation_history())
+
+
+@app.get("/api/workspace/risk-evolution")
+@app.get("/api/v1/workspace/risk-evolution")
+def api_workspace_risk_evolution():
+    import intelligence_workspace_service as wss
+    return _ws_json(wss.get_risk_evolution())
+
+
+@app.get("/api/workspace/search")
+@app.get("/api/v1/workspace/search")
+def api_workspace_search():
+    import intelligence_workspace_service as wss
+    from datetime import datetime as _dt
+
+    def _iso(name, *alts):
+        for key in (name, *alts):
+            raw = request.args.get(key)
+            if raw:
+                try:
+                    _dt.fromisoformat(raw.replace("Z", "+00:00"))
+                except ValueError:
+                    raise ValueError(key)
+                return raw
+        return None
+
+    try:
+        partial = _ws_bool("partial")
+        advisory = _ws_bool("advisory_only")
+        start = _iso("start", "date")
+        end = _iso("end", "date_end")
+    except ValueError as e:
+        return _ws_bad_request(str(e))
+    return _ws_json(wss.search(
+        start=start,
+        end=end,
+        status=request.args.get("status") or None,
+        confidence=request.args.get("confidence") or None,
+        recommendation_code=request.args.get("recommendation") or None,
+        insight_code=request.args.get("insight") or None,
+        partial=partial,
+        advisory_only=advisory,
+    ))
+
+
 @app.get("/api/v1/executive/summary")
 def api_executive_summary():
     """Mission 1400.5 — yönetici üst çubuğu özeti (salt-okunur)."""
