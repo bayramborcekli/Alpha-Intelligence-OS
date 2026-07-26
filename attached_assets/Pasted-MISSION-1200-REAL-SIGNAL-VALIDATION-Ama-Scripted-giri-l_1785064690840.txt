@@ -1,0 +1,77 @@
+MISSION 1200 — REAL SIGNAL VALIDATION
+
+Amaç:
+Scripted girişleri kapatıp gerçek sinyal akışını uçtan uca ölçmek.
+
+Kurallar:
+- Motor koduna yeni özellik ekleme.
+- PAPER-only kilidi korunacak.
+- Resume ve crash-recovery mekanizması değiştirilmeyecek.
+- Gerçek sinyal filtresi aktif olacak.
+- Signal score eşiği başlangıçta mevcut üretim değeri olan >=65 olacak.
+- Saat, gün veya market regime filtresi eklenmeyecek.
+- Economic Viability Filter aktif kalacak.
+- Fee safety factor değiştirilmeden önce baseline koşusu alınacak.
+
+AŞAMA A — BASELINE
+- Mevcut signal score >=65
+- Mevcut fee safety factor
+- En az 300 kapanmış paper trade
+- 0 ledger mismatch
+- 0 PnL mismatch
+- 0 risk violation
+- 0 beklenmeyen exception
+
+AŞAMA B — FEE CALIBRATION
+Baseline tamamlandıktan sonra yalnızca fee safety factor için kontrollü deney yap:
+- 1.5
+- 2.0
+- 2.5
+
+Her varyant aynı veri dönemi, aynı başlangıç state'i ve aynı sinyal akışıyla çalıştırılmalı.
+Sonuçlar karşılaştırılabilir ve deterministik olmalı.
+
+Her varyant için raporla:
+- Eligible signals
+- Executed trades
+- Rejected by economic filter
+- Closed trades
+- Win rate
+- Gross profit
+- Gross loss
+- Total fees
+- Fee / gross profit ratio
+- Net PnL
+- Profit factor
+- Max drawdown
+- Average net PnL per trade
+- Average signal score
+- Ledger mismatches
+- PnL mismatches
+- Risk violations
+- Exceptions
+
+Karar ilkesi:
+En yüksek net PnL'yi körü körüne seçme.
+Teknik doğruluk, örneklem büyüklüğü, drawdown, fee yükü ve işlem sayısını birlikte değerlendir.
+
+Yasaklar:
+- Saat/gün filtresi ekleme.
+- Rejim filtresi ekleme.
+- Sonuca bakarak eşik uydurma.
+- Aynı veri üzerinde tekrar tekrar parametre arama.
+- Gerçekleşmeyen metriği raporlama.
+
+PASS koşulları:
+- Tüm varyantlarda teknik doğruluk korunuyor.
+- En az 300 gerçek-sinyal kapanmış işlemden oluşan baseline tamamlanıyor.
+- Sonuçlar tekrar üretilebilir.
+- Fee safety factor için veri destekli öneri oluşturuluyor.
+
+Final çıktı:
+MISSION 1200: PASS / FAIL
+TECHNICAL INTEGRITY: PASS / FAIL
+REAL SIGNAL BASELINE: PASS / FAIL
+RECOMMENDED SAFETY FACTOR: x veya NO CHANGE
+EVIDENCE: kısa gerekçe
+NEXT ACTION: tek net işlem
