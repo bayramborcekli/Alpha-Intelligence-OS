@@ -357,6 +357,75 @@ class TestSinglePnLSource:
         assert "Kapanan işlem yok" in out
 
 
+# ── 5c. Mission 11: Pre-trade ekonomik filtre ─────────────────────────────────
+
+class TestEconomicFilter:
+    def _cfg(self, **o):
+        cfg = base_config()
+        cfg.setdefault("fee_safety_factor", 2.0)
+        cfg.update(o)
+        return cfg
+
+    def test_wide_stop_passes(self):
+        # Geniş stop → küçük pozisyon → düşük fee → işlem açılabilir
+        econ = alpha20.evaluate_trade_economics(
+            entry=65000, atr=650, side="LONG", balance=10000, config=self._cfg())
+        assert econ["skip"] is False
+        assert econ["expected_gross_profit"] == pytest.approx(
+            10000 * 0.5 / 100 * 2.0)  # risk × RR
+        assert econ["fee_gross_ratio"] < 0.5
+
+    def test_tiny_stop_skipped(self):
+        # 1m ATR benzeri minik stop → dev pozisyon → fee brütü ezer → SKIP
+        econ = alpha20.evaluate_trade_economics(
+            entry=65000, atr=8, side="LONG", balance=10000, config=self._cfg())
+        assert econ["skip"] is True
+        assert econ["expected_total_fee"] > econ["expected_gross_profit"]
+
+    def test_required_metrics_present(self):
+        econ = alpha20.evaluate_trade_economics(
+            entry=100, atr=1, side="SHORT", balance=10000, config=self._cfg())
+        for key in ("entry", "stop", "atr", "stop_distance_pct", "position_size",
+                    "expected_gross_profit", "expected_total_fee",
+                    "risk_reward", "fee_gross_ratio", "safety_factor"):
+            assert key in econ
+
+    def test_safety_factor_configurable(self):
+        # Sınırda bir kurulum: sf=0 ile geçer, çok yüksek sf ile atlanır
+        kw = dict(entry=65000, atr=650, side="LONG", balance=10000)
+        assert alpha20.evaluate_trade_economics(
+            **kw, config=self._cfg(fee_safety_factor=0.0))["skip"] is False
+        assert alpha20.evaluate_trade_economics(
+            **kw, config=self._cfg(fee_safety_factor=100.0))["skip"] is True
+
+    def test_open_raises_trade_skipped(self):
+        cfg, st = base_config(), fresh_state()
+        cfg["fee_safety_factor"] = 2.0
+        d = details()
+        d["atr"] = d["price"] * 0.0001  # ekonomik olarak saçma sıkılıkta stop
+        with pytest.raises(alpha20.TradeSkippedError, match="SKIPPED"):
+            open_paper_position("BTCUSDT", "LONG", d, cfg, st)
+        assert st["position"] is None  # hiçbir durum değişmedi
+        assert st["balance"] == cfg["starting_balance_usdt"]
+
+    def test_open_allows_economic_trade(self):
+        cfg, st = base_config(), fresh_state()
+        cfg["fee_safety_factor"] = 2.0
+        open_paper_position("BTCUSDT", "LONG", details(), cfg, st)
+        assert st["position"] is not None
+
+    def test_skip_is_not_risk_violation(self):
+        """SKIP sonrası consecutive_losses ve bakiye değişmez."""
+        cfg, st = base_config(), fresh_state()
+        d = details()
+        d["atr"] = d["price"] * 0.0001
+        before = dict(st)
+        with pytest.raises(alpha20.TradeSkippedError):
+            open_paper_position("BTCUSDT", "SHORT", d, cfg, st)
+        assert st["consecutive_losses"] == before["consecutive_losses"]
+        assert st["trades"] == []
+
+
 # ── 6. Başlangıç doğrulaması ──────────────────────────────────────────────────
 
 class TestStartupValidation:

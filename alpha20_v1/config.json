@@ -15,6 +15,7 @@
   "minimum_score": 65,
   "reward_risk_ratio": 2.0,
   "atr_stop_multiplier": 1.5,
+  "fee_safety_factor": 2.0,
   "max_open_positions": 1,
   "adaptive_system": {
     "enabled": false,

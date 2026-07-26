@@ -307,6 +307,53 @@ def score_setup(fast: pd.DataFrame, trend: pd.DataFrame) -> tuple[str | None, in
     return None, max(long_score, short_score), details
 
 
+class TradeSkippedError(Exception):
+    """Ekonomik filtre: işlem açılmadı (risk ihlali DEĞİL)."""
+
+
+def evaluate_trade_economics(
+    entry: float,
+    atr: float,
+    side: str,
+    balance: float,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Mission 11 — pre-trade ekonomik doğrulama (salt hesap, durum değiştirmez).
+
+    Kural: expected_gross_profit <= expected_total_fee * safety_factor → SKIP.
+    """
+    safety_factor = float(config.get("fee_safety_factor", 2.0))
+    stop_distance = atr * config["atr_stop_multiplier"]
+    rr = config["reward_risk_ratio"]
+    risk_usdt = balance * config["risk_per_trade_pct"] / 100
+    quantity = risk_usdt / stop_distance if stop_distance > 0 else 0.0
+    if side == "LONG":
+        stop = entry - stop_distance
+        target = entry + stop_distance * rr
+    else:
+        stop = entry + stop_distance
+        target = entry - stop_distance * rr
+    expected_gross_profit = risk_usdt * rr  # hedefe ulaşırsa brüt kâr
+    expected_total_fee = (entry + target) * quantity * FEE_RATE
+    fee_gross_ratio = (expected_total_fee / expected_gross_profit
+                       if expected_gross_profit > 0 else float("inf"))
+    skip = expected_gross_profit <= expected_total_fee * safety_factor
+    return {
+        "entry": entry,
+        "stop": stop,
+        "atr": atr,
+        "stop_distance": stop_distance,
+        "stop_distance_pct": round(stop_distance / entry * 100, 6) if entry else None,
+        "position_size": quantity,
+        "expected_gross_profit": round(expected_gross_profit, 8),
+        "expected_total_fee": round(expected_total_fee, 8),
+        "risk_reward": rr,
+        "fee_gross_ratio": round(fee_gross_ratio, 6),
+        "safety_factor": safety_factor,
+        "skip": skip,
+    }
+
+
 def can_open(
     config: dict[str, Any], state: dict[str, Any], symbol: str | None = None
 ) -> tuple[bool, str]:
@@ -347,6 +394,20 @@ def open_paper_position(
     if risk_usdt <= 0 or state["balance"] <= 0:
         raise ValueError(f"Yetersiz sanal bakiye: {state['balance']:.2f} USDT")
     quantity = risk_usdt / stop_distance
+
+    # Mission 11 — pre-trade ekonomik doğrulama (muhasebe/risk motoruna dokunmaz)
+    econ = evaluate_trade_economics(entry, atr, side, state["balance"], config)
+    if econ["skip"]:
+        log.info(
+            "SKIPPED: Expected fee exceeds acceptable threshold. | %s %s | "
+            "beklenen brüt=%.2f beklenen fee=%.2f oran=%.2f sf=%.1f",
+            symbol, side, econ["expected_gross_profit"],
+            econ["expected_total_fee"], econ["fee_gross_ratio"], econ["safety_factor"],
+        )
+        raise TradeSkippedError(
+            "SKIPPED: Expected fee exceeds acceptable threshold. "
+            f"(gross={econ['expected_gross_profit']:.2f} "
+            f"fee={econ['expected_total_fee']:.2f} sf={econ['safety_factor']})")
 
     if side == "LONG":
         stop = entry - stop_distance
@@ -473,7 +534,12 @@ def run_cycle(config: dict[str, Any], state: dict[str, Any]) -> None:
         log.warning("Ağ/veri hatası nedeniyle bu döngüde yeni pozisyon açılmayacak.")
     elif candidates:
         score, symbol, side, details = max(candidates, key=lambda x: x[0])
-        open_paper_position(symbol, side, details, config, state)
+        try:
+            open_paper_position(symbol, side, details, config, state)
+        except TradeSkippedError as exc:
+            state["skipped_trades"] = state.get("skipped_trades", 0) + 1
+            log.info("%s %s açılmadı — %s (ekonomik filtre, risk ihlali değil)",
+                     symbol, side, exc)
     else:
         log.info("Eşik üzerinde fırsat bulunmadı.")
 

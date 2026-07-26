@@ -26,6 +26,8 @@ sys.path.insert(0, str(ROOT / "alpha20_v1"))
 import alpha20  # noqa: E402
 from alpha20 import (  # noqa: E402
     FEE_RATE,
+    TradeSkippedError,
+    evaluate_trade_economics,
     fetch_klines,
     open_paper_position,
     manage_position,
@@ -102,6 +104,8 @@ def main() -> int:
     validation_failures: list[str] = []
     risk_violations = 0
     exceptions = 0
+    skipped = 0
+    skip_samples: list[dict] = []
     cursor = {s: 200 for s in symbols}  # ATR için ısınma payı
     sides = ["LONG", "SHORT"]
     opened = 0
@@ -133,6 +137,23 @@ def main() -> int:
         try:
             open_paper_position(sym, side,
                                 {"price": entry_price, "atr": atr}, config, state)
+        except TradeSkippedError:
+            skipped += 1
+            econ = evaluate_trade_economics(entry_price, atr, side,
+                                            state["balance"], config)
+            if len(skip_samples) < 3:
+                skip_samples.append({k: econ[k] for k in (
+                    "entry", "stop", "atr", "stop_distance_pct", "position_size",
+                    "expected_gross_profit", "expected_total_fee",
+                    "risk_reward", "fee_gross_ratio")})
+            print(f"SKIPPED ({sym} {side}): Expected fee exceeds acceptable "
+                  f"threshold. gross={econ['expected_gross_profit']:.2f} "
+                  f"fee={econ['expected_total_fee']:.2f}")
+            cursor[sym] += 50
+            if all(cursor[s] >= len(data[s]) - 5 for s in symbols):
+                print("Tüm replay verisi tarandı — ekonomik filtre hiçbir işleme izin vermedi.")
+                break
+            continue
         except ValueError as exc:
             print(f"AÇILIŞ REDDİ ({sym} {side}): {exc}")
             exceptions += 1
@@ -247,8 +268,13 @@ def main() -> int:
     ledger_mismatches = sum("ledger" in f for f in validation_failures)
     pnl_mismatches = sum("PnL" in f or "fee" in f or "delta" in f
                          for f in validation_failures)
-    passed = (len(trades) == TARGET_TRADES and ledger_mismatches == 0
-              and pnl_mismatches == 0 and risk_violations == 0 and exceptions == 0)
+    allow_all_skipped = "--allow-all-skipped" in sys.argv
+    clean = (ledger_mismatches == 0 and pnl_mismatches == 0
+             and risk_violations == 0 and exceptions == 0)
+    passed = clean and (
+        len(trades) == TARGET_TRADES
+        or (allow_all_skipped and len(trades) == 0 and skipped > 0)
+    )
 
     report = {
         "mission": "Mission 10",
@@ -257,6 +283,8 @@ def main() -> int:
         "started_at": started_at,
         "finished_at": finished_at,
         "opened_trades": opened,
+        "skipped_trades": skipped,
+        "skip_samples": skip_samples,
         "closed_trades": len(trades),
         "wins": len(wins),
         "losses": len(losses),

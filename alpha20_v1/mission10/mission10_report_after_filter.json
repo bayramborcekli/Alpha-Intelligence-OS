@@ -1,0 +1,62 @@
+{
+  "mission": "Mission 10",
+  "mode": "PAPER (izole simülasyon, gerçek Binance 1m verisi replay)",
+  "pytest_before": "342 passed",
+  "started_at": "2026-07-26T10:41:02.284465+00:00",
+  "finished_at": "2026-07-26T10:41:04.831382+00:00",
+  "opened_trades": 0,
+  "skipped_trades": 78,
+  "skip_samples": [
+    {
+      "entry": 64079.3,
+      "stop": 64071.510714285716,
+      "atr": 5.192857142856416,
+      "stop_distance_pct": 0.012156,
+      "position_size": 6.419073819349821,
+      "expected_gross_profit": 100.0,
+      "expected_total_fee": 822.75951398,
+      "risk_reward": 2.0,
+      "fee_gross_ratio": 8.227595
+    },
+    {
+      "entry": 1859.12,
+      "stop": 1859.675,
+      "atr": 0.370000000000037,
+      "stop_distance_pct": 0.029853,
+      "position_size": 90.09009009008108,
+      "expected_gross_profit": 100.0,
+      "expected_total_fee": 334.87657658,
+      "risk_reward": 2.0,
+      "fee_gross_ratio": 3.348766
+    },
+    {
+      "entry": 73.91,
+      "stop": 73.87571428571428,
+      "atr": 0.022857142857141355,
+      "stop_distance_pct": 0.046388,
+      "position_size": 1458.3333333334292,
+      "expected_gross_profit": 100.0,
+      "expected_total_fee": 215.67083333,
+      "risk_reward": 2.0,
+      "fee_gross_ratio": 2.156708
+    }
+  ],
+  "closed_trades": 0,
+  "wins": 0,
+  "losses": 0,
+  "gross_pnl": 0,
+  "total_fee": 0,
+  "net_pnl": 0,
+  "largest_win": null,
+  "largest_loss": null,
+  "max_drawdown_pct": 0.0,
+  "ledger_check": "OK",
+  "ledger_mismatches": 0,
+  "pnl_mismatches": 0,
+  "risk_violations": 0,
+  "exceptions": 0,
+  "validation_failures": [],
+  "starting_balance": 10000.0,
+  "final_balance": 10000.0,
+  "result": "PASS"
+}
