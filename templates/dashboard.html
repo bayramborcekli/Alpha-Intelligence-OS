@@ -656,6 +656,53 @@
       </div>
     </section>
 
+    {# ── Güvenlik Durumu ── #}
+    <section class="card col-12" id="guvenlik">
+      <h2>Güvenlik Durumu</h2>
+      <p class="muted" style="font-size:.84rem;margin-bottom:14px">
+        Son 24 saatteki başarısız giriş denemeleri ve IP kilitlenmeleri (security.log).
+      </p>
+      {% if security.fail_count == 0 %}
+        <div class="empty-box">Son 24 saatte başarısız giriş denemesi yok.</div>
+      {% else %}
+        <div class="smart-cards" style="grid-template-columns:repeat(3,1fr)">
+          <div class="smart-card-item">
+            <div class="muted" style="font-size:.78rem">Başarısız giriş (24s)</div>
+            <div style="font-size:1.3rem;font-weight:600{{ ';color:var(--loss,#f85149)' if security.fail_count else '' }}">{{ security.fail_count }}</div>
+          </div>
+          <div class="smart-card-item">
+            <div class="muted" style="font-size:.78rem">Kilitlenen IP sayısı</div>
+            <div style="font-size:1.3rem;font-weight:600{{ ';color:var(--loss,#f85149)' if security.locked_ip_count else '' }}">{{ security.locked_ip_count }}</div>
+          </div>
+          <div class="smart-card-item">
+            <div class="muted" style="font-size:.78rem">Son kilitlenme</div>
+            <div style="font-size:1.05rem;font-weight:600">{{ security.last_lockout or '—' }}</div>
+          </div>
+        </div>
+        {% if security.locked_ip_count %}
+          <p style="color:#f85149;font-weight:600;font-size:.9rem;margin-bottom:10px">
+            ⚠ Parola tahmin girişimi olabilir: bir veya daha fazla IP kilitlendi.
+          </p>
+        {% endif %}
+        {% if security.recent %}
+          <div class="history-wrap">
+            <table>
+              <thead><tr><th>Zaman (UTC)</th><th>Olay</th><th>IP</th></tr></thead>
+              <tbody>
+                {% for ev in security.recent %}
+                  <tr>
+                    <td>{{ ev.time }}</td>
+                    <td class="{{ 'loss' if ev.lockout else '' }}">{{ ev.event }}</td>
+                    <td>{{ ev.ip }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      {% endif %}
+    </section>
+
     {# ── İşlem Geçmişi ── #}
     <section class="card col-12" id="islem-gecmisi">
       <h2>İşlem Geçmişi</h2>

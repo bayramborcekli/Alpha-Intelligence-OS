@@ -801,6 +801,7 @@ def render_dashboard(message: str | None = None, message_type: str = "success"):
         message=message, message_type=message_type,
         smart=smart, perf=perf,
         adaptive=adaptive_ctx,
+        security=slog.get_security_summary(),
         app_version=get_version(),
     )
 

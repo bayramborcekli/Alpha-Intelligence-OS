@@ -95,6 +95,87 @@ def log_event(
     _logger.info(" | ".join(parts))
 
 
+_LINE_RE = None  # lazily compiled
+
+
+def get_security_summary(hours: int = 24, max_events: int = 10) -> dict:
+    """
+    security.log dosyasından son `hours` saatteki başarısız giriş / kilitlenme
+    özetini çıkar. Parola veya hassas veri içermez (log'a zaten yazılmaz).
+
+    Dönen sözlük:
+      fail_count      — son N saatteki LOGIN_FAIL sayısı
+      locked_ip_count — rate-limit'e takılan (kilitlenen) farklı IP sayısı
+      last_lockout    — son kilitlenme zamanı (UTC string) veya None
+      recent          — en son olaylar listesi [{time, event, ip, detail}]
+    """
+    import re
+
+    global _LINE_RE
+    if _LINE_RE is None:
+        _LINE_RE = re.compile(
+            r"^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})Z \| (?P<rest>.+)$"
+        )
+
+    summary = {
+        "fail_count": 0,
+        "locked_ip_count": 0,
+        "last_lockout": None,
+        "recent": [],
+    }
+    if not LOG_PATH.exists():
+        return summary
+
+    try:
+        lines = LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return summary
+
+    from datetime import timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    locked_ips: set[str] = set()
+    recent: list[dict] = []
+
+    for line in reversed(lines):
+        m = _LINE_RE.match(line.strip())
+        if not m:
+            continue
+        try:
+            ts = datetime.strptime(m.group("ts"), "%Y-%m-%dT%H:%M:%S").replace(
+                tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if ts < cutoff:
+            break
+        fields: dict[str, str] = {}
+        for part in m.group("rest").split(" | "):
+            if "=" in part:
+                k, _, v = part.partition("=")
+                fields[k.strip()] = v.strip()
+        if fields.get("event") != LOGIN_FAIL:
+            continue
+        ip     = fields.get("ip", "")
+        detail = fields.get("detail", "")
+        summary["fail_count"] += 1
+        is_lockout = detail.lower().startswith("rate limited")
+        if is_lockout:
+            if ip:
+                locked_ips.add(ip)
+            if summary["last_lockout"] is None:
+                summary["last_lockout"] = ts.strftime("%Y-%m-%d %H:%M:%S UTC")
+        if len(recent) < max_events:
+            recent.append({
+                "time":    ts.strftime("%Y-%m-%d %H:%M:%S"),
+                "event":   "Kilitlendi" if is_lockout else "Başarısız giriş",
+                "ip":      ip or "—",
+                "lockout": is_lockout,
+            })
+
+    summary["locked_ip_count"] = len(locked_ips)
+    summary["recent"] = recent
+    return summary
+
+
 def log_contains_sensitive(log_path: Path | None = None) -> bool:
     """Test yardımcısı: log dosyasında hassas kelime var mı?"""
     path = log_path or LOG_PATH
