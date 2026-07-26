@@ -83,14 +83,14 @@ class TestSetupAccess:
         )
 
     def test_setup_hash_endpoint_blocked_when_configured(self, configured_client):
-        """POST /setup/hash, parola yapılandırılmışken 403 dönmeli."""
+        """POST /setup/hash, parola yapılandırılmışken 404 dönmeli (varlık ifşa etmez)."""
         resp = configured_client.post(
             "/setup/hash",
             data=json.dumps({"password": "anypassword"}),
             content_type="application/json",
         )
-        assert resp.status_code == 403, (
-            f"POST /setup/hash, parola yapılandırıldığında 403 bekleniyor; {resp.status_code} alındı"
+        assert resp.status_code == 404, (
+            f"POST /setup/hash, parola yapılandırıldığında 404 bekleniyor; {resp.status_code} alındı"
         )
         body = resp.get_json()
         assert body is not None and "error" in body

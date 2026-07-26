@@ -271,6 +271,33 @@ class TestSecurity:
             flask_app.app.config["TESTING"] = True
             auth._ATTEMPTS.clear()
 
+    def test_setup_hash_404_after_configuration(self, client):
+        """Kurulum sonrası /setup/hash da 404 dönmeli (403 değil)."""
+        assert client.post("/setup/hash",
+                           json={"password": "abcdef123"}).status_code == 404
+
+    def test_setup_throttle_does_not_consume_login_budget(self, monkeypatch):
+        """Sihirbaz hız sınırı ayrı ad alanında; login kilidini tüketmez."""
+        for k in ("ADMIN_PASSWORD_HASH", "ALPHA_OWNER_USERNAME",
+                  "ALPHA_OWNER_PASSWORD_HASH"):
+            monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv("LOGIN_ATTEMPTS_DB", "/tmp/test_m14001r_ns.db")
+        auth._ATTEMPTS.clear()
+        flask_app.app.config["TESTING"] = False
+        flask_app.app.config["WTF_CSRF_ENABLED"] = False
+        try:
+            with flask_app.app.test_client() as c:
+                for _ in range(auth.MAX_ATTEMPTS):
+                    c.post("/setup/hash", json={"password": "abcdef123"})
+            # setup kilitlendi ama login IP bütçesi dokunulmamış olmalı
+            allowed, _ = auth.check_rate_limit("127.0.0.1")
+            assert allowed is True
+            allowed_setup, _ = auth.check_rate_limit("setup:127.0.0.1")
+            assert allowed_setup is False
+        finally:
+            flask_app.app.config["TESTING"] = True
+            auth._ATTEMPTS.clear()
+
     def test_owner_config_persists_across_simulated_restart(self, client):
         """Env tabanlı model: sahip kimliği yalnızca ortamdan okunur; süreç
         yeniden başlasa da (yeni istemci) yapılandırma READY kalır."""

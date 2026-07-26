@@ -686,15 +686,17 @@ def setup_generate_hash():
     Yalnızca ADMIN_PASSWORD_HASH yapılandırılmamışken erişilebilir.
     """
     if auth.password_hash_configured():
-        return {"error": "Kurulum tamamlanmış. Bu endpoint artık devre dışı."}, 403
-    # Hız sınırı (Mission 1400.1-R): sihirbaz hash üretimi de login ile aynı
-    # IP bazlı sınırı kullanır — anonim uçta kaba kuvvet/istismar önlenir.
-    _ip = auth.get_client_ip()
-    _allowed, _secs = auth.check_rate_limit(_ip)
+        # Kurulum sonrası /setup ile aynı davranış: varlık ifşa etmeyen 404.
+        return "", 404
+    # Hız sınırı (Mission 1400.1-R): ayrı "setup:" ad alanı kullanılır —
+    # sihirbaz istekleri login kilit bütçesini TÜKETMEZ, ama kendi başına
+    # aynı pencere/limitle kısıtlanır.
+    _key = "setup:" + auth.get_client_ip()
+    _allowed, _secs = auth.check_rate_limit(_key)
     if not _allowed:
         return {"error": f"Çok fazla istek. {_secs} saniye sonra tekrar "
                          "deneyin."}, 429
-    auth.record_attempt(_ip, success=False)
+    auth.record_attempt(_key, success=False)
     data = request.get_json(silent=True) or {}
     password = data.get("password", "")
     if not password or not isinstance(password, str):
