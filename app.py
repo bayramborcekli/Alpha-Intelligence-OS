@@ -196,6 +196,7 @@ def _security_headers(response: Response) -> Response:
     response.headers["X-Frame-Options"]        = "DENY"
     response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"]     = "geolocation=(), camera=(), microphone=()"
+    response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
     csp = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
