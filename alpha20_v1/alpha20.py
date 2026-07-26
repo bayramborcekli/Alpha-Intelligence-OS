@@ -65,11 +65,71 @@ def initial_state(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+MAX_SYMBOLS = 3
+MIN_RISK_PCT = 0.25
+MAX_RISK_PCT = 0.50
+FEE_RATE = 0.001  # taraf başına %0.1 tahmini ücret
+
+
+def validate_startup_config(config: dict[str, Any]) -> None:
+    """Başlangıç kuralları — herhangi biri ihlal edilirse SystemExit."""
+    errors: list[str] = []
+    if config.get("mode") != "PAPER":
+        errors.append("mode PAPER olmalı — gerçek işlem desteklenmiyor.")
+    symbols = config.get("symbols") or []
+    if not symbols:
+        errors.append("En az 1 sembol gerekli.")
+    if len(symbols) > MAX_SYMBOLS:
+        errors.append(f"En fazla {MAX_SYMBOLS} sembol kullanılabilir (şu an {len(symbols)}).")
+    risk = float(config.get("risk_per_trade_pct", 0))
+    if not (MIN_RISK_PCT <= risk <= MAX_RISK_PCT):
+        errors.append(
+            f"risk_per_trade_pct {MIN_RISK_PCT}–{MAX_RISK_PCT} aralığında olmalı (şu an {risk})."
+        )
+    if int(config.get("max_open_positions", 0)) != 1:
+        errors.append("max_open_positions 1 olmalı.")
+    if int(config.get("leverage", 1)) != 1:
+        errors.append("Kaldıraç desteklenmiyor — leverage 1 olmalı.")
+    if errors:
+        for err in errors:
+            log.error("CONFIG HATASI: %s", err)
+        raise SystemExit("Başlangıç doğrulaması başarısız: " + " | ".join(errors))
+
+
+def print_startup_report(config: dict[str, Any], state: dict[str, Any]) -> None:
+    print("Paper Trading Start Ready")
+    print(f"Mode: {config['mode']}")
+    print(f"Symbols: {', '.join(config['symbols'])}")
+    print(f"Starting Virtual Balance: {config['starting_balance_usdt']:.2f} USDT")
+    print(f"Current Balance: {state['balance']:.2f} USDT")
+    print(f"Risk Per Trade: {config['risk_per_trade_pct']}%")
+    print(f"Max Open Positions: {config['max_open_positions']}")
+    print(f"Leverage: 1x")
+    print(f"Stop Loss: ATR x {config['atr_stop_multiplier']} (zorunlu)")
+    print(f"Take Profit: stop mesafesi x {config['reward_risk_ratio']} (zorunlu)")
+
+
 def reset_day_if_needed(state: dict[str, Any]) -> None:
     today = datetime.now(timezone.utc).date().isoformat()
     if state["day"] != today:
         state["day"] = today
         state["day_start_balance"] = state["balance"]
+
+
+def fetch_klines_safe(
+    symbol: str, interval: str, limit: int = 300, state: dict[str, Any] | None = None
+) -> pd.DataFrame | None:
+    """Ağ/veri hatasında None döndürür — yeni pozisyon açılmasını engeller."""
+    try:
+        df = fetch_klines(symbol, interval, limit)
+        if df is None or df.empty:
+            raise ValueError("Boş kline verisi.")
+        return df
+    except Exception as exc:
+        if state is not None:
+            state["network_errors"] = int(state.get("network_errors", 0)) + 1
+        log.warning("VERİ HATASI | %s %s | %s — yeni işlem açılmayacak.", symbol, interval, exc)
+        return None
 
 
 def fetch_klines(symbol: str, interval: str, limit: int = 300) -> pd.DataFrame:
@@ -172,8 +232,13 @@ def score_setup(fast: pd.DataFrame, trend: pd.DataFrame) -> tuple[str | None, in
     return None, max(long_score, short_score), details
 
 
-def can_open(config: dict[str, Any], state: dict[str, Any]) -> tuple[bool, str]:
-    if state["position"] is not None:
+def can_open(
+    config: dict[str, Any], state: dict[str, Any], symbol: str | None = None
+) -> tuple[bool, str]:
+    position = state.get("position")
+    if position is not None:
+        if symbol is not None and position.get("symbol") == symbol:
+            return False, f"{symbol} için zaten açık pozisyon var (mükerrer engellendi)."
         return False, "Açık pozisyon var."
     if state["consecutive_losses"] >= config["max_consecutive_losses"]:
         return False, "Arka arkaya zarar limiti doldu."
@@ -191,13 +256,21 @@ def open_paper_position(
     config: dict[str, Any],
     state: dict[str, Any],
 ) -> None:
+    if state.get("position") is not None:
+        raise ValueError("Zaten açık pozisyon var — ikinci pozisyon açılamaz.")
     entry = details["price"]
     atr = details["atr"]
+    if entry is None or entry <= 0:
+        raise ValueError(f"Geçersiz giriş fiyatı: {entry}")
+    if atr is None or atr <= 0:
+        raise ValueError(f"Geçersiz ATR: {atr}")
     stop_distance = atr * config["atr_stop_multiplier"]
     if stop_distance <= 0:
         raise ValueError("ATR stop mesafesi geçersiz.")
 
     risk_usdt = state["balance"] * config["risk_per_trade_pct"] / 100
+    if risk_usdt <= 0 or state["balance"] <= 0:
+        raise ValueError(f"Yetersiz sanal bakiye: {state['balance']:.2f} USDT")
     quantity = risk_usdt / stop_distance
 
     if side == "LONG":
@@ -230,7 +303,10 @@ def manage_position(state: dict[str, Any]) -> None:
         return
 
     pos = Position(**raw)
-    df = fetch_klines(pos.symbol, "1m", 5)
+    df = fetch_klines_safe(pos.symbol, "1m", 5, state=state)
+    if df is None:
+        # Veri yok — pozisyon güvenle korunur, kapatma kararı verilmez.
+        return
     last = df.iloc[-1]
     high, low = float(last["high"]), float(last["low"])
 
@@ -253,15 +329,23 @@ def manage_position(state: dict[str, Any]) -> None:
         return
 
     direction = 1 if pos.side == "LONG" else -1
-    pnl = (exit_price - pos.entry) * pos.quantity * direction
+    gross_pnl = (exit_price - pos.entry) * pos.quantity * direction
+    fee_usdt = (pos.entry + exit_price) * pos.quantity * FEE_RATE  # giriş + çıkış
+    pnl = gross_pnl - fee_usdt
+    close_reason = "STOP_LOSS" if result == "LOSS" else "TAKE_PROFIT"
     state["balance"] += pnl
     state["consecutive_losses"] = state["consecutive_losses"] + 1 if pnl < 0 else 0
     state["trades"].append({
         **raw,
         "closed_at": datetime.now(timezone.utc).isoformat(),
+        "entry_price": pos.entry,
+        "exit_price": exit_price,
         "exit": exit_price,
+        "fee_usdt": round(fee_usdt, 8),
+        "gross_pnl": round(gross_pnl, 8),
         "pnl": round(pnl, 8),
         "result": result,
+        "close_reason": close_reason,
         "balance_after": round(state["balance"], 8),
     })
     state["position"] = None
@@ -282,10 +366,20 @@ def run_cycle(config: dict[str, Any], state: dict[str, Any]) -> None:
         return
 
     candidates = []
+    data_error = False
     for symbol in config["symbols"]:
+        sym_ok, sym_reason = can_open(config, state, symbol=symbol)
+        if not sym_ok:
+            log.info("%s atlandı: %s", symbol, sym_reason)
+            continue
         try:
-            fast = add_indicators(fetch_klines(symbol, config["interval"]))
-            trend = add_indicators(fetch_klines(symbol, config["trend_interval"]))
+            fast_raw = fetch_klines_safe(symbol, config["interval"], state=state)
+            trend_raw = fetch_klines_safe(symbol, config["trend_interval"], state=state)
+            if fast_raw is None or trend_raw is None:
+                data_error = True  # Herhangi bir veri hatası → bu döngüde hiç işlem açma.
+                continue
+            fast = add_indicators(fast_raw)
+            trend = add_indicators(trend_raw)
             side, score, details = score_setup(fast, trend)
             log.info(
                 "%s | yön=%s skor=%s RSI=%s hacim=%.2f",
@@ -296,7 +390,9 @@ def run_cycle(config: dict[str, Any], state: dict[str, Any]) -> None:
         except Exception as exc:
             log.exception("%s taranamadı: %s", symbol, exc)
 
-    if candidates:
+    if data_error:
+        log.warning("Ağ/veri hatası nedeniyle bu döngüde yeni pozisyon açılmayacak.")
+    elif candidates:
         score, symbol, side, details = max(candidates, key=lambda x: x[0])
         open_paper_position(symbol, side, details, config, state)
     else:
@@ -309,11 +405,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Alpha-20 v1 PAPER trading bot")
     parser.add_argument("--once", action="store_true", help="Bir kez tara ve çık.")
     parser.add_argument("--reset", action="store_true", help="Sanal hesabı sıfırla.")
+    parser.add_argument("--dry-run", action="store_true", help="Doğrula, raporla ve çık — işlem yok.")
+    parser.add_argument("--report", action="store_true", help="Başlangıç raporunu yazdır.")
     args = parser.parse_args()
 
     config = load_json(CONFIG_PATH, {})
-    if config.get("mode") != "PAPER":
-        raise RuntimeError("v1 yalnızca PAPER modunda çalışır.")
+    validate_startup_config(config)
 
     if args.reset or not STATE_PATH.exists():
         state = initial_state(config)
@@ -322,6 +419,15 @@ def main() -> None:
         state = load_json(STATE_PATH, initial_state(config))
 
     log.info("Alpha-20 v1 başladı | MOD=PAPER | bakiye=%.2f", state["balance"])
+    log.info("PAPER modu doğrulandı — gerçek emir gönderimi yok, API anahtarı yok.")
+
+    if args.report or args.dry_run:
+        print_startup_report(config, state)
+    if args.dry_run:
+        log.info("Dry-run tamamlandı — döngü başlatılmadı.")
+        return
+
+    time.sleep(2)  # Başlangıç onay gecikmesi
 
     if args.once:
         run_cycle(config, state)

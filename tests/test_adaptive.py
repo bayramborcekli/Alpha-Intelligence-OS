@@ -692,8 +692,14 @@ class TestFlaskRoutes:
         assert resp.status_code == 200
 
     def test_coin_add_valid(self, client):
-        resp = client.post("/coins/add", data={"symbol": "XRPUSDT"})
-        assert resp.status_code == 200
+        cfg_path = "alpha20_v1/config.json"
+        original = open(cfg_path).read()
+        try:
+            resp = client.post("/coins/add", data={"symbol": "XRPUSDT"})
+            assert resp.status_code == 200
+        finally:
+            with open(cfg_path, "w") as f:
+                f.write(original)  # gerçek config'i kirletme
 
     def test_coin_add_invalid_rejected(self, client):
         resp = client.post("/coins/add", data={"symbol": "INVALID123"})

@@ -3,8 +3,7 @@
   "symbols": [
     "BTCUSDT",
     "ETHUSDT",
-    "SOLUSDT",
-    "XRPUSDT"
+    "SOLUSDT"
   ],
   "interval": "15m",
   "trend_interval": "1h",
