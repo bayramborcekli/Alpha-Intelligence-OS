@@ -1,0 +1,107 @@
+MISSION 1400.1-STARTUP-DIAGNOSTIC
+
+The application remains stuck on “Your app is starting...” after owner setup
+was completed successfully.
+
+Do not modify authentication logic.
+Do not modify secrets.
+Do not publish.
+Do not change Binance code.
+
+OBJECTIVE
+
+Find why the Replit preview cannot reach the running web application.
+
+CHECK IN THIS ORDER
+
+1. Confirm the active Replit Run command.
+2. Confirm the process actually starts and remains alive.
+3. Capture the first startup exception, if any.
+4. Confirm the app binds to:
+   - host 0.0.0.0
+   - the Replit-provided PORT environment variable
+5. Do not hardcode port 5000 if PORT is provided.
+6. Confirm gunicorn imports the correct application object.
+7. Confirm frontend/static build assets exist.
+8. Confirm the health endpoint responds locally from inside the Repl.
+9. Confirm the preview URL reaches the same port.
+10. Confirm no startup migration, lock file, SQLite lock or worker crash blocks boot.
+11. Confirm two gunicorn workers are compatible with current session/rate-limit storage.
+12. Check memory and repeated worker restart logs.
+13. Check whether CSP or auth redirects are unrelated to the startup screen.
+
+RUN THESE SAFE CHECKS
+
+- print the configured start command
+- print whether PORT exists and its numeric value
+- list running application processes
+- inspect recent stdout/stderr logs
+- request http://127.0.0.1:$PORT/api/v1/health from inside the Repl
+- if PORT is absent, test the actual configured local port
+- report HTTP status and response content type only
+- do not print secrets or environment values other than the non-secret port
+
+LIKELY REQUIRED STARTUP PATTERN
+
+Use the repository’s actual module path, but production binding must follow:
+
+gunicorn <module>:<app> \
+  --bind 0.0.0.0:${PORT:-5000} \
+  --workers 2 \
+  --timeout 120 \
+  --access-logfile - \
+  --error-logfile -
+
+Do not apply this blindly. First verify the correct module and framework.
+
+IF A FIX IS REQUIRED
+
+Implement only the smallest startup fix.
+
+Examples:
+
+- use the Replit PORT variable
+- correct the gunicorn module path
+- build missing frontend assets before startup
+- serve the correct static directory
+- remove a startup-only crash
+- reduce workers to 1 only if shared-state or memory evidence requires it
+
+Do not weaken security controls.
+
+VERIFICATION
+
+After any fix, verify:
+
+- process remains alive for at least 60 seconds
+- internal health endpoint returns 200
+- Replit Preview loads /login
+- /setup remains 404
+- setup_state remains READY
+- login page renders
+- no secret exposure
+- full test suite passes
+
+EXPECTED REPORT
+
+MISSION 1400.1-STARTUP-DIAGNOSTIC: PASS / FAIL
+ROOT CAUSE:
+START COMMAND:
+APP MODULE:
+HOST:
+PORT SOURCE:
+PROCESS STABLE:
+INTERNAL HEALTH STATUS:
+PREVIEW STATUS:
+LOGIN PAGE:
+SETUP STATE:
+SETUP ROUTE:
+WORKER CRASHES:
+MEMORY ISSUE:
+CODE CHANGE:
+TESTS:
+SECRETS EXPOSED:
+COMMIT:
+GITHUB PUSH:
+APPLICATION PUBLISHED:
+NEXT ACTION:
