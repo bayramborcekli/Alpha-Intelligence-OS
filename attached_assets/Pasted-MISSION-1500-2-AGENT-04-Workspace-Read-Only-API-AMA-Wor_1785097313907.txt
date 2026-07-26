@@ -1,0 +1,293 @@
+MISSION 1500.2 — AGENT 04
+Workspace Read-Only API
+
+AMAÇ
+
+Workspace servis katmanını kullanarak yalnızca GET tabanlı
+Workspace API katmanını oluşturmak.
+
+Bu agent yalnızca API rotalarını geliştirecektir.
+
+UI, Export ve Security doğrulamaları bu agent'ın kapsamında değildir.
+
+────────────────────────────────────────
+
+GÖREVLER
+
+1.
+
+Aşağıdaki GET uçlarını oluştur.
+
+GET /api/workspace/timeline
+
+GET /api/workspace/snapshot/<id>
+
+GET /api/workspace/compare
+
+GET /api/workspace/recommendations
+
+GET /api/workspace/risk-evolution
+
+GET /api/workspace/search
+
+Tüm uçların
+
+/api/v1
+
+takma adları da oluşturulacak.
+
+2.
+
+Veri yalnızca
+
+IntelligenceWorkspaceService
+
+üzerinden alınacak.
+
+Timeline modülüne doğrudan erişilmeyecek.
+
+3.
+
+Authentication
+
+Mevcut
+
+_security_gate
+
+zorunlu.
+
+Anonim erişim reddedilecek.
+
+4.
+
+Yanıt sözleşmesi
+
+1500.1 Intelligence API yapısıyla uyumlu olacak.
+
+Steril JSON.
+
+Decimal string.
+
+Deterministik.
+
+5.
+
+Search
+
+Aşağıdaki parametreleri destekleyecek.
+
+date
+
+status
+
+confidence
+
+recommendation
+
+insight
+
+partial
+
+advisory_only
+
+6.
+
+Compare
+
+İki snapshot id alacak.
+
+Yalnızca kayıtlı alanları karşılaştıracak.
+
+Yeni
+
+Değişen
+
+Kaldırılan
+
+alanları döndürecek.
+
+7.
+
+Status kodları
+
+Başarılı istek
+
+↓
+
+200
+
+Bulunamayan snapshot
+
+↓
+
+404
+
+Geçersiz parametre
+
+↓
+
+400
+
+Provider hatası
+
+↓
+
+200
+
+Steril hata nesnesiyle.
+
+8.
+
+Cache
+
+1500.1 ile aynı.
+
+Cache-Control:
+
+no-store, private
+
+9.
+
+Secret
+
+Credential
+
+Stack trace
+
+çıktıya taşınmayacak.
+
+────────────────────────────────────────
+
+KISITLAR
+
+Dokunulmayacak:
+
+Timeline
+
+Risk Engine
+
+Recommendation Engine
+
+Models
+
+Export
+
+UI
+
+Security
+
+Settings
+
+Exchange
+
+Ledger
+
+Audit
+
+────────────────────────────────────────
+
+YASAKLAR
+
+POST
+
+PUT
+
+PATCH
+
+DELETE
+
+Exchange request
+
+Exchange write
+
+History update
+
+History delete
+
+History overwrite
+
+Harici LLM
+
+Tahmin
+
+Otomatik karar
+
+────────────────────────────────────────
+
+TESTLER
+
+En az aşağıdakiler doğrulanmalıdır.
+
+• authentication
+
+• GET uçları
+
+• /api/v1 alias
+
+• search
+
+• compare
+
+• snapshot
+
+• timeline
+
+• risk evolution
+
+• recommendations
+
+• no-store
+
+• Decimal
+
+• determinizm
+
+• 400
+
+• 404
+
+• sterile error
+
+• secret sızıntısı yokluğu
+
+• POST/PUT/PATCH/DELETE → 405
+
+────────────────────────────────────────
+
+TESLİM RAPORU
+
+── DEĞİŞEN DOSYALAR ──
+
+── WORKSPACE API ──
+
+── KURAL UYUMU ──
+
+── TESTLER ──
+
+── TAM TEST SONUCU ──
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+
+── SECRET EXPOSURE ──
+
+── COMMIT / HEAD ──
+
+── BİLİNEN SINIRLAMALAR ──
+
+────────────────────────────────────────
+
+PASS KRİTERİ
+
+• Workspace API hazır.
+
+• Yalnızca GET.
+
+• IntelligenceWorkspaceService üzerinden çalışıyor.
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Regresyon yok.
+
+• 1500.1 ve 1500.2 davranışları korunuyor.
