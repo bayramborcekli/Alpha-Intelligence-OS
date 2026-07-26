@@ -1,0 +1,396 @@
+MISSION 1500.2 — AGENT 11
+Full Regression Verification
+
+AMAÇ
+
+MISSION 1500.2 kapsamında geliştirilen tüm Workspace mimarisinin,
+1400 ve 1500.1 davranışlarını bozmadan çalıştığını doğrulamak.
+
+Bu agent yeni özellik geliştirmeyecektir.
+
+Kod davranışı değiştirilmeyecektir.
+
+Yalnızca gerçek regresyonlar minimum değişiklikle giderilecektir.
+
+────────────────────────────────────────
+
+KAPSAM
+
+Doğrulanacak zincir:
+
+Snapshot
+→ Timeline
+→ Workspace Service
+→ Read-only API
+→ Workspace UI
+→ Export
+
+Ayrıca:
+
+• Risk Engine
+• Recommendation Engine
+• Ledger
+• Audit
+• Exchange sınırları
+
+regresyona uğramamış olmalıdır.
+
+────────────────────────────────────────
+
+GÖREVLER
+
+1.
+
+Tüm test paketini temiz ortamda çalıştır.
+
+2.
+
+1400 regresyonlarını doğrula.
+
+Hiçbir eski test bozulmamalıdır.
+
+3.
+
+1500.1 regresyonlarını doğrula.
+
+Risk hesapları
+
+Recommendation
+
+Insight
+
+API davranışı
+
+bozulmamalıdır.
+
+4.
+
+1500.2 Workspace regresyonlarını doğrula.
+
+• Timeline
+
+• Service
+
+• API
+
+• UI
+
+• Export
+
+tam zincir çalışmalıdır.
+
+5.
+
+History davranışını doğrula.
+
+• append-only
+
+• overwrite yok
+
+• update yok
+
+• delete yok
+
+Bayt özdeşliği korunmalıdır.
+
+6.
+
+Deterministik davranışı doğrula.
+
+Aynı snapshot
+
+aynı çıktı
+
+üretmelidir.
+
+7.
+
+Decimal bütünlüğünü doğrula.
+
+Decimal → string
+
+float dönüşümü oluşmamalıdır.
+
+8.
+
+Eksik veri davranışını doğrula.
+
+unknown
+
+null
+
+"Veri Yok"
+
+"—"
+
+sözleşmeleri korunmalıdır.
+
+9.
+
+Export regresyonunu doğrula.
+
+JSON
+
+CSV
+
+canonical JSON
+
+Content-Disposition
+
+nosniff
+
+no-store
+
+korunmalıdır.
+
+10.
+
+API sözleşmesini doğrula.
+
+Tüm endpointler
+
+v1 aliasları
+
+HTTP kodları
+
+response yapısı
+
+bozulmamalıdır.
+
+11.
+
+UI regresyonunu doğrula.
+
+Salt okunur davranış
+
+işlem düğmesi yokluğu
+
+XSS koruması
+
+CSP uyumu
+
+korunmalıdır.
+
+12.
+
+Güvenlik regresyonunu doğrula.
+
+• Authentication
+
+• GET-only
+
+• 405
+
+• CSRF
+
+• Rate limiting
+
+• no-store
+
+• sterile errors
+
+korunmalıdır.
+
+13.
+
+Exchange sınırını doğrula.
+
+Workspace
+
+hiçbir durumda
+
+Exchange Write
+
+üretmeyecektir.
+
+14.
+
+Secret taraması yap.
+
+Kod
+
+çıktılar
+
+dokümanlar
+
+test logları
+
+içinde
+
+credential
+
+secret
+
+token
+
+API key
+
+bulunmamalıdır.
+
+15.
+
+Gerçek regresyon bulunursa
+
+yalnız minimum düzeltme
+
+uygulanacaktır.
+
+Yeni özellik eklenmeyecektir.
+
+────────────────────────────────────────
+
+KISITLAR
+
+Dokunulmayacak:
+
+• Risk algoritmaları
+
+• Recommendation mantığı
+
+• Ledger
+
+• Audit
+
+• Exchange
+
+• Workspace veri modeli
+
+• Timeline formatı
+
+────────────────────────────────────────
+
+YASAKLAR
+
+Yeni endpoint
+
+Yeni servis
+
+Yeni UI
+
+Yeni export
+
+Yeni filtre
+
+Yeni ayar
+
+Migration
+
+Exchange Write
+
+History rewrite
+
+Harici LLM
+
+────────────────────────────────────────
+
+TESTLER
+
+En az aşağıdakiler doğrulanmalıdır.
+
+• tüm test paketi
+
+• 1400 regresyonu
+
+• 1500.1 regresyonu
+
+• Workspace zinciri
+
+• Timeline
+
+• Service
+
+• API
+
+• UI
+
+• Export
+
+• Empty history
+
+• Single snapshot
+
+• Multi snapshot
+
+• Compare
+
+• Decimal integrity
+
+• Determinism
+
+• Unknown/null davranışı
+
+• Append-only history
+
+• GET-only
+
+• Authentication
+
+• 405
+
+• no-store
+
+• CSP
+
+• XSS
+
+• Secret scan
+
+• Exchange Write
+
+────────────────────────────────────────
+
+TESLİM RAPORU
+
+── ÇALIŞTIRILAN TESTLER ──
+
+── REGRESYON SONUÇLARI ──
+
+── WORKSPACE ZİNCİRİ ──
+
+── API DOĞRULAMASI ──
+
+── EXPORT DOĞRULAMASI ──
+
+── UI DOĞRULAMASI ──
+
+── GÜVENLİK REGRESYONU ──
+
+── DECIMAL / DETERMINISM ──
+
+── HISTORY BÜTÜNLÜĞÜ ──
+
+── SECRET TARAMASI ──
+
+── FINAL TEST SONUCU ──
+
+── FAIL / SKIP ──
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+
+── SECRET EXPOSURE ──
+
+── COMMIT / HEAD ──
+
+── BİLİNEN SINIRLAMALAR ──
+
+────────────────────────────────────────
+
+PASS KRİTERİ
+
+• Tüm testler başarılı.
+
+• Regresyon yok.
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Determinizm korunuyor.
+
+• Decimal bütünlüğü korunuyor.
+
+• History append-only korunuyor.
+
+• Güvenlik davranışları korunuyor.
+
+• Yeni özellik eklenmedi.
