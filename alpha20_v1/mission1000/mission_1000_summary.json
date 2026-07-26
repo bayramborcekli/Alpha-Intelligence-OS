@@ -1,0 +1,269 @@
+{
+  "mission": "Mission 1000",
+  "commit": "0e2e964",
+  "run_id": "M1000-f142fdb18d",
+  "mode": "PAPER (izole replay, gerçek Binance 15m verisi, ekonomik filtre aktif)",
+  "started_at": "2026-07-26T11:12:23.494517+00:00",
+  "finished_at": "2026-07-26T11:15:53.801980+00:00",
+  "duration_seconds": 210.3,
+  "tests": "349 passed in 4.64s",
+  "opened_trades": 1000,
+  "closed_trades": 1000,
+  "skipped_trades": 3,
+  "economic_filter_rejects": 3,
+  "wins": 349,
+  "losses": 651,
+  "breakeven": 0,
+  "win_rate_pct": 34.9,
+  "gross_profit": 15819.8095,
+  "gross_loss": 23193.7051,
+  "total_fees": 8193.7874,
+  "net_pnl": -7373.8956,
+  "profit_factor": 0.6821,
+  "max_drawdown_pct": 74.1609,
+  "starting_balance": 10000.0,
+  "final_balance": 2626.1044,
+  "balance_change": -7373.8956,
+  "ledger_validation_count": 2001,
+  "ledger_mismatch_count": 0,
+  "pnl_mismatch_count": 0,
+  "risk_violation_count": 0,
+  "warning_count": 0,
+  "exception_count": 0,
+  "recovery_count": 0,
+  "open_positions": 0,
+  "observations": {
+    "avg_atr": 51.215258,
+    "avg_duration_minutes": 213.2,
+    "avg_notional_usdt": 4095.76,
+    "avg_fee_usdt": 8.1938,
+    "fee_to_gross_profit_ratio": 0.5179,
+    "by_symbol": {
+      "BTCUSDT": {
+        "trades": 332,
+        "net_pnl": -3313.9139,
+        "win_rate_pct": 35.24
+      },
+      "ETHUSDT": {
+        "trades": 334,
+        "net_pnl": -3259.468,
+        "win_rate_pct": 34.43
+      },
+      "SOLUSDT": {
+        "trades": 334,
+        "net_pnl": -800.5137,
+        "win_rate_pct": 35.03
+      }
+    },
+    "by_hour_utc": {
+      "0": {
+        "trades": 45,
+        "net_pnl": -234.6186,
+        "win_rate_pct": 40.0
+      },
+      "1": {
+        "trades": 48,
+        "net_pnl": -124.4333,
+        "win_rate_pct": 37.5
+      },
+      "2": {
+        "trades": 33,
+        "net_pnl": -392.028,
+        "win_rate_pct": 30.3
+      },
+      "3": {
+        "trades": 22,
+        "net_pnl": -214.0075,
+        "win_rate_pct": 31.82
+      },
+      "4": {
+        "trades": 21,
+        "net_pnl": -147.4214,
+        "win_rate_pct": 33.33
+      },
+      "5": {
+        "trades": 25,
+        "net_pnl": -212.807,
+        "win_rate_pct": 36.0
+      },
+      "6": {
+        "trades": 40,
+        "net_pnl": -164.5132,
+        "win_rate_pct": 35.0
+      },
+      "7": {
+        "trades": 38,
+        "net_pnl": -584.2582,
+        "win_rate_pct": 31.58
+      },
+      "8": {
+        "trades": 41,
+        "net_pnl": -533.9988,
+        "win_rate_pct": 29.27
+      },
+      "9": {
+        "trades": 42,
+        "net_pnl": -50.1763,
+        "win_rate_pct": 38.1
+      },
+      "10": {
+        "trades": 27,
+        "net_pnl": 11.9757,
+        "win_rate_pct": 44.44
+      },
+      "11": {
+        "trades": 52,
+        "net_pnl": -688.437,
+        "win_rate_pct": 28.85
+      },
+      "12": {
+        "trades": 31,
+        "net_pnl": -709.7533,
+        "win_rate_pct": 22.58
+      },
+      "13": {
+        "trades": 56,
+        "net_pnl": -423.5064,
+        "win_rate_pct": 35.71
+      },
+      "14": {
+        "trades": 75,
+        "net_pnl": -884.1943,
+        "win_rate_pct": 30.67
+      },
+      "15": {
+        "trades": 68,
+        "net_pnl": -353.6637,
+        "win_rate_pct": 35.29
+      },
+      "16": {
+        "trades": 51,
+        "net_pnl": -356.39,
+        "win_rate_pct": 31.37
+      },
+      "17": {
+        "trades": 48,
+        "net_pnl": 257.7627,
+        "win_rate_pct": 43.75
+      },
+      "18": {
+        "trades": 45,
+        "net_pnl": -413.8326,
+        "win_rate_pct": 28.89
+      },
+      "19": {
+        "trades": 34,
+        "net_pnl": 83.0028,
+        "win_rate_pct": 50.0
+      },
+      "20": {
+        "trades": 35,
+        "net_pnl": 172.0285,
+        "win_rate_pct": 57.14
+      },
+      "21": {
+        "trades": 33,
+        "net_pnl": -473.7349,
+        "win_rate_pct": 27.27
+      },
+      "22": {
+        "trades": 47,
+        "net_pnl": -217.5934,
+        "win_rate_pct": 36.17
+      },
+      "23": {
+        "trades": 43,
+        "net_pnl": -719.2974,
+        "win_rate_pct": 27.91
+      }
+    },
+    "by_weekday": {
+      "Fri": {
+        "trades": 143,
+        "net_pnl": -1765.6196,
+        "win_rate_pct": 27.97
+      },
+      "Mon": {
+        "trades": 145,
+        "net_pnl": -757.9304,
+        "win_rate_pct": 36.55
+      },
+      "Sat": {
+        "trades": 116,
+        "net_pnl": -279.7042,
+        "win_rate_pct": 41.38
+      },
+      "Sun": {
+        "trades": 145,
+        "net_pnl": -1653.0491,
+        "win_rate_pct": 33.79
+      },
+      "Thu": {
+        "trades": 145,
+        "net_pnl": -775.9477,
+        "win_rate_pct": 35.17
+      },
+      "Tue": {
+        "trades": 148,
+        "net_pnl": -897.2297,
+        "win_rate_pct": 36.49
+      },
+      "Wed": {
+        "trades": 158,
+        "net_pnl": -1244.415,
+        "win_rate_pct": 34.18
+      }
+    },
+    "by_regime": {
+      "RANGE": {
+        "trades": 339,
+        "net_pnl": -3258.5355,
+        "win_rate_pct": 34.51
+      },
+      "TREND_DOWN": {
+        "trades": 121,
+        "net_pnl": -469.7625,
+        "win_rate_pct": 40.5
+      },
+      "TREND_UP": {
+        "trades": 540,
+        "net_pnl": -3645.5976,
+        "win_rate_pct": 33.89
+      }
+    },
+    "by_score_bucket": {
+      "000-019": {
+        "trades": 18,
+        "net_pnl": -77.863,
+        "win_rate_pct": 38.89
+      },
+      "020-039": {
+        "trades": 130,
+        "net_pnl": -1507.1356,
+        "win_rate_pct": 33.85
+      },
+      "040-059": {
+        "trades": 356,
+        "net_pnl": -3157.45,
+        "win_rate_pct": 34.27
+      },
+      "060-079": {
+        "trades": 215,
+        "net_pnl": -1315.7747,
+        "win_rate_pct": 34.88
+      },
+      "080-099": {
+        "trades": 196,
+        "net_pnl": -1101.5397,
+        "win_rate_pct": 34.18
+      },
+      "100-119": {
+        "trades": 85,
+        "net_pnl": -214.1326,
+        "win_rate_pct": 40.0
+      }
+    }
+  },
+  "result": "PASS",
+  "fail_reasons": []
+}
