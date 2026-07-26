@@ -28,7 +28,11 @@ yalnızca gerekli secret ADLARI listelenir (değerler asla gösterilmez).
 ## Güvenli varsayılanlar
 Tüm özellik bayrakları kapalıdır: `ALPHA_ENABLE_DRY_RUN`,
 `ALPHA_ENABLE_LIVE_TRADING`, `ALPHA_ENABLE_TRANSFERS`,
-`ALPHA_ENABLE_WITHDRAWALS` = `false`. **Canlı emir yürütme devre dışıdır**
+`ALPHA_ENABLE_WITHDRAWALS`, `ALPHA_ENABLE_INTELLIGENCE` = `false`.
+Not: `ALPHA_ENABLE_INTELLIGENCE` tanımsız/geçersizken de KAPALIDIR;
+Intelligence API'lerini kullanmak için `true` yapılmalıdır (salt-okunur,
+tavsiye niteliğinde uçlar: `GET /api/intelligence/*`).
+**Canlı emir yürütme devre dışıdır**
 ve yalnızca sunucu tarafında, açık talimatla etkinleştirilebilir.
 
 ## Genel Bakış panosu (Mission 1400.2)

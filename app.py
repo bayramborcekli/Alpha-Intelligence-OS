@@ -1698,6 +1698,81 @@ def api_risk_simulator():
     return _run_simulator(request.args.to_dict())
 
 
+# ── Mission 1500.1 / Agent 07 — Read-Only Intelligence API ──────────────────
+# YALNIZCA GET. Kimlik doğrulama _security_gate ile zorunludur; oturum/
+# giriş denemeleri mevcut rate-limit modeliyle sınırlıdır. Tüm yanıtlar
+# no-store'dur; hata yanıtları sterilizedir (stack trace / secret yok).
+
+_intel_service = None
+
+
+def _get_intel_service():
+    global _intel_service
+    if _intel_service is None:
+        from intelligence_service import IntelligenceService
+        _intel_service = IntelligenceService()
+    return _intel_service
+
+
+def _intel_enabled() -> bool:
+    import alpha_platform as ap
+    return ap.feature_flags().get("ALPHA_ENABLE_INTELLIGENCE", False)
+
+
+def _intel_json(fn):
+    if not _intel_enabled():
+        # Feature flag kapalı: güvenli, verisiz yanıt (veri uydurulmaz)
+        resp = jsonify({"ok": True, "enabled": False, "read_only": True,
+                        "advisory_only": True, "status": "UNAVAILABLE",
+                        "message": "Intelligence özelliği kapalı "
+                                   "(ALPHA_ENABLE_INTELLIGENCE)."})
+        resp.headers["Cache-Control"] = "no-store, private"
+        return resp
+    try:
+        payload = fn()
+    except Exception:
+        app.logger.exception("intelligence api hatası")
+        resp = jsonify({"ok": False, "error": {
+            "code": "INTELLIGENCE_ERROR",
+            "message": "Intelligence çıktısı üretilemedi."}})
+        resp.headers["Cache-Control"] = "no-store, private"
+        return resp, 500
+    if isinstance(payload, list):
+        payload = {"ok": True, "read_only": True, "advisory_only": True,
+                   "enabled": True, "items": payload}
+    else:
+        payload = {**payload, "enabled": True}
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = "no-store, private"
+    return resp
+
+
+@app.get("/api/intelligence")
+@app.get("/api/v1/intelligence")
+@app.get("/api/intelligence/summary")
+@app.get("/api/v1/intelligence/summary")
+def api_intelligence_summary():
+    return _intel_json(lambda: _get_intel_service().get_summary())
+
+
+@app.get("/api/intelligence/insights")
+@app.get("/api/v1/intelligence/insights")
+def api_intelligence_insights():
+    return _intel_json(lambda: _get_intel_service().get_insights())
+
+
+@app.get("/api/intelligence/recommendations")
+@app.get("/api/v1/intelligence/recommendations")
+def api_intelligence_recommendations():
+    return _intel_json(lambda: _get_intel_service().get_recommendations())
+
+
+@app.get("/api/intelligence/status")
+@app.get("/api/v1/intelligence/status")
+def api_intelligence_status():
+    return _intel_json(lambda: _get_intel_service().get_status())
+
+
 @app.get("/api/v1/executive/summary")
 def api_executive_summary():
     """Mission 1400.5 — yönetici üst çubuğu özeti (salt-okunur)."""
