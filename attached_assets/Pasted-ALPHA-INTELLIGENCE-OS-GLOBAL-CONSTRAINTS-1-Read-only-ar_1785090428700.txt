@@ -1,0 +1,184 @@
+ALPHA INTELLIGENCE OS — GLOBAL CONSTRAINTS
+
+1. Read-only architecture must remain intact.
+2. Exchange write requests must remain exactly 0.
+3. Never add order placement, cancellation, transfer or withdrawal behavior.
+4. Never expose credentials, API keys, tokens, cookies or session secrets.
+5. Use Decimal for financial calculations; never use float for accounting.
+6. Never fabricate portfolio, market, risk or financial data.
+7. Unknown values must be represented honestly as "Veri Yok", "—",
+   null or an explicit unknown state according to the existing API/UI contract.
+8. Risk Engine is authoritative and deterministic.
+9. Intelligence may explain Risk Engine output but may not override or mutate it.
+10. Ledger and audit records are immutable.
+11. External LLM access is disabled during Mission 1500.1.
+12. All Intelligence outputs are advisory-only.
+13. Existing authentication, CSRF, rate limiting and security headers must remain.
+14. Every code change requires tests.
+15. Run the complete regression suite before claiming PASS.
+16. Do not report fabricated test counts, commits or security results.
+17. Do not modify alpha20_v1/, auth.py, ledger integrity logic or exchange signing.
+18. Do not combine TRY and USDT values without a verified exchange rate.
+19. realized_pnl, daily_pnl_pct and total_pnl_pct must not be inferred.
+20. Follow the repository’s existing flat *_api.py architecture.
+
+MISSION 1500.1 / AGENT 02
+INTELLIGENCE DATA CONTRACTS AND MODELS
+
+Baseline:
+- HEAD before work: e0b71ad
+- Regression baseline: 593 passed
+- Exchange writes: 0
+- Secret exposure: 0
+
+Amaç:
+Mission 1500.1 Intelligence katmanı için güvenli, deterministik,
+JSON-serileştirilebilir ve açıklanabilir veri sözleşmelerini oluştur.
+
+Bu agent yalnızca veri modelleri ve bunların testleri üzerinde çalışmalıdır.
+Route, UI, servis orkestrasyonu, harici LLM, geçmiş kaydı veya exchange
+entegrasyonu eklememelidir.
+
+Önerilen dosya:
+- intelligence_api.py
+
+Ancak mevcut mimariye daha uygun ayrı bir model dosyası gerekiyorsa:
+- intelligence_models.py
+
+Yeni bir paket/dizin yapısı oluşturmadan önce mevcut düz modül desenini koru.
+
+Gerekli modeller:
+
+1. ConfidenceLevel
+   Değerler:
+   - HIGH
+   - MEDIUM
+   - LOW
+   - INSUFFICIENT_DATA
+
+2. IntelligenceStatus
+   Örnek değerler:
+   - OK
+   - PARTIAL
+   - STALE
+   - UNAVAILABLE
+
+3. DataFreshness
+   Alanlar:
+   - status
+   - observed_at
+   - age_seconds
+   - source
+   - detail
+
+4. IntelligenceEvidence
+   Alanlar:
+   - source
+   - field
+   - value
+   - unit
+   - observed_at
+
+5. IntelligenceInsight
+   Alanlar:
+   - code
+   - category
+   - title
+   - observation
+   - reason
+   - impact
+   - recommendation
+   - confidence
+   - evidence
+   - freshness
+   - advisory_only
+
+6. IntelligenceSummary
+   Alanlar:
+   - status
+   - generated_at
+   - portfolio_summary
+   - risk_summary
+   - insights
+   - recommendations
+   - warnings
+   - freshness
+   - advisory_only
+
+Zorunlu davranışlar:
+
+- Finansal değerler bellekte Decimal olarak tutulmalı.
+- JSON dönüşümünde Decimal için mevcut proje standardını kullan.
+- Mevcut standart yoksa Decimal değerleri kesinlik kaybetmeden string olarak
+  serileştir.
+- float dönüşümü yapma.
+- Bilinmeyen finansal değerleri sıfır olarak gösterme.
+- Eksik değer için null veya açık bir unknown durum kullan.
+- UI metni gerekiyorsa Türkçe "Veri Yok" kullanılabilir.
+- advisory_only her insight ve summary için true olmalı.
+- Modellerde order_action, side, quantity_to_trade, target_price,
+  leverage_instruction veya benzeri işlem talimatı alanları bulunmamalı.
+- raw credential, request headers, session, cookie veya signature alanları
+  bulunmamalı.
+- Evidence yalnızca izin verilen, doğrulanmış alanlara referans vermeli.
+- Enum değerleri bilinmeyen serbest metin kabul etmemeli.
+- Aynı model aynı veriden aynı JSON yapısını üretmeli.
+- Alan sıralamasına bağımlı olmayan fakat şeması sabit çıktı sağlanmalı.
+- Tarihler UTC ve ISO-8601 biçiminde olmalı.
+- Naive datetime üretme.
+- Kullanıcıya gösterilecek metinler varsayılan olarak Türkçe olmalı.
+- Model oluşturulurken HTML kabul edilse bile template katmanında escape
+  edilebilir düz metin olarak tutulmalı; Markup/SafeString kullanılmamalı.
+
+Testler:
+
+- ConfidenceLevel yalnızca izin verilen değerleri kabul eder.
+- IntelligenceStatus yalnızca izin verilen değerleri kabul eder.
+- Decimal kesinliği korunur.
+- Decimal hiçbir aşamada float’a dönüşmez.
+- Eksik değer sıfıra çevrilmez.
+- Empty evidence güvenli çalışır.
+- advisory_only false yapılamaz veya doğrulamada reddedilir.
+- JSON çıktısında yasaklı işlem alanları bulunmaz.
+- JSON çıktısında secret benzeri alanlar bulunmaz.
+- UTC ISO-8601 zaman formatı doğrulanır.
+- Aynı girdi aynı serialize edilmiş çıktı üretir.
+- Türkçe karakterler bozulmadan JSON’a dönüşür.
+- Mevcut 593 testte regresyon oluşmaz.
+
+Kapsam dışı:
+
+- /intelligence rotası
+- /api/v1/intelligence rotaları
+- Dashboard kartları
+- Risk açıklama metinlerinin iş kuralları
+- Öneri üretme kuralları
+- Harici LLM
+- Kalıcı history dosyası
+- Exchange çağrıları
+- app.py üzerinde route değişiklikleri
+
+Teslim raporu:
+
+── DEĞİŞEN DOSYALAR ──
+── EKLENEN MODELLER ──
+── JSON SÖZLEŞMESİ ──
+── DECIMAL DAVRANIŞI ──
+── UNKNOWN DAVRANIŞI ──
+── EKLENEN TESTLER ──
+── TAM TEST SONUCU ──
+── EXCHANGE WRITE REQUEST SAYISI ──
+── SECRET EXPOSURE ──
+── BİLİNEN SINIRLAMALAR ──
+── COMMIT / HEAD ──
+
+PASS koşulları:
+
+- Tüm yeni model testleri başarılı.
+- Tam regresyon paketi başarılı.
+- Başlangıçtaki 593 testin hiçbiri zayıflatılmamış veya atlanmamış.
+- Exchange writes = 0.
+- Secret exposure = 0.
+- float tabanlı finansal serileştirme yok.
+- İşlem talimatı üretebilecek alan yok.
+- Route, UI veya exchange davranışı eklenmemiş.
