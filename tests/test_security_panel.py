@@ -160,6 +160,24 @@ class TestSummaryWindows:
         assert s["last_lockout"] is not None
         assert s["recent"][0]["lockout"] is False
 
+    def test_out_of_order_timestamps_do_not_hide_recent_events(self, sec_log):
+        """Pencere dışı (eski) bir satır dosyanın sonlarına yakınsa,
+        ondan ÖNCE gelen yeni olaylar yine de sayılmalı (break yerine skip)."""
+        import security_log as slog
+        sec_log([
+            _line(5,       "event=LOGIN_FAIL | ip=1.1.1.1 | detail=yeni-1"),
+            _line(60 * 48, "event=LOGIN_FAIL | ip=9.9.9.9 | detail=cok-eski"),
+            _line(3,       "event=LOGIN_FAIL | ip=2.2.2.2 | detail=rate limited yeni-2"),
+            _line(60 * 30, "event=LOGIN_FAIL | ip=8.8.8.8 | detail=eski"),
+            _line(1,       "event=LOGIN_FAIL | ip=3.3.3.3 | detail=yeni-3"),
+        ])
+        s = slog.get_security_summary(hours=24)
+        assert s["fail_count"] == 3
+        ips = {e["ip"] for e in s["recent"]}
+        assert ips == {"1.1.1.1", "2.2.2.2", "3.3.3.3"}
+        assert s["locked_ip_count"] == 1
+        assert s["last_lockout"] is not None
+
     def test_non_login_fail_events_ignored(self, sec_log):
         import security_log as slog
         sec_log([

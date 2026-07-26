@@ -148,7 +148,9 @@ def get_security_summary(hours: int = 24, max_events: int = 10) -> dict:
         except ValueError:
             continue
         if ts < cutoff:
-            break
+            # Satırlar kronolojik sırada olmayabilir (saat değişimi, birleşik
+            # dosyalar); erken durmak yerine pencere dışı satırı atla.
+            continue
         fields: dict[str, str] = {}
         for part in m.group("rest").split(" | "):
             if "=" in part:
