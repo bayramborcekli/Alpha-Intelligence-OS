@@ -1,0 +1,275 @@
+MISSION 1500.2 — AGENT 02
+Intelligence Timeline Engine
+
+AMAÇ
+
+1500.1 Intelligence çıktılarının zaman sıralı geçmişini oluşturacak
+Timeline katmanını geliştirmek.
+
+Bu agent yalnızca Timeline veri katmanını oluşturacaktır.
+
+UI, karşılaştırma, export, filtreleme ve API bu agent'ın kapsamında değildir.
+
+────────────────────────────────────────
+
+GÖREVLER
+
+1.
+
+Yeni timeline modülünü oluştur.
+
+Önerilen dosya:
+
+intelligence_timeline.py
+
+2.
+
+Append-only geçmiş kayıtlarını yönet.
+
+• kayıt ekleme
+• kayıt okuma
+• son N kayıt
+• tarih aralığı okuma
+
+Hiçbir kayıt silinmeyecek veya güncellenmeyecek.
+
+3.
+
+Kayıt formatı
+
+Her kayıt yalnızca güvenli alanları içerebilir.
+
+Örneğin:
+
+- generated_at
+- status
+- partial
+- freshness
+- insights
+- recommendations
+- warnings
+- portfolio_summary
+- risk_summary
+- advisory_only
+
+Kesinlikle kaydedilmeyecek:
+
+- API key
+- Secret
+- Session
+- Cookie
+- Token
+- Credential
+- CSRF
+- Exchange response
+- Ledger
+- Audit
+- Kullanıcı bilgileri
+
+4.
+
+Append-only JSONL yapısı oluştur.
+
+Kurallar:
+
+• satır bazlı
+• immutable
+• overwrite yok
+• truncate yok
+• update yok
+
+5.
+
+Aşağıdaki fonksiyonları oluştur.
+
+append_snapshot()
+
+load_history()
+
+get_latest()
+
+get_by_timerange()
+
+count()
+
+6.
+
+Deterministik davranış.
+
+Aynı kayıt
+
+↓
+
+aynı JSON
+
+↓
+
+aynı sıralama
+
+↓
+
+aynı çıktı.
+
+7.
+
+Decimal davranışı korunacak.
+
+float kullanılmayacak.
+
+Decimal string olarak saklanacak.
+
+8.
+
+Bilinmeyen değerler
+
+null
+
+veya
+
+"—"
+
+olarak saklanacak.
+
+Asla
+
+0
+
+üretilmeyecek.
+
+────────────────────────────────────────
+
+KISITLAR
+
+Dokunulmayacak:
+
+app.py
+
+templates/
+
+route
+
+API
+
+Risk Engine
+
+Recommendation Engine
+
+Service Layer
+
+Security
+
+Settings
+
+Export
+
+UI
+
+Exchange
+
+Ledger
+
+Audit
+
+────────────────────────────────────────
+
+YASAKLAR
+
+POST
+
+PUT
+
+PATCH
+
+DELETE
+
+Exchange request
+
+Exchange write
+
+History update
+
+History delete
+
+History overwrite
+
+Harici LLM
+
+Tahmin
+
+Otomatik karar
+
+İşlem oluşturma
+
+────────────────────────────────────────
+
+TESTLER
+
+En az aşağıdakiler doğrulanmalıdır.
+
+• append-only davranışı
+
+• overwrite yok
+
+• update yok
+
+• kayıt sırası korunuyor
+
+• tarih filtreleme
+
+• son kayıt
+
+• boş history
+
+• Decimal korunuyor
+
+• determinizm
+
+• bilinmeyen değer
+
+• advisory_only korunuyor
+
+• secret kaydedilmiyor
+
+• exchange alanı bulunmuyor
+
+────────────────────────────────────────
+
+TESLİM RAPORU
+
+── DEĞİŞEN DOSYALAR ──
+
+── TIMELINE MOTORU ──
+
+── JSONL ŞEMASI ──
+
+── KURAL UYUMU ──
+
+── TESTLER ──
+
+── TAM TEST SONUCU ──
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+
+── SECRET EXPOSURE ──
+
+── COMMIT / HEAD ──
+
+── BİLİNEN SINIRLAMALAR ──
+
+────────────────────────────────────────
+
+PASS KRİTERİ
+
+• Timeline katmanı hazır.
+
+• Append-only korunuyor.
+
+• History immutable.
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Regresyon yok.
+
+• 1500.1 davranışı değişmedi.
