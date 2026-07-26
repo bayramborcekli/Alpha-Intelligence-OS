@@ -1,0 +1,390 @@
+MISSION 1500.2 — AGENT 10
+Workspace Security Verification
+
+AMAÇ
+
+MISSION 1500.2 kapsamında geliştirilen Workspace bileşenlerinin
+güvenlik sınırlarını doğrulamak ve yalnızca gerçek güvenlik
+ihlallerini minimum değişiklikle gidermek.
+
+Bu agent yeni özellik geliştirmeyecektir.
+
+Timeline, Service, API, UI ve Export mimarisi genişletilmeyecektir.
+
+────────────────────────────────────────
+
+GÖREVLER
+
+1.
+
+Aşağıdaki bileşenleri güvenlik açısından doğrula:
+
+• Intelligence Timeline
+
+• Workspace Service
+
+• Workspace API
+
+• Workspace UI
+
+• Workspace Export
+
+2.
+
+Authentication doğrulaması yap.
+
+• tüm Workspace API uçları
+
+• tüm Export uçları
+
+• /workspace
+
+mevcut _security_gate davranışını korumalıdır.
+
+Anonim erişim:
+
+401
+
+veya mevcut güvenli yönlendirme davranışı üretmelidir.
+
+3.
+
+HTTP method sözleşmesini doğrula.
+
+İzin verilen:
+
+GET
+
+HEAD
+
+OPTIONS
+
+Yasaklanan:
+
+POST
+
+PUT
+
+PATCH
+
+DELETE
+
+405 davranışı korunmalıdır.
+
+4.
+
+CSRF güvenliğini doğrula.
+
+Yeni
+
+@csrf.exempt
+
+eklenmeyecektir.
+
+Mevcut davranış değiştirilmeyecektir.
+
+5.
+
+Rate limiting mevcut davranışını doğrula.
+
+Workspace uçları
+
+bypass
+
+etmeyecektir.
+
+6.
+
+HTTP güvenlik başlıklarını doğrula.
+
+• Cache-Control: no-store, private
+
+• Content-Type
+
+• Content-Disposition (Export)
+
+• X-Content-Type-Options
+
+• CSP
+
+• X-Frame-Options
+
+• Referrer-Policy
+
+Mevcut başlıklar kaldırılmayacaktır.
+
+7.
+
+XSS güvenliğini doğrula.
+
+• autoescape açık
+
+• |safe kullanılmayacak
+
+• innerHTML yalnız güvenli escape zinciriyle
+
+• snapshot JSON textContent
+
+• harici JS/CSS/CDN yok
+
+8.
+
+Path traversal doğrulaması yap.
+
+Kullanıcı:
+
+• history dosya yolu
+
+• export yolu
+
+• sunucu dosya yolu
+
+belirleyememelidir.
+
+9.
+
+Parametre doğrulamasını incele.
+
+• limit
+
+• offset
+
+• snapshot id
+
+• compare a/b
+
+• date
+
+• date_end
+
+• status
+
+• confidence
+
+• recommendation
+
+• insight
+
+• partial
+
+• advisory_only
+
+• format
+
+Geçersiz girişler:
+
+400
+
+sterile hata üretmelidir.
+
+10.
+
+Sterile hata modelini doğrula.
+
+Aşağıdakiler hiçbir yanıtta bulunmamalıdır:
+
+• stack trace
+
+• exception metni
+
+• dosya yolu
+
+• credential
+
+• token
+
+• API key
+
+• environment secret
+
+11.
+
+History bütünlüğünü doğrula.
+
+Workspace bileşenleri:
+
+• append
+
+• overwrite
+
+• update
+
+• delete
+
+işlemi yapmamalıdır.
+
+Timeline append-only sözleşmesi korunmalıdır.
+
+12.
+
+Exchange ve ağ sınırlarını doğrula.
+
+Workspace bileşenleri:
+
+• exchange çağrısı yapmayacak
+
+• emir oluşturmayacak
+
+• network write yapmayacak
+
+• harici LLM kullanmayacak
+
+13.
+
+Gerçek güvenlik ihlali bulunursa
+
+yalnızca minimum değişiklik
+
+uygulanacaktır.
+
+Yeni özellik eklenmeyecektir.
+
+────────────────────────────────────────
+
+KISITLAR
+
+Dokunulmayacak:
+
+• Risk Engine
+
+• Recommendation Engine
+
+• 1500.1 modelleri
+
+• Exchange
+
+• Ledger
+
+• Audit
+
+• Workspace veri sözleşmesi
+
+• Export içerikleri
+
+────────────────────────────────────────
+
+YASAKLAR
+
+Yeni endpoint
+
+Yeni servis
+
+Yeni UI
+
+Yeni export formatı
+
+Yeni filtre
+
+Exchange request
+
+Exchange write
+
+History write
+
+Auth bypass
+
+CSRF bypass
+
+Rate-limit bypass
+
+Harici LLM
+
+────────────────────────────────────────
+
+TESTLER
+
+En az aşağıdakiler doğrulanmalıdır.
+
+• authentication
+
+• /workspace
+
+• tüm Workspace API uçları
+
+• tüm Export uçları
+
+• /api/v1 aliasları
+
+• GET-only
+
+• POST/PUT/PATCH/DELETE → 405
+
+• Cache-Control
+
+• CSP
+
+• XSS
+
+• autoescape
+
+• path traversal
+
+• parametre doğrulama
+
+• sterile errors
+
+• stack trace yokluğu
+
+• secret/token/credential yokluğu
+
+• history immutability
+
+• exchange/network yokluğu
+
+• Decimal string korunumu
+
+• determinizm
+
+• mevcut 1500.1 güvenlik regresyonu olmaması
+
+────────────────────────────────────────
+
+TESLİM RAPORU
+
+── İNCELENEN DOSYALAR ──
+
+── DEĞİŞEN DOSYALAR ──
+
+── AUTH / METHOD SECURITY ──
+
+── XSS / CSP ──
+
+── PARAMETRE GÜVENLİĞİ ──
+
+── ERROR STERILIZATION ──
+
+── HISTORY INTEGRITY ──
+
+── EXCHANGE / NETWORK SINIRLARI ──
+
+── TESTLER ──
+
+── TAM TEST SONUCU ──
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+
+── SECRET EXPOSURE ──
+
+── COMMIT / HEAD ──
+
+── BİLİNEN SINIRLAMALAR ──
+
+────────────────────────────────────────
+
+PASS KRİTERİ
+
+• Authentication korunuyor.
+
+• Yalnız GET tabanlı kullanım mevcut.
+
+• XSS/CSP güvenliği korunuyor.
+
+• History append-only sözleşmesi korunuyor.
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Regresyon yok.
+
+• Yeni özellik eklenmedi.
