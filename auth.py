@@ -19,7 +19,9 @@ from werkzeug.security import check_password_hash
 MAX_ATTEMPTS     = 5      # Bu sayıda başarısız denemeden sonra kilitle
 LOCKOUT_SECONDS  = 300    # 5 dakika kilit süresi
 WINDOW_SECONDS   = 300    # Bu zaman diliminde denemeleri say
-SESSION_MAX_AGE  = 8 * 3600  # 8 saatlik oturum
+SESSION_MAX_AGE    = 8 * 3600  # 8 saatlik oturum
+SESSION_WARN_SECS  = 300       # Son 5 dakikada uyarı göster
+SESSION_REFRESH_AT = 3600      # Son 1 saat kaldığında oturumu uzat
 
 _LOCK    = threading.Lock()
 _ATTEMPTS: dict[str, list[float]] = {}   # IP → [timestamp, ...]
@@ -129,6 +131,36 @@ def _session_expired() -> bool:
         return (datetime.now(timezone.utc) - lt).total_seconds() > SESSION_MAX_AGE
     except Exception:
         return True
+
+
+def get_session_remaining_seconds() -> int:
+    """Oturumun dolmasına kalan saniyeyi döndür. Geçersiz oturumda 0."""
+    login_time_str = session.get("login_time")
+    if not login_time_str:
+        return 0
+    try:
+        lt = datetime.fromisoformat(login_time_str)
+        elapsed = (datetime.now(timezone.utc) - lt).total_seconds()
+        remaining = SESSION_MAX_AGE - elapsed
+        return max(0, int(remaining))
+    except Exception:
+        return 0
+
+
+def maybe_refresh_session() -> bool:
+    """
+    Oturum son 1 saat içindeyse (kalan < SESSION_REFRESH_AT) login_time'ı
+    sıfırlayarak 8 saati uzat. Uzatma yapıldıysa True döndür.
+    """
+    if not session.get("logged_in"):
+        return False
+    remaining = get_session_remaining_seconds()
+    if remaining <= 0:
+        return False
+    if remaining < SESSION_REFRESH_AT:
+        session["login_time"] = datetime.now(timezone.utc).isoformat()
+        return True
+    return False
 
 
 # ── Dekoratör ─────────────────────────────────────────────────────────────────

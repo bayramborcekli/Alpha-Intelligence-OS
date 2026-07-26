@@ -182,6 +182,11 @@
 <body>
 <div class="shell">
 
+  <!-- Oturum süresi uyarı bandı (JS tarafından gösterilir) -->
+  <div id="session-warn-banner" style="display:none;background:rgba(210,153,34,.15);border:1px solid var(--warning);border-radius:8px;color:var(--warning);font-size:.85rem;font-weight:600;margin-bottom:14px;padding:10px 16px;text-align:center;">
+    ⚠️ Oturum süresi <span id="session-warn-secs"></span> saniye içinde dolacak. Devam etmek için sayfayı yenileyin veya herhangi bir işlem yapın.
+  </div>
+
   <header>
     <div>
       <p class="eyebrow">Alpha-20 v1</p>
@@ -1133,6 +1138,18 @@
       if (badge) {
         badge.textContent = d.running ? "Çalışıyor" : "Durdu";
         badge.className   = "sbadge " + (d.running ? "s-run" : "s-stop");
+      }
+      // Oturum uyarısı: kalan süre 300 sn (5 dk) altına düştüğünde göster
+      const banner  = document.getElementById("session-warn-banner");
+      const secEl   = document.getElementById("session-warn-secs");
+      const remaining = d.session_remaining_seconds;
+      if (banner && typeof remaining === "number") {
+        if (remaining > 0 && remaining <= 300) {
+          if (secEl) secEl.textContent = remaining;
+          banner.style.display = "";
+        } else {
+          banner.style.display = "none";
+        }
       }
     } catch (_) {}
   }

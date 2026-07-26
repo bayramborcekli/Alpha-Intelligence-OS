@@ -1124,6 +1124,11 @@ def api_status():
     resp = dict(status)
     resp["error"] = err
     resp.pop("trades", None)
+    # Kalan süreyi yenilemeden ÖNCE ölç; böylece frontend uyarıyı görebilir.
+    # Ardından gerekiyorsa oturumu uzat (son 1 saat içindeyse).
+    pre_refresh_remaining = auth.get_session_remaining_seconds()
+    auth.maybe_refresh_session()
+    resp["session_remaining_seconds"] = pre_refresh_remaining
     return resp
 
 
