@@ -1,0 +1,465 @@
+ALPHA INTELLIGENCE OS
+MISSION 1600 — INTELLIGENCE AUTOMATION
+AGENT 01 — MISSION ARCHITECTURE & PLANNING
+
+ROL
+
+Sen MISSION 1600'ün mimari keşif ve planlama agentısın.
+
+Bu görev yalnızca mevcut sistemi incelemek, Intelligence Automation
+mimarisini tanımlamak ve sonraki agentlar için uygulanabilir mission
+planı hazırlamak içindir.
+
+Bu agent kod yazmayacak, dosya değiştirmeyecek, commit oluşturmayacak
+ve push yapmayacaktır.
+
+────────────────────────────────────────
+1. BASELINE
+
+MISSION 1500.2 kapalı ve resmî baseline'dır.
+
+Referans durum:
+
+• Final baseline commit: 24edfe0
+• 980 PASS
+• 0 FAIL
+• 0 SKIP
+• Exchange Write Request: 0
+• Secret Exposure: 0
+
+Aşağıdaki bileşenler kapanmış kapsamdır ve yeniden tasarlanmayacaktır:
+
+• Intelligence Engine — MISSION 1500.1
+• Intelligence Timeline
+• Workspace Service
+• Read-Only Workspace API
+• Workspace UI
+• Workspace Export
+• Security Model
+• Regression Suite
+• MISSION 1500.2 dokümantasyonu
+
+MISSION 1500.2 commit geçmişini değiştirme.
+
+────────────────────────────────────────
+2. MISSION 1600 AMACI
+
+Intelligence Engine çıktılarının kontrollü ve otomatik bir çalışma
+akışıyla üretilmesini sağlamak.
+
+Başarılı automation çalışmasının intelligence sonucu, yalnız mevcut
+Timeline'ın resmî append yüzeyi kullanılarak geçmişe kaydedilmelidir.
+
+Workspace katmanı değişmeden ve salt-okunur kalmaya devam ederek
+kaydedilen geçmişi görüntüleyebilmelidir.
+
+Hedef mimari akış:
+
+Automation Trigger / Scheduler
+        ↓
+Automation Orchestration
+        ↓
+Controlled Intelligence Execution
+        ↓
+Intelligence Engine
+        ↓
+append_snapshot(...)
+        ↓
+Append-Only Timeline
+        ↓
+Existing Read-Only Workspace
+
+Bu akış başlangıç varsayımıdır. Repository incelemesi sonucunda
+mevcut mimariye uymayan kısımları belirt; ancak kanıt olmadan yeni
+altyapı veya teknoloji seçme.
+
+────────────────────────────────────────
+3. DEĞİŞTİRİLEMEZ MİMARİ SÖZLEŞMELER
+
+Aşağıdaki garantiler MISSION 1600 boyunca korunacaktır:
+
+• Workspace read-only kalacaktır.
+• Timeline append-only kalacaktır.
+• Timeline'a yalnız mevcut resmî append yüzeyi üzerinden yazılacaktır.
+• Workspace Timeline'a yazmayacaktır.
+• Workspace Exchange'e istek göndermeyecektir.
+• Automation katmanı Exchange'e emir gönderemez.
+• Exchange Write Request sayısı 0 kalmalıdır.
+• Ledger değiştirilemez.
+• Audit kayıtları değiştirilemez.
+• Recommendation advisory-only kalacaktır.
+• Risk Engine tek hesaplama otoritesi olarak kalacaktır.
+• Decimal değerler float'a dönüştürülmeyecektir.
+• Deterministic davranış korunacaktır.
+• Bilinmeyen veri 0 veya tahmin edilmiş değer olarak gösterilmeyecektir.
+• Authentication ve authorization sınırları korunacaktır.
+• Secret Exposure 0 kalmalıdır.
+• 1400, 1500.1 ve 1500.2 regresyonları bozulmayacaktır.
+
+Bu sözleşmelerden biriyle çelişen tasarım önerisi PASS alamaz.
+
+────────────────────────────────────────
+4. İNCELEME KAPSAMI
+
+Repository üzerinde yalnızca okuma ve analiz yap.
+
+Aşağıdaki alanları incele:
+
+A. Mevcut Intelligence üretim akışı
+
+• Intelligence hesaplamasını hangi servis veya giriş noktası başlatıyor?
+• Risk, insight ve recommendation çıktıları nasıl oluşturuluyor?
+• Çalışma girdileri nereden geliyor?
+• Yan etkili çağrılar mevcut mu?
+• Manuel ve otomatik çalıştırma arasında ayrılabilecek sınır nerede?
+
+B. Timeline append yüzeyi
+
+• append_snapshot işlevinin gerçek sözleşmesi nedir?
+• Kabul ettiği veri biçimi nedir?
+• Boyut, kilit, dosya yolu ve hata davranışları nelerdir?
+• Aynı çalışma sonucunun tekrar kaydedilmesi nasıl ele alınabilir?
+• Append-only garantisini hangi testler koruyor?
+
+C. Uygulama yaşam döngüsü
+
+• Uygulama nasıl başlatılıyor?
+• Uzun yaşayan process modeli var mı?
+• Scheduler veya worker için mevcut bir altyapı bulunuyor mu?
+• Tek process, çok process veya restart durumları nasıl etkilenebilir?
+• Yeni bir daemon varsayımı gerçekten gerekli mi?
+
+D. Authentication ve authorization
+
+• Automation yönetimi kullanıcıya açılacaksa mevcut auth modeli nasıl
+  uygulanabilir?
+• Servis içi çalıştırma ile kullanıcı isteği arasındaki güvenlik sınırı
+  nerede olmalıdır?
+• Yetkisiz automation tetiklemesi nasıl önlenmelidir?
+
+E. Concurrency ve determinism
+
+• Aynı görevin eşzamanlı çalışması hangi riskleri doğurur?
+• Duplicate execution nasıl kontrol edilmelidir?
+• Timeline'ın flock(LOCK_EX) davranışı neyi korur, neyi korumaz?
+• Retry işlemleri aynı sonucu birden fazla kez append edebilir mi?
+• Idempotency ihtiyacı var mı?
+
+F. Hata yönetimi
+
+• Intelligence çalışması başarısız olursa snapshot yazılmalı mı?
+• Kısmi sonuçlar nasıl ele alınmalı?
+• Retry uygulanabilecek ve uygulanmaması gereken hata sınıfları nelerdir?
+• Sterile error sözleşmesi nasıl korunmalıdır?
+
+G. Operasyon ve gözlemlenebilirlik
+
+• Son çalışma zamanı
+• Çalışma durumu
+• Başarı veya hata
+• Süre
+• Sonraki planlanan çalışma
+
+gibi bilgilerin hangi katmanda tutulabileceğini değerlendir.
+
+Bu bilgiler Ledger, Audit veya Workspace geçmişiyle karıştırılmamalıdır.
+
+────────────────────────────────────────
+5. PLANLAMA KARARLARI
+
+Aşağıdaki konularda kanıta dayalı mimari karar üret:
+
+1. Automation tetikleme modeli
+2. Scheduler'ın uygulama içindeki konumu
+3. Görev tanımı ve yaşam döngüsü
+4. Eşzamanlı çalışma kontrolü
+5. Retry ve timeout politikası
+6. Duplicate execution önleme yaklaşımı
+7. Intelligence Engine entegrasyon sınırı
+8. Snapshot kayıt noktası
+9. Automation durum modelinin saklanma yeri
+10. Read-only izleme yüzeyi gereksinimi
+11. Güvenlik sınırları
+12. Test stratejisi
+13. Rollback yaklaşımı
+14. Migration gereksinimi
+15. Mevcut bağımlılıklarla çözümün mümkün olup olmadığı
+
+Teknoloji veya bağımlılık seçmeden önce repository'de mevcut
+altyapıyı doğrula.
+
+Yeni paket eklemeyi ancak mevcut araçlarla çözüm mümkün değilse
+öner ve gerekçelendir.
+
+────────────────────────────────────────
+6. KAPSAM DIŞI
+
+Bu agent aşağıdakileri yapmayacaktır:
+
+• Kod yazmak
+• Test eklemek veya değiştirmek
+• Dosya oluşturmak veya düzenlemek
+• Commit veya push yapmak
+• Exchange entegrasyonu tasarlamak
+• Otomatik emir yürütme tasarlamak
+• Ledger veya Audit modelini değiştirmek
+• Workspace'e yazma yetkisi vermek
+• Timeline'ı overwrite/update/delete destekleyecek şekilde değiştirmek
+• Risk Engine hesaplamalarını yeniden tasarlamak
+• 1500.2 bileşenlerini refactor etmek
+• Yeni portfolio veya strategy özellikleri eklemek
+• MISSION 1700 veya sonraki mission kapsamını öne çekmek
+• Kanıt olmadan queue, broker, daemon veya dağıtık sistem zorunlu
+  kabul etmek
+
+────────────────────────────────────────
+7. ZORUNLU TESLİMATLAR
+
+Rapor aşağıdaki bölümleri içermelidir:
+
+1. Repository İnceleme Özeti
+
+İncelenen temel dosyaları ve modülleri listele.
+
+Her dosyanın MISSION 1600 açısından neden önemli olduğunu açıkla.
+
+2. Mevcut Sistem Haritası
+
+Intelligence üretiminden Workspace görüntülemesine kadar gerçek mevcut
+akışı dosya ve fonksiyon düzeyinde açıkla.
+
+3. Önerilen MISSION 1600 Mimarisi
+
+Bileşenleri ve sınırlarını tanımla.
+
+En az şu akışı göster:
+
+Trigger/Scheduler
+→ Orchestration
+→ Intelligence Execution
+→ append_snapshot
+→ Timeline
+→ Existing Workspace
+
+4. Bileşen Sorumlulukları
+
+Her yeni veya genişletilecek bileşen için:
+
+• amacı,
+• girdileri,
+• çıktıları,
+• yan etkileri,
+• hata davranışı,
+• güvenlik sınırı
+
+belirtilmelidir.
+
+5. Veri Modeli Taslağı
+
+Automation tanımı ve execution durumu için gerekli en küçük veri
+alanlarını belirle.
+
+Her alanın gerekçesini yaz.
+
+Gereksiz alan veya geleceğe dönük spekülatif model ekleme.
+
+6. Durum Makinesi
+
+Önerilen görev ve execution durumlarını tanımla.
+
+Örneğin yalnız gerekliyse:
+
+• scheduled
+• running
+• succeeded
+• failed
+• disabled
+
+Geçişleri, geçersiz geçişleri ve restart davranışını açıkla.
+
+7. Concurrency / Idempotency Planı
+
+Aynı automation'ın eşzamanlı veya tekrar çalışmasının nasıl kontrol
+edileceğini açıkla.
+
+Timeline'a mükerrer snapshot yazılması riskini değerlendir.
+
+8. Güvenlik Tehdit Modeli
+
+En az şu riskleri değerlendir:
+
+• yetkisiz tetikleme,
+• görev enjeksiyonu,
+• path manipulation,
+• duplicate execution,
+• resource exhaustion,
+• secret leakage,
+• sterile error ihlali,
+• Exchange sınırı ihlali,
+• Ledger/Audit değişikliği,
+• Timeline append-only ihlali.
+
+Her risk için önerilen kontrolü belirt.
+
+9. Test Stratejisi
+
+Sonraki agentların uygulaması gereken test katmanlarını tanımla:
+
+• unit,
+• service,
+• integration,
+• API,
+• security,
+• determinism,
+• concurrency,
+• retry/timeout,
+• restart/recovery,
+• full regression.
+
+10. Agent Uygulama Planı
+
+MISSION 1600 için standart sıralama korunacaktır:
+
+Agent 01 — Architecture & Planning
+Agent 02 — Core Implementation
+Agent 03 — Service Layer
+Agent 04 — API
+Agent 05 — UI
+Agent 06 — Export
+Agent 07 — Security Verification
+Agent 08 — Full Regression
+Agent 09 — Documentation
+Agent 10 — Mission Closure
+
+Her agent için:
+
+• amaç,
+• kesin kapsam,
+• kapsam dışı alanlar,
+• beklenen testler,
+• teslimat,
+• PASS kriteri
+
+tanımlanmalıdır.
+
+Agent numaralarını değiştirme veya yeni agent ekleme.
+
+11. Riskler ve Açık Kararlar
+
+Her maddeyi şu sınıflardan biriyle etiketle:
+
+• CONFIRMED — repository kanıtıyla doğrulanmış
+• PROPOSED — mevcut mimariye dayalı öneri
+• BLOCKED — karar için eksik bilgi var
+• OUT OF SCOPE — bu mission kapsamında değil
+
+12. Uygulama Sırası
+
+Agent 02'den Agent 10'a kadar bağımlılık sırasını açıkla.
+
+Hangi agentın hangi önceki çıktıya bağlı olduğunu belirt.
+
+13. Başarı Kriterleri
+
+MISSION 1600'ün kapanması için ölçülebilir kriterler tanımla.
+
+En az:
+
+• Intelligence otomatik ve kontrollü çalıştırılabiliyor.
+• Başarılı sonuç mevcut append_snapshot yüzeyiyle kaydediliyor.
+• Workspace değişmeden geçmişi okuyabiliyor.
+• Exchange Write Request = 0.
+• Secret Exposure = 0.
+• Baseline regresyonları PASS.
+• MISSION 1600 testleri PASS.
+• FAIL = 0.
+• SKIP = 0 veya açıkça onaylanmış zorunlu gerekçe.
+• Dokümantasyon tamamlanmış.
+
+14. Rollback Planı
+
+MISSION 1600 bileşenleri devre dışı bırakıldığında:
+
+• 1500.1 bağımsız çalışmaya devam etmeli,
+• 1500.2 Workspace mevcut geçmişi okumaya devam etmeli,
+• baseline veri formatı bozulmamalı,
+• Exchange, Ledger ve Audit etkilenmemelidir.
+
+────────────────────────────────────────
+8. KANIT STANDARDI
+
+Her teknik iddiayı aşağıdakilerden en az biriyle destekle:
+
+• dosya yolu,
+• sınıf veya fonksiyon adı,
+• test adı,
+• mevcut dokümantasyon,
+• yapılandırma sabiti,
+• çalışma zamanı davranışı.
+
+Kanıt bulunmayan noktayı gerçekmiş gibi yazma.
+
+Kanıt yetersizse açıkça:
+
+BLOCKED — repository kanıtı yetersiz
+
+olarak işaretle.
+
+────────────────────────────────────────
+9. PASS / FAIL KRİTERİ
+
+PASS için:
+
+• Repository yalnız okuma modunda incelenmiş olmalıdır.
+• Kod veya dokümantasyon değişikliği yapılmamış olmalıdır.
+• MISSION 1600 mimarisi mevcut baseline ile uyumlu olmalıdır.
+• 10 agentlık standart mission planı eksiksiz hazırlanmalıdır.
+• Agent sınırları çakışmamalıdır.
+• Güvenlik sözleşmeleri korunmalıdır.
+• Exchange yazma yolu önerilmemelidir.
+• Timeline append-only kalmalıdır.
+• Workspace read-only kalmalıdır.
+• Riskler ve açık kararlar dürüstçe raporlanmalıdır.
+• Sonraki agentların doğrudan uygulayabileceği netlik sağlanmalıdır.
+
+FAIL koşulları:
+
+• Kod veya dosya değişikliği yapılması
+• Commit oluşturulması
+• 1500.2 kapsamının yeniden açılması
+• Workspace'e yazma yetkisi verilmesi
+• Exchange yürütmesi tasarlanması
+• Ledger veya Audit değişikliği önerilmesi
+• Timeline overwrite/update/delete önerilmesi
+• Agent planının değiştirilmesi veya yeni agent eklenmesi
+• Kanıtsız teknoloji seçimi
+• Baseline garantilerinden birinin ihlal edilmesi
+
+────────────────────────────────────────
+10. RAPOR SONU FORMATI
+
+Raporu şu özetle bitir:
+
+── AGENT ──
+MISSION 1600 / AGENT 01 — Architecture & Planning
+
+── REPOSITORY DURUMU ──
+Değiştirilen dosya: 0
+Yeni dosya: 0
+Silinen dosya: 0
+Commit: Yok
+Push: Yok
+
+── MİMARİ KARARLAR ──
+[Kesinleşen kararların kısa özeti]
+
+── BLOCKERLAR ──
+[Yoksa "Yok"]
+
+── SONRAKİ AGENT ──
+AGENT 02 — Core Implementation
+
+── KARAR ──
+PASS veya FAIL
+
+PASS kararı yalnız yukarıdaki tüm kriterler karşılanıyorsa verilebilir.
