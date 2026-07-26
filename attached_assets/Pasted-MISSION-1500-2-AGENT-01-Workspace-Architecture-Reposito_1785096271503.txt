@@ -1,0 +1,100 @@
+MISSION 1500.2 — AGENT 01
+Workspace Architecture & Repository Reconnaissance
+
+AMAÇ
+1500.1 Intelligence katmanını değiştirmeden, Intelligence Workspace için mevcut repository mimarisini incele ve uygulanabilir teknik plan hazırla.
+
+BU AGENT SADECE İNCELEME YAPACAK.
+Kod, test, route, UI, config veya dokümantasyon dosyası değiştirmeyecek.
+
+İNCELEME KAPSAMI
+
+1. Mevcut Intelligence yapısını doğrula:
+   - intelligence_models.py
+   - intelligence_api.py
+   - intelligence_service.py
+   - risk_explainer.py
+   - recommendation_api.py
+   - intelligence_settings.py
+   - templates/intelligence.html
+   - app.py içindeki Intelligence route’ları
+   - 1500.1 testleri
+
+2. Mevcut veri üretim akışını çıkar:
+   - snapshot nasıl oluşuyor
+   - summary nasıl üretiliyor
+   - insights ve recommendations nasıl sıralanıyor
+   - freshness ve partial durumları nasıl taşınıyor
+   - generated_at alanı nasıl kullanılıyor
+
+3. Workspace geçmişi için güvenli veri kaynağını belirle:
+   - mevcut sistemde geçmiş kayıt var mı
+   - yoksa append-only JSONL uygun mu
+   - hangi alanların kaydedilmesi güvenli
+   - hangi alanlar kesinlikle kaydedilmemeli
+   - kayıt boyutu ve saklama sınırları ne olmalı
+
+4. Aşağıdaki özellikler için önerilen mimariyi çıkar:
+   - Intelligence Timeline
+   - Snapshot Comparison
+   - Recommendation History
+   - Risk Evolution
+   - Search & Filters
+   - Read-only Workspace API
+   - Workspace UI
+   - JSON/CSV/PDF export
+
+5. Mevcut mimariyle uyumlu dosya yerleşimi öner.
+   Repository flat root-level *_api.py yapısını koru.
+   Gereksiz package veya klasör oluşturma.
+
+6. Güvenlik sınırlarını doğrula:
+   - exchange write = 0
+   - advisory_only korunacak
+   - external LLM kapalı kalacak
+   - ledger/audit değiştirilmeyecek
+   - secret veya credential geçmişe yazılmayacak
+   - geçmiş kayıtları API üzerinden değiştirilemeyecek
+   - yalnızca GET yüzeyi kullanılacak
+
+7. 1500.2 için agent bağımlılıklarını doğrula.
+   Sonraki agentların hangi dosyalara dokunabileceğini ve hangi dosyalara dokunmaması gerektiğini belirt.
+
+ZORUNLU KISITLAR
+
+- Kod değiştirme.
+- Commit oluşturma.
+- Route ekleme.
+- UI ekleme.
+- Test ekleme.
+- History dosyası oluşturma.
+- Exchange istemcisine erişme.
+- 1500.1 modellerinin veya çıktı sözleşmelerinin davranışını değiştirme.
+- Tahmin, otomatik karar veya işlem yürütme tasarlama.
+
+TESLİM RAPORU
+
+Rapor şu başlıklarla verilmelidir:
+
+── REPOSITORY / HEAD ──
+── MEVCUT INTELLIGENCE MİMARİSİ ──
+── VERİ AKIŞI ──
+── GEÇMİŞ KAYIT STRATEJİSİ ──
+── ÖNERİLEN DOSYALAR ──
+── WORKSPACE API PLANI ──
+── WORKSPACE UI PLANI ──
+── GÜVENLİK SINIRLARI ──
+── AGENT BAĞIMLILIKLARI ──
+── RİSKLER / BİLİNEN SINIRLAMALAR ──
+── TEST TABANI ──
+── EXCHANGE WRITE REQUEST SAYISI ──
+── SECRET EXPOSURE ──
+
+PASS KRİTERİ
+
+- Repository değişikliği yok.
+- Mevcut HEAD ve test tabanı raporlanmış.
+- 1500.1 davranışı değiştirilmemiş.
+- Workspace için net ve uygulanabilir mimari çıkarılmış.
+- Exchange write = 0.
+- Secret exposure = 0.
