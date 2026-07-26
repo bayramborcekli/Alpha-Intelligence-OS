@@ -1,0 +1,227 @@
+ALPHA INTELLIGENCE OS
+MISSION 1600 — INTELLIGENCE AUTOMATION
+AGENT 02 — CORE IMPLEMENTATION
+
+ROL
+
+Sen MISSION 1600'ün Core Implementation agentısın.
+
+Bu agent yalnızca Automation çekirdeğini oluşturacaktır.
+
+Bu agent;
+
+• API geliştirmeyecek,
+• UI geliştirmeyecek,
+• Export geliştirmeyecek,
+• Dokümantasyon yazmayacak,
+• Güvenlik doğrulaması yapmayacak.
+
+────────────────────────────────────────
+
+BASELINE
+
+MISSION 1500.2 referans sürümdür.
+
+Final baseline:
+
+Commit:
+24edfe0
+
+Korunacak garanti:
+
+• Workspace Read-Only
+• Timeline Append-Only
+• Exchange Isolation
+• Ledger Immutable
+• Audit Immutable
+• Recommendation Advisory-Only
+• Risk Engine Authority
+• Decimal Integrity
+• Deterministic Output
+
+Bu garantiler ihlal edilemez.
+
+────────────────────────────────────────
+
+GÖREV
+
+Automation çekirdeğini oluştur.
+
+Amaç:
+
+Intelligence Engine'in kontrollü biçimde
+otomatik çalıştırılmasını sağlayacak
+çekirdek servisleri geliştirmek.
+
+Henüz kullanıcıya açık API
+oluşturulmayacaktır.
+
+────────────────────────────────────────
+
+UYGULANACAK BİLEŞENLER
+
+Yalnız çekirdek katman oluşturulacaktır.
+
+Örnek kapsam:
+
+• Automation Scheduler
+• Automation Coordinator
+• Automation Runner
+• Automation State
+• Automation Lock
+• Automation Configuration
+
+Repository incelemesine göre isimler değişebilir.
+
+Ancak görev aynı kalacaktır.
+
+────────────────────────────────────────
+
+KESİNLİKLE YAPILMAYACAKLAR
+
+Bu agent
+
+YAPMAYACAK
+
+• REST endpoint
+• UI
+• Export
+• Workspace değişikliği
+• Timeline değişikliği
+• Ledger değişikliği
+• Audit değişikliği
+• Exchange entegrasyonu
+• Emir gönderme
+• Recommendation mantığını değiştirme
+• Risk hesaplarını değiştirme
+
+────────────────────────────────────────
+
+INTELLIGENCE ÇAĞRISI
+
+Automation yalnız mevcut
+Intelligence Engine'i çalıştıracaktır.
+
+Yeni hesaplama algoritması
+yazılmayacaktır.
+
+Risk Engine değiştirilmeyecektir.
+
+────────────────────────────────────────
+
+SNAPSHOT
+
+Başarılı automation sonunda
+
+yalnız
+
+append_snapshot(...)
+
+çağrılabilir.
+
+Başarısız çalışmada
+
+snapshot yazılmayacaktır.
+
+Overwrite
+
+Update
+
+Delete
+
+yasaktır.
+
+────────────────────────────────────────
+
+CONCURRENCY
+
+Agent 01 kararları uygulanacaktır.
+
+Tek automation
+
+aynı anda iki kez çalışamaz.
+
+Lock mekanizması uygulanacaktır.
+
+Duplicate execution
+engellenecektir.
+
+────────────────────────────────────────
+
+RETRY
+
+Agent 01 kararına uygun olarak
+
+automatic retry
+
+uygulanmayacaktır.
+
+Interrupted durumları
+
+otomatik append üretmeyecektir.
+
+────────────────────────────────────────
+
+TESTLER
+
+Core Implementation testleri yazılacaktır.
+
+En az:
+
+• scheduler
+• coordinator
+• runner
+• locking
+• interrupted
+• duplicate prevention
+• append success
+• append failure
+• deterministic behaviour
+
+testleri bulunmalıdır.
+
+────────────────────────────────────────
+
+TESLİMAT
+
+Rapor aşağıdaki bilgileri içermelidir.
+
+• oluşturulan dosyalar
+
+• değiştirilen dosyalar
+
+• yeni testler
+
+• PASS sayısı
+
+• FAIL sayısı
+
+• SKIP sayısı
+
+• Exchange Write Request
+
+• Secret Exposure
+
+• commit
+
+────────────────────────────────────────
+
+PASS
+
+PASS için
+
+Automation çekirdeği tamamlanmış,
+
+Timeline korunmuş,
+
+Workspace korunmuş,
+
+Exchange Write = 0,
+
+Secret Exposure = 0,
+
+testler başarılı,
+
+commit oluşturulmuş olmalıdır.
+
+Kod tamamlanmadan PASS verilmez.
