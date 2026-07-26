@@ -95,6 +95,7 @@
     </div>
   </nav>
   <div class="main">
+    {% include "_exec_topbar.html" %}
     <header>
       <button class="menu-btn" id="menu-btn" aria-label="Menüyü aç/kapat"
               aria-expanded="false" aria-controls="sidebar">☰</button>
@@ -113,6 +114,37 @@
       <p class="sub">Salt-okunur canlı borsa panosu · tüm veriler backend üzerinden · v{{ app_version }}</p>
 
       <div class="warn-banner" id="warn-banner" role="alert" aria-live="polite" style="display:none"></div>
+
+      <!-- Mission 1400.5 — Hızlı erişim kartları (yalnızca gezinme) -->
+      <section aria-labelledby="h-quick" style="margin-bottom:18px">
+        <h2 id="h-quick" style="font-size:.8rem;color:var(--muted);text-transform:uppercase;
+            letter-spacing:.05em;margin-bottom:8px">Hızlı Erişim</h2>
+        <div class="quick-grid" style="display:grid;gap:8px;
+             grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+          <a class="quick-card" href="/portfolio">💼 Portföy</a>
+          <a class="quick-card" href="/positions">📈 Pozisyonlar</a>
+          <a class="quick-card" href="/orders">🧾 Emirler</a>
+          <a class="quick-card" href="/ledger">📒 Defter</a>
+          <a class="quick-card" href="/audit">🛡️ Denetim</a>
+          <a class="quick-card" href="/reports">📄 Raporlar</a>
+          <span class="quick-card quick-disabled" title="Sonraki sprint"
+                aria-disabled="true">⚖️ Risk</span>
+          <span class="quick-card quick-disabled" title="Sonraki sprint"
+                aria-disabled="true">🧪 Dry Run</span>
+          <span class="quick-card quick-disabled" title="Sonraki sprint"
+                aria-disabled="true">❤️ Sistem Sağlığı</span>
+          <span class="quick-card quick-disabled" title="Sonraki sprint"
+                aria-disabled="true">⚙️ Ayarlar</span>
+        </div>
+        <style>
+          .quick-card { display:flex; align-items:center; gap:8px; background:var(--panel);
+            border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+            font-size:.86rem; font-weight:600; color:var(--text); }
+          a.quick-card:hover { border-color:var(--accent); color:var(--accent); }
+          a.quick-card:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+          .quick-disabled { color:#4d5661; cursor:not-allowed; }
+        </style>
+      </section>
 
       <div class="cards">
         <section class="card" aria-labelledby="h-global">

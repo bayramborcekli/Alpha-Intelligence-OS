@@ -1622,6 +1622,15 @@ def orders_page():
 
 # ── Mission 1400.4 — Defter / Denetim / Raporlar (salt okunur) ──────────────
 
+@app.get("/api/v1/executive/summary")
+def api_executive_summary():
+    """Mission 1400.5 — yönetici üst çubuğu özeti (salt-okunur)."""
+    import alpha_platform as ap
+    import executive_api as xa
+    return jsonify(xa.executive_summary(bot_is_running=bot_running(),
+                                        app_mode=ap.app_mode()))
+
+
 @app.get("/api/v1/ledger/events")
 def api_v1_ledger_events():
     import ledger_api as la

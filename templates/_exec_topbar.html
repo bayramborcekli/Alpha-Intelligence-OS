@@ -1,0 +1,144 @@
+<!-- Mission 1400.5 — Yönetici üst çubuğu: yapışkan başlık + performans şeridi
+     + durum çubuğu. SALT-OKUNUR: yalnızca gezinme, hiçbir işlem eylemi yok. -->
+<div class="xh-wrap" id="exec-topbar">
+  <style>
+    .xh-wrap { position:sticky; top:0; z-index:40; background:#10151d;
+               border-bottom:1px solid #30363d; font-size:.78rem; }
+    .xh-row { display:flex; align-items:center; gap:10px; padding:6px 14px;
+              flex-wrap:wrap; }
+    .xh-head { border-bottom:1px solid rgba(48,54,61,.6); }
+    .xh-home { display:inline-flex; align-items:center; gap:6px; font-weight:700;
+               color:#58a6ff; padding:4px 10px; border:1px solid #30363d;
+               border-radius:8px; background:#161b22; }
+    .xh-home:focus-visible { outline:2px solid #58a6ff; outline-offset:2px; }
+    .xh-brand { font-weight:800; letter-spacing:.05em; color:#e6edf3;
+                text-transform:uppercase; font-size:.74rem; }
+    .xh-badge { border-radius:12px; padding:2px 10px; font-weight:700;
+                font-size:.7rem; border:1px solid rgba(63,185,80,.4);
+                color:#3fb950; background:rgba(63,185,80,.12); }
+    .xh-live { border-color:rgba(248,81,73,.4); color:#f85149;
+               background:rgba(248,81,73,.1); }
+    .xh-upd { color:#8b949e; margin-left:auto; }
+    .xh-strip { border-bottom:1px solid rgba(48,54,61,.6); gap:0 18px; }
+    .xh-kpi { display:inline-flex; gap:6px; white-space:nowrap; padding:2px 0; }
+    .xh-kpi b { color:#8b949e; font-weight:600; }
+    .xh-kpi span { color:#e6edf3; font-variant-numeric:tabular-nums; }
+    .xh-pos { color:#3fb950 !important; } .xh-neg { color:#f85149 !important; }
+    .xh-status { gap:0 16px; padding-top:4px; padding-bottom:4px; }
+    .xh-st { white-space:nowrap; color:#8b949e; }
+    .xh-st span { font-weight:700; }
+    .xh-st .st-ok { color:#3fb950; } .xh-st .st-part { color:#d29922; }
+    .xh-st .st-off { color:#f85149; }
+    @media (max-width:760px) {
+      .xh-row { padding:5px 10px; gap:8px 12px; }
+      .xh-brand { display:none; }
+      .xh-strip .xh-kpi:nth-child(n+6) { display:none; }
+    }
+  </style>
+  <div class="xh-row xh-head">
+    <a class="xh-home" href="/overview" aria-label="Ana Ekran">🏠 Ana Ekran</a>
+    <span class="xh-brand">Alpha Intelligence OS</span>
+    <span class="xh-badge" id="xh-mode">…</span>
+    <span class="xh-badge xh-live">Canlı Emir: KAPALI</span>
+    <span class="xh-upd" aria-live="polite">Son Güncelleme:
+      <span id="xh-updated">—</span></span>
+  </div>
+  <div class="xh-row xh-strip" role="group" aria-label="Performans şeridi">
+    <span class="xh-kpi"><b id="xh-pt-label">Toplam Portföy</b>
+      <span id="xh-pt">Veri Yok</span></span>
+    <span class="xh-kpi"><b>Gerçekleşmemiş PnL</b><span id="xh-upnl">Veri Yok</span></span>
+    <span class="xh-kpi"><b>Gerçekleşmiş PnL</b><span id="xh-rpnl">—</span></span>
+    <span class="xh-kpi"><b>Günlük K/Z %</b><span id="xh-dpct">—</span></span>
+    <span class="xh-kpi"><b>Toplam K/Z %</b><span id="xh-tpct">—</span></span>
+    <span class="xh-kpi"><b>7 Günlük</b><span id="xh-7d">—</span></span>
+    <span class="xh-kpi"><b>30 Günlük</b><span id="xh-30d">—</span></span>
+    <span class="xh-kpi"><b>Açık Pozisyon</b><span id="xh-op">Veri Yok</span></span>
+    <span class="xh-kpi"><b>Açık Emir</b><span id="xh-oo">Veri Yok</span></span>
+    <span class="xh-kpi"><b>Risk Seviyesi</b><span id="xh-risk">Veri Yok</span></span>
+  </div>
+  <div class="xh-row xh-status" role="group" aria-label="Sistem durum çubuğu">
+    <span class="xh-st">Binance Global <span id="xh-s-bg">—</span></span>
+    <span class="xh-st">Binance Futures <span id="xh-s-bf">—</span></span>
+    <span class="xh-st">Binance TR <span id="xh-s-tr">—</span></span>
+    <span class="xh-st">Defter <span id="xh-s-led">—</span></span>
+    <span class="xh-st">Denetim <span id="xh-s-aud">—</span></span>
+    <span class="xh-st">Risk Motoru <span id="xh-s-risk">—</span></span>
+    <span class="xh-st">Sağlık <span id="xh-s-hp">—</span></span>
+  </div>
+  <script>
+  (function () {
+    "use strict";
+    function el(id) { return document.getElementById(id); }
+    function num(v, suffix) {
+      if (v === null || v === undefined || v === "") return null;
+      var n = Number(v);
+      var t = isNaN(n) ? String(v) : n.toFixed(2);
+      return t + (suffix || "");
+    }
+    function setVal(id, v, fallback, signed) {
+      var e = el(id); if (!e) return;
+      if (v === null) { e.textContent = fallback; e.className = ""; return; }
+      e.textContent = v;
+      if (signed) {
+        var n = parseFloat(v);
+        e.className = n > 0 ? "xh-pos" : (n < 0 ? "xh-neg" : "");
+      }
+    }
+    function setSt(id, s) {
+      var e = el(id); if (!e) return;
+      if (s === "Bağlı") { e.textContent = "● Bağlı"; e.className = "st-ok"; }
+      else if (s === "Kısmi") { e.textContent = "◐ Kısmi"; e.className = "st-part"; }
+      else { e.textContent = "○ Bağlantı Yok"; e.className = "st-off"; }
+    }
+    function unavailable() {
+      ["xh-pt","xh-upnl","xh-op","xh-oo","xh-risk"].forEach(function (i) {
+        setVal(i, null, "Veri Yok");
+      });
+      ["xh-rpnl","xh-dpct","xh-tpct","xh-7d","xh-30d"].forEach(function (i) {
+        setVal(i, null, "—");
+      });
+      ["xh-s-bg","xh-s-bf","xh-s-tr","xh-s-led","xh-s-aud","xh-s-risk","xh-s-hp"]
+        .forEach(function (i) { setSt(i, "Bağlantı Yok"); });
+    }
+    function refresh() {
+      fetch("/api/v1/executive/summary", { credentials: "same-origin" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("http " + r.status);
+          return r.json();
+        })
+        .then(function (d) {
+          if (!d || !d.ok) { unavailable(); return; }
+          el("xh-mode").textContent = d.mode || "…";
+          el("xh-updated").textContent =
+            (d.as_of || "").replace("T", " ").replace("+00:00", " UTC");
+          var p = d.performance || {};
+          el("xh-pt-label").textContent =
+            "Toplam Portföy · " + (p.portfolio_total_label || "");
+          setVal("xh-pt", num(p.portfolio_total_usdt), "Veri Yok");
+          setVal("xh-upnl", num(p.unrealized_pnl_usdt), "Veri Yok", true);
+          setVal("xh-rpnl", num(p.realized_pnl_usdt), "—", true);
+          setVal("xh-dpct", num(p.daily_pnl_pct, "%"), "—", true);
+          setVal("xh-tpct", num(p.total_pnl_pct, "%"), "—", true);
+          setVal("xh-7d", num(p.pnl_7d_usdt), "—", true);
+          setVal("xh-30d", num(p.pnl_30d_usdt), "—", true);
+          setVal("xh-op", p.open_position_count === null ? null :
+                 String(p.open_position_count), "Veri Yok");
+          setVal("xh-oo", p.open_order_count === null ? null :
+                 String(p.open_order_count), "Veri Yok");
+          setVal("xh-risk", p.risk_level, "Veri Yok");
+          var s = d.status_bar || {};
+          setSt("xh-s-bg", s.binance_global);
+          setSt("xh-s-bf", s.binance_futures);
+          setSt("xh-s-tr", s.binance_tr);
+          setSt("xh-s-led", s.ledger);
+          setSt("xh-s-aud", s.audit);
+          setSt("xh-s-risk", s.risk_engine);
+          setSt("xh-s-hp", s.health);
+        })
+        .catch(unavailable);
+    }
+    refresh();
+    setInterval(refresh, 30000);
+  })();
+  </script>
+</div>

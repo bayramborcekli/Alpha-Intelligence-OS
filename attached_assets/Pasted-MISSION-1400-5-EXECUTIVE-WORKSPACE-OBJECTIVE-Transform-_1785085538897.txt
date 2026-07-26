@@ -1,0 +1,251 @@
+MISSION 1400.5 — EXECUTIVE WORKSPACE
+
+OBJECTIVE
+
+Transform Alpha Intelligence OS into a professional executive trading
+workspace where the owner can monitor the entire system from every page
+without losing situational awareness.
+
+This sprint does not introduce any exchange write capability.
+
+All additions are strictly read-only.
+
+--------------------------------------------------------------------
+
+PACKAGE 5.1
+GLOBAL EXECUTIVE HEADER
+
+Create a sticky header visible on every authenticated page.
+
+The header must remain visible while scrolling.
+
+Desktop:
+
+---------------------------------------------------------
+
+🏠 Ana Ekran
+
+Alpha Intelligence OS
+
+PAPER
+
+Canlı Emir:
+KAPALI
+
+Son Güncelleme
+
+---------------------------------------------------------
+
+Mobile:
+
+compact sticky version.
+
+No action other than navigation.
+
+--------------------------------------------------------------------
+
+PACKAGE 5.2
+QUICK HOME BUTTON
+
+Every page must contain:
+
+🏠 Ana Ekran
+
+Click →
+
+/overview
+
+Keyboard accessible.
+
+Visible regardless of sidebar state.
+
+--------------------------------------------------------------------
+
+PACKAGE 5.3
+LIVE PERFORMANCE STRIP
+
+Display a persistent performance strip.
+
+Never disappears while navigating.
+
+Contents:
+
+Toplam Portföy
+
+Gerçekleşmemiş PnL
+
+Gerçekleşmiş PnL
+(if verified only)
+
+Günlük K/Z %
+
+Toplam K/Z %
+
+Açık Pozisyon
+
+Açık Emir
+
+Risk Seviyesi
+
+Son Güncelleme
+
+Data unavailable →
+
+"Veri Yok"
+
+Never estimate values.
+
+Never fabricate percentages.
+
+--------------------------------------------------------------------
+
+PACKAGE 5.4
+GLOBAL STATUS BAR
+
+Visible everywhere.
+
+Status indicators:
+
+Binance Global
+
+Binance Futures
+
+Binance TR
+
+Ledger
+
+Audit
+
+Risk Engine
+
+Health
+
+Each shows:
+
+Bağlı
+
+Kısmi
+
+Bağlantı Yok
+
+Do not rely on color only.
+
+--------------------------------------------------------------------
+
+PACKAGE 5.5
+EXECUTIVE QUICK ACTIONS
+
+Overview contains quick navigation cards.
+
+Portföy
+
+Pozisyonlar
+
+Emirler
+
+Defter
+
+Denetim
+
+Raporlar
+
+Risk
+
+Dry Run
+
+Sistem Sağlığı
+
+Ayarlar
+
+Cards navigate only.
+
+No trading actions.
+
+--------------------------------------------------------------------
+
+PACKAGE 5.6
+SMART PNL SUMMARY
+
+Always visible.
+
+Display:
+
+Toplam Gerçekleşmemiş PnL
+
+Toplam Gerçekleşmiş PnL
+
+Bugünkü K/Z
+
+7 Günlük
+
+30 Günlük
+
+Only compute from verified data.
+
+Unknown →
+
+—
+
+No projections.
+
+No estimates.
+
+--------------------------------------------------------------------
+
+PACKAGE 5.7
+EXECUTIVE DESIGN
+
+Bloomberg-style compact layout.
+
+Maximum information density.
+
+Minimal wasted whitespace.
+
+Responsive.
+
+Fast rendering.
+
+No animation-heavy components.
+
+No blinking elements.
+
+--------------------------------------------------------------------
+
+PACKAGE 5.8
+READ-ONLY GUARANTEE
+
+No order buttons.
+
+No close buttons.
+
+No leverage controls.
+
+No transfer controls.
+
+No withdrawal controls.
+
+No exchange POST/PUT/PATCH/DELETE.
+
+Only monitoring.
+
+MISSION SUCCESS
+
+PASS only if:
+
+✓ Executive Header visible everywhere
+
+✓ Home button works
+
+✓ Performance strip persists
+
+✓ Status bar works
+
+✓ Quick navigation cards work
+
+✓ Smart PnL summary works
+
+✓ Responsive layout passes
+
+✓ Write request counters remain zero
+
+✓ Secret exposure remains zero
