@@ -1,0 +1,432 @@
+ALPHA INTELLIGENCE OS
+MISSION 1600 — INTELLIGENCE AUTOMATION
+AGENT 06 — EXPORT
+
+ROL
+
+Sen MISSION 1600’ün Export agentısın.
+
+Görevin, Automation durumunu ve çalışma geçmişini güvenli, deterministik
+ve salt okunur biçimde dışa aktaran export katmanını oluşturmaktır.
+
+Bu agent Automation Core, Service Layer, API veya Intelligence
+algoritmalarının işleyişini değiştirmeyecektir.
+
+────────────────────────────────────────
+1. BAŞLANGIÇ KOŞULU
+
+Agent 05 henüz doğrulanıp PASS ilan edilmediyse:
+
+• Agent 05 koduna bağımlı çalışma yapma.
+• Son doğrulanmış baseline olan Agent 04 commit’i üzerinden ilerle.
+• UI dosyalarını değiştirme.
+• Agent 05 ile çakışabilecek dosyaları commit’e alma.
+• Teslimat raporunda kullanılan gerçek başlangıç commit’ini belirt.
+
+Son doğrulanmış baseline:
+
+Commit:
+34d9f4e
+
+Tests:
+1049 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request:
+0
+
+Secret Exposure:
+0
+
+────────────────────────────────────────
+2. AMAÇ
+
+Automation sisteminin güvenli operasyon verilerini dışa aktar.
+
+Export yalnız mevcut, yetkilendirilmiş ve read-only verileri kullanmalıdır.
+
+Önerilen akış:
+
+Authenticated Client
+        ↓
+Automation Export API
+        ↓
+Automation Status / State Reader
+        ↓
+Sterile Export Normalizer
+        ↓
+CSV veya JSON Download
+
+Export katmanı:
+
+• automation çalıştırmayacak,
+• scheduler başlatmayacak,
+• snapshot üretmeyecek,
+• Intelligence Engine çağırmayacak,
+• Exchange erişimi yapmayacaktır.
+
+────────────────────────────────────────
+3. EXPORT KAPSAMI
+
+Repository’nin mevcut export desenini incele.
+
+Kanıtlı mimari uygunsa aşağıdakileri destekle:
+
+A. Automation Status Export
+
+Örnek:
+
+GET /api/automation/export/status
+GET /api/v1/automation/export/status
+
+B. Automation Run History Export
+
+Yalnız mevcut sistemde güvenli ve tanımlı çalışma geçmişi bulunuyorsa:
+
+GET /api/automation/export/history
+GET /api/v1/automation/export/history
+
+Geçmiş modeli bulunmuyorsa yeni ledger, timeline veya database modeli
+icat etme. Bu özelliği OUT OF SCOPE olarak raporla.
+
+────────────────────────────────────────
+4. FORMATLAR
+
+Repository’de mevcut export standardı varsa aynen kullan.
+
+En fazla:
+
+• JSON
+• CSV
+
+desteklenebilir.
+
+Format seçimi mevcut desenle uyumlu olmalıdır:
+
+• ayrı endpoint,
+• query parametresi,
+• Accept header
+
+seçeneklerinden repository’de kanıtlanan yaklaşımı kullan.
+
+Yeni PDF, Excel, ZIP veya üçüncü taraf export paketi ekleme.
+
+────────────────────────────────────────
+5. İZİN VERİLEN ALANLAR
+
+Status export için yalnız sterile beyaz-listed alanlar:
+
+• enabled
+• interval_minutes
+• state
+• running
+• run_id
+• last_run_started_at
+• last_run_finished_at
+• last_result_code
+• last_error_code
+• last_snapshot_recorded
+• next_due
+
+Gerçek API sözleşmesinde farklı veya daha az alan varsa mevcut sözleşmeyi
+koru. Kanıtsız alan ekleme.
+
+History export yalnız mevcut modelde bulunan güvenli alanları taşımalıdır:
+
+• run_id
+• started_at
+• finished_at
+• duration
+• result_code
+• final_state
+• snapshot_recorded
+
+Secret, exception metni veya iç sistem ayrıntısı taşınamaz.
+
+────────────────────────────────────────
+6. KESİNLİKLE DIŞA AKTARILMAYACAK VERİLER
+
+• Secret
+• API key
+• Session token
+• CSRF token
+• Cookie
+• Environment variable
+• Dosya yolu
+• Lock dosyası yolu
+• Host bilgisi
+• Process ID
+• Thread bilgisi
+• Stack trace
+• Exception metni
+• Internal module adı
+• Kullanıcı kimlik bilgisi
+• Ham Intelligence payload
+• Portfolio özel verisi
+• Exchange hesabı
+• Ledger içeriği
+• Audit içeriği
+• Timeline’ın kapsam dışı kayıtları
+
+────────────────────────────────────────
+7. AUTHENTICATION / AUTHORIZATION
+
+Tüm export endpoint’leri mevcut `_security_gate` ve repository’deki mevcut
+yetkilendirme modelini kullanmalıdır.
+
+Zorunlu:
+
+• anonim erişim reddedilir,
+• yeni rol veya permission adı icat edilmez,
+• export için auth bypass oluşturulmaz,
+• export URL’sine token eklenmez,
+• dosya adında kullanıcı kontrollü path kullanılmaz.
+
+GET export salt okunur olduğundan repository politikasına göre CSRF
+gerektirmeyebilir. Mevcut güvenlik sözleşmesini izle.
+
+────────────────────────────────────────
+8. EXPORT DAVRANIŞI
+
+Export çıktısı:
+
+• deterministik,
+• UTF-8,
+• sabit kolon sıralı,
+• sabit alan sıralı,
+• sterile,
+• tekrar üretilebilir
+
+olmalıdır.
+
+CSV için:
+
+• sabit başlık sırası,
+• doğru escaping,
+• formula injection koruması,
+• newline güvenliği,
+• delimiter repository standardına uygunluk
+
+sağlanmalıdır.
+
+`=`, `+`, `-`, `@` ile başlayan kullanıcı veya dış kaynaklı değerlerin
+spreadsheet formula olarak yürütülmesine izin verme.
+
+JSON için:
+
+• deterministic key order,
+• geçerli Content-Type,
+• secret-free payload,
+• minimum veri
+
+sağlanmalıdır.
+
+────────────────────────────────────────
+9. HTTP SÖZLEŞMESİ
+
+Repository standardına uygun olarak:
+
+• 200 — export başarılı
+• 400 — geçersiz format
+• 401 — authentication yok
+• 403 — yetki reddi
+• 404 — desteklenmeyen export yüzeyi
+• 503 — automation status kaynağı kullanılamıyor
+• 500 — sterile export error
+
+kullanılabilir.
+
+Gerçek proje standardı farklıysa mevcut standardı koru.
+
+Response header’ları:
+
+• doğru Content-Type
+• güvenli Content-Disposition
+• Cache-Control: no-store, private
+• X-Content-Type-Options: nosniff
+
+mevcut uygulama modeli destekliyorsa eklenmelidir.
+
+Dosya adı statik veya sunucu tarafından güvenli biçimde üretilmelidir.
+
+────────────────────────────────────────
+10. MİMARİ SINIRLAR
+
+Export route’u:
+
+• `append_snapshot()` çağırmayacak,
+• `run_automation()` çağırmayacak,
+• `automation_scheduler_tick()` çağırmayacak,
+• `execute_intelligence_run()` çağırmayacak,
+• `IntelligenceService` çağırmayacak,
+• Exchange import etmeyecek,
+• Timeline’a yazmayacak,
+• Workspace’e yazmayacak,
+• Ledger/Audit değiştirmeyecek.
+
+Export yalnız mevcut durum okuma sözleşmesini kullanacaktır.
+
+────────────────────────────────────────
+11. KAPSAM DIŞI
+
+Bu agent yapmayacaktır:
+
+• UI
+• Grafik
+• Dashboard
+• Scheduler değişikliği
+• Manual run değişikliği
+• Enable/disable
+• Yeni çalışma geçmişi deposu
+• Database migration
+• Timeline genişletmesi
+• Portfolio export
+• Strategy export
+• Exchange export
+• PDF
+• XLSX
+• E-posta gönderimi
+• Otomatik zamanlanmış rapor
+• MISSION 1700+ kapsamı
+
+────────────────────────────────────────
+12. TESTLER
+
+En az aşağıdaki testleri ekle:
+
+Authentication:
+
+• anonymous export denied
+• authenticated export success
+• unauthorized export denied
+
+Status export:
+
+• JSON export success
+• CSV export success
+• deterministic JSON
+• deterministic CSV
+• stable field order
+• stable column order
+• correct Content-Type
+• safe Content-Disposition
+• no-store cache header
+
+Security:
+
+• secret leakage yok
+• path leakage yok
+• traceback leakage yok
+• exception text leakage yok
+• CSV formula injection koruması
+• CSV newline/quote escaping
+• unsupported format rejected
+• route does not call append_snapshot
+• route does not run automation
+• route does not call IntelligenceService
+• no Exchange import/call
+
+Failure behavior:
+
+• unavailable status source → sterile response
+• malformed internal state → sterile response
+• export exception → sterile error
+
+History:
+
+• mevcut history modeli varsa export testi
+• model yoksa endpoint eklenmediğinin statik doğrulaması
+
+Regression:
+
+• Agent 02 Core
+• Agent 03 Service
+• Agent 04 API/Lifecycle
+• Agent 05 yalnız doğrulanmış ve baseline’a dahil edilmişse UI
+• MISSION 1400
+• MISSION 1500.1
+• MISSION 1500.2
+• MISSION 1600 mevcut testleri
+
+────────────────────────────────────────
+13. DOSYA DEĞİŞİKLİĞİ KURALI
+
+• Mevcut export helper varsa yeniden kullan.
+• Route mantığını ince tut.
+• Normalizasyonu ayrı saf fonksiyonda tut.
+• Yeni bağımlılık ekleme.
+• UI dosyalarını değiştirme.
+• Agent 05’in doğrulanmamış değişikliklerini commit’e alma.
+• Baseline test dosyasını yalnız gerekli ve açıkça gerekçeli durumda değiştir.
+
+────────────────────────────────────────
+14. TESLİMAT RAPORU
+
+── KULLANILAN BAŞLANGIÇ BASELINE’I ──
+[Commit ve test sonucu]
+
+── OLUŞTURULAN DOSYALAR ──
+[Dosya ve amacı]
+
+── DEĞİŞTİRİLEN DOSYALAR ──
+[Dosya ve gerekçe]
+
+── EXPORT YÜZEYİ ──
+[Endpoint, format, auth, status code]
+
+── EXPORT ALANLARI ──
+[Beyaz-listed alanlar]
+
+── GÜVENLİK KONTROLLERİ ──
+[Secret, path, formula injection, headers]
+
+── HISTORY KARARI ──
+[Uygulandı veya OUT OF SCOPE ve nedeni]
+
+── YENİ TESTLER ──
+[Test sayısı ve kapsamı]
+
+── TAM TEST SONUCU ──
+[PASS]
+
+── FAIL / SKIP ──
+[0 / 0 olmalıdır]
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+0
+
+── SECRET EXPOSURE ──
+0
+
+── BİLİNEN SINIRLAMALAR ──
+[Varsa]
+
+── COMMIT ──
+[Hash ve push durumu]
+
+── SONRAKİ AGENT ──
+AGENT 07 — Security Verification
+
+────────────────────────────────────────
+15. PASS KRİTERİ
+
+PASS için:
+
+• Güvenli ve read-only export tamamlanmış olmalıdır.
+• Yalnız mevcut status/history okuma sözleşmesi kullanılmalıdır.
+• Export automation çalıştırmamalıdır.
+• Export snapshot yazmamalıdır.
+• Auth korunmalıdır.
+• CSV formula injection engellenmelidir.
+• Yanıtlar deterministik ve sterile olmalıdır.
+• Workspace read-only korunmalıdır.
+• Timeline append-only korunmalıdır.
+• Exchange Write Request = 0 olmalıdır.
+• Secret Exposure = 0 olmalıdır.
+• Tüm testler PASS olmalıdır.
+• FAIL = 0 olmalıdır.
+• SKIP = 0 olmalı veya önceden onaylı zorunlu gerekçe bulunmalıdır.
+• Commit oluşturulmalı ve push edilmelidir.
+
+Kod tamamlanmadan PASS verilmez.
