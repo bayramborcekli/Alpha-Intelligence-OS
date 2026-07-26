@@ -1,0 +1,282 @@
+MISSION 1500.2 — AGENT 06
+Workspace Export
+
+AMAÇ
+
+Intelligence Workspace verilerinin salt-okunur dışa aktarım
+(export) katmanını oluşturmak.
+
+Bu agent yalnızca export işlevini geliştirecektir.
+
+Timeline, Service, API, UI ve Security mimarisi değiştirilmeyecektir.
+
+────────────────────────────────────────
+
+GÖREVLER
+
+1.
+
+Aşağıdaki export uçlarını ekle.
+
+GET /api/workspace/export/timeline
+
+GET /api/workspace/export/snapshot/<id>
+
+GET /api/workspace/export/compare
+
+GET /api/workspace/export/recommendations
+
+GET /api/workspace/export/risk-evolution
+
+GET /api/workspace/export/search
+
+2.
+
+Tüm uçların
+
+/api/v1
+
+takma adları oluşturulacaktır.
+
+3.
+
+Export formatları
+
+JSON
+
+CSV
+
+destekleyecektir.
+
+CSV yalnızca düz metin alanları içerecektir.
+
+4.
+
+Veriler yalnızca
+
+IntelligenceWorkspaceService
+
+üzerinden alınacaktır.
+
+Timeline modülüne doğrudan erişim yasaktır.
+
+5.
+
+Tüm export işlemleri
+
+salt-okunur
+
+olacaktır.
+
+Hiçbir kayıt oluşturulmayacaktır.
+
+Hiçbir geçmiş güncellenmeyecektir.
+
+6.
+
+Snapshot export
+
+bulunamazsa
+
+404
+
+sterile hata döndürmelidir.
+
+7.
+
+Compare export
+
+aynı deterministik alan sırasını koruyacaktır.
+
+8.
+
+Decimal değerler
+
+string
+
+olarak korunacaktır.
+
+9.
+
+Unknown değerler
+
+null
+
+"—"
+
+"Veri Yok"
+
+kurallarını aynen koruyacaktır.
+
+10.
+
+Response başlıkları
+
+Content-Disposition
+
+Content-Type
+
+Cache-Control:
+no-store, private
+
+uyumlu olacaktır.
+
+11.
+
+Sterile hata modeli korunacaktır.
+
+Exception
+
+Stack trace
+
+Credential
+
+Secret
+
+çıktıya taşınmayacaktır.
+
+────────────────────────────────────────
+
+KISITLAR
+
+Dokunulmayacak
+
+Timeline
+
+Workspace Service
+
+Workspace API
+
+Workspace UI
+
+Risk Engine
+
+Recommendation Engine
+
+Models
+
+Security
+
+Settings
+
+Exchange
+
+Ledger
+
+Audit
+
+────────────────────────────────────────
+
+YASAKLAR
+
+POST
+
+PUT
+
+PATCH
+
+DELETE
+
+History write
+
+History update
+
+History delete
+
+Exchange request
+
+Exchange write
+
+Harici LLM
+
+Tahmin
+
+Otomatik karar
+
+────────────────────────────────────────
+
+TESTLER
+
+En az aşağıdakiler doğrulanmalıdır.
+
+• tüm export endpointleri
+
+• /api/v1 aliasları
+
+• JSON export
+
+• CSV export
+
+• snapshot export
+
+• compare export
+
+• recommendation export
+
+• risk evolution export
+
+• search export
+
+• 400
+
+• 404
+
+• no-store header
+
+• Content-Disposition
+
+• Decimal doğruluğu
+
+• determinizm
+
+• sterile error
+
+• secret sızıntısı yokluğu
+
+• yalnız GET
+
+• POST/PUT/PATCH/DELETE → 405
+
+────────────────────────────────────────
+
+TESLİM RAPORU
+
+── DEĞİŞEN DOSYALAR ──
+
+── EXPORT KATMANI ──
+
+── FORMATLAR ──
+
+── KURAL UYUMU ──
+
+── TESTLER ──
+
+── TAM TEST SONUCU ──
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+
+── SECRET EXPOSURE ──
+
+── COMMIT / HEAD ──
+
+── BİLİNEN SINIRLAMALAR ──
+
+────────────────────────────────────────
+
+PASS KRİTERİ
+
+• Export katmanı tamamlandı.
+
+• JSON ve CSV export çalışıyor.
+
+• Salt-okunur.
+
+• WorkspaceService üzerinden çalışıyor.
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Regresyon yok.
+
+• 1500.1 ve 1500.2 mimarisi korunuyor.
