@@ -5,6 +5,7 @@ Parola asla loglanmaz veya düz metin olarak saklanmaz.
 """
 from __future__ import annotations
 
+import ipaddress
 import os
 import time
 import threading
@@ -37,12 +38,61 @@ def _get_admin_password_hash() -> str | None:
     return os.environ.get("ADMIN_PASSWORD_HASH") or None
 
 
+def _trusted_proxy_networks() -> list[ipaddress._BaseNetwork]:
+    """
+    TRUSTED_PROXY_IPS ortam değişkeninden güvenilir proxy ağlarını oku.
+    Virgülle ayrılmış IP veya CIDR listesi (örn. "10.0.0.1, 172.16.0.0/12").
+    Boş / tanımsızsa hiçbir proxy'ye güvenilmez.
+    """
+    raw = os.environ.get("TRUSTED_PROXY_IPS", "")
+    networks: list[ipaddress._BaseNetwork] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(part, strict=False))
+        except ValueError:
+            continue  # geçersiz girdi sessizce atlanır; güven GENİŞLETİLMEZ
+    return networks
+
+
+def _is_trusted_proxy(peer: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(peer)
+    except ValueError:
+        return False
+    return any(addr in net for net in _trusted_proxy_networks())
+
+
 def get_client_ip() -> str:
-    """Gerçek istemci IP'sini döndür (proxy arkasında çalışır)."""
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:45]
-    return (request.remote_addr or "unknown")[:45]
+    """
+    Gerçek istemci IP'sini döndür.
+
+    Güvenlik kuralı: X-Forwarded-For başlığına VARSAYILAN olarak güvenilmez —
+    doğrudan bağlanan bir saldırgan her istekte farklı sahte değer göndererek
+    IP bazlı login kilidini sıfırlayabilirdi. Başlık yalnızca şu iki koşul
+    birden sağlandığında kullanılır:
+      1. İsteğin geldiği soket adresi (request.remote_addr) TRUSTED_PROXY_IPS
+         ortam değişkeninde tanımlı güvenilir bir proxy ise, ve
+      2. Kullanılan değer zincirin SON girdisidir (güvenilir proxy'nin kendi
+         eklediği, istemcinin kontrol EDEMEDİĞİ girdi) ve geçerli bir IP'dir.
+    Aksi durumda her zaman soket adresi döndürülür. TRUSTED_PROXY_IPS boşken
+    (varsayılan) başlık tamamen yok sayılır; proxy arkasında bu, tüm
+    isteklerin proxy IP'si altında sayılması demektir — bypass yerine daha
+    sıkı (fail-safe) davranıştır.
+    """
+    peer = request.remote_addr or ""
+    if peer and _is_trusted_proxy(peer):
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            candidate = forwarded.split(",")[-1].strip()
+            try:
+                ipaddress.ip_address(candidate)
+                return candidate[:45]
+            except ValueError:
+                pass  # bozuk başlık → soket adresine geri dön
+    return (peer or "unknown")[:45]
 
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────

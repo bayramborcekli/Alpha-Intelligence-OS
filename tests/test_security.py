@@ -203,6 +203,95 @@ class TestRateLimiting:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# IP sahteciliği (X-Forwarded-For spoofing) testleri
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestIpSpoofing:
+
+    def test_get_client_ip_ignores_forwarded_header_by_default(self):
+        """TRUSTED_PROXY_IPS tanımsızken X-Forwarded-For tamamen yok sayılmalı;
+        soket adresi (remote_addr) döndürülmeli."""
+        import auth
+        from flask import Flask
+        raw_app = Flask(__name__)
+        with raw_app.test_request_context(
+            "/", headers={"X-Forwarded-For": "6.6.6.6"},
+            environ_base={"REMOTE_ADDR": "9.9.9.9"},
+        ):
+            assert auth.get_client_ip() == "9.9.9.9"
+
+    def test_rotating_forwarded_header_does_not_reset_lockout(self, auth_client):
+        """ANA GEREKSİNİM: Doğrudan bağlanan saldırgan her istekte FARKLI
+        tek-girdilik X-Forwarded-For gönderse bile kilit sıfırlanmamalı.
+        Başlık güvenilmediği için kilit soket adresi üzerinden işler."""
+        for i in range(5):
+            auth_client.post(
+                "/login",
+                data={"username": "testadmin", "password": "badpass"},
+                headers={"X-Forwarded-For": f"10.66.{i}.{i}"},
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+        # 6. deneme: doğru parola + yine farklı sahte başlık — yine de kilitli
+        resp = auth_client.post(
+            "/login",
+            data={"username": "testadmin", "password": "testpass1234"},
+            headers={"X-Forwarded-For": "10.99.99.99"},
+            environ_base={"REMOTE_ADDR": "127.0.0.1"},
+        )
+        assert resp.status_code == 200
+        assert b"bekleyin" in resp.data.lower()
+
+    def test_untrusted_peer_forwarded_header_never_trusted(self, auth_client):
+        """Sahte başlıklı denemeler soket IP'si altında sayılmalı; başlıktaki
+        IP'ler için ayrı sayaç OLUŞMAMALI."""
+        import auth
+        for i in range(5):
+            auth_client.post(
+                "/login",
+                data={"username": "testadmin", "password": "badpass"},
+                headers={"X-Forwarded-For": f"198.51.100.{i}"},
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+        # Kilit gerçek soket adresinde
+        allowed, _ = auth.check_rate_limit("127.0.0.1")
+        assert allowed is False
+        # Sahte IP'ler hiç sayılmamış olmalı
+        with auth._LOCK:
+            assert not any(k.startswith("198.51.100.") for k in auth._ATTEMPTS)
+
+    def test_trusted_proxy_uses_last_forwarded_entry(self, auth_client, monkeypatch):
+        """Güvenilir proxy tanımlıyken yalnızca zincirin SON girdisi (proxy'nin
+        eklediği gerçek istemci IP'si) kullanılmalı; saldırganın öne eklediği
+        sahte girdiler ve rotasyonu kilidi sıfırlamamalı."""
+        import auth
+        monkeypatch.setenv("TRUSTED_PROXY_IPS", "127.0.0.1")
+        real_ip = "203.0.113.7"
+        for i in range(5):
+            auth_client.post(
+                "/login",
+                data={"username": "testadmin", "password": "badpass"},
+                headers={"X-Forwarded-For": f"10.66.{i}.{i}, {real_ip}"},
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+        allowed, secs = auth.check_rate_limit(real_ip)
+        assert allowed is False
+        assert secs > 0
+
+    def test_trusted_proxy_malformed_header_falls_back_to_socket(self, monkeypatch):
+        """Güvenilir proxy'den gelse bile bozuk (IP olmayan) başlık değeri
+        kullanılmamalı; soket adresine dönülmeli."""
+        import auth
+        from flask import Flask
+        monkeypatch.setenv("TRUSTED_PROXY_IPS", "127.0.0.1")
+        raw_app = Flask(__name__)
+        with raw_app.test_request_context(
+            "/", headers={"X-Forwarded-For": "not-an-ip"},
+            environ_base={"REMOTE_ADDR": "127.0.0.1"},
+        ):
+            assert auth.get_client_ip() == "127.0.0.1"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Güvenlik HTTP başlıkları testleri
 # ══════════════════════════════════════════════════════════════════════════════
 

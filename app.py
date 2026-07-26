@@ -40,6 +40,15 @@ import security_log     as slog  # noqa: E402
 
 app = Flask(__name__)
 
+# ── Proxy güveni ──────────────────────────────────────────────────────────────
+# X-Forwarded-For başlığına varsayılan olarak GÜVENİLMEZ. auth.get_client_ip()
+# başlığı yalnızca isteğin doğrudan geldiği soket adresi (remote_addr)
+# TRUSTED_PROXY_IPS ortam değişkeninde listelenen güvenilir proxy'lerden
+# biriyse ve o zaman da yalnızca proxy'nin eklediği SON girdiyi dikkate alır.
+# Bkz. auth.get_client_ip(). Bu, sahte başlıkla rate limit atlatmayı önler:
+# başlık ya tamamen yok sayılır ya da saldırganın kontrol edemediği,
+# güvenilir proxy'nin yazdığı girdi kullanılır.
+
 # ── Güvenlik yapılandırması ───────────────────────────────────────────────────
 _secret = (
     os.environ.get("FLASK_SECRET_KEY") or
