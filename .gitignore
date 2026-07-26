@@ -5,5 +5,7 @@ __pycache__/
 # Generated PAPER trading state and logs
 alpha20_v1/state.json
 alpha20_v1/alpha20.log
+alpha20_v1/.bot.pid
+alpha20_v1/bot_process.log
 state.json
 alpha20.log

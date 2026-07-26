@@ -1,0 +1,187 @@
+Mevcut Alpha20_v1 PAPER kontrol paneline “Akıllı Coin Seçimi” özelliği ekle.
+
+ÖNEMLİ:
+- Sistem yalnızca PAPER modunda kalacak.
+- Gerçek emir, canlı API veya gerçek para işlemi ekleme.
+- Akıllı seçim kârlılık garantisi vermez.
+- Kullanıcının manuel coin listesi korunmalı ve geri yüklenebilmelidir.
+
+1. ÇALIŞMA MODLARI
+
+Coin Yönetimi bölümüne üç mod ekle:
+
+A) Manuel
+- Yalnızca kullanıcının seçtiği symbols listesi taransın.
+- Sistem otomatik coin ekleyip çıkarmasın.
+
+B) Öneri
+- Sistem fırsat olabilecek coinleri analiz etsin.
+- “Önerilen Coinler” bölümünde gösterilsin.
+- Kullanıcı onaylamadan symbols listesi değişmesin.
+
+C) Otomatik
+- Belirlenen kurallara göre coinleri symbols listesine otomatik ekleyip çıkarabilsin.
+- Her değişiklik sebebiyle birlikte loglansın.
+- Panelde son değişiklik zamanı gösterilsin.
+
+Varsayılan mod MANUEL olsun. Mevcut ayar kendiliğinden Otomatik moda geçmesin.
+
+2. ADAY COIN HAVUZU
+
+Binance USD-M Futures herkese açık API verilerini kullanarak aktif USDT perpetual sembollerinden aday havuzu oluştur.
+
+Kurallar:
+- Yalnızca aktif USDT perpetual sözleşmeleri.
+- Teslim tarihli sözleşmeleri alma.
+- UP, DOWN, BULL, BEAR gibi kaldıraçlı token sembollerini dışla.
+- Veri alınamayan veya yeni listelenmiş ve yeterli mum geçmişi olmayan sembolleri dışla.
+- API anahtarı gerektiren endpoint kullanma.
+- İsteklerde timeout, tekrar deneme ve hata yönetimi kullan.
+- Binance erişilemezse mevcut coin listesini değiştirme.
+
+3. PİYASA FIRSAT PUANI
+
+Her aday için 0-100 arası “Piyasa Fırsat Puanı” hesapla.
+
+Puan bileşenleri:
+- 24 saatlik USDT hacmi ve likidite
+- Son mumlardaki hacim oranı
+- ATR yüzdesi ile ölçülen volatilite
+- 15 dakikalık ve 1 saatlik trend uyumu
+- EMA eğimi
+- RSI’nın aşırı uçta olmaması
+- Fiyat hareketinin düzenli olması
+- Veri kalitesi ve yeterli geçmiş
+
+Tek bir ölçüte göre karar verme.
+Sadece yüksek volatilite nedeniyle coin ekleme.
+Aşırı düşük hacimli coinleri dışla.
+Puanlama bileşenlerini ayrı ayrı panelde göster.
+
+4. PAPER PERFORMANS PUANI
+
+state.json içindeki tamamlanmış işlemlerden coin bazında istatistik çıkar:
+- İşlem sayısı
+- Kazanma oranı
+- Toplam PnL
+- Ortalama PnL
+- Profit factor
+- Maksimum ardışık kayıp
+- Son işlemlerdeki performans
+
+Kurallar:
+- En az 5 tamamlanmış işlem olmayan coinlerde geçmiş performansa yüksek ağırlık verme.
+- Az işlemle oluşan yüzde 100 kazanma oranını güvenilir kabul etme.
+- Paper performansı toplam seçim puanının en fazla %30’unu oluştursun.
+- Eski işlemlerin etkisini azalt; yakın tarihli işlemlere makul ölçüde daha fazla ağırlık ver.
+- Geçmiş sonuçların geleceği garanti etmediğini panelde açıkça yaz.
+
+5. OTOMATİK LİSTE KURALLARI
+
+Varsayılan ayarlar:
+- Maksimum aktif coin: 10
+- Minimum aktif coin: 3
+- Otomatik değerlendirme aralığı: 6 saat
+- Ekleme puanı: 70
+- Çıkarma puanı: 50
+- Bir coin eklendikten sonra minimum listede kalma süresi: 24 saat
+- Bir coin çıkarıldıktan sonra yeniden ekleme bekleme süresi: 12 saat
+
+Bu değerler panelden değiştirilebilir olsun.
+
+Histerezis kullan:
+- 70 üzerinde ekle.
+- 50 altına düşmeden çıkarma.
+Bu sayede listenin sürekli değişmesini engelle.
+
+Ek güvenlik:
+- Açık paper pozisyon bulunan sembol listeden çıkarılmasın.
+- Bot çalışırken liste değişirse botun güvenli biçimde yeniden başlatılması gerektiğini bildir.
+- Otomatik yeniden başlatma varsayılan olarak kapalı olsun.
+- Aynı değerlendirmede listenin en fazla %30’u değişebilsin.
+- En az bir büyük likit sembol listede tutulsun; varsayılan olarak BTCUSDT.
+- Hata durumunda mevcut listeyi koru.
+- config.json dosyasını atomik şekilde kaydet.
+
+6. PANEL ARAYÜZÜ
+
+“Akıllı Coin Seçimi” bölümünde göster:
+- Manuel / Öneri / Otomatik mod seçimi
+- Son analiz zamanı
+- Bir sonraki analiz zamanı
+- Aday coin sayısı
+- Aktif coin sayısı
+- Ekleme ve çıkarma eşikleri
+- Maksimum coin sayısı
+- Değerlendirme aralığı
+- “Şimdi Analiz Et” düğmesi
+- “Önerileri Uygula” düğmesi
+- “Manuel Listeyi Geri Yükle” düğmesi
+
+Öneri tablosunda:
+- Sembol
+- Toplam seçim puanı
+- Piyasa fırsat puanı
+- Paper performans puanı
+- 24 saatlik hacim
+- ATR yüzdesi
+- Trend durumu
+- İşlem sayısı
+- Kazanma oranı
+- Toplam paper PnL
+- Öneri: Ekle / Tut / Çıkar
+- Önerinin kısa Türkçe gerekçesi
+
+Her satırda manuel:
+- Ekle
+- Çıkar
+- Sabitle
+düğmeleri olsun.
+
+“Sabitle” işaretli coinler otomatik sistem tarafından çıkarılmasın.
+
+7. KAYIT VE ŞEFFAFLIK
+
+Her otomatik değişikliği ayrı bir JSON log dosyasına yaz:
+- Tarih
+- Eklenen coinler
+- Çıkarılan coinler
+- Önceki liste
+- Yeni liste
+- Her coin için puan ve gerekçe
+- Kullanılan mod
+
+Panelde son 20 değişikliği göster.
+
+Sistem “kârlı olacak”, “kesin fırsat” veya benzeri ifadeler kullanmasın.
+Bunun yerine:
+- “yüksek puanlı aday”
+- “izleme önerisi”
+- “strateji koşullarına daha uygun”
+ifadelerini kullansın.
+
+8. PERFORMANS KARŞILAŞTIRMASI
+
+Manuel liste ve akıllı liste performansını ayrı ayrı takip et:
+- Toplam işlem
+- Kazanma oranı
+- Net paper PnL
+- Profit factor
+- Maksimum düşüş
+
+Akıllı seçim özelliğinin gerçekten daha iyi sonuç üretip üretmediğini karşılaştırmalı göster.
+Yeterli işlem yoksa “istatistiksel olarak yetersiz veri” yaz.
+
+9. TEKNİK VE TEST
+
+- Mevcut strateji giriş/çıkış mantığını bozma.
+- Mümkünse seçim mantığını ayrı bir alpha20_v1/universe_manager.py dosyasına koy.
+- Ağ çağrılarını Flask ana isteğini uzun süre bloke etmeyecek şekilde yönet.
+- Aynı anda iki analiz çalışmasını engelle.
+- Kullanıcı girdilerini sunucu tarafında doğrula.
+- API hatasında veya bozuk JSON durumunda uygulama çökmemeli.
+- Manuel, Öneri ve Otomatik modları test et.
+- Açık pozisyonlu sembolün çıkarılmadığını test et.
+- Histerezis, sabitleme, cooldown ve maksimum değişim kurallarını test et.
+- Mevcut symbols listesini geliştirme sırasında kendiliğinden değiştirme.
+- İş bitince yapılan değişiklikleri ve test sonuçlarını Türkçe özetle.

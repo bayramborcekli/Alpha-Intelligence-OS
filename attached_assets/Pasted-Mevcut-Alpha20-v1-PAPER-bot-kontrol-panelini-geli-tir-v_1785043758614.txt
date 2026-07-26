@@ -1,0 +1,155 @@
+Mevcut Alpha20_v1 PAPER bot kontrol panelini geliştir ve coin yönetimi ekle.
+
+ÖNEMLİ:
+- Sistem yalnızca PAPER modunda kalacak.
+- Binance API, canlı emir veya gerçek para işlemi ekleme.
+- alpha20_v1/alpha20.py içindeki strateji ve işlem hesaplama mantığını mümkün olduğunca değiştirme.
+- Mevcut çalışan minimum_score arayüzünü koru.
+- Değişikliklerden önce ilgili dosyaların yedeğini oluştur.
+
+1. BOT DURUMU
+Ana sayfada göster:
+- Bot çalışıyor veya durdu
+- PAPER bakiyesi
+- Gün başlangıç bakiyesi
+- Açık pozisyon olup olmadığı
+- Açık pozisyon varsa sembol, yön, giriş, stop, hedef ve miktar
+- Ardışık zarar sayısı
+- Toplam tamamlanan işlem sayısı
+- Son tarama zamanı
+- Son log mesajı
+
+Bu bilgileri alpha20_v1/state.json ve alpha20_v1/alpha20.log dosyalarından güvenli şekilde oku.
+Dosya yoksa veya JSON bozuksa uygulama çökmemeli; Türkçe açıklama göstermeli.
+
+2. AYARLAR
+Panelden şu değerler düzenlenebilsin:
+- minimum_score: tam sayı, 0-100
+- scan_seconds: tam sayı, 15-3600
+- risk_per_trade_pct: ondalık sayı, 0.1-2.0
+- daily_loss_limit_pct: ondalık sayı, 0.5-10
+- max_consecutive_losses: tam sayı, 1-10
+- reward_risk_ratio: ondalık sayı, 1-5
+- atr_stop_multiplier: ondalık sayı, 0.5-5
+- max_open_positions: tam sayı, 1-5
+
+Kurallar:
+- Sunucu tarafında doğrulama yap.
+- Geçersiz değerleri config.json dosyasına yazma.
+- Diğer ayarları koru.
+- Atomik kayıt kullan.
+- Başarı ve hata mesajlarını Türkçe göster.
+
+3. COIN YÖNETİMİ
+Panelde ayrı bir “Coin Yönetimi” bölümü oluştur.
+
+Mevcut config.json içindeki symbols listesini göster.
+Her sembol için:
+- Sembol adı
+- Aktif bilgisi
+- Sil düğmesi
+
+Yeni coin ekleme alanı olsun:
+- Kullanıcı örneğin XRPUSDT, BNBUSDT veya DOGEUSDT yazabilsin.
+- Girilen değeri otomatik olarak büyük harfe dönüştür.
+- Boşlukları temizle.
+- Yalnızca A-Z ve 0-9 karakterlerine izin ver.
+- Sembol USDT ile bitmeli.
+- Aynı sembol ikinci kez eklenmemeli.
+- Geçersiz sembol config.json dosyasına yazılmamalı.
+- Başarılı ve hatalı işlemlerde Türkçe mesaj göster.
+
+Coin silme:
+- BTCUSDT dahil her coin silinebilir.
+- Son kalan coin silinmek istenirse işlemi engelle; en az bir coin kalmalı.
+- Silme işlemi diğer ayarları değiştirmemeli.
+
+Hazır listeler:
+- “Varsayılan 3” düğmesi:
+  BTCUSDT, ETHUSDT, SOLUSDT
+
+- “Top 10” düğmesi:
+  BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT,
+  DOGEUSDT, ADAUSDT, LINKUSDT, AVAXUSDT, SUIUSDT
+
+- “Top 20” düğmesi:
+  BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT,
+  DOGEUSDT, ADAUSDT, LINKUSDT, AVAXUSDT, SUIUSDT,
+  LTCUSDT, BCHUSDT, DOTUSDT, TRXUSDT, UNIUSDT,
+  ETCUSDT, ATOMUSDT, NEARUSDT, ICPUSDT, AAVEUSDT
+
+Hazır liste düğmesine basıldığında:
+- Mevcut symbols listesi yeni listeyle değiştirilsin.
+- Onay kutusu veya onay penceresi gösterilsin.
+- Değişiklik atomik şekilde kaydedilsin.
+- Bot çalışıyorsa yeni coin listesinin etkili olması için yeniden başlatma gerektiği bildirilsin.
+
+Her coin için sürükle-bırak şart değil.
+Bunun yerine yukarı ve aşağı düğmeleri ekle:
+- Yukarı taşı
+- Aşağı taşı
+
+Bu sıralama config.json içindeki symbols sırasını değiştirsin.
+
+4. BOT BAŞLAT / DURDUR
+Panelde:
+- Botu Başlat
+- Botu Durdur
+
+Kurallar:
+- Başlatma komutu:
+  python alpha20_v1/alpha20.py
+- Aynı anda ikinci bot sürecini engelle.
+- PID bilgisini güvenli dosyada sakla.
+- Durdurma sadece uygulamanın başlattığı süreci durdursun.
+- shell=True kullanma.
+- Kullanıcı girdisini komutla birleştirme.
+- Eski PID geçerli mi kontrol et.
+- Bot zaten çalışıyorsa Türkçe mesaj göster.
+
+Ayar veya coin listesi değiştiğinde:
+- Bot çalışıyorsa “Değişikliklerin uygulanması için botu yeniden başlatın” uyarısı göster.
+- Otomatik yeniden başlatma yapma.
+
+5. OTOMATİK YENİLEME
+- Durum paneli 5 saniyede bir yenilensin.
+- /api/status JSON endpoint oluştur.
+- Gizli değer döndürme.
+- Fetch hatasında arayüz çökmemeli.
+
+6. İŞLEM GEÇMİŞİ
+state.json içindeki son 10 tamamlanmış işlemi tabloda göster:
+- Sembol
+- Yön
+- Açılış zamanı
+- Kapanış zamanı
+- Sonuç
+- Kâr/zarar
+- İşlem sonrası bakiye
+
+7. TASARIM
+- Mevcut koyu temayı koru.
+- Mobil ve bilgisayar uyumlu olsun.
+- Bölümler:
+  Bot Durumu
+  Bot Kontrolü
+  Ayarlar
+  Coin Yönetimi
+  İşlem Geçmişi
+- PAPER modu uyarısı sürekli görünür olsun.
+- Kârlılık garantisi olmadığı uyarısını koru.
+- Bot çalışıyorsa yeşil, durmuşsa kırmızı rozet göster.
+- Coinleri küçük rozetler veya düzenli satırlar halinde göster.
+- Silme düğmeleri dikkat çekici fakat yanlışlıkla basılması zor olsun.
+
+8. TEKNİK VE TEST
+- Mevcut app.py dosyasını geliştir.
+- Gerekirse templates ve static klasörlerini kullan.
+- requirements.txt dosyasını güncelle.
+- Workflow komutu python app.py olarak kalsın.
+- Flask 0.0.0.0 ve PORT ortam değişkeniyle çalışsın.
+- Tip ipuçları ve hata yönetimi ekle.
+- Gizli değerleri loglama.
+- Mevcut minimum_score ve mevcut symbols değerlerini kendiliğinden değiştirme.
+- Ayar kaydetme, coin ekleme, coin silme, sıralama, hazır listeler, başlatma, durdurma ve /api/status için test çalıştır.
+- İş tamamlanınca yapılan değişiklikleri ve test sonuçlarını Türkçe özetle.
