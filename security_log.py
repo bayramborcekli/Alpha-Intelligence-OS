@@ -67,11 +67,13 @@ _setup()
 
 
 def _sanitize(text: str) -> str:
-    """Hassas kelime içeren alanı maskele."""
+    """Hassas kelime içeren alanı maskele; log format enjeksiyonunu engelle."""
     lower = text.lower()
     for word in _FORBIDDEN_WORDS:
         if word in lower:
             return "[REDACTED]"
+    # Pipe / satır sonu karakterleri log alanı enjeksiyonuna izin vermesin
+    text = text.replace("|", "/").replace("\n", " ").replace("\r", " ")
     return text[:200]
 
 
@@ -87,9 +89,9 @@ def log_event(
     """
     parts: list[str] = [f"event={event_type}"]
     if username:
-        parts.append(f"user={username[:64]}")
+        parts.append(f"user={_sanitize(username)[:64]}")
     if ip:
-        parts.append(f"ip={ip[:45]}")
+        parts.append(f"ip={_sanitize(ip)[:45]}")
     if detail:
         parts.append(f"detail={_sanitize(detail)}")
     _logger.info(" | ".join(parts))
