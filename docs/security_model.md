@@ -35,6 +35,12 @@ değerler asla loglanmaz/gösterilmez.
   `GET /api/v1/global/orders`); POST/PUT/DELETE yasaktır.
 - `POST /api/v1/refresh` CSRF korumalıdır ve yalnızca uygulama-yerel okuma
   önbelleklerini temizler; denetim kaydı üretir.
+- Mission 1400.3: Portföy/Pozisyon/Emir sayfaları ve CSV dışa aktarımları da
+  aynı güvenlik kapısından geçer (sahip oturumu zorunlu). Sorgu parametreleri
+  sunucuda doğrulanır (enum/uzunluk/sınır); CSV üretimi sterilize tipli
+  modellerden yapılır ve metin hücrelerinde formül enjeksiyonu nötralize
+  edilir. UI'da iptal/kapat/düzenle/gönder kontrolü yoktur; izinli rota
+  istisnaları GET-only olarak test ile zorlanır.
 
 ## Denetim (audit)
 `security.log` şu olayları maskelenmiş meta verilerle kaydeder: giriş

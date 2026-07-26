@@ -373,7 +373,9 @@ class TestWriteSafety:
         for method, _ in dapi.GLOBAL_ALLOWLIST | dapi.TR_ALLOWLIST:
             assert method == "GET"
 
-    READ_ONLY_ALLOWED = {"/api/v1/global/orders"}
+    READ_ONLY_ALLOWED = {"/api/v1/global/orders",
+                         "/api/v1/global/orders/export.csv",
+                         "/orders"}
 
     def test_route_map_no_write_routes(self):
         """Hassas kelime içeren rotalar yalnızca açık izinli + GET olabilir."""

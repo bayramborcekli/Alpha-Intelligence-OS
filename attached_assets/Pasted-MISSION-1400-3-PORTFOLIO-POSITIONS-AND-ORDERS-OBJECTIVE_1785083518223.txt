@@ -1,0 +1,960 @@
+MISSION 1400.3 — PORTFOLIO, POSITIONS AND ORDERS
+
+OBJECTIVE
+
+Extend the authenticated Alpha Intelligence OS web application with secure,
+read-only Portfolio, Positions and Orders workspaces.
+
+This sprint must turn the existing navigation placeholders into practical
+daily-use screens for monitoring Binance Global Futures and Binance TR assets,
+open Futures positions and open Futures orders.
+
+This sprint must not create, submit, modify, cancel or close any order.
+It must not transfer or withdraw funds.
+It must not change leverage, margin mode or position mode.
+
+BASELINE
+
+Mission 1400.1 and Mission 1400.2 are complete and closed.
+
+Preserve:
+
+- single-owner authentication
+- secure sessions
+- CSRF protection
+- request IDs
+- Turkish default UI
+- current application shell
+- current Overview dashboard
+- existing Binance Global and Binance TR read-only clients
+- current cache and freshness policies
+- existing deterministic append-only ledger
+- current application feature flags
+- existing API response sanitization
+- all 467 passing tests
+- current Git history
+
+Reference baseline:
+
+- Mission 1400.2 commit: 9de6954
+- Application mode: PAPER
+- Live trading: disabled
+- Transfers: disabled
+- Withdrawals: disabled
+- Exchange write requests: zero
+
+Do not redesign the authentication architecture.
+Do not replace the existing dashboard.
+Do not duplicate exchange clients unnecessarily.
+
+PRIMARY DELIVERABLES
+
+Implement these authenticated pages:
+
+- /portfolio
+- /positions
+- /orders
+
+Activate the existing navigation entries:
+
+- Portföy
+- Pozisyonlar
+- Emirler
+
+All three pages must use the current authenticated application shell.
+
+READ-ONLY GUARANTEE
+
+All exchange access must remain explicitly allowlisted GET-only.
+
+Forbidden:
+
+- order creation
+- order cancellation
+- order modification
+- position close actions
+- reduce-only submission
+- leverage changes
+- margin type changes
+- position mode changes
+- transfers
+- withdrawals
+- asset conversion
+- Futures wallet transfers
+- any POST, PUT, PATCH or DELETE request to an exchange endpoint
+
+The following counters must remain zero:
+
+- ORDER ENDPOINT REQUESTS
+- CANCEL ENDPOINT REQUESTS
+- TRANSFER ENDPOINT REQUESTS
+- WITHDRAWAL ENDPOINT REQUESTS
+- OTHER EXCHANGE WRITE REQUESTS
+
+BACKEND API
+
+Reuse the Mission 1400.2 routes where appropriate.
+
+Keep:
+
+- GET /api/v1/global/account
+- GET /api/v1/global/positions
+- GET /api/v1/global/orders
+- GET /api/v1/tr/account
+- GET /api/v1/overview
+
+Add authenticated routes only when necessary:
+
+- GET /api/v1/portfolio
+- GET /api/v1/portfolio/export.csv
+- GET /api/v1/global/positions/export.csv
+- GET /api/v1/global/orders/export.csv
+
+Do not expose raw exchange payloads.
+
+All routes must:
+
+- require an authenticated owner session
+- return safe typed data
+- include request ID metadata where consistent with the current API
+- apply bounded pagination or result limits
+- use Decimal-compatible serialization
+- include source and freshness metadata
+- fail safely on malformed exchange responses
+
+No new exchange write route may exist.
+
+PORTFOLIO AGGREGATION
+
+GET /api/v1/portfolio must return separated account sections.
+
+Do not calculate or display a misleading combined net-worth total.
+
+Suggested response:
+
+{
+  "application_mode": "PAPER",
+  "live_execution_enabled": false,
+  "sections": [
+    {
+      "source": "BINANCE_GLOBAL_FUTURES",
+      "assets": [],
+      "retrieved_at": "...",
+      "age_seconds": 0,
+      "freshness": "FRESH",
+      "latency_ms": 0
+    },
+    {
+      "source": "BINANCE_TR",
+      "assets": [],
+      "retrieved_at": "...",
+      "age_seconds": 0,
+      "freshness": "FRESH",
+      "latency_ms": 0
+    }
+  ],
+  "warnings": []
+}
+
+Keep currencies and assets separate.
+
+Do not convert TRY to USDT.
+Do not convert crypto assets to TRY or USDT in this sprint.
+Do not sum Binance TR and Binance Global balances.
+
+BINANCE GLOBAL FUTURES ASSETS
+
+Display all returned Futures account assets, with a default option to hide
+zero balances.
+
+Fields:
+
+- asset
+- wallet balance
+- available balance
+- margin balance where available
+- unrealized PnL
+- initial margin where available
+- maintenance margin where available
+- order margin where available
+- position margin where available
+- update time
+- source
+- freshness
+
+Use safe fallback values only when a field is genuinely unavailable.
+
+Do not silently reinterpret missing values as exchange-confirmed zero unless the
+API contract guarantees that behavior.
+
+BINANCE TR ASSETS
+
+Display:
+
+- asset
+- free balance
+- locked balance where supported
+- total balance calculated with Decimal
+- non-zero status
+- account status
+- update time
+- source
+- freshness
+
+Include all assets by default only if the current payload size remains practical.
+
+Otherwise default to non-zero assets with an explicit “Sıfır Bakiyeleri Göster”
+control.
+
+PORTFOLIO PAGE
+
+Create a professional read-only Portföy page.
+
+Header:
+
+- Portföy
+- application mode badge
+- “Canlı emir devre dışı” warning
+- last refresh
+- refresh button
+- export button
+
+Account sections:
+
+1. Binance Global Futures
+2. Binance TR
+
+Each section must show:
+
+- source status
+- freshness
+- retrieved time
+- latency
+- asset count
+- non-zero asset count
+- search input
+- hide/show zero balances
+- sort controls
+- table on desktop
+- readable cards or responsive rows on mobile
+
+Suggested columns for Binance Global Futures:
+
+- Varlık
+- Cüzdan Bakiyesi
+- Kullanılabilir
+- Marjin Bakiyesi
+- Gerçekleşmemiş PnL
+- Güncelleme
+
+Suggested columns for Binance TR:
+
+- Varlık
+- Serbest
+- Kilitli
+- Toplam
+- Güncelleme
+
+Do not display a combined total card.
+
+POSITION PAGE
+
+Create a read-only Pozisyonlar page using:
+
+- GET /api/v1/global/positions
+
+Default behavior:
+
+- show active positions only
+- provide a “Sıfır Pozisyonları Göster” option
+- preserve ONE-WAY mode semantics
+- do not manufacture simultaneous LONG and SHORT rows
+
+Fields:
+
+- symbol
+- direction:
+  - LONG
+  - SHORT
+  - FLAT
+- signed position amount
+- absolute position quantity
+- entry price
+- mark price
+- unrealized PnL
+- leverage
+- liquidation price if available
+- margin type
+- isolated wallet if available
+- update time
+- freshness
+
+Position interpretation:
+
+- amount > 0 → LONG
+- amount < 0 → SHORT
+- amount = 0 → FLAT
+
+Display direction with text, not color alone.
+
+Do not add:
+
+- close button
+- reverse button
+- increase-position button
+- stop-loss button
+- take-profit button
+- leverage editor
+- margin editor
+
+POSITION SUMMARY
+
+At the top of the page display read-only summary cards:
+
+- active position count
+- LONG count
+- SHORT count
+- total unrealized PnL
+
+The total unrealized PnL may be summed only within the same returned Futures
+account context and must use Decimal arithmetic.
+
+Mark it clearly as:
+
+“Toplam Gerçekleşmemiş PnL”
+
+Do not describe it as realized profit or account equity.
+
+POSITION FILTERS
+
+Support:
+
+- symbol search
+- LONG / SHORT / FLAT filter
+- margin type filter
+- show zero positions
+- sort by:
+  - symbol
+  - position quantity
+  - unrealized PnL
+  - leverage
+  - update time
+
+Filters must be client-side over already sanitized API data unless server-side
+pagination makes that impractical.
+
+ORDERS PAGE
+
+Create a read-only Emirler page using:
+
+- GET /api/v1/global/orders
+
+Display open orders only unless the current backend already supports a stable,
+tested recent-order GET client.
+
+Fields:
+
+- symbol
+- side
+- type
+- status
+- original quantity
+- executed quantity
+- remaining quantity
+- price
+- stop price where available
+- average price where available
+- reduce-only
+- close-position flag where available
+- time-in-force
+- order time
+- update time
+- freshness
+
+Calculate:
+
+remaining_quantity = original_quantity - executed_quantity
+
+Use Decimal arithmetic.
+
+Do not infer filled status from quantities when the exchange already provides a
+status field.
+
+No action controls:
+
+- no cancel button
+- no replace button
+- no edit button
+- no duplicate button
+- no submit button
+
+ORDER SUMMARY
+
+Display:
+
+- open order count
+- BUY count
+- SELL count
+- reduce-only count
+
+Use the sanitized returned rows only.
+
+ORDER FILTERS
+
+Support:
+
+- symbol search
+- BUY / SELL
+- order type
+- reduce-only
+- status
+- sort by:
+  - order time
+  - symbol
+  - original quantity
+  - executed quantity
+  - price
+
+EMPTY STATES
+
+Portfolio:
+
+- “Gösterilecek varlık bulunamadı.”
+
+Positions:
+
+- “Aktif Futures pozisyonu bulunmuyor.”
+
+Orders:
+
+- “Açık emir bulunmuyor.”
+
+Do not treat empty positions or empty orders as an error.
+
+DATA FRESHNESS
+
+Reuse the centralized Mission 1400.2 freshness policy.
+
+Every page and account section must show:
+
+- source
+- retrieved timestamp
+- age
+- status:
+  - GÜNCEL
+  - ESKİ VERİ
+  - KULLANILAMIYOR
+
+Positions and open orders:
+
+- fresh through 60 seconds unless the existing centralized policy uses a
+  stricter approved threshold
+- stale beyond the threshold
+
+Do not label cached data as freshly retrieved.
+
+REFRESH
+
+Each page must include a refresh control.
+
+Reuse the existing authenticated:
+
+- POST /api/v1/refresh
+
+Requirements:
+
+- CSRF required
+- disable while refreshing
+- avoid repeated clicks
+- preserve last known safe data on source failure
+- update freshness metadata
+- no exchange write calls
+- record sanitized audit event
+
+A page-specific safe cache invalidation scope may be added:
+
+- portfolio
+- positions
+- orders
+
+Do not create separate unaudited refresh implementations.
+
+CSV EXPORT
+
+Implement safe, read-only CSV exports for:
+
+- portfolio
+- positions
+- open orders
+
+Requirements:
+
+- authenticated session required
+- CSV generated server-side from sanitized typed models
+- UTF-8 with BOM if needed for Turkish Excel compatibility
+- stable column order
+- ISO-8601 timestamps
+- unformatted decimal strings
+- no secret values
+- no API keys
+- no raw payload
+- no request headers
+- no signatures
+- no internal filesystem paths
+
+Suggested filenames:
+
+- alpha-portfolio-YYYYMMDD-HHMMSS.csv
+- alpha-positions-YYYYMMDD-HHMMSS.csv
+- alpha-open-orders-YYYYMMDD-HHMMSS.csv
+
+CSV exports must reflect active filters only if the filter values are sent
+through validated safe query parameters.
+
+Otherwise export all currently available sanitized rows and state this clearly
+in the UI.
+
+INPUT VALIDATION
+
+Validate all query parameters.
+
+Examples:
+
+- include_zero: true or false
+- source: approved enum only
+- direction: LONG, SHORT, FLAT
+- side: BUY, SELL
+- sort: approved field enum
+- order: asc or desc
+- search: bounded length and sanitized
+- limit: bounded maximum
+- offset or cursor: bounded and validated
+
+Reject unknown or invalid values safely.
+
+Do not build dynamic SQL or unsafe expressions from query parameters.
+
+PAGINATION AND SCALE
+
+Use pagination or bounded limits where required.
+
+Suggested defaults:
+
+- portfolio assets: 100
+- positions: 100
+- orders: 100
+
+Suggested maximum:
+
+- 500 rows per request
+
+If the current account data is naturally smaller, simple bounded responses are
+acceptable.
+
+The UI must not become unusable with hundreds of rows.
+
+NUMBER FORMATTING
+
+Use Turkish locale display formatting:
+
+- TRY: ₺1,39
+- USDT: 20,9685 USDT
+- BTC: 0,001 BTC
+- price: 64.442,20 USDT
+
+Preserve source precision.
+
+Provide exact raw Decimal string through a tooltip or detail view where useful.
+
+Never parse display-formatted text for calculations.
+
+POSITIVE AND NEGATIVE VALUES
+
+Make gains and losses distinguishable using:
+
+- text sign
+- accessible label
+- optional visual styling
+
+Do not rely only on green/red color.
+
+Do not use casino-like visual effects.
+
+MOBILE EXPERIENCE
+
+Below the existing mobile breakpoint:
+
+- portfolio tables become readable cards or scroll-safe structured rows
+- positions become stacked cards
+- orders become stacked cards
+- key labels remain visible
+- no clipped quantities
+- no horizontal page overflow
+- filters remain usable
+- export and refresh controls remain touch-friendly
+
+Desktop tables may use sticky headers where practical.
+
+ACCESSIBILITY
+
+Implement:
+
+- semantic table headers
+- scope attributes where applicable
+- keyboard-accessible filters
+- visible focus states
+- accessible sort labels
+- status text in addition to icons
+- aria-live for refresh and errors
+- accessible empty states
+- proper labels for search and checkboxes
+
+ERROR HANDLING
+
+Handle independently:
+
+- Binance Global account unavailable
+- Binance TR unavailable
+- positions unavailable
+- orders unavailable
+- malformed response
+- timeout
+- rate limit
+- stale cache
+- unauthorized session
+- CSV generation failure
+
+One section failing must not hide unrelated available sections.
+
+Never display:
+
+- stack trace
+- raw HTML error
+- full exchange error payload
+- secret value
+- full API key
+- signature
+
+AUDIT EVENTS
+
+Record safe events for:
+
+- portfolio page opened
+- positions page opened
+- orders page opened
+- portfolio export
+- positions export
+- orders export
+- page refresh
+- source load failure
+- stale-data display
+
+Do not record asset balances or position details in authentication logs.
+
+Audit payloads may contain only safe metadata such as:
+
+- page
+- source
+- row count
+- result
+- request ID
+- timestamp
+
+SECURITY
+
+Verify:
+
+- all pages require authentication
+- all APIs require authentication
+- exports require authentication
+- refresh requires CSRF
+- no raw payload reaches frontend
+- no API keys beyond approved masks
+- no secrets in generated CSV
+- no secret values in HTML or JavaScript
+- no exchange write client instantiated
+- no exchange POST/PUT/PATCH/DELETE request
+- route map contains no cancel/close/modify paths
+
+Do not add CORS unless existing architecture requires it.
+
+TESTING
+
+Run the full baseline test suite before modifying code.
+
+Add tests for:
+
+PORTFOLIO BACKEND
+
+- authentication required
+- Global Futures assets mapping
+- Binance TR assets mapping
+- Decimal total calculation
+- zero-balance filtering
+- search
+- approved sorting
+- invalid sort rejection
+- malformed asset field isolation
+- partial source failure
+- freshness metadata
+- no combined portfolio total
+- stable typed response
+
+POSITIONS BACKEND
+
+- authentication required
+- active positions default
+- include_zero=true
+- LONG mapping
+- SHORT mapping
+- FLAT mapping
+- ONE-WAY behavior
+- signed quantity preservation
+- absolute quantity calculation
+- Decimal PnL aggregation
+- margin type mapping
+- liquidation price optional
+- malformed row isolation
+- safe sorting and filtering
+
+ORDERS BACKEND
+
+- authentication required
+- open orders mapping
+- remaining quantity Decimal calculation
+- BUY filtering
+- SELL filtering
+- type filtering
+- reduce-only filtering
+- malformed row isolation
+- safe sorting
+- no cancel route
+- no edit route
+- no submit route
+
+CSV EXPORT
+
+- authentication required
+- correct Content-Type
+- safe filename
+- UTF-8 encoding
+- stable headers
+- Decimal values unformatted
+- no secret values
+- no API keys
+- no raw payload
+- no formula injection through symbol or text fields
+- bounded export size
+
+CSV FORMULA INJECTION PROTECTION
+
+For any cell beginning with:
+
+- =
+- +
+- -
+- @
+- tab
+- carriage return
+
+escape or neutralize it safely.
+
+Do not alter legitimate negative Decimal amounts in numeric columns.
+
+Apply protection contextually to text fields.
+
+FRONTEND
+
+- Portfolio navigation active
+- Positions navigation active
+- Orders navigation active
+- loading states
+- empty states
+- success states
+- stale states
+- unavailable states
+- search and filters
+- zero-balance toggle
+- zero-position toggle
+- desktop tables
+- mobile cards
+- export control
+- refresh control
+- no action buttons
+- live-execution warning visible
+- Turkish labels
+- keyboard navigation
+- one source failure isolation
+
+WRITE SAFETY
+
+- order request count remains zero
+- cancel request count remains zero
+- transfer request count remains zero
+- withdrawal request count remains zero
+- other exchange write request count remains zero
+- exchange client method allowlist rejects non-GET
+- route map contains no exchange write actions
+- frontend contains no cancel/close/execute actions
+
+REGRESSION
+
+- all Mission 1400.1 tests pass
+- all Mission 1400.2 tests pass
+- owner login still works
+- logout still works
+- setup remains closed
+- Overview still works
+- /panel security remains intact
+- refresh CSRF still works
+- no startup regression
+
+DOCUMENTATION
+
+Update:
+
+- README.md
+- docs/live_application.md
+- docs/operator_guide_tr.md
+- docs/security_model.md
+
+Document:
+
+- Portföy page
+- Futures versus Binance TR account separation
+- why combined account value is not shown
+- position direction interpretation
+- ONE-WAY mode
+- unrealized PnL meaning
+- open-order page behavior
+- zero-balance and zero-position filters
+- CSV export behavior
+- stale-data behavior
+- why action buttons do not exist
+
+Do not include secret values.
+
+CODE REVIEW
+
+Review specifically for:
+
+- float usage
+- incorrect negative position handling
+- simultaneous LONG/SHORT fabrication in ONE-WAY mode
+- combined misleading portfolio totals
+- raw payload exposure
+- unsafe CSV generation
+- CSV formula injection
+- unauthenticated exports
+- missing query validation
+- stale data shown as live
+- hidden exchange write path
+- action buttons accidentally added
+- mobile overflow
+- secret leakage
+
+MISSION SUCCESS CRITERIA
+
+Mission 1400.3 may declare PASS only if:
+
+1. Portföy page works after owner login.
+2. Binance Global Futures assets display safely.
+3. Binance TR assets display safely.
+4. No misleading combined total is shown.
+5. Positions page displays ONE-WAY positions correctly.
+6. Active positions are shown by default.
+7. Zero positions can be optionally shown.
+8. Orders page displays open orders read-only.
+9. No cancel, modify, close or execute action exists.
+10. Search, filtering and sorting work.
+11. Freshness appears on all sections.
+12. One source failure does not break unrelated sections.
+13. CSV exports are authenticated and sanitized.
+14. CSV formula injection protection passes.
+15. Desktop experience works.
+16. Mobile experience works.
+17. Accessibility checks pass.
+18. Order requests remain zero.
+19. Cancel requests remain zero.
+20. Transfer requests remain zero.
+21. Withdrawal requests remain zero.
+22. Other exchange write requests remain zero.
+23. Raw payload exposure remains zero.
+24. Secret exposure remains zero.
+25. Existing tests remain passing.
+26. New backend and frontend tests pass.
+27. Security scan passes.
+28. Code review passes.
+29. Changes are committed and pushed to GitHub.
+30. Application is not publicly published without explicit owner authorization.
+
+EXPECTED FINAL REPORT
+
+MISSION 1400.3: PASS / FAIL
+BASELINE COMMIT:
+NEW COMMIT:
+GITHUB PUSH:
+APPLICATION START:
+APPLICATION PUBLISHED:
+OWNER LOGIN:
+PORTFOLIO PAGE:
+GLOBAL FUTURES ASSETS:
+BINANCE TR ASSETS:
+COMBINED PORTFOLIO TOTAL:
+POSITIONS PAGE:
+ONE-WAY POSITION MODE:
+LONG MAPPING:
+SHORT MAPPING:
+FLAT MAPPING:
+POSITION SUMMARY:
+ORDERS PAGE:
+OPEN ORDERS:
+ORDER ACTION CONTROLS:
+SEARCH:
+FILTERING:
+SORTING:
+ZERO BALANCE TOGGLE:
+ZERO POSITION TOGGLE:
+CSV PORTFOLIO EXPORT:
+CSV POSITIONS EXPORT:
+CSV ORDERS EXPORT:
+CSV FORMULA INJECTION:
+DATA FRESHNESS:
+PARTIAL SOURCE FAILURE:
+MOBILE EXPERIENCE:
+ACCESSIBILITY:
+ORDER ENDPOINT REQUESTS:
+CANCEL ENDPOINT REQUESTS:
+TRANSFER ENDPOINT REQUESTS:
+WITHDRAWAL ENDPOINT REQUESTS:
+OTHER EXCHANGE WRITE REQUESTS:
+RAW PAYLOAD EXPOSED:
+SECRETS EXPOSED:
+BASELINE TESTS:
+NEW BACKEND TESTS:
+NEW FRONTEND TESTS:
+TOTAL TESTS:
+SECURITY SCAN:
+CODE REVIEW:
+RUN_ID:
+KNOWN LIMITATIONS:
+NEXT ACTION:
+
+FINAL RESTRICTIONS
+
+- Do not submit orders.
+- Do not cancel orders.
+- Do not modify orders.
+- Do not close positions.
+- Do not add execute controls.
+- Do not transfer funds.
+- Do not withdraw funds.
+- Do not change leverage.
+- Do not change margin mode.
+- Do not change position mode.
+- Do not enable live trading.
+- Do not combine account balances into a misleading total.
+- Do not expose raw exchange payloads.
+- Do not expose secrets.
+- Do not publish without explicit owner authorization.
+- Do not declare PASS without tests, security scan, code review, commit and push.

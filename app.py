@@ -1434,15 +1434,18 @@ def api_v1_global_account():
 
 @app.get("/api/v1/global/positions")
 def api_v1_global_positions():
-    import dashboard_api as dapi
-    include_zero = request.args.get("include_zero", "false").lower() == "true"
-    return _dash_json(dapi.global_positions(include_zero=include_zero))
+    import portfolio_api as pf
+    try:
+        include_zero = pf._parse_bool(request.args.get("include_zero"))
+    except pf.InvalidParameter as e:
+        return _invalid_param(e.name)
+    return _dash_json(pf.positions_view(include_zero=include_zero))
 
 
 @app.get("/api/v1/global/orders")
 def api_v1_global_orders():
-    import dashboard_api as dapi
-    return _dash_json(dapi.global_orders())
+    import portfolio_api as pf
+    return _dash_json(pf.orders_view())
 
 
 @app.get("/api/v1/tr/account")
@@ -1494,6 +1497,125 @@ def overview_page():
         server_time=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         flags=ap.feature_flags(),
     )
+
+
+# ── Mission 1400.3 — Portföy / Pozisyonlar / Emirler (salt okunur) ──────────
+
+def _pf_params():
+    """Ortak sorgu parametresi doğrulaması (geçersiz → InvalidParameter)."""
+    import portfolio_api as pf
+    return {
+        "include_zero": pf._parse_bool(request.args.get("include_zero"),
+                                       default=False),
+        "search": pf._parse_search(request.args.get("search")),
+        "sort": pf._parse_enum(request.args.get("sort"),
+                               set(pf.PORTFOLIO_SORTS), "sort"),
+        "order": pf._parse_enum(request.args.get("order"), {"asc", "desc"},
+                                "order", "asc"),
+        "limit": pf._parse_limit(request.args.get("limit")),
+    }
+
+
+def _invalid_param(name: str):
+    return jsonify({
+        "ok": False,
+        "error": {"code": "INVALID_PARAMETER",
+                  "message": f"Geçersiz sorgu parametresi: {name}"},
+        "request_id": getattr(g, "request_id", ""),
+    }), 400
+
+
+@app.get("/api/v1/portfolio")
+def api_v1_portfolio():
+    import portfolio_api as pf
+    import alpha_platform as ap
+    try:
+        p = _pf_params()
+    except pf.InvalidParameter as e:
+        return _invalid_param(e.name)
+    return _dash_json(pf.portfolio(ap.app_mode(), **p))
+
+
+@app.get("/api/v1/portfolio/export.csv")
+def api_v1_portfolio_export():
+    import portfolio_api as pf
+    try:
+        p = _pf_params()
+    except pf.InvalidParameter as e:
+        return _invalid_param(e.name)
+    try:
+        body, fname = pf.portfolio_csv(**p)
+    except Exception:
+        return _api_error("CSV üretimi başarısız oldu.", 500)
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   detail=f"csv export: portfolio rows<= {p['limit']}")
+    return app.response_class(
+        body, mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={fname}",
+                 "Cache-Control": "no-store, private"})
+
+
+@app.get("/api/v1/global/positions/export.csv")
+def api_v1_positions_export():
+    import portfolio_api as pf
+    try:
+        include_zero = pf._parse_bool(request.args.get("include_zero"))
+    except pf.InvalidParameter as e:
+        return _invalid_param(e.name)
+    try:
+        body, fname = pf.positions_csv(include_zero)
+    except Exception:
+        return _api_error("CSV üretimi başarısız oldu.", 500)
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   detail="csv export: positions")
+    return app.response_class(
+        body, mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={fname}",
+                 "Cache-Control": "no-store, private"})
+
+
+@app.get("/api/v1/global/orders/export.csv")
+def api_v1_orders_export():
+    import portfolio_api as pf
+    try:
+        body, fname = pf.orders_csv()
+    except Exception:
+        return _api_error("CSV üretimi başarısız oldu.", 500)
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   detail="csv export: orders")
+    return app.response_class(
+        body, mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={fname}",
+                 "Cache-Control": "no-store, private"})
+
+
+def _render_workspace(template: str, page: str):
+    from version import get_version
+    import alpha_platform as ap
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   detail=f"page opened: {page}")
+    return render_template(
+        template,
+        app_mode=ap.app_mode(),
+        app_version=get_version(),
+        owner=session.get("username", ""),
+        active_page=page,
+    )
+
+
+@app.get("/portfolio")
+def portfolio_page():
+    return _render_workspace("portfolio.html", "portfolio")
+
+
+@app.get("/positions")
+def positions_page():
+    return _render_workspace("positions.html", "positions")
+
+
+@app.get("/orders")
+def orders_page():
+    return _render_workspace("orders.html", "orders")
 
 
 @app.get("/api/exchange/summary")

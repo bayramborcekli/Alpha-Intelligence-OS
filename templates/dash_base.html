@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>Alpha Intelligence OS — {% block title %}{% endblock %}</title>
+  <style>
+    :root { --bg:#0d1117; --panel:#161b22; --soft:#1c2430; --border:#30363d;
+            --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --ok:#3fb950;
+            --warn:#d29922; --danger:#f85149; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text);
+           font-family:-apple-system,"Segoe UI",Roboto,sans-serif; min-height:100vh; }
+    a { color:var(--accent); text-decoration:none; }
+    .layout { display:flex; min-height:100vh; }
+    .sidebar { width:230px; background:var(--panel); border-right:1px solid var(--border);
+               padding:18px 12px; flex-shrink:0; }
+    .brand { font-weight:800; letter-spacing:.06em; font-size:.86rem; color:var(--accent);
+             text-transform:uppercase; padding:4px 10px 16px; }
+    .nav a, .nav span { display:block; padding:9px 12px; border-radius:8px; font-size:.88rem;
+             margin-bottom:2px; }
+    .nav a.active { background:rgba(88,166,255,.16); color:var(--accent); font-weight:600; }
+    .nav a:hover { background:var(--soft); }
+    .nav span.disabled { color:#4d5661; cursor:not-allowed; }
+    .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+    header { display:flex; align-items:center; gap:10px; padding:12px 20px;
+             background:var(--panel); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    .mode-badge { background:rgba(63,185,80,.15); color:var(--ok); border:1px solid rgba(63,185,80,.4);
+                  border-radius:14px; padding:3px 12px; font-size:.75rem; font-weight:700; }
+    .live-badge { background:rgba(248,81,73,.12); color:var(--danger); border:1px solid rgba(248,81,73,.4);
+                  border-radius:14px; padding:3px 12px; font-size:.75rem; font-weight:700; }
+    .spacer { flex:1; }
+    .owner { color:var(--muted); font-size:.84rem; }
+    button, select, input[type=search], input[type=text] {
+      background:var(--soft); color:var(--text); border:1px solid var(--border);
+      border-radius:8px; padding:7px 12px; font-size:.84rem; min-height:38px; }
+    button { cursor:pointer; }
+    button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
+      { outline:2px solid var(--accent); outline-offset:2px; }
+    .logout-btn:hover { border-color:var(--danger); color:var(--danger); }
+    .refresh-btn, .export-btn { border-color:var(--accent); color:var(--accent); font-weight:600; }
+    .refresh-btn:disabled { opacity:.5; cursor:wait; }
+    .menu-btn { display:none; }
+    .content { padding:22px 20px; max-width:1280px; width:100%; }
+    h1 { font-size:1.4rem; margin-bottom:4px; }
+    .sub { color:var(--muted); font-size:.86rem; margin-bottom:14px; }
+    .warn-banner { background:rgba(210,153,34,.12); border:1px solid rgba(210,153,34,.5);
+                   color:var(--warn); border-radius:10px; padding:12px 16px; font-weight:600;
+                   margin-bottom:14px; font-size:.88rem; overflow-wrap:anywhere; }
+    .warn-banner ul { margin-left:18px; font-weight:400; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:12px 0; }
+    .toolbar label { font-size:.82rem; color:var(--muted); display:flex; gap:6px;
+                     align-items:center; }
+    .summary-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+                     gap:10px; margin-bottom:14px; }
+    .scard { background:var(--panel); border:1px solid var(--border); border-radius:10px;
+             padding:12px 14px; }
+    .scard .lbl { font-size:.72rem; color:var(--muted); text-transform:uppercase;
+                  letter-spacing:.05em; }
+    .scard .val { font-size:1.15rem; font-weight:700; margin-top:4px; overflow-wrap:anywhere; }
+    .section { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+               padding:16px; margin-bottom:16px; }
+    .section h2 { font-size:.95rem; margin-bottom:4px; }
+    .fresh-line { font-size:.74rem; color:var(--muted); margin:4px 0 10px; }
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:.84rem; }
+    th, td { text-align:right; padding:8px 10px; border-bottom:1px solid rgba(48,54,61,.5);
+             white-space:nowrap; }
+    th:first-child, td:first-child { text-align:left; }
+    thead th { color:var(--muted); font-weight:600; position:sticky; top:0;
+               background:var(--panel); cursor:default; }
+    th button.sort { background:none; border:none; color:inherit; font:inherit; padding:0;
+                     min-height:0; cursor:pointer; }
+    .pos { color:var(--ok); font-weight:600; }
+    .neg { color:var(--danger); font-weight:600; }
+    .st-ok { color:var(--ok); font-weight:600; } .st-warn { color:var(--warn); font-weight:600; }
+    .st-err { color:var(--danger); font-weight:600; } .st-neutral { color:var(--muted); }
+    .empty-box { border:1px dashed var(--border); border-radius:10px; color:var(--muted);
+                 text-align:center; padding:22px; font-size:.88rem; }
+    .skeleton { color:var(--muted); font-style:italic; padding:14px 0; }
+    footer { text-align:center; padding:16px; color:#444; font-size:.72rem; margin-top:auto; }
+    @media (max-width: 760px) {
+      .sidebar { position:fixed; z-index:30; top:0; left:0; height:100%;
+                 transform:translateX(-105%); transition:transform .2s ease;
+                 box-shadow:4px 0 24px rgba(0,0,0,.5); }
+      .sidebar.open { transform:translateX(0); }
+      .menu-btn { display:block; }
+      .content { padding:14px 10px; }
+      .owner { display:none; }
+      /* tablolar mobilde kart satırlarına dönüşür */
+      table, thead, tbody, tr, td { display:block; }
+      thead { display:none; }
+      tr { border:1px solid var(--border); border-radius:10px; margin-bottom:10px;
+           padding:8px 10px; background:var(--soft); }
+      td { text-align:left; border:none; padding:4px 0; white-space:normal;
+           display:flex; justify-content:space-between; gap:8px; }
+      td::before { content:attr(data-l); color:var(--muted); font-size:.76rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <nav class="sidebar" id="sidebar" aria-label="Ana menü">
+    <div class="brand">Alpha Intelligence OS</div>
+    <div class="nav">
+      <a href="/">🏠 Başlangıç</a>
+      <a href="/overview" {% if active_page=='overview' %}class="active" aria-current="page"{% endif %}>📊 Genel Bakış</a>
+      <a href="/panel">🤖 Bot Kontrol</a>
+      <a href="/portfolio" {% if active_page=='portfolio' %}class="active" aria-current="page"{% endif %}>💼 Portföy</a>
+      <a href="/positions" {% if active_page=='positions' %}class="active" aria-current="page"{% endif %}>📈 Pozisyonlar</a>
+      <a href="/orders" {% if active_page=='orders' %}class="active" aria-current="page"{% endif %}>🧾 Emirler</a>
+      <span class="disabled" title="Sonraki sprint">Defter</span>
+      <span class="disabled" title="Sonraki sprint">Risk</span>
+      <span class="disabled" title="Sonraki sprint">Raporlar</span>
+      <span class="disabled" title="Sonraki sprint">Ayarlar</span>
+    </div>
+  </nav>
+  <div class="main">
+    <header>
+      <button class="menu-btn" id="menu-btn" aria-label="Menüyü aç/kapat"
+              aria-expanded="false" aria-controls="sidebar">☰</button>
+      <span class="mode-badge">{{ app_mode }}</span>
+      <span class="live-badge">Canlı emir: DEVRE DIŞI</span>
+      <span class="owner" id="last-refresh-top" aria-live="polite">Son yenileme: —</span>
+      <button class="refresh-btn" id="refresh-btn" type="button">⟳ Yenile</button>
+      {% block header_extra %}{% endblock %}
+      <div class="spacer"></div>
+      <span class="owner">👤 {{ owner or "sahip" }}</span>
+      <form method="get" action="/logout" style="display:inline">
+        <button class="logout-btn" type="submit">Oturumu Kapat</button>
+      </form>
+    </header>
+    <main class="content">
+      <h1>{% block heading %}{% endblock %}</h1>
+      <p class="sub">{% block subheading %}{% endblock %} · salt okunur · v{{ app_version }}</p>
+      <div class="warn-banner" id="warn-banner" role="alert" aria-live="polite" style="display:none"></div>
+      {% block content %}{% endblock %}
+    </main>
+    <footer>Alpha Intelligence OS · <span style="color:var(--ok)">{{ app_mode }}</span> · v{{ app_version }} · Salt okunur — emir/iptal/transfer işlemi yoktur</footer>
+  </div>
+</div>
+<script>
+"use strict";
+(function () {
+  var btn = document.getElementById("menu-btn"), sb = document.getElementById("sidebar");
+  btn.addEventListener("click", function () {
+    var open = sb.classList.toggle("open");
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { sb.classList.remove("open");
+      btn.setAttribute("aria-expanded", "false"); }
+  });
+})();
+function esc(s) {
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+function trNum(s, unit) {
+  if (s === null || s === undefined || s === "") return "—";
+  var n = Number(s);
+  if (!isFinite(n)) return esc(s);
+  var txt = n.toLocaleString("tr-TR", { maximumFractionDigits: 8 });
+  return '<span title="' + esc(s) + esc(unit || "") + '">' + txt +
+    (unit ? " " + esc(unit) : "") + "</span>";
+}
+function pnlCell(s) {
+  if (s === null || s === undefined || s === "") return "—";
+  var n = Number(s), sign = n > 0 ? "+" : "";
+  var cls = n > 0 ? "pos" : (n < 0 ? "neg" : "st-neutral");
+  var label = n > 0 ? "kazanç" : (n < 0 ? "kayıp" : "nötr");
+  return '<span class="' + cls + '" aria-label="' + label + '" title="' +
+    esc(s) + '">' + sign + n.toLocaleString("tr-TR",
+    { maximumFractionDigits: 8 }) + "</span>";
+}
+function freshText(meta) {
+  if (!meta) return "";
+  var map = { FRESH: "GÜNCEL", STALE: "ESKİ VERİ", UNAVAILABLE: "KULLANILAMIYOR" };
+  var parts = ["Durum: " + (map[meta.freshness] || meta.freshness || "—")];
+  if (meta.age_seconds !== null && meta.age_seconds !== undefined)
+    parts.push("yaş: " + meta.age_seconds + " sn");
+  if (meta.latency_ms !== null && meta.latency_ms !== undefined)
+    parts.push("gecikme: " + meta.latency_ms + " ms");
+  if (meta.retrieved_at)
+    parts.push("alındı: " + new Date(meta.retrieved_at).toLocaleTimeString("tr-TR"));
+  if (meta.source) parts.push("kaynak: " + esc(meta.source));
+  return parts.join(" · ");
+}
+function tsText(ms) {
+  if (!ms) return "—";
+  return new Date(Number(ms)).toLocaleString("tr-TR");
+}
+function showWarnings(list) {
+  var wb = document.getElementById("warn-banner");
+  if (list && list.length) {
+    wb.style.display = "block";
+    wb.innerHTML = "⚠️ Uyarılar:<ul>" +
+      list.map(function (w) { return "<li>" + esc(w) + "</li>"; }).join("") + "</ul>";
+  } else { wb.style.display = "none"; }
+}
+function markRefreshed() {
+  document.getElementById("last-refresh-top").textContent =
+    "Son yenileme: " + new Date().toLocaleTimeString("tr-TR");
+}
+function wireRefresh(reloadFn) {
+  var rb = document.getElementById("refresh-btn");
+  rb.addEventListener("click", async function () {
+    if (rb.disabled) return;
+    rb.disabled = true; rb.textContent = "Yenileniyor…";
+    try {
+      var csrf = document.querySelector('meta[name="csrf-token"]');
+      var r = await fetch("/api/v1/refresh", { method: "POST",
+        headers: { "Content-Type": "application/json",
+                   "X-CSRFToken": csrf ? csrf.content : "" }, body: "{}" });
+      if (r.ok) { await reloadFn(); rb.textContent = "✓ Yenilendi"; }
+      else { rb.textContent = "Yenileme başarısız"; }
+    } catch (_) { rb.textContent = "Yenileme başarısız"; }
+    finally {
+      setTimeout(function () { rb.textContent = "⟳ Yenile"; rb.disabled = false; }, 1500);
+    }
+  });
+}
+function sortRows(rows, key, numeric, desc) {
+  return rows.slice().sort(function (a, b) {
+    var x = a[key], y = b[key];
+    if (numeric) { x = Number(x) || 0; y = Number(y) || 0; }
+    else { x = String(x || ""); y = String(y || ""); }
+    return (x < y ? -1 : x > y ? 1 : 0) * (desc ? -1 : 1);
+  });
+}
+</script>
+{% block page_script %}{% endblock %}
+</body>
+</html>

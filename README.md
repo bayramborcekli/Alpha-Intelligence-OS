@@ -10,6 +10,8 @@ açık talimatla etkinleştirilebilir.
 - `exchange_gateway.py` — salt-okunur borsa geçidi (yalnızca GET + allowlist)
 - `dashboard_api.py` — canlı pano servis katmanı (tipli modeller, önbellek,
   tazelik politikası, yazma sayaçları — Mission 1400.2)
+- `portfolio_api.py` — Portföy/Pozisyon/Emir servis katmanı + güvenli CSV
+  dışa aktarım (formül-enjeksiyon korumalı — Mission 1400.3)
 - `tools/` — görev (mission) betikleri
 - `tests/` — test paketi (`python -m pytest tests/ -q`)
 

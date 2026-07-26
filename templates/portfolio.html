@@ -1,0 +1,148 @@
+{% extends "dash_base.html" %}
+{% block title %}Portföy{% endblock %}
+{% block heading %}Portföy{% endblock %}
+{% block subheading %}Binance Global Futures ve Binance TR varlıkları — ayrı hesaplar, birleşik toplam gösterilmez{% endblock %}
+{% block header_extra %}
+  <a class="export-btn" id="export-link" href="/api/v1/portfolio/export.csv"
+     role="button" style="display:inline-flex;align-items:center;padding:7px 12px;border:1px solid var(--accent);border-radius:8px;font-size:.84rem">
+    ⬇ CSV Dışa Aktar</a>
+{% endblock %}
+{% block content %}
+  <div class="toolbar" role="search">
+    <label for="pf-search">Ara
+      <input type="search" id="pf-search" placeholder="Varlık (örn. USDT)"
+             maxlength="32" aria-label="Varlık ara"></label>
+    <label><input type="checkbox" id="pf-zero"> Sıfır Bakiyeleri Göster</label>
+    <label for="pf-sort">Sırala
+      <select id="pf-sort" aria-label="Sıralama alanı">
+        <option value="asset">Varlık</option>
+        <option value="balance">Bakiye</option>
+      </select></label>
+    <label for="pf-order">Yön
+      <select id="pf-order" aria-label="Sıralama yönü">
+        <option value="asc">Artan</option>
+        <option value="desc">Azalan</option>
+      </select></label>
+  </div>
+  <p class="sub" style="margin-top:-4px">CSV dışa aktarımı geçerli "sıfır bakiye" ve arama filtrelerini içerir.</p>
+
+  <section class="section" aria-labelledby="h-gf">
+    <h2 id="h-gf">Binance Global Futures</h2>
+    <p class="fresh-line" id="fresh-gf"></p>
+    <div id="body-gf"><p class="skeleton">Yükleniyor…</p></div>
+  </section>
+
+  <section class="section" aria-labelledby="h-tr">
+    <h2 id="h-tr">Binance TR</h2>
+    <p class="fresh-line" id="fresh-tr"></p>
+    <div id="body-tr"><p class="skeleton">Yükleniyor…</p></div>
+  </section>
+{% endblock %}
+{% block page_script %}
+<script>
+"use strict";
+(function () {
+  var data = null;
+
+  function currentParams() {
+    var p = new URLSearchParams();
+    if (document.getElementById("pf-zero").checked) p.set("include_zero", "true");
+    var s = document.getElementById("pf-search").value.trim();
+    if (s) p.set("search", s);
+    return p;
+  }
+  function updateExportLink() {
+    var p = currentParams();
+    document.getElementById("export-link").href =
+      "/api/v1/portfolio/export.csv" + (p.toString() ? "?" + p : "");
+  }
+
+  function rowsGF(assets) {
+    return assets.map(function (a) {
+      return "<tr>" +
+        '<td data-l="Varlık">' + esc(a.asset) + "</td>" +
+        '<td data-l="Cüzdan Bakiyesi">' + trNum(a.wallet_balance) + "</td>" +
+        '<td data-l="Kullanılabilir">' + trNum(a.available_balance) + "</td>" +
+        '<td data-l="Marjin Bakiyesi">' + trNum(a.margin_balance) + "</td>" +
+        '<td data-l="Gerçekleşmemiş PnL">' + pnlCell(a.unrealized_pnl) + "</td>" +
+        '<td data-l="Güncelleme">' + esc(tsText(a.update_time)) + "</td></tr>";
+    }).join("");
+  }
+  function rowsTR(assets) {
+    return assets.map(function (a) {
+      return "<tr>" +
+        '<td data-l="Varlık">' + esc(a.asset) + "</td>" +
+        '<td data-l="Serbest">' + trNum(a.free) + "</td>" +
+        '<td data-l="Kilitli">' + trNum(a.locked) + "</td>" +
+        '<td data-l="Toplam">' + trNum(a.total) + "</td>" +
+        '<td data-l="Güncelleme">' + esc(tsText(a.update_time)) + "</td></tr>";
+    }).join("");
+  }
+
+  function renderSection(sec, bodyId, freshId, cols, rowFn) {
+    var body = document.getElementById(bodyId);
+    document.getElementById(freshId).textContent = sec.meta ? freshText(sec.meta) : "";
+    if (!sec.ok) {
+      body.innerHTML = '<p class="st-err">' +
+        esc((sec.error && sec.error.message) || "Kaynak kullanılamıyor.") + "</p>";
+      return;
+    }
+    var assets = filterSort(sec.assets || []);
+    var head = '<p class="sub">Varlık: ' + sec.asset_count +
+      " · sıfır olmayan: " + sec.nonzero_asset_count + "</p>";
+    if (!assets.length) {
+      body.innerHTML = head + '<div class="empty-box" role="status">Gösterilecek varlık bulunamadı.</div>';
+      return;
+    }
+    body.innerHTML = head + '<div class="table-wrap"><table><thead><tr>' +
+      cols.map(function (c) { return '<th scope="col">' + c + "</th>"; }).join("") +
+      "</tr></thead><tbody>" + rowFn(assets) + "</tbody></table></div>";
+  }
+
+  function filterSort(assets) {
+    var q = document.getElementById("pf-search").value.trim().toUpperCase();
+    var zero = document.getElementById("pf-zero").checked;
+    var out = assets.filter(function (a) {
+      if (!zero && !a.nonzero) return false;
+      return !q || a.asset.toUpperCase().indexOf(q) !== -1;
+    });
+    var sortSel = document.getElementById("pf-sort").value;
+    var desc = document.getElementById("pf-order").value === "desc";
+    if (sortSel === "asset") return sortRows(out, "asset", false, desc);
+    var key = out.length && out[0].wallet_balance !== undefined ? "wallet_balance" : "total";
+    return sortRows(out, key, true, desc);
+  }
+
+  function render() {
+    if (!data) return;
+    showWarnings(data.warnings);
+    var gf = data.sections.find(function (s) { return s.source === "BINANCE_GLOBAL_FUTURES"; });
+    var tr = data.sections.find(function (s) { return s.source === "BINANCE_TR"; });
+    renderSection(gf || { ok: false }, "body-gf", "fresh-gf",
+      ["Varlık", "Cüzdan Bakiyesi", "Kullanılabilir", "Marjin Bakiyesi",
+       "Gerçekleşmemiş PnL", "Güncelleme"], rowsGF);
+    renderSection(tr || { ok: false }, "body-tr", "fresh-tr",
+      ["Varlık", "Serbest", "Kilitli", "Toplam", "Güncelleme"], rowsTR);
+    updateExportLink();
+    markRefreshed();
+  }
+
+  async function load() {
+    try {
+      var r = await fetch("/api/v1/portfolio?include_zero=true", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      data = await r.json();
+      render();
+    } catch (_) {
+      showWarnings(["Portföy verisi alınamadı. Bağlantınızı kontrol edin."]);
+    }
+  }
+
+  ["pf-search", "pf-zero", "pf-sort", "pf-order"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", render);
+  });
+  wireRefresh(load);
+  load();
+})();
+</script>
+{% endblock %}

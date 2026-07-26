@@ -238,7 +238,9 @@ class TestSecurity:
         assert "/home/" not in blob and "balance" not in blob.lower()
 
     # Mission 1400.2: açıkça salt-okunur (yalnızca GET) izinli rotalar.
-    READ_ONLY_ALLOWED = {"/api/v1/global/orders"}
+    READ_ONLY_ALLOWED = {"/api/v1/global/orders",
+                         "/api/v1/global/orders/export.csv",
+                         "/orders"}
 
     def test_no_binance_write_route_exists(self):
         for rule in flask_app.app.url_map.iter_rules():

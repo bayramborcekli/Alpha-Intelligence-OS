@@ -28,6 +28,11 @@
 | `GET /api/v1/tr/movements/summary` | korumalı | 1310B ledger'ından hareket özeti (yeniden besleme yok) |
 | `GET /api/v1/system/status` | korumalı | sistem sağlığı + yazma sayaçları |
 | `POST /api/v1/refresh` | korumalı + CSRF | uygulama-yerel önbellek temizleme |
+| `GET /portfolio`, `/positions`, `/orders` | korumalı | Portföy / Pozisyonlar / Emirler çalışma alanları (1400.3) |
+| `GET /api/v1/portfolio` | korumalı | ayrık hesap bölümleri (Global + TR varlıkları) |
+| `GET /api/v1/portfolio/export.csv` | korumalı | portföy CSV dışa aktarımı |
+| `GET /api/v1/global/positions/export.csv` | korumalı | pozisyonlar CSV dışa aktarımı |
+| `GET /api/v1/global/orders/export.csv` | korumalı | açık emirler CSV dışa aktarımı |
 
 Kimliksiz istek: API'de `401` (kilitli kurulumda `403`), tarayıcı
 sayfalarında `/login` yönlendirmesi. Her yanıtta `X-Request-ID` başlığı bulunur.
@@ -62,6 +67,38 @@ kod yolu yoktur.
 - **Pano birleştirme:** "Genel Bakış" = `/overview` (tek birincil pano).
   `/panel` bot kontrol sayfası olarak kalır; eski borsa izleme bölümü
   `/overview`'a yönlendirir. `GET /api/exchange/summary` uyumluluk için korunur.
+
+## Portföy / Pozisyonlar / Emirler (Mission 1400.3)
+- **Hesap ayrımı:** Binance Global Futures ve Binance TR ayrı bölümlerde
+  gösterilir. TRY→USDT dönüşümü yapılmaz ve kaynaklar arası birleşik toplam
+  KASITLI olarak gösterilmez — farklı para birimlerinin dönüşümsüz toplamı
+  yanıltıcı olurdu.
+- **Pozisyon yönü (TEK YÖN modu):** miktar > 0 → LONG, < 0 → SHORT,
+  = 0 → FLAT. Aynı sembolde eşzamanlı LONG+SHORT satırı üretilmez.
+  Varsayılan görünüm aktif pozisyonlardır; "Sıfır Pozisyonları Göster" ile
+  FLAT satırlar eklenir.
+- **Gerçekleşmemiş PnL:** açık pozisyonların anlık kâr/zararıdır;
+  gerçekleşmiş kâr veya hesap özkaynağı değildir. Sayfadaki toplam yalnızca
+  aynı Futures hesabı içinde ve Decimal aritmetiğiyle hesaplanır.
+- **Emirler:** yalnızca açık emirler görüntülenir. `kalan = miktar −
+  gerçekleşen` Decimal ile hesaplanır; doluluk durumu borsanın `status`
+  alanından okunur, miktarlardan çıkarsanmaz.
+- **Eylem düğmesi yoktur:** iptal/kapat/düzenle/gönder kontrolleri kasıtlı
+  olarak yoktur — uygulama salt-okunurdur ve borsa yazma kod yolu içermez.
+- **Filtre/sıralama:** arama, yön/taraf/tür/marjin filtreleri ve sıralama
+  istemci tarafında sterilize veri üzerinde çalışır; API sorgu parametreleri
+  (include_zero, search, sort, order, limit) sunucuda doğrulanır, geçersiz
+  değer 400 INVALID_PARAMETER döner.
+- **CSV dışa aktarımı:** sunucu tarafında tipli modellerden üretilir; UTF-8
+  BOM (Türkçe Excel), ISO-8601 zaman, ham Decimal string, sabit sütun sırası.
+  Metin hücrelerinde formül enjeksiyonu (`= + - @` vb.) nötralize edilir;
+  sayısal sütunlardaki negatif değerler DEĞİŞTİRİLMEZ. Portföy ve pozisyon
+  dışa aktarımı doğrulanmış filtreleri uygular; emir dışa aktarımı tüm açık
+  emirleri içerir (UI'da belirtilir).
+- **Eski veri:** merkezî 1400.2 tazelik politikası aynen kullanılır; her
+  bölümde kaynak, alınma zamanı, yaş ve GÜNCEL/ESKİ VERİ/KULLANILAMIYOR
+  etiketi görünür. Önbellekten sunulan veri asla "yeni alındı" gibi
+  etiketlenmez.
 
 ## Dil
 Varsayılan arayüz dili Türkçe'dir (`ui_language: "tr"` yapılandırma

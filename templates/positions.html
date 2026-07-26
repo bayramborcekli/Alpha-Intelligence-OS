@@ -1,0 +1,145 @@
+{% extends "dash_base.html" %}
+{% block title %}Pozisyonlar{% endblock %}
+{% block heading %}Pozisyonlar{% endblock %}
+{% block subheading %}Binance Global Futures açık pozisyonları (TEK YÖN modu){% endblock %}
+{% block header_extra %}
+  <a class="export-btn" id="export-link" href="/api/v1/global/positions/export.csv"
+     role="button" style="display:inline-flex;align-items:center;padding:7px 12px;border:1px solid var(--accent);border-radius:8px;font-size:.84rem">
+    ⬇ CSV Dışa Aktar</a>
+{% endblock %}
+{% block content %}
+  <div class="summary-cards" id="summary" aria-live="polite">
+    <div class="scard"><div class="lbl">Aktif Pozisyon</div><div class="val" id="s-active">—</div></div>
+    <div class="scard"><div class="lbl">LONG</div><div class="val" id="s-long">—</div></div>
+    <div class="scard"><div class="lbl">SHORT</div><div class="val" id="s-short">—</div></div>
+    <div class="scard"><div class="lbl">Toplam Gerçekleşmemiş PnL</div><div class="val" id="s-pnl">—</div></div>
+  </div>
+  <p class="sub" style="margin-top:-6px">Toplam Gerçekleşmemiş PnL aynı Futures hesabı içindeki açık pozisyonların toplamıdır; gerçekleşmiş kâr veya hesap özkaynağı değildir. CSV dışa aktarımı "sıfır pozisyon" filtresini içerir.</p>
+
+  <div class="toolbar" role="search">
+    <label for="ps-search">Ara
+      <input type="search" id="ps-search" placeholder="Sembol (örn. BTC)"
+             maxlength="32" aria-label="Sembol ara"></label>
+    <label for="ps-dir">Yön
+      <select id="ps-dir" aria-label="Yön filtresi">
+        <option value="">Tümü</option><option>LONG</option>
+        <option>SHORT</option><option>FLAT</option>
+      </select></label>
+    <label for="ps-margin">Marjin
+      <select id="ps-margin" aria-label="Marjin türü filtresi">
+        <option value="">Tümü</option><option value="cross">Cross</option>
+        <option value="isolated">Isolated</option>
+      </select></label>
+    <label><input type="checkbox" id="ps-zero"> Sıfır Pozisyonları Göster</label>
+    <label for="ps-sort">Sırala
+      <select id="ps-sort" aria-label="Sıralama alanı">
+        <option value="symbol">Sembol</option>
+        <option value="abs_quantity">Miktar</option>
+        <option value="unrealized_pnl">PnL</option>
+        <option value="leverage">Kaldıraç</option>
+        <option value="update_time">Güncelleme</option>
+      </select></label>
+    <label for="ps-order">Yön
+      <select id="ps-order" aria-label="Sıralama yönü">
+        <option value="asc">Artan</option><option value="desc">Azalan</option>
+      </select></label>
+  </div>
+
+  <section class="section" aria-labelledby="h-pos">
+    <h2 id="h-pos">Açık Pozisyonlar</h2>
+    <p class="fresh-line" id="fresh-pos"></p>
+    <div id="body-pos"><p class="skeleton">Yükleniyor…</p></div>
+  </section>
+{% endblock %}
+{% block page_script %}
+<script>
+"use strict";
+(function () {
+  var data = null;
+
+  function dirBadge(d) {
+    var cls = d === "LONG" ? "pos" : (d === "SHORT" ? "neg" : "st-neutral");
+    return '<span class="' + cls + '">' + esc(d) + "</span>";
+  }
+
+  function filtered() {
+    var rows = (data && data.positions) || [];
+    var q = document.getElementById("ps-search").value.trim().toUpperCase();
+    var dir = document.getElementById("ps-dir").value;
+    var mg = document.getElementById("ps-margin").value;
+    rows = rows.filter(function (p) {
+      if (q && p.symbol.toUpperCase().indexOf(q) === -1) return false;
+      if (dir && p.direction !== dir) return false;
+      if (mg && String(p.margin_type || "").toLowerCase() !== mg) return false;
+      return true;
+    });
+    var key = document.getElementById("ps-sort").value;
+    var desc = document.getElementById("ps-order").value === "desc";
+    return sortRows(rows, key, key !== "symbol", desc);
+  }
+
+  function render() {
+    if (!data) return;
+    var body = document.getElementById("body-pos");
+    document.getElementById("fresh-pos").textContent =
+      data.meta ? freshText(data.meta) : "";
+    if (!data.ok) {
+      body.innerHTML = '<p class="st-err">' +
+        esc((data.error && data.error.message) || "Kaynak kullanılamıyor.") + "</p>";
+      return;
+    }
+    var s = data.summary || {};
+    document.getElementById("s-active").textContent = s.active_count ?? "—";
+    document.getElementById("s-long").textContent = s.long_count ?? "—";
+    document.getElementById("s-short").textContent = s.short_count ?? "—";
+    document.getElementById("s-pnl").innerHTML = pnlCell(s.total_unrealized_pnl);
+    var rows = filtered();
+    if (!rows.length) {
+      body.innerHTML = '<div class="empty-box" role="status">Aktif Futures pozisyonu bulunmuyor.</div>';
+      return;
+    }
+    body.innerHTML = '<div class="table-wrap"><table><thead><tr>' +
+      ["Sembol", "Yön", "Miktar (işaretli)", "Miktar", "Giriş", "Mark",
+       "Gerçekleşmemiş PnL", "Kaldıraç", "Likidasyon", "Marjin", "Güncelleme"]
+        .map(function (c) { return '<th scope="col">' + c + "</th>"; }).join("") +
+      "</tr></thead><tbody>" + rows.map(function (p) {
+        return "<tr>" +
+          '<td data-l="Sembol">' + esc(p.symbol) + "</td>" +
+          '<td data-l="Yön">' + dirBadge(p.direction) + "</td>" +
+          '<td data-l="Miktar (işaretli)">' + trNum(p.position_amt) + "</td>" +
+          '<td data-l="Miktar">' + trNum(p.abs_quantity) + "</td>" +
+          '<td data-l="Giriş">' + trNum(p.entry_price) + "</td>" +
+          '<td data-l="Mark">' + trNum(p.mark_price) + "</td>" +
+          '<td data-l="Gerçekleşmemiş PnL">' + pnlCell(p.unrealized_pnl) + "</td>" +
+          '<td data-l="Kaldıraç">' + trNum(p.leverage, "x") + "</td>" +
+          '<td data-l="Likidasyon">' + trNum(p.liquidation_price) + "</td>" +
+          '<td data-l="Marjin">' + esc(p.margin_type || "—") + "</td>" +
+          '<td data-l="Güncelleme">' + esc(tsText(p.update_time)) + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+  }
+
+  async function load() {
+    var zero = document.getElementById("ps-zero").checked;
+    var url = "/api/v1/global/positions" + (zero ? "?include_zero=true" : "");
+    document.getElementById("export-link").href =
+      "/api/v1/global/positions/export.csv" + (zero ? "?include_zero=true" : "");
+    try {
+      var r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      data = await r.json();
+      showWarnings(data.ok ? [] : [((data.error || {}).message) || "Pozisyon verisi kullanılamıyor."]);
+      render();
+    } catch (_) {
+      showWarnings(["Pozisyon verisi alınamadı. Bağlantınızı kontrol edin."]);
+    }
+  }
+
+  ["ps-search", "ps-dir", "ps-margin", "ps-sort", "ps-order"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", render);
+  });
+  document.getElementById("ps-zero").addEventListener("change", load);
+  wireRefresh(load);
+  load();
+})();
+</script>
+{% endblock %}

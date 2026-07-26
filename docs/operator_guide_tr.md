@@ -44,6 +44,18 @@ ve yalnızca sunucu tarafında, açık talimatla etkinleştirilebilir.
   durumu her zaman **DEVRE DIŞI** olarak ayrıca gösterilir.
 - Bot kontrolü artık menüdeki **🤖 Bot Kontrol** (`/panel`) sayfasındadır.
 
+## Portföy, Pozisyonlar ve Emirler (Mission 1400.3)
+- Menüden **💼 Portföy**, **📈 Pozisyonlar**, **🧾 Emirler** açılır; üçü de
+  salt-okunurdur — emir verme/iptal/kapatma düğmesi yoktur ve olmayacaktır.
+- Portföy'de hesaplar ayrıdır; birleşik toplam gösterilmez (TRY ile USDT
+  dönüşümsüz toplanamaz). "Sıfır Bakiyeleri Göster" ile tüm varlıklar görünür.
+- Pozisyonlarda yön metinle gösterilir: LONG / SHORT / FLAT. "Toplam
+  Gerçekleşmemiş PnL" açık pozisyonların anlık değeridir, gerçekleşmiş kâr
+  değildir.
+- **⬇ CSV Dışa Aktar** düğmeleri Excel-uyumlu (UTF-8 BOM) dosya indirir;
+  dosyalarda secret veya ham borsa yanıtı bulunmaz.
+- Her bölümde veri durumu görünür: GÜNCEL / ESKİ VERİ / KULLANILAMIYOR.
+
 ## Üretim başlatma komutu
 ```
 gunicorn -c gunicorn.conf.py app:app
