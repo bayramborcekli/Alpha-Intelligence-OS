@@ -1,0 +1,282 @@
+ALPHA INTELLIGENCE OS — SECURITY BASELINE v1
+
+Amaç:
+Mevcut çalışan PAPER trading uygulamasını güvenlik açısından incele, kritik açıkları düzelt ve güvenli bir checkpoint oluştur.
+
+Bu görevde yeni trade stratejisi, yeni analiz motoru veya canlı emir özelliği ekleme.
+Mevcut fonksiyonları bozma.
+Sistem PAPER modunda kalmalıdır.
+
+1. PROJE DENETİMİ
+
+Projeyi bütünüyle incele:
+
+- app.py
+- alpha20.py ve ilgili bot dosyaları
+- config dosyaları
+- templates
+- static
+- requirements.txt
+- state ve veri dosyaları
+- .gitignore
+- ortam değişkenleri
+- log dosyaları
+- testler
+
+Şunları ara:
+
+- Kaynak koda yazılmış API anahtarları
+- Şifreler
+- Secret key değerleri
+- Tokenlar
+- Binance anahtarları
+- Veritabanı bağlantı bilgileri
+- Debug modu
+- Açık yönetim rotaları
+- Kimlik doğrulama olmayan ayar değişiklikleri
+- Hassas bilgileri gösteren loglar
+- Kullanıcı girdilerinin doğrulanmadan kullanılması
+- Path traversal
+- Command injection
+- Template injection
+- Açık yönlendirme
+- CSRF riski
+- Güvensiz dosya yazma
+- Hatalı izinler
+- Gereksiz portlar veya servisler
+
+Hiçbir gerçek anahtar veya parola üretme ve kaynak koda ekleme.
+
+2. SECRETS YÖNETİMİ
+
+Hassas ayarları config.json veya Python kodundan çıkar.
+
+Ortam değişkenlerini kullan:
+
+- FLASK_SECRET_KEY
+- ADMIN_USERNAME
+- ADMIN_PASSWORD_HASH
+- BINANCE_API_KEY
+- BINANCE_API_SECRET
+- DATABASE_URL
+
+BINANCE değerleri PAPER modunda zorunlu olmasın.
+
+.env.example oluştur.
+Bu dosyada yalnızca örnek değişken isimleri bulunsun; gerçek değer bulunmasın.
+
+.env dosyasını .gitignore içine ekle.
+
+config.json içinde yalnızca hassas olmayan strateji ayarları kalmalı.
+
+Uygulama başlangıcında eksik veya güvensiz yapılandırmayı kontrol eden bir config validation katmanı ekle.
+
+3. KİMLİK DOĞRULAMA
+
+Dashboard'a basit fakat güvenli bir oturum açma sistemi ekle.
+
+Gereksinimler:
+
+- Tüm yönetim ekranları giriş gerektirsin.
+- Parola düz metin olarak tutulmasın.
+- Werkzeug password hashing kullan.
+- Session cookie ayarları güvenli olsun.
+- HttpOnly aktif olsun.
+- SameSite=Lax veya daha sıkı olsun.
+- Production ortamında Secure cookie aktif edilebilsin.
+- Logout rotası olsun.
+- Başarısız giriş denemeleri loglansın fakat parola loglanmasın.
+- Basit rate limiting uygula.
+- Çok sayıda başarısız denemede geçici kilitleme yap.
+- Kullanıcının oturum süresi sınırlı olsun.
+
+Yeni kullanıcı kayıt ekranı ekleme.
+Sistem tek yönetici hesabıyla çalışabilir.
+
+4. CSRF VE FORM GÜVENLİĞİ
+
+Ayar değiştiren, bot başlatan/durduran, coin ekleyen/silen ve diğer tüm POST işlemlerinde CSRF koruması kullan.
+
+GET istekleri veri değiştirmesin.
+
+Bütün kullanıcı girdilerini doğrula:
+
+- Coin sembolü
+- Sayısal eşikler
+- Risk değerleri
+- Mod seçimleri
+- Dosya veya yol değerleri
+
+Geçersiz değerlerde güvenli hata mesajı göster.
+
+5. GÜVENLİ HTTP AYARLARI
+
+Uygun güvenlik başlıklarını ekle:
+
+- Content-Security-Policy
+- X-Content-Type-Options
+- X-Frame-Options veya CSP frame-ancestors
+- Referrer-Policy
+- Permissions-Policy
+- HSTS yalnızca HTTPS production ortamında
+
+Hata sayfalarında stack trace gösterme.
+
+Flask debug varsayılan olarak kapalı olsun.
+Debug yalnızca açık bir development ortam değişkeniyle etkinleştirilebilsin.
+
+Uygulama 0.0.0.0 üzerinde çalışmak zorundaysa bunun yalnızca deployment gereksinimi olduğunu dokümante et.
+
+6. PAPER MODU KİLİDİ
+
+Bu sürümde gerçek emir kesinlikle çalışmamalı.
+
+Aşağıdaki korumaları ekle:
+
+- PAPER_MODE varsayılan olarak true.
+- PAPER_MODE false olsa bile canlı emir fonksiyonu bulunmuyorsa güvenli şekilde dur.
+- Dashboard üzerinde belirgin PAPER rozeti göster.
+- Canlı emir fonksiyonlarına ait yanlışlıkla etkinleşebilecek kod varsa devre dışı bırak veya açık bir güvenlik engeli ekle.
+- Para çekme, transfer ve gerçek emir işlevi ekleme.
+- Uygulama başlarken PAPER modu loglansın.
+
+7. LOG VE GİZLİLİK
+
+Loglardan şu bilgileri kaldır veya maskele:
+
+- API anahtarları
+- Tokenlar
+- Parolalar
+- Session değerleri
+- Tam portföy bakiyesi
+- Hassas yapılandırma
+
+Rotasyonlu log sistemi kullan.
+
+Önemli güvenlik olaylarını kaydet:
+
+- Başarılı giriş
+- Başarısız giriş
+- Çıkış
+- Ayar değişikliği
+- Bot başlatma/durdurma
+- Coin ekleme/silme
+- PAPER modunu etkileyen değişiklik
+- Kritik hata
+
+Log kayıtlarında tarih, olay türü ve kullanıcı bilgisi bulunsun.
+Parola veya secret hiçbir zaman loglanmasın.
+
+8. DOSYA VE VERİ GÜVENLİĞİ
+
+State ve config yazma işlemlerinde:
+
+- Atomic write kullan.
+- Geçici dosya + replace yöntemi uygula.
+- Bozuk JSON durumunda uygulama kontrollü şekilde çalışsın.
+- Yedek kopya oluştur.
+- Kullanıcı tarafından verilen dosya yollarını doğrudan kullanma.
+
+Veri dosyalarının web üzerinden indirilememesini sağla.
+
+9. BAĞIMLILIKLAR
+
+requirements.txt dosyasını incele.
+
+- Kullanılmayan bağımlılıkları kaldır.
+- Gerekli sürümleri sabitle veya güvenli aralıklarla sınırla.
+- Bilinen sorunlara açık eski paketleri güncelle.
+- Uygulamanın çalışmasını bozacak gereksiz büyük güncellemeler yapma.
+
+Bir SECURITY.md oluştur:
+
+- Güvenlik mimarisi
+- Secret yönetimi
+- PAPER modu
+- Kurulum
+- Yedekleme
+- Olay müdahalesi
+- API anahtarı sızıntısında yapılacaklar
+- Güncelleme prosedürü
+
+10. YEDEKLEME
+
+Yerel bir güvenli yedekleme komutu veya scripti oluştur.
+
+Yedeklenecekler:
+
+- Hassas olmayan config
+- state
+- trade geçmişi
+- öğrenme verileri
+- SQLite kullanılıyorsa veritabanı
+
+Yedeklere gerçek .env dosyasını dahil etme.
+
+Yedeklerin nereye oluşturulduğunu dokümante et.
+Geri yükleme talimatı ekle.
+
+11. TESTLER
+
+Aşağıdakiler için otomatik test ekle:
+
+- Girişsiz dashboard erişimi engelleniyor.
+- Doğru giriş başarılı.
+- Yanlış giriş başarısız.
+- Logout çalışıyor.
+- CSRF'siz POST reddediliyor.
+- Geçersiz coin sembolü reddediliyor.
+- Risk limitlerinin dışında değer reddediliyor.
+- PAPER modu aktif.
+- Canlı işlem çalıştırılamıyor.
+- Hassas değerler loglarda görünmüyor.
+- Config atomic write çalışıyor.
+- Tüm ana dashboard bölümleri giriş sonrası HTTP 200 dönüyor.
+
+Mevcut testleri bozma.
+Tüm testleri çalıştır.
+
+12. RAPOR
+
+İş tamamlandığında şu formatta rapor ver:
+
+A. Bulunan güvenlik sorunları
+B. Düzeltilen sorunlar
+C. Değiştirilen dosyalar
+D. Yeni dosyalar
+E. Çalıştırılan testler
+F. Test sonuçları
+G. Manuel yapılması gereken işlemler
+H. Bilinen kalan riskler
+
+Gerçek secret değerlerini raporda gösterme.
+
+13. CHECKPOINT
+
+Tüm testler geçerse:
+
+Checkpoint adı:
+security-baseline-v1
+
+Uygulamanın çalışma komutunu doğrula.
+
+Çalıştırma komutu:
+python app.py
+
+Son kontrol:
+
+- Uygulama açılıyor.
+- Login ekranı geliyor.
+- Giriş sonrası dashboard açılıyor.
+- Bot PAPER modunda çalışıyor.
+- Tüm dashboard bölümleri render ediliyor.
+- Hassas veri görünmüyor.
+- Testler geçiyor.
+- Checkpoint oluşturuluyor.
+
+Önemli:
+Mevcut çalışan özellikleri silme.
+Büyük mimari yeniden yazım yapma.
+Canlı trading ekleme.
+Gerçek API anahtarı isteme veya üretme.
+Testler geçmeden görevi tamamlanmış sayma.
