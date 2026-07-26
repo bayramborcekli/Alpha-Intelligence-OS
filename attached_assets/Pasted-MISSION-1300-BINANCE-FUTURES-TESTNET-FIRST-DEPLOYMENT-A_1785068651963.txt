@@ -1,0 +1,163 @@
+MISSION 1300 — BINANCE FUTURES TESTNET FIRST DEPLOYMENT
+
+Amaç:
+Alpha Intelligence OS'u Binance USDⓈ-M Futures Testnet'e bağlamak,
+LONG ve SHORT yönlerini uçtan uca doğrulamak ve ilk güvenli test yayınını yapmak.
+
+BÜTÇE KURALI:
+- Yeni araştırma özelliği ekleme.
+- Strateji optimizasyonu yapma.
+- Dashboard genişletme.
+- Yalnızca gerekli entegrasyon, güvenlik ve doğrulama kodunu yaz.
+- Mevcut test altyapısını yeniden kullan.
+- Gereksiz refactor yapma.
+
+ORTAM:
+- Binance USDⓈ-M Futures TESTNET
+- Production API endpoint kullanma.
+- Gerçek para kullanma.
+- PAPER ve TESTNET profilleri açıkça ayrılmalı.
+- LIVE production profili hard-blocked kalmalı.
+
+SECRET YÖNETİMİ:
+- BINANCE_TESTNET_API_KEY
+- BINANCE_TESTNET_API_SECRET
+- Secret'ları koda, loglara, raporlara veya Git'e yazma.
+- .env dosyasını commit etme.
+- Loglarda key/signature maskele.
+- Başlangıçta eksik secret varsa fail closed.
+
+PHASE 1 — CONNECTIVITY
+- REST server-time kontrolü
+- Exchange information okuma
+- Account/balance okuma
+- Açık pozisyonları okuma
+- BTCUSDT, ETHUSDT ve SOLUSDT contract metadata doğrulama
+- Quantity precision, price precision, step size ve min notional kurallarını cache'le
+- Rate-limit başlıklarını ve API hatalarını yapılandırılmış logla
+
+PHASE 2 — MARKET DATA
+- 15m kline stream
+- Mark price stream
+- Best bid/ask veya uygun book ticker stream
+- Ping/pong yönetimi
+- Exponential backoff + jitter ile reconnect
+- 24 saatlik bağlantı yenilemesini güvenli biçimde destekle
+- Duplicate ve out-of-order event koruması
+- open_time tabanlı deterministik candle kimliği
+- Gap oluşursa REST backfill ve doğrulama
+
+PHASE 3 — USER DATA
+- User data stream'i aç
+- Gerekli keepalive/yenileme davranışını uygula
+- ORDER_TRADE_UPDATE ve ACCOUNT_UPDATE olaylarını işle
+- REST snapshot + WebSocket event reconciliation uygula
+- Reconnect sonrası bakiye, açık emir ve pozisyonları yeniden uzlaştır
+- Event duplication idempotent olmalı
+
+PHASE 4 — POSITION MODE
+- Hedge Mode durumunu oku ve doğrula
+- Aynı sembolde LONG ve SHORT taraflarını bağımsız temsil et
+- positionSide değerlerini LONG ve SHORT olarak açıkça kullan
+- LONG ve SHORT için ayrı:
+  entry price
+  quantity
+  unrealized PnL
+  realized PnL
+  fees
+  stop
+  target
+  ledger records
+- Yanlış position mode varsa otomatik işlem açma; fail closed ve açık hata üret
+
+PHASE 5 — SAFETY GATES
+Gerçek testnet emri yalnızca aşağıdaki koşulların tamamında açılabilir:
+- ENVIRONMENT=TESTNET
+- ACCOUNT_MODE=FUTURES_TESTNET
+- ORDER_EXECUTION_ENABLED=true
+- LIVE_PRODUCTION_ENABLED=false
+- terminal confirmation tam olarak:
+  CONFIRM BINANCE FUTURES TESTNET
+
+Ek güvenlik:
+- Tek sembol: BTCUSDT
+- İzole margin
+- En düşük makul testnet miktarı
+- İlk aşamada yüksek kaldıraç kullanma
+- Maksimum 1 LONG ve 1 SHORT test pozisyonu
+- Yeni pozisyon öncesi açık emir/pozisyon mutabakatı
+- Global kill switch
+- Günlük zarar limiti
+- Maksimum notional limiti
+- Stale market data varsa emir yasağı
+- Reconciliation başarısızsa emir yasağı
+
+PHASE 6 — TEST ORDERS
+Sırasıyla:
+1. Küçük LONG market veya uygun test emri
+2. Fill olayını user stream'den al
+3. REST ile fill ve pozisyonu doğrula
+4. Ledger kaydıyla birebir uzlaştır
+5. LONG pozisyonunu reduce-only olarak kapat
+6. Aynı doğrulamaları yap
+7. Küçük SHORT test emri aç
+8. Fill, pozisyon, fee ve ledger doğrulaması yap
+9. SHORT pozisyonunu reduce-only olarak kapat
+10. Açık emir ve açık pozisyon sayısının sıfır olduğunu doğrula
+
+PHASE 7 — FAILURE TESTS
+- WebSocket bağlantısını zorla kes ve reconnect doğrula
+- User stream yenilenmesini doğrula
+- Süreci kill -9 ile durdur
+- --resume ile başlat
+- Binance REST state ile yerel snapshot/ledger state'i uzlaştır
+- Duplicate emir oluşmadığını kanıtla
+- Belirsiz emir durumunda otomatik tekrar gönderme
+- Önce order query/reconciliation yap
+- Gerçek project state dosyalarını koru
+
+TESTLER:
+- Mevcut 349 test korunmalı
+- Testnet adapter unit testleri
+- Signature/request testleri
+- Precision/filter testleri
+- LONG/SHORT position-side testleri
+- Duplicate event testleri
+- Reconnect testleri
+- Ambiguous order testleri
+- Kill/resume reconciliation testi
+
+PASS KRİTERLERİ:
+- Tüm testler geçiyor
+- Futures Testnet bağlantısı başarılı
+- Market data stabil
+- Account/user stream çalışıyor
+- Hedge Mode doğrulandı
+- 1 LONG test işlemi açılıp kapandı
+- 1 SHORT test işlemi açılıp kapandı
+- Exchange fills ile ledger birebir eşleşiyor
+- Fee ve realized PnL eşleşiyor
+- 0 duplicate order
+- 0 açık emir
+- 0 açık pozisyon
+- Reconnect başarılı
+- kill -9 + resume başarılı
+- Production endpoint'e 0 istek
+- Production emri gönderebilecek yol hard-blocked
+
+FINAL REPORT:
+MISSION 1300: PASS / FAIL
+ENVIRONMENT: BINANCE FUTURES TESTNET
+POSITION MODE: HEDGE / FAIL
+LONG ROUND TRIP: PASS / FAIL
+SHORT ROUND TRIP: PASS / FAIL
+ORDER RECONCILIATION: PASS / FAIL
+LEDGER RECONCILIATION: PASS / FAIL
+CRASH RECOVERY: PASS / FAIL
+OPEN ORDERS AFTER TEST: 0 / value
+OPEN POSITIONS AFTER TEST: 0 / value
+PRODUCTION REQUEST COUNT: 0 / value
+TEST COUNT: passed / failed
+RUN_ID:
+COMMIT:
+NEXT ACTION: tek net işlem
