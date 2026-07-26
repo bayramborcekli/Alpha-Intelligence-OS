@@ -41,6 +41,31 @@ yoktur ve bu sürümde planlanmamaktadır.
 
 ---
 
+## Intelligence Katmanı (Mission 1500.1)
+
+Salt-okunur, deterministik, yalnızca-tavsiye analiz zinciri:
+
+```
+dashboard_api / risk_api  (salt-okunur sağlayıcılar)
+        │
+intelligence_service.py   (anlık görüntü + tazelik + sterile hata)
+        │
+intelligence_api.py       (kural tabanlı çekirdek — LLM/rastgelelik yok)
+   ├── risk_explainer.py      (Gözlem/Gerekçe/Etki/Öneri şablonları)
+   └── recommendation_api.py  (öncelikli, tekilleştirilmiş tavsiyeler)
+        │
+intelligence_models.py    (tipli sözleşmeler, Decimal-string, yasak alanlar)
+        │
+app.py  →  GET /api/intelligence/*  +  /intelligence sayfası
+intelligence_settings.py  (doğrulanmış ALPHA_INTELLIGENCE_* yapılandırması)
+```
+
+Sınırlar: borsa istemcisi/ledger/audit import edilemez; dosya yazımı ve
+ağ erişimi yoktur; harici LLM sert kilitlidir. Ayrıntı:
+`docs/RELEASE_NOTES_1500_1.md`, `docs/API_REFERENCE.md`.
+
+---
+
 ## Modüller
 
 ### ✅ Mevcut — Üretimde

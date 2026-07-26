@@ -64,5 +64,19 @@ yanıtlarına eklenir, iç izleri ifşa etmez.
 
 ## HTTP başlıkları
 CSP (`default-src 'self'`, `connect-src 'self'`, `frame-ancestors 'none'`),
-X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy; üretimde
+X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy,
+X-Permitted-Cross-Domain-Policies `none` (Mission 1500.1); üretimde
 HSTS. Debug modu üretimde kapalıdır.
+
+## Intelligence katmanı sınırları (Mission 1500.1)
+- Yalnızca GET uçları; kimlik doğrulama zorunlu; `no-store` önbellek.
+- Intelligence modülleri borsa istemcisi, ledger ve audit modüllerini
+  **import edemez**; ağ kütüphanesi ve dosya yazımı yasaktır — bunlar
+  statik AST testleriyle sürekli doğrulanır
+  (`tests/test_mission1500_1_security.py`, `..._regression.py`).
+- Harici LLM sert kilitli: `ALPHA_INTELLIGENCE_EXTERNAL_LLM_ENABLED=true`
+  yapılsa bile kapalı kalır; hiçbir veri dışarı gönderilmez.
+- Çıktılar advisory-only'dir; emir dili, fiyat tahmini, API key/secret/
+  token/oturum verisi içermez (canlı sahte-secret taramasıyla test edilir).
+- Kural tabanlı motor kullanıcı/borsa kaynaklı metinden talimat almaz
+  (prompt injection etkisiz); UI tüm dinamik içeriği HTML-kaçışlı basar.

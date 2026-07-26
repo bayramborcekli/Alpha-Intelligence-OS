@@ -20,6 +20,12 @@ açık talimatla etkinleştirilebilir.
 - `ledger_api.py` — Defter/Denetim/Rapor servis katmanı: ekle-yalnız defter
   görünümü, bütünlük doğrulaması, 1310B mutabakat kanıtı, sabit rapor kayıt
   defteri, güvenli CSV (Mission 1400.4; PDF ertelendi)
+- `intelligence_models.py` / `intelligence_api.py` / `risk_explainer.py` /
+  `recommendation_api.py` / `intelligence_service.py` /
+  `intelligence_settings.py` — Intelligence Katmanı: deterministik,
+  yalnızca-tavsiye analiz; açıklanabilir içgörüler, öncelikli öneriler,
+  `/intelligence` sayfası ve `GET /api/intelligence/*` uçları
+  (Mission 1500.1; salt-okunur, harici LLM kilitli)
 - `tools/` — görev (mission) betikleri
 - `tests/` — test paketi (`python -m pytest tests/ -q`)
 
@@ -44,3 +50,12 @@ Eksiklerse uygulama **Kurulum Kilitli** moduna girer. Ayrıntılar:
 `ALPHA_ENABLE_DRY_RUN`, `ALPHA_ENABLE_LIVE_TRADING`, `ALPHA_ENABLE_TRANSFERS`,
 `ALPHA_ENABLE_WITHDRAWALS` = `false`. Borsa secret'ları yalnızca backend'de
 kalır; frontend'e hiçbir secret geçmez.
+
+Intelligence katmanı da varsayılan kapalıdır: açmak için
+`ALPHA_INTELLIGENCE_ENABLED=true`. Harici LLM 1500.1 kapsamında sert
+kilitlidir (ortamdan bile açılamaz). Diğer belgeler:
+- [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
+- [docs/MISSION_INDEX.md](docs/MISSION_INDEX.md)
+- [docs/TEST_PROGRAM.md](docs/TEST_PROGRAM.md)
+- [docs/RELEASE_NOTES_1500_1.md](docs/RELEASE_NOTES_1500_1.md)
+- [CHANGELOG.md](CHANGELOG.md) · [AGENTS.md](AGENTS.md)

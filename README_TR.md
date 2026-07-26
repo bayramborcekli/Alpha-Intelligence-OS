@@ -2,6 +2,13 @@
 
 Bu sürüm **yalnızca PAPER (sanal işlem)** modundadır. Binance hesabına bağlanmaz, API anahtarı istemez ve gerçek emir göndermez.
 
+> **Mission 1500.1 — Intelligence Katmanı:** Platform artık deterministik,
+> yalnızca-tavsiye niteliğinde bir Intelligence katmanı içerir
+> (`/intelligence` sayfası ve `GET /api/intelligence/*` uçları).
+> Varsayılan kapalıdır; `ALPHA_INTELLIGENCE_ENABLED=true` ile açılır.
+> Harici LLM bu fazda kilitlidir; tüm analiz yereldir ve hiçbir işlem
+> kararı vermez. Ayrıntı: `docs/RELEASE_NOTES_1500_1.md`.
+
 ## Ne yapar?
 
 - Binance USDⓈ-M Futures'ın herkese açık mum verilerini okur.
