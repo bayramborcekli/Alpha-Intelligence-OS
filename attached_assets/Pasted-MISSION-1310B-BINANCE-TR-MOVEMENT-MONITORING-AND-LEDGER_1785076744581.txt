@@ -1,0 +1,73 @@
+MISSION 1310B — BINANCE TR MOVEMENT MONITORING AND LEDGER RECONCILIATION
+
+OBJECTIVE
+
+Use Binance TR as a read-only source to track crypto movements and validate the Alpha Intelligence OS ledger while the Binance Global transfer waiting period continues.
+
+SECRETS
+
+BINANCE_TR_API_KEY
+BINANCE_TR_API_SECRET
+
+RULES
+
+- Read-only operations only
+- GET requests only
+- No orders
+- No transfers
+- No withdrawals
+- No asset conversions
+- Never expose API keys, secrets or signatures
+- Fail closed
+- Do not modify existing historical ledger entries
+
+TASKS
+
+1. Read current Binance TR balances.
+2. Read all accessible deposit records.
+3. Read all accessible withdrawal records.
+4. Normalize each movement into a deterministic ledger event.
+5. Generate a stable event ID using exchange, transaction ID, asset, amount and timestamp.
+6. Prevent duplicate ledger ingestion.
+7. Classify records as:
+   - DEPOSIT
+   - WITHDRAWAL
+   - INTERNAL_TRANSFER
+   - UNKNOWN
+8. Preserve raw exchange payload hashes for audit without storing secrets.
+9. Reconcile current exchange balances against reconstructed ledger totals.
+10. Report unexplained differences separately.
+11. Record the earliest and latest movement timestamps.
+12. Produce a request audit proving all calls were GET.
+13. Add tests for duplicate ingestion, ordering, malformed data and reconciliation mismatch.
+
+EXPECTED REPORT
+
+MISSION 1310B: PASS / FAIL
+AUTHENTICATION:
+ACCOUNT STATUS:
+CURRENT TRY:
+CURRENT USDT:
+DEPOSIT RECORDS:
+WITHDRAWAL RECORDS:
+UNIQUE LEDGER EVENTS:
+DUPLICATES BLOCKED:
+UNKNOWN EVENTS:
+EARLIEST EVENT:
+LATEST EVENT:
+LEDGER RECONCILIATION: PASS / FAIL / PARTIAL
+UNEXPLAINED TRY DIFFERENCE:
+UNEXPLAINED USDT DIFFERENCE:
+ORDER ENDPOINT REQUESTS:
+TRANSFER ENDPOINT REQUESTS:
+WITHDRAWAL ENDPOINT REQUESTS:
+OTHER WRITE REQUESTS:
+SECRETS EXPOSED:
+TESTS:
+RUN_ID:
+COMMIT:
+NEXT ACTION:
+
+IMPORTANT
+
+Historical records may not represent the full lifetime of the account because exchange APIs can limit accessible history. If complete reconstruction is impossible, report LEDGER RECONCILIATION: PARTIAL and explain the missing historical coverage. Do not manufacture opening balances.
