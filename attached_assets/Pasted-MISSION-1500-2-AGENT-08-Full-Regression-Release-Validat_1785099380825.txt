@@ -1,0 +1,369 @@
+MISSION 1500.2 — AGENT 08
+Full Regression & Release Validation
+
+AMAÇ
+
+MISSION 1500.2 kapsamında geliştirilen tüm Workspace bileşenlerini
+birlikte doğrulamak ve 1500.1 ile önceki sistem davranışlarında
+regresyon bulunmadığını kanıtlamak.
+
+Bu agent yeni özellik geliştirmeyecektir.
+
+────────────────────────────────────────
+
+GÖREVLER
+
+1.
+
+Tam test paketini temiz ortamda çalıştır.
+
+2.
+
+Aşağıdaki Workspace zincirini uçtan uca doğrula:
+
+Timeline
+
+↓
+
+Workspace Service
+
+↓
+
+Workspace API
+
+↓
+
+Workspace UI
+
+↓
+
+Workspace Export
+
+3.
+
+Boş geçmiş durumunu doğrula.
+
+Beklenen:
+
+• hata yok
+
+• total: 0
+
+• bilinmeyen değerler dürüstçe gösterilir
+
+• değer türetilmez
+
+4.
+
+Tek snapshot durumunu doğrula.
+
+• timeline listesi
+
+• snapshot detay
+
+• recommendation history
+
+• risk evolution
+
+• search
+
+• export
+
+doğru çalışmalıdır.
+
+5.
+
+Birden fazla snapshot durumunu doğrula.
+
+• deterministik sıralama
+
+• compare
+
+• recommendation değişimleri
+
+• risk evolution
+
+• search kombinasyonları
+
+• JSON/CSV export
+
+doğrulanmalıdır.
+
+6.
+
+Eski veya kısmi şema kayıtlarını doğrula.
+
+Eksik alanlar:
+
+null
+
+"—"
+
+"Veri Yok"
+
+olarak gösterilmelidir.
+
+Asla 0 veya tahmini değer üretilmemelidir.
+
+7.
+
+Decimal bütünlüğünü tüm katmanlarda doğrula.
+
+Timeline
+
+Service
+
+API
+
+UI
+
+Export
+
+boyunca float dönüşümü yapılmamalıdır.
+
+8.
+
+Determinizmi doğrula.
+
+Aynı geçmiş ve aynı parametreler:
+
+• aynı veri
+
+• aynı sıra
+
+• aynı JSON çıktısı
+
+• aynı CSV çıktısı
+
+üretmelidir.
+
+9.
+
+Mevcut 1500.1 davranışlarını doğrula.
+
+• Intelligence Engine
+
+• Risk Engine
+
+• Recommendations
+
+• Authentication
+
+• CSRF
+
+• Rate limiting
+
+• Ledger
+
+• Audit
+
+değişmemelidir.
+
+10.
+
+Exchange güvenlik sınırını doğrula.
+
+Tüm suite boyunca:
+
+Exchange Write Request = 0
+
+olmalıdır.
+
+11.
+
+Secret exposure taraması yap.
+
+Test çıktısı, API yanıtı, UI ve export içinde:
+
+• API key
+
+• token
+
+• credential
+
+• environment secret
+
+• stack trace
+
+bulunmamalıdır.
+
+12.
+
+Flaky veya çalışma-zamanı durumuna bağlı testleri kontrol et.
+
+Repository dışı çalışma-zamanı değişikliği varsa:
+
+• açıkça raporla
+
+• commit'li durumu değiştirme
+
+• test ortamını temizle
+
+• suite'i yeniden çalıştır
+
+13.
+
+Canlı smoke test gerçekleştir:
+
+• /health
+
+• /workspace anonim erişim
+
+• Workspace API anonim erişim
+
+• authenticated GET akışı mümkünse
+
+• export GET akışı mümkünse
+
+Canlı ortamda hiçbir yazma işlemi yapılmayacaktır.
+
+14.
+
+Bulunan regresyonlar yalnızca mevcut sözleşmeyi geri yükleyen
+minimum değişikliklerle kapatılabilir.
+
+Yeni özellik eklenmeyecektir.
+
+────────────────────────────────────────
+
+KISITLAR
+
+Yeni özellik yok.
+
+Yeni endpoint yok.
+
+Yeni UI bölümü yok.
+
+Yeni export formatı yok.
+
+Yeni servis fonksiyonu yok.
+
+Risk veya recommendation mantığı değişikliği yok.
+
+────────────────────────────────────────
+
+YASAKLAR
+
+Test silme
+
+Test atlama
+
+Skip ekleme
+
+Beklentiyi gevşetme
+
+Güvenlik kontrolünü kaldırma
+
+Exchange request
+
+Exchange write
+
+Harici LLM
+
+Tahmin
+
+Otomatik karar
+
+────────────────────────────────────────
+
+TEST MATRİSİ
+
+• Timeline append/load/read
+
+• Service timeline/snapshot/compare
+
+• Recommendation history
+
+• Risk evolution
+
+• Search ve filtre kombinasyonları
+
+• API ve /api/v1 aliasları
+
+• UI render ve güvenli veri gösterimi
+
+• JSON export
+
+• CSV export
+
+• Authentication
+
+• 400 / 404 / 405
+
+• Cache-Control
+
+• Content-Disposition
+
+• Decimal
+
+• unknown/null gösterimi
+
+• sterile errors
+
+• XSS
+
+• path traversal
+
+• secret exposure
+
+• deterministic output
+
+• history immutability
+
+• exchange write absence
+
+• 1500.1 tam regresyon
+
+────────────────────────────────────────
+
+TESLİM RAPORU
+
+── DEĞİŞEN DOSYALAR ──
+
+── TEST ORTAMI ──
+
+── WORKSPACE UÇTAN UCA DOĞRULAMA ──
+
+── 1500.1 REGRESYON SONUCU ──
+
+── SECURITY REGRESYON SONUCU ──
+
+── CANLI SMOKE TEST ──
+
+── TAM TEST SONUCU ──
+
+── FAIL / SKIP SAYISI ──
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+
+── SECRET EXPOSURE ──
+
+── COMMIT / HEAD ──
+
+── BİLİNEN SINIRLAMALAR ──
+
+────────────────────────────────────────
+
+PASS KRİTERİ
+
+• Tam test paketi PASS.
+
+• FAIL = 0
+
+• SKIP = 0
+
+• Workspace zinciri uçtan uca çalışıyor.
+
+• 1500.1 regresyonu yok.
+
+• Decimal bütünlüğü korunuyor.
+
+• Determinizm korunuyor.
+
+• History immutable.
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Yeni özellik eklenmedi.
