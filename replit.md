@@ -1,10 +1,18 @@
 # Alpha-20 v1
 
-This project is a Python command-line trading bot that runs in PAPER mode only. It reads public Binance USDⓈ-M Futures candle data and never connects to an account or sends live orders.
+This project contains a small Flask settings page for the Python command-line trading bot. The bot runs in PAPER mode only: it reads public Binance USDⓈ-M Futures candle data and never connects to an account or sends live orders.
 
 ## Run on Replit
 
-Dependencies are listed in `alpha20_v1/requirements.txt`.
+Dependencies are listed in `requirements.txt`.
+
+Start the settings page:
+
+```bash
+python app.py
+```
+
+The page listens on `0.0.0.0` and uses the `PORT` environment variable, falling back to port 5000. It edits only `minimum_score` in `alpha20_v1/config.json`.
 
 Run one scan:
 

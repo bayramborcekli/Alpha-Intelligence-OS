@@ -13,15 +13,20 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Alpha-20 PAPER scan"
+args = "Start application"
 
 [[workflows.workflow]]
-name = "Alpha-20 PAPER scan"
+name = "Start application"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python alpha20_v1/alpha20.py --once"
+args = "python app.py"
+waitForPort = 5000
 
 [workflows.workflow.metadata]
-outputType = "console"
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
