@@ -1,1 +1,2 @@
 - [Python package setup](python-package-setup.md) — use the Replit Python tools module when the base interpreter lacks pip.
+- [Fee dominance with tight stops](fee-dominance-1m.md) — 1m ATR stops make qty huge so fees dwarf gross PnL; not an accounting bug.
