@@ -1,0 +1,521 @@
+MISSION 1400.1 — APPLICATION FOUNDATION, LOGIN AND SECURITY
+
+OBJECTIVE
+
+Create the secure foundation of the Alpha Intelligence OS live web
+application.
+
+This sprint includes:
+
+- production application shell
+- backend server
+- frontend shell
+- owner-only authentication
+- secure session management
+- protected internal APIs
+- environment validation
+- basic responsive layout
+- health endpoint
+
+Do not implement exchange dashboards, portfolio pages, dry-run screens or
+live trading in this sprint.
+
+EXISTING REPOSITORY
+
+Preserve:
+
+- all existing mission evidence
+- Binance integration modules
+- deterministic append-only ledger
+- risk engine
+- audit modules
+- existing tests
+- existing Git history
+
+Do not rewrite stable exchange or ledger modules.
+
+TECHNOLOGY
+
+Prefer the repository’s existing application stack.
+
+If no suitable web stack exists, use:
+
+Backend:
+- Python
+- FastAPI
+- Pydantic typed models
+- session-based authentication
+
+Frontend:
+- React
+- TypeScript
+- Vite
+- responsive CSS
+- semantic HTML
+
+Use the smallest stable architecture that satisfies the requirements.
+
+ENVIRONMENT SECRETS
+
+Existing:
+
+- BINANCE_API_KEY
+- BINANCE_API_SECRET
+- BINANCE_TRADING_API_KEY
+- BINANCE_TRADING_API_SECRET
+- BINANCE_TR_API_KEY
+- BINANCE_TR_API_SECRET
+- SESSION_SECRET
+
+New required application secrets:
+
+- ALPHA_OWNER_USERNAME
+- ALPHA_OWNER_PASSWORD_HASH
+
+Never request or store a plaintext owner password.
+
+The password hash must be generated outside source code and stored only in
+Replit Secrets.
+
+If owner secrets are missing:
+
+- application must enter LOCKED SETUP mode
+- login must remain unavailable
+- exchange data must not be loaded
+- UI may list only required environment variable names
+- values must never be logged or displayed
+
+FEATURE FLAGS
+
+Support these server-side flags:
+
+- ALPHA_ENABLE_DRY_RUN
+- ALPHA_ENABLE_LIVE_TRADING
+- ALPHA_ENABLE_TRANSFERS
+- ALPHA_ENABLE_WITHDRAWALS
+
+Safe defaults:
+
+- ALPHA_ENABLE_DRY_RUN=false
+- ALPHA_ENABLE_LIVE_TRADING=false
+- ALPHA_ENABLE_TRANSFERS=false
+- ALPHA_ENABLE_WITHDRAWALS=false
+
+The frontend must never override server flags.
+
+No live-order client or write-enabled exchange route may be created in this
+sprint.
+
+CORE SECURITY RULES
+
+1. Exchange secrets remain server-side.
+2. Never put secrets into frontend environment variables.
+3. Never expose environment contents through an API.
+4. Never log passwords, password hashes, cookies or session IDs.
+5. Never log API secrets or signatures.
+6. Mask API keys if their status is displayed.
+7. Fail closed on authentication and configuration errors.
+8. Browser communicates only with Alpha backend.
+9. No Binance write endpoints.
+10. No withdrawals, transfers, leverage or mode changes.
+11. No exchange calls are required for this sprint.
+12. Do not modify historical mission evidence.
+13. Production debug mode must be disabled.
+14. All protected API routes require a valid authenticated session.
+
+AUTHENTICATION
+
+Implement owner-only authentication.
+
+Requirements:
+
+- username and password login form
+- password verification against ALPHA_OWNER_PASSWORD_HASH
+- use a modern password hashing scheme such as Argon2id or bcrypt
+- secure session cookie
+- HttpOnly cookie
+- SameSite=Lax or stricter
+- Secure=true in production
+- session expiration
+- logout
+- session invalidation
+- login rate limiting
+- generic login error message
+- timing-safe password verification
+- session fixation prevention
+- CSRF protection for state-changing application requests
+- no credentials in localStorage or sessionStorage
+- no “remember me” in this sprint
+
+Do not reveal whether the username or password was incorrect.
+
+APPLICATION ROUTES
+
+Public routes:
+
+- GET /health
+- GET /api/v1/health
+- GET /login
+- POST /api/v1/auth/login
+
+Protected routes:
+
+- POST /api/v1/auth/logout
+- GET /api/v1/auth/session
+- GET /api/v1/application/config
+- GET /
+
+Unauthenticated protected requests must return:
+
+- HTTP 401 for API requests
+- redirect to login for browser pages where appropriate
+
+HEALTH ENDPOINT
+
+GET /api/v1/health must return only safe operational information:
+
+- application status
+- version
+- environment mode
+- setup state: READY or LOCKED
+- current server timestamp
+
+Do not include:
+
+- secret names beyond intentionally required missing configuration names
+- secret values
+- API keys
+- filesystem paths
+- stack traces
+- exchange balances
+
+APPLICATION CONFIG ENDPOINT
+
+Authenticated endpoint:
+
+GET /api/v1/application/config
+
+Return only safe data:
+
+- application name
+- application version
+- current application mode
+- feature flag values
+- live trading status
+- transfer status
+- withdrawal status
+- UI language
+- authenticated owner display name
+
+Never return credentials or exchange secret values.
+
+APPLICATION SHELL
+
+Create the basic authenticated application layout.
+
+Desktop:
+
+- left sidebar
+- top header
+- central content workspace
+- logout control
+- application mode badge
+
+Mobile:
+
+- top navigation
+- collapsible menu
+- touch-friendly controls
+- no horizontal overflow
+
+Initial navigation entries may be displayed as disabled placeholders:
+
+- Genel Bakış
+- Portföy
+- Pozisyonlar
+- Emirler
+- Binance Global
+- Binance TR
+- Defter
+- Risk
+- Dry Run
+- Raporlar
+- Sistem Sağlığı
+- Ayarlar
+
+Only the initial “Başlangıç” page needs to work in this sprint.
+
+START PAGE
+
+After login display:
+
+- Alpha Intelligence OS title
+- authenticated owner status
+- application setup status
+- current server time
+- current feature flags
+- prominent warning:
+  “Canlı emir yürütme devre dışı”
+- next sprint status placeholder
+
+Do not load exchange data yet.
+
+TURKISH UI
+
+Default interface language must be Turkish.
+
+Prepare a translation structure for future English support.
+
+Use labels including:
+
+- Giriş Yap
+- Kullanıcı Adı
+- Parola
+- Oturumu Kapat
+- Uygulama Hazır
+- Kurulum Kilitli
+- Canlı Emir Devre Dışı
+- Bağlantı
+- Sistem Durumu
+- Yetkisiz Erişim
+- Tekrar Deneyin
+
+ERROR HANDLING
+
+Provide safe user-facing errors for:
+
+- invalid credentials
+- rate limit
+- expired session
+- missing application configuration
+- unavailable backend
+- malformed request
+- CSRF failure
+- unauthorized access
+
+Do not return raw exceptions or stack traces to the frontend.
+
+AUDIT EVENTS
+
+Record sanitized audit events for:
+
+- login success
+- login failure
+- logout
+- session expiration
+- unauthorized API access
+- CSRF rejection
+- application locked state
+
+Audit events may include:
+
+- event type
+- timestamp
+- request ID
+- outcome
+- masked client metadata
+
+Do not record:
+
+- passwords
+- password hashes
+- cookies
+- session tokens
+- API keys
+- secrets
+- authorization headers
+
+REQUEST IDs
+
+Generate a unique request ID for backend requests.
+
+Include it in:
+
+- safe backend logs
+- API response headers
+- structured error responses
+
+Do not use request IDs to expose internal traces.
+
+TESTS
+
+Preserve all existing tests.
+
+Add tests for:
+
+CONFIGURATION
+
+- required owner secret validation
+- locked setup mode
+- safe feature flag defaults
+- malformed feature flag values
+- no secret values in configuration responses
+
+AUTHENTICATION
+
+- successful login
+- invalid password
+- invalid username
+- generic error response
+- missing credentials
+- login rate limiting
+- logout
+- expired session
+- session invalidation
+- session fixation prevention
+
+AUTHORIZATION
+
+- unauthenticated protected API request
+- authenticated protected API request
+- unauthorized page redirect
+- CSRF rejection
+- safe 401 and 403 responses
+
+SECURITY
+
+- secure cookie attributes
+- no password in logs
+- no password hash in API response
+- no session token in logs
+- frontend bundle contains no Binance secret variable names as values
+- environment values are not exposed
+- live trading flag defaults to false
+- transfers default to false
+- withdrawals default to false
+
+FRONTEND
+
+- login form renders
+- invalid login error renders
+- authenticated shell renders
+- logout works
+- desktop navigation renders
+- mobile navigation renders
+- live execution warning renders
+- locked setup screen renders
+- keyboard navigation works
+- form labels are accessible
+
+DEPLOYMENT FOUNDATION
+
+Prepare:
+
+- production backend start command
+- production frontend build command
+- combined Replit start command
+- platform host and port binding
+- graceful startup
+- graceful shutdown
+- production debug disabled
+- static frontend serving
+- environment validation on startup
+
+Do not deploy publicly until tests pass.
+
+DOCUMENTATION
+
+Create or update:
+
+- README.md
+- docs/live_application.md
+- docs/security_model.md
+- docs/deployment_replit.md
+- docs/operator_guide_tr.md
+
+For this sprint document:
+
+- required owner secret names
+- password hash creation procedure
+- login process
+- logout process
+- locked setup behavior
+- safe feature flag defaults
+- production start command
+
+Never include secret values or example real keys.
+
+SECURITY SCAN
+
+Scan source, build output, logs and generated reports for:
+
+- API key values
+- Binance secret values
+- password values
+- password hashes
+- session tokens
+- signatures
+- Authorization headers
+- accidental environment dumps
+
+Do not print matched secret values during scanning.
+
+MISSION SUCCESS CRITERIA
+
+Mission 1400.1 may pass only if:
+
+1. Application starts successfully.
+2. Missing owner credentials produce LOCKED SETUP mode.
+3. Owner login works with configured secrets.
+4. Invalid logins fail safely.
+5. Protected routes require authentication.
+6. Secure session cookie works.
+7. Logout invalidates the session.
+8. Login rate limiting works.
+9. CSRF protection works.
+10. Desktop application shell works.
+11. Mobile application shell works.
+12. Live trading remains disabled.
+13. No Binance write route exists.
+14. Existing tests remain passing.
+15. New tests pass.
+16. Secret scan reports zero exposure.
+17. Code review passes.
+18. Changes are committed and pushed to GitHub.
+
+EXPECTED FINAL REPORT
+
+MISSION 1400.1: PASS / FAIL
+APPLICATION START:
+SETUP STATE:
+OWNER LOGIN:
+INVALID LOGIN:
+SESSION SECURITY:
+SESSION EXPIRATION:
+LOGOUT:
+CSRF PROTECTION:
+LOGIN RATE LIMIT:
+PROTECTED API ROUTES:
+DESKTOP SHELL:
+MOBILE SHELL:
+DEFAULT LANGUAGE:
+LIVE TRADING FLAG:
+TRANSFER FLAG:
+WITHDRAWAL FLAG:
+BINANCE WRITE ROUTES:
+ORDER ENDPOINT REQUESTS:
+OTHER EXCHANGE WRITE REQUESTS:
+SECRETS EXPOSED:
+FRONTEND SECRET SCAN:
+EXISTING TESTS:
+NEW AUTH TESTS:
+NEW SECURITY TESTS:
+NEW FRONTEND TESTS:
+TOTAL TESTS:
+CODE REVIEW:
+RUN_ID:
+COMMIT:
+GITHUB PUSH:
+KNOWN LIMITATIONS:
+NEXT ACTION:
+
+FINAL RESTRICTIONS
+
+- Do not call Binance APIs in this sprint.
+- Do not submit orders.
+- Do not create order submission routes.
+- Do not transfer or withdraw funds.
+- Do not change leverage, margin mode or position mode.
+- Do not expose secrets.
+- Do not modify historical mission evidence.
+- Do not declare PASS without tests, security scan, code review and GitHub push.

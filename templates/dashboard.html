@@ -251,6 +251,20 @@
       {% endif %}
     </section>
 
+    {# ── Canlı Borsa İzleme (salt okunur, Mission 1400) ── #}
+    <section class="card col-12" id="borsa-izleme">
+      <div class="status-head">
+        <h2>Canlı Borsa İzleme</h2>
+        <span class="sbadge s-stop" title="Otomatik canlı emir kapalı">SALT OKUNUR</span>
+      </div>
+      <p class="muted" style="font-size:.84rem">Veriler yalnızca backend üzerinden okunur; tarayıcı borsayla asla doğrudan konuşmaz. Otomatik canlı işlem <strong>kapalıdır</strong>.</p>
+      <div class="dgrid" id="exchange-grid">
+        <div><strong>Binance Global (Futures)</strong><span id="xg-global">yükleniyor…</span></div>
+        <div><strong>Binance TR (Spot)</strong><span id="xg-tr">yükleniyor…</span></div>
+        <div><strong>Son güncelleme</strong><span id="xg-updated">—</span></div>
+      </div>
+    </section>
+
     {# ── Bot Kontrolü ── #}
     <section class="card col-4" id="bot-kontrolu">
       <h2>Bot Kontrolü</h2>
@@ -1195,6 +1209,29 @@
     refreshSmartStatus();
     refreshAdaptiveStatus();
   }, 5000);
+
+  // ── Canlı borsa izleme (salt okunur; backend 30 sn önbellekli) ────────────
+  async function refreshExchange() {
+    try {
+      const r = await fetch("/api/exchange/summary", { cache: "no-store" });
+      if (!r.ok) return;
+      const d = await r.json();
+      const fmt = (s) => {
+        if (!s) return "—";
+        if (!s.configured) return "yapılandırılmamış";
+        if (!s.ok) return "hata: " + (s.error || "?");
+        if (!s.balances || !s.balances.length) return "bakiye 0";
+        return s.balances.map(b =>
+          b.asset + " " + (b.balance ?? b.free ?? "0")).join(" · ");
+      };
+      document.getElementById("xg-global").textContent = fmt(d.global_futures);
+      document.getElementById("xg-tr").textContent = fmt(d.tr_spot);
+      document.getElementById("xg-updated").textContent =
+        new Date().toLocaleTimeString("tr-TR");
+    } catch (_) {}
+  }
+  refreshExchange();
+  setInterval(refreshExchange, 60000);
 
   // ── CSRF token — tüm POST form'larına otomatik enjekte ───────────────────
   (function () {

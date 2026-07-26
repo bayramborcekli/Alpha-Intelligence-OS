@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 import secrets
 
-from flask import Flask, Response, render_template, request, redirect, session, url_for
+from flask import Flask, Response, jsonify, render_template, request, redirect, session, url_for
 from flask_wtf.csrf import CSRFProtect, CSRFError
 
 # ── alpha20_v1/ modülleri sys.path üzerinden import ──────────────────────────
@@ -1247,6 +1247,16 @@ def api_adaptive_status():
         "safety":     safety,
         "panel":      {k: v for k, v in panel.items() if k != "last_decisions"},
     }
+
+
+@app.get("/api/exchange/summary")
+def api_exchange_summary():
+    """Salt-okunur borsa özeti (Mission 1400). Tüm borsa istekleri
+    backend'den çıkar; secret'lar asla yanıtta yer almaz."""
+    import exchange_gateway as xg
+    resp = jsonify(xg.exchange_summary())
+    resp.headers["Cache-Control"] = "no-store, private"
+    return resp
 
 
 @app.get("/api/daily-report")
