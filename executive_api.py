@@ -40,6 +40,20 @@ def executive_summary(bot_is_running: bool, app_mode: str) -> dict:
     integ = la.ledger_integrity()
     aud = la.audit_summary()
 
+    # Mission 1400.6 — Risk Motoru: doğrulanmış deterministik skor
+    risk_level = None
+    risk_engine_status = "Bağlantı Yok"
+    try:
+        import risk_api as ra
+        rs = ra.summary()
+        if rs.get("ok"):
+            risk_engine_status = "Bağlı"
+            if rs.get("classification"):
+                risk_level = (f"{rs['classification']} "
+                              f"({rs['risk_score']}/100)")
+    except Exception:
+        risk_engine_status = "Bağlantı Yok"
+
     acc = ga.get("account") or {} if ga.get("ok") else {}
 
     # ── Performans şeridi (doğrulanmış veri; yoksa null) ──────────────────
@@ -75,7 +89,8 @@ def executive_summary(bot_is_running: bool, app_mode: str) -> dict:
             "pnl_30d_usdt": None,
             "open_position_count": open_positions,
             "open_order_count": open_orders,
-            "risk_level": None,           # doğrulanmış risk metriği yok
+            # 1400.6: deterministik risk motoru skoru (doğrulanmış girdiler)
+            "risk_level": risk_level,
         },
         "status_bar": {
             "binance_global": _conn_status(ga),
@@ -83,7 +98,7 @@ def executive_summary(bot_is_running: bool, app_mode: str) -> dict:
             "binance_tr": _conn_status(ta),
             "ledger": ledger_status,
             "audit": "Bağlı" if aud.get("ok") else "Bağlantı Yok",
-            "risk_engine": "Bağlı" if bot_is_running else "Bağlantı Yok",
+            "risk_engine": risk_engine_status,
             "health": "Bağlı",            # uygulama bu yanıtı üretebildi
         },
     }

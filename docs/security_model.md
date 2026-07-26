@@ -48,6 +48,11 @@ değerler asla loglanmaz/gösterilmez.
   anahtar ve iç yol temizliğinden geçirilir. Bütünlük FAIL durumunda defter
   CSV dışa aktarımı fail-closed kapanır. Denetim API'si parola/hash/token/
   çerez döndürmez ve satır getirme rekürsif denetim kaydı üretmez.
+- Mission 1400.5/1400.6: Yönetici üst çubuğu ve Risk Motoru rotaları
+  GET-only ve oturum korumalıdır. Risk motoru tavsiye niteliğindedir:
+  borsaya yazma isteği yoktur, simülatör yerel hesaptır (tipli doğrulama,
+  Decimal aritmetik), risk geçmişi ekle-yalnızdır ve doğrulanamayan
+  değerler tahmin edilmek yerine "Veri Yok" olarak raporlanır.
 
 ## Denetim (audit)
 `security.log` şu olayları maskelenmiş meta verilerle kaydeder: giriş

@@ -38,6 +38,9 @@
 | `GET /api/v1/audit/{events,summary}` | korumalı | uygulama denetim olayları |
 | `GET /api/v1/reports`, `/api/v1/reports/{id}`, `/{id}/download` | korumalı | görev raporu kayıt defteri |
 | `GET /api/v1/ledger/export.csv`, `/api/v1/audit/export.csv` | korumalı | defter/denetim CSV dışa aktarımı |
+| `GET /risk` | korumalı | Risk İstihbarat Motoru çalışma alanı (1400.6) |
+| `GET /api/risk/{summary,exposure,alerts,history,simulator}` | korumalı | salt-okunur risk analizi (tavsiye niteliğinde) |
+| `GET /api/v1/executive/summary` | korumalı | yönetici üst çubuğu özeti (1400.5) |
 
 Kimliksiz istek: API'de `401` (kilitli kurulumda `403`), tarayıcı
 sayfalarında `/login` yönlendirmesi. Her yanıtta `X-Request-ID` başlığı bulunur.
@@ -140,6 +143,31 @@ kod yolu yoktur.
 - **Tazelik:** Defter GÜNCEL (bütünlük ≤15 dk önce doğrulandı) / ESKİ VERİ /
   KULLANILAMIYOR; raporlar MEVCUT / EKSİK / GEÇERSİZ. Tarihsel kanıt için
   "canlı" terimi kullanılmaz.
+
+## Risk İstihbarat Motoru (Mission 1400.6)
+- **Tavsiye niteliğinde:** motor hiçbir otomatik işlem yapmaz, emir
+  oluşturmaz, borsaya yazma isteği göndermez. Tüm rotalar GET-only.
+- **Deterministik skor (0-100):** kural tabanlı cezalarla hesaplanır
+  (marj kullanımı, maruziyet, konsantrasyon, kullanılabilir bakiye, açık
+  emir, günlük düşüş). Yapay zekâ yok, rastgelelik yok; aynı girdi aynı
+  skoru üretir. Sınıflar: Mükemmel / İyi / Orta / Yüksek Risk / Kritik.
+- **Maruziyet evreni tek para birimidir** (Global Futures USDT). Binance TR
+  varlıkları yalnızca adet olarak listelenir; kur tahminiyle USD karşılığı
+  ÜRETİLMEZ, çapraz kur birleştirme yapılmaz.
+- **Düşüş (drawdown) değerleri** yalnızca yerel ekle-yalnız anlık görüntü
+  geçmişinden hesaplanır; yeterli doğrulanmış geçmiş yoksa "Veri Yok"
+  gösterilir — asla tahmin edilmez.
+- **Uyarılar tekrarsızdır** (kod başına en çok bir uyarı) ve yalnızca
+  bilgilendiricidir.
+- **Simülatör** tamamen yerel hesaptır: sembol/yön/fiyat/miktar/kaldıraç
+  tipli doğrulamadan geçer (400 INVALID_PARAMETER), borsaya istek atılmaz,
+  emir önizlemesi/gönderimi yoktur. Tasfiye tamponu 1/kaldıraç yaklaşımıdır
+  ve açıkça öyle etiketlenir.
+- **Geçmiş** `risk_history.jsonl` dosyasında ekle-yalnız tutulur: günde en
+  çok bir kayıt, önceki kayıtların üzerine asla yazılmaz, bozuk satırlar
+  izole edilir (dosya onarılmaz). Tüm para matematiği Decimal'dir.
+- Yönetici üst çubuğundaki "Risk Seviyesi" artık bu motorun doğrulanmış
+  skorundan beslenir.
 
 ## Dil
 Varsayılan arayüz dili Türkçe'dir (`ui_language: "tr"` yapılandırma

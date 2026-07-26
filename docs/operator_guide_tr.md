@@ -68,6 +68,16 @@ ve yalnızca sunucu tarafında, açık talimatla etkinleştirilebilir.
 - Her üç sayfada da **⬇ CSV Dışa Aktar** (defter/denetim) Excel-uyumludur;
   bütünlük FAIL ise defter dışa aktarımı güvenlik gereği kapanır.
 
+## Risk sayfası (Mission 1400.6)
+- **⚖️ Risk:** hesabın genel risk skorunu (0-100), maruziyet dağılımını,
+  konsantrasyonu, tavsiye uyarılarını ve risk trendini gösterir.
+- Skor deterministik kurallarla hesaplanır ve yalnızca bilgilendirir;
+  hiçbir otomatik işlem tetiklemez.
+- **Simülatör** ile bir işlemin portföye etkisini emir GÖNDERMEDEN
+  hesaplayabilirsiniz — borsaya hiçbir istek atılmaz.
+- Düşüş değerleri yerel günlük kayıtlardan hesaplanır; ilk günlerde
+  "Veri Yok" görünmesi normaldir.
+
 ## Üretim başlatma komutu
 ```
 gunicorn -c gunicorn.conf.py app:app

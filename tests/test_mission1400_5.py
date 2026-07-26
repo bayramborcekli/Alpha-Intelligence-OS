@@ -71,7 +71,9 @@ class TestSummaryModel:
         assert p["total_pnl_pct"] is None
         assert p["pnl_7d_usdt"] is None
         assert p["pnl_30d_usdt"] is None
-        assert p["risk_level"] is None
+        # 1400.6 sonrası: risk_level doğrulanmış deterministik motor
+        # skorundan gelir (veya kaynak yoksa null) — asla tahmin değildir.
+        assert p["risk_level"] is None or "/100" in p["risk_level"]
         assert p["portfolio_total_label"] == "Global Futures (USDT)"
         s = d["status_bar"]
         for k in ("binance_global", "binance_futures", "binance_tr",
@@ -149,11 +151,11 @@ class TestQuickActions:
         html = client.get("/overview").get_data(as_text=True)
         assert "Hızlı Erişim" in html
         for href in ("/portfolio", "/positions", "/orders", "/ledger",
-                     "/audit", "/reports"):
+                     "/audit", "/reports", "/risk"):   # /risk 1400.6'da aktif
             assert f'class="quick-card" href="{href}"' in html, href
-        for disabled in ("Risk", "Dry Run", "Sistem Sağlığı", "Ayarlar"):
+        for disabled in ("Dry Run", "Sistem Sağlığı", "Ayarlar"):
             assert disabled in html, disabled
-        assert html.count('aria-disabled="true"') >= 4
+        assert html.count('aria-disabled="true"') >= 3
 
 
 class TestWriteSafety:

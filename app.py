@@ -1622,6 +1622,63 @@ def orders_page():
 
 # ── Mission 1400.4 — Defter / Denetim / Raporlar (salt okunur) ──────────────
 
+# ── Mission 1400.6 — Risk Intelligence Engine (salt-okunur, tavsiye) ────────
+
+def _risk_json(fn):
+    try:
+        return jsonify(fn())
+    except Exception:
+        app.logger.exception("risk api hatası")
+        return jsonify({"ok": False, "error": {
+            "code": "RISK_ENGINE_ERROR",
+            "message": "Risk hesabı tamamlanamadı."}}), 500
+
+
+@app.get("/risk")
+def risk_page():
+    return _render_workspace("risk.html", "risk")
+
+
+@app.get("/api/risk/summary")
+def api_risk_summary():
+    import risk_api as ra
+    return _risk_json(ra.summary)
+
+
+@app.get("/api/risk/exposure")
+def api_risk_exposure():
+    import risk_api as ra
+    return _risk_json(ra.exposure)
+
+
+@app.get("/api/risk/alerts")
+def api_risk_alerts():
+    import risk_api as ra
+    return _risk_json(ra.alerts)
+
+
+@app.get("/api/risk/history")
+def api_risk_history():
+    import risk_api as ra
+    return _risk_json(ra.history)
+
+
+@app.get("/api/risk/simulator")
+def api_risk_simulator():
+    """Salt-okunur yerel simülasyon — borsaya HİÇBİR istek atılmaz."""
+    import risk_api as ra
+    try:
+        return jsonify(ra.simulate(request.args.to_dict()))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": {
+            "code": "INVALID_PARAMETER", "message": str(exc)}}), 400
+    except Exception:
+        app.logger.exception("simülatör hatası")
+        return jsonify({"ok": False, "error": {
+            "code": "RISK_ENGINE_ERROR",
+            "message": "Simülasyon tamamlanamadı."}}), 500
+
+
 @app.get("/api/v1/executive/summary")
 def api_executive_summary():
     """Mission 1400.5 — yönetici üst çubuğu özeti (salt-okunur)."""

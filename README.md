@@ -12,6 +12,11 @@ açık talimatla etkinleştirilebilir.
   tazelik politikası, yazma sayaçları — Mission 1400.2)
 - `portfolio_api.py` — Portföy/Pozisyon/Emir servis katmanı + güvenli CSV
   dışa aktarım (formül-enjeksiyon korumalı — Mission 1400.3)
+- `executive_api.py` — Yönetici üst çubuğu özeti: doğrulanmış-yalnız
+  performans şeridi + durum çubuğu (Mission 1400.5)
+- `risk_api.py` — Risk İstihbarat Motoru: deterministik sağlık skoru,
+  maruziyet/konsantrasyon analizi, tekrarsız tavsiye uyarıları, ekle-yalnız
+  risk geçmişi, yerel işlem-öncesi simülatör (Mission 1400.6; salt-okunur)
 - `ledger_api.py` — Defter/Denetim/Rapor servis katmanı: ekle-yalnız defter
   görünümü, bütünlük doğrulaması, 1310B mutabakat kanıtı, sabit rapor kayıt
   defteri, güvenli CSV (Mission 1400.4; PDF ertelendi)

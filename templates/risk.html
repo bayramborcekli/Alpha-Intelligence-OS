@@ -1,0 +1,308 @@
+{% extends "dash_base.html" %}
+{% block title %}Risk{% endblock %}
+{% block heading %}⚖️ Risk İstihbarat Motoru{% endblock %}
+{% block subheading %}Tavsiye niteliğinde analiz — otomatik işlem yok{% endblock %}
+
+{% block content %}
+<style>
+  .rk-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+             margin-bottom:18px; }
+  .rk-card { background:var(--panel); border:1px solid var(--border); border-radius:10px;
+             padding:12px 14px; }
+  .rk-card h3 { font-size:.72rem; color:var(--muted); text-transform:uppercase;
+                letter-spacing:.05em; margin-bottom:6px; font-weight:600; }
+  .rk-card .v { font-size:1.15rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .rk-pos { color:var(--ok); } .rk-neg { color:var(--danger); } .rk-warn { color:var(--warn); }
+  .rk-sec { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+            padding:16px; margin-bottom:18px; }
+  .rk-sec h2 { font-size:.9rem; margin-bottom:12px; }
+  .rk-note { color:var(--muted); font-size:.76rem; margin-top:8px; }
+  table.rk { width:100%; border-collapse:collapse; font-size:.84rem; }
+  table.rk th, table.rk td { padding:7px 8px; text-align:left;
+    border-bottom:1px solid rgba(48,54,61,.5); }
+  table.rk th { color:var(--muted); font-weight:600; }
+  .rk-bar { height:10px; background:var(--soft); border-radius:5px; overflow:hidden; }
+  .rk-bar i { display:block; height:100%; background:var(--accent); }
+  .rk-alert { border-left:3px solid var(--warn); background:rgba(210,153,34,.08);
+              padding:8px 12px; border-radius:6px; margin-bottom:8px; font-size:.85rem; }
+  .rk-alert.h { border-color:var(--danger); background:rgba(248,81,73,.08); }
+  .rk-alert.i { border-color:var(--accent); background:rgba(88,166,255,.06); }
+  .sim-grid { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
+  .sim-grid label { display:block; font-size:.76rem; color:var(--muted); margin-bottom:4px; }
+  .sim-grid input, .sim-grid select { width:100%; background:var(--soft); color:var(--text);
+    border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:.86rem; }
+  .sim-btn { margin-top:12px; background:var(--soft); color:var(--accent);
+    border:1px solid var(--accent); border-radius:8px; padding:9px 16px;
+    font-weight:700; cursor:pointer; }
+  .sim-btn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  svg.rk-chart { width:100%; height:120px; background:var(--soft); border-radius:8px; }
+</style>
+
+<div class="rk-grid" id="rk-cards" aria-live="polite">
+  <div class="rk-card"><h3>Genel Risk Skoru</h3><div class="v" id="c-score">—</div></div>
+  <div class="rk-card"><h3>Portföy Sağlığı</h3><div class="v" id="c-health">—</div></div>
+  <div class="rk-card"><h3>Mevcut Maruziyet</h3><div class="v" id="c-exp">—</div></div>
+  <div class="rk-card"><h3>Kullanılabilir Marj</h3><div class="v" id="c-avail">—</div></div>
+  <div class="rk-card"><h3>Marj Kullanımı</h3><div class="v" id="c-usage">—</div></div>
+  <div class="rk-card"><h3>Açık Pozisyon</h3><div class="v" id="c-pos">—</div></div>
+  <div class="rk-card"><h3>Açık Emir</h3><div class="v" id="c-ord">—</div></div>
+  <div class="rk-card"><h3>En Büyük Pozisyon</h3><div class="v" id="c-big">—</div></div>
+  <div class="rk-card"><h3>En Büyük Kayıp</h3><div class="v rk-neg" id="c-loss">—</div></div>
+  <div class="rk-card"><h3>En Büyük Kazanç</h3><div class="v rk-pos" id="c-gain">—</div></div>
+  <div class="rk-card"><h3>Günlük Düşüş</h3><div class="v" id="c-dd1">—</div></div>
+  <div class="rk-card"><h3>Haftalık Düşüş</h3><div class="v" id="c-dd7">—</div></div>
+  <div class="rk-card"><h3>30 Günlük Düşüş</h3><div class="v" id="c-dd30">—</div></div>
+  <div class="rk-card"><h3>Son Güncelleme</h3><div class="v" style="font-size:.85rem"
+       id="c-upd">—</div></div>
+</div>
+
+<section class="rk-sec" aria-labelledby="h-alerts">
+  <h2 id="h-alerts">🔔 Tavsiye Uyarıları</h2>
+  <div id="alerts-box"><p class="rk-note">Yükleniyor…</p></div>
+  <p class="rk-note">Uyarılar tavsiye niteliğindedir; hiçbir otomatik işlem tetiklemez.</p>
+</section>
+
+<section class="rk-sec" aria-labelledby="h-expo">
+  <h2 id="h-expo">📊 Portföy Maruziyeti (Global Futures, USDT)</h2>
+  <div style="overflow-x:auto"><table class="rk" id="expo-table" aria-describedby="h-expo">
+    <thead><tr><th scope="col">Varlık</th><th scope="col">Değer (USDT)</th>
+      <th scope="col">Pay %</th><th scope="col">Dağılım</th></tr></thead>
+    <tbody><tr><td colspan="4">Yükleniyor…</td></tr></tbody>
+  </table></div>
+  <div id="expo-meta" class="rk-note"></div>
+  <div id="tr-holdings" class="rk-note"></div>
+</section>
+
+<section class="rk-sec" aria-labelledby="h-conc">
+  <h2 id="h-conc">🎯 Pozisyon Konsantrasyonu</h2>
+  <div style="overflow-x:auto"><table class="rk" id="conc-table">
+    <thead><tr><th scope="col">Sembol</th><th scope="col">Yön</th>
+      <th scope="col">Değer (USDT)</th><th scope="col">Pay %</th></tr></thead>
+    <tbody><tr><td colspan="4">Yükleniyor…</td></tr></tbody>
+  </table></div>
+  <div id="conc-warn"></div>
+  <p class="rk-note">Sektör gruplaması: doğrulanmış sektör verisi olmadığı için gösterilmez.</p>
+</section>
+
+<section class="rk-sec" aria-labelledby="h-trend">
+  <h2 id="h-trend">📈 Risk Trendi (yerel ekle-yalnız geçmiş)</h2>
+  <svg class="rk-chart" id="trend-chart" role="img"
+       aria-label="Günlük risk skoru trend grafiği"></svg>
+  <div style="overflow-x:auto;margin-top:10px"><table class="rk" id="hist-table">
+    <thead><tr><th scope="col">Tarih</th><th scope="col">Skor</th>
+      <th scope="col">Maruziyet (USDT)</th><th scope="col">Maruziyet %</th>
+      <th scope="col">Marj Kullanımı %</th><th scope="col">Günlük Düşüş %</th></tr></thead>
+    <tbody><tr><td colspan="6">Yükleniyor…</td></tr></tbody>
+  </table></div>
+  <p class="rk-note">Geçmiş kayıtlar günde bir kez eklenir ve asla üzerine yazılmaz.</p>
+</section>
+
+<section class="rk-sec" aria-labelledby="h-sim">
+  <h2 id="h-sim">🧮 İşlem Öncesi Risk Simülatörü (borsa iletişimi YOK)</h2>
+  <form id="sim-form">
+    <div class="sim-grid">
+      <div><label for="sim-symbol">Sembol</label>
+        <input id="sim-symbol" name="symbol" required maxlength="20"
+               pattern="[A-Za-z0-9]{2,20}" placeholder="BTCUSDT"></div>
+      <div><label for="sim-direction">Yön</label>
+        <select id="sim-direction" name="direction">
+          <option value="LONG">LONG</option><option value="SHORT">SHORT</option>
+        </select></div>
+      <div><label for="sim-price">Giriş Fiyatı</label>
+        <input id="sim-price" name="entry_price" required inputmode="decimal"></div>
+      <div><label for="sim-qty">Miktar</label>
+        <input id="sim-qty" name="quantity" required inputmode="decimal"></div>
+      <div><label for="sim-lev">Kaldıraç (1-125)</label>
+        <input id="sim-lev" name="leverage" required inputmode="numeric" value="1"></div>
+    </div>
+    <button class="sim-btn" type="submit">Simüle Et (yalnızca hesap)</button>
+  </form>
+  <div id="sim-result" style="margin-top:12px" aria-live="polite"></div>
+  <p class="rk-note">Bu araç emir oluşturmaz, önizlemez ve göndermez; borsaya hiçbir
+    istek atılmaz. Tasfiye tamponu yaklaşıktır (1/kaldıraç, bakım marjı hariç).</p>
+</section>
+{% endblock %}
+
+{% block page_script %}
+<script>
+(function () {
+  "use strict";
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { var d = document.createElement("div");
+    d.textContent = s === null || s === undefined ? "" : String(s);
+    return d.innerHTML; }
+  function vy(v, suffix) { return (v === null || v === undefined)
+    ? "Veri Yok" : esc(v) + (suffix || ""); }
+
+  fetch("/api/risk/summary", { credentials: "same-origin" })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.ok) return;
+      el("c-score").textContent = d.risk_score === null ? "Veri Yok"
+        : d.risk_score + " / 100";
+      el("c-health").textContent = d.classification || "Veri Yok";
+      el("c-exp").textContent = d.current_exposure_usdt === null ? "Veri Yok"
+        : d.current_exposure_usdt + " USDT";
+      el("c-avail").textContent = d.available_margin_usdt === null ? "Veri Yok"
+        : d.available_margin_usdt + " USDT";
+      el("c-usage").textContent = d.margin_usage_pct === null ? "Veri Yok"
+        : "%" + d.margin_usage_pct;
+      el("c-pos").textContent = d.open_position_count === null ? "Veri Yok"
+        : d.open_position_count;
+      el("c-ord").textContent = d.open_order_count === null ? "Veri Yok"
+        : d.open_order_count;
+      el("c-big").textContent = d.largest_position
+        ? d.largest_position.symbol + " (%" + (d.largest_position.share_pct || "?") + ")"
+        : "—";
+      el("c-loss").textContent = d.largest_unrealized_loss
+        ? d.largest_unrealized_loss.symbol + " " +
+          d.largest_unrealized_loss.unrealized_pnl_usdt : "—";
+      el("c-gain").textContent = d.largest_unrealized_gain
+        ? d.largest_unrealized_gain.symbol + " +" +
+          d.largest_unrealized_gain.unrealized_pnl_usdt : "—";
+      el("c-dd1").textContent = d.daily_drawdown_pct === null ? "Veri Yok"
+        : "%" + d.daily_drawdown_pct;
+      el("c-dd7").textContent = d.weekly_drawdown_pct === null ? "Veri Yok"
+        : "%" + d.weekly_drawdown_pct;
+      el("c-dd30").textContent = d.monthly_drawdown_pct === null ? "Veri Yok"
+        : "%" + d.monthly_drawdown_pct;
+      el("c-upd").textContent = (d.as_of || "").replace("T", " ");
+      // Konsantrasyon: top5 + eşik uyarıları
+      var ctb = el("conc-table").querySelector("tbody");
+      if (d.top5_positions === null || d.top5_positions === undefined) {
+        ctb.innerHTML = "<tr><td colspan='4'>Veri Yok</td></tr>";
+      } else if (!d.top5_positions.length) {
+        ctb.innerHTML = "<tr><td colspan='4'>Açık pozisyon yok.</td></tr>";
+      } else {
+        ctb.innerHTML = d.top5_positions.map(function (p) {
+          return "<tr><td>" + esc(p.symbol) + "</td><td>" + esc(p.direction) +
+            "</td><td>" + vy(p.notional_usdt) + "</td><td>" +
+            (p.share_pct === null ? "Veri Yok" : "%" + esc(p.share_pct)) +
+            "</td></tr>";
+        }).join("");
+      }
+      var cw = el("conc-warn");
+      cw.innerHTML = (d.concentration_warnings || []).map(function (w) {
+        return "<div class='rk-alert'>" + esc(w) + "</div>";
+      }).join("");
+    });
+
+  fetch("/api/risk/alerts", { credentials: "same-origin" })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var box = el("alerts-box");
+      if (!d.ok) { box.innerHTML = "<p class='rk-note'>Veri Yok</p>"; return; }
+      if (!d.alerts.length) {
+        box.innerHTML = "<p class='rk-note'>✅ Aktif uyarı yok.</p>"; return; }
+      box.innerHTML = d.alerts.map(function (a) {
+        var cls = a.severity === "HIGH" ? "h" : (a.severity === "INFO" ? "i" : "");
+        return "<div class='rk-alert " + cls + "'><strong>" + esc(a.severity) +
+          "</strong> · " + esc(a.code) + " — " + esc(a.message) + "</div>";
+      }).join("");
+    });
+
+  fetch("/api/risk/exposure", { credentials: "same-origin" })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var tb = el("expo-table").querySelector("tbody");
+      if (!d.ok) { tb.innerHTML = "<tr><td colspan='4'>Veri Yok</td></tr>"; return; }
+      if (!d.by_asset.length) {
+        tb.innerHTML = "<tr><td colspan='4'>Açık pozisyon yok.</td></tr>";
+      } else {
+        tb.innerHTML = d.by_asset.map(function (a) {
+          var pct = a.exposure_pct === null ? 0 : parseFloat(a.exposure_pct);
+          return "<tr><td>" + esc(a.asset) + "</td><td>" +
+            vy(a.exposure_value_usdt) + "</td><td>" +
+            (a.exposure_pct === null ? "Veri Yok" : "%" + esc(a.exposure_pct)) +
+            "</td><td><div class='rk-bar' aria-hidden='true'><i style='width:" +
+            Math.min(100, pct) + "%'></i></div></td></tr>";
+        }).join("");
+      }
+      el("expo-meta").textContent =
+        "Brüt: " + vy(d.gross_exposure_usdt, " USDT") +
+        " · Net: " + vy(d.net_exposure_usdt, " USDT") +
+        " · Long: " + vy(d.by_direction.long_pct === null ? null
+          : "%" + d.by_direction.long_pct) +
+        " · Short: " + vy(d.by_direction.short_pct === null ? null
+          : "%" + d.by_direction.short_pct) +
+        " · Marj oranı: " + vy(d.exposure_pct_of_margin === null ? null
+          : "%" + d.exposure_pct_of_margin);
+      var trh = d.binance_tr_holdings || {};
+      var items = (trh.stablecoins || []).concat(trh.other_assets || []);
+      el("tr-holdings").textContent = items.length
+        ? "Binance TR (yalnızca adet — kur tahmini yapılmaz): " +
+          items.map(function (i) { return i.asset + ": " + i.quantity; }).join(" · ")
+        : "";
+    });
+
+  fetch("/api/risk/history", { credentials: "same-origin" })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var tb = el("hist-table").querySelector("tbody");
+      if (!d.ok || !d.snapshots.length) {
+        tb.innerHTML = "<tr><td colspan='6'>Henüz geçmiş kaydı yok — ilk anlık " +
+          "görüntü bugün eklendi veya eklenecek.</td></tr>"; return; }
+      var snaps = d.snapshots.slice().reverse();
+      tb.innerHTML = snaps.slice(0, 60).map(function (s) {
+        return "<tr><td>" + esc(s.date) + "</td><td>" + vy(s.risk_score) +
+          "</td><td>" + vy(s.gross_exposure_usdt) + "</td><td>" +
+          vy(s.exposure_pct_of_margin) + "</td><td>" + vy(s.margin_usage_pct) +
+          "</td><td>" + vy(s.daily_drawdown_pct) + "</td></tr>";
+      }).join("");
+      // Basit SVG trend çizgisi (animasyonsuz)
+      var svg = el("trend-chart");
+      var pts = d.snapshots.filter(function (s) {
+        return s.risk_score !== null && s.risk_score !== undefined; });
+      if (pts.length >= 2) {
+        var w = 600, h = 120, pad = 8;
+        svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+        var step = (w - 2 * pad) / (pts.length - 1);
+        var path = pts.map(function (s, i) {
+          var x = pad + i * step;
+          var y = h - pad - (s.risk_score / 100) * (h - 2 * pad);
+          return (i ? "L" : "M") + x.toFixed(1) + "," + y.toFixed(1);
+        }).join(" ");
+        svg.innerHTML = "<path d='" + path +
+          "' fill='none' stroke='#58a6ff' stroke-width='2'/>";
+      } else {
+        svg.innerHTML = "<text x='12' y='60' fill='#8b949e' font-size='13'>" +
+          "Trend için en az 2 günlük kayıt gerekir.</text>";
+      }
+    });
+
+  el("sim-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var q = new URLSearchParams({
+      symbol: el("sim-symbol").value.trim().toUpperCase(),
+      direction: el("sim-direction").value,
+      entry_price: el("sim-price").value.trim(),
+      quantity: el("sim-qty").value.trim(),
+      leverage: el("sim-lev").value.trim()
+    });
+    fetch("/api/risk/simulator?" + q.toString(), { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var box = el("sim-result");
+        if (!d.ok) {
+          box.innerHTML = "<div class='rk-alert h'>" +
+            esc((d.error || {}).message || "Geçersiz girdi") + "</div>";
+          return;
+        }
+        box.innerHTML =
+          "<table class='rk'><tbody>" +
+          "<tr><td>Pozisyon Değeri</td><td>" + vy(d.position_value_usdt, " USDT") + "</td></tr>" +
+          "<tr><td>Tahmini Marj</td><td>" + vy(d.estimated_margin_usdt, " USDT") + "</td></tr>" +
+          "<tr><td>İşlem Sonrası Maruziyet</td><td>" +
+            (d.portfolio_exposure_after_pct === null ? "Veri Yok"
+             : "%" + esc(d.portfolio_exposure_after_pct)) + "</td></tr>" +
+          "<tr><td>İşlem Sonrası Konsantrasyon</td><td>" +
+            (d.concentration_after_pct === null ? "Veri Yok"
+             : "%" + esc(d.concentration_after_pct)) + "</td></tr>" +
+          "<tr><td>Tahmini Tasfiye Tamponu</td><td>%" +
+            esc(d.estimated_liquidation_buffer_pct) + "</td></tr>" +
+          "</tbody></table><p class='rk-note'>" + esc(d.liquidation_note) + "</p>";
+      });
+  });
+})();
+</script>
+{% endblock %}

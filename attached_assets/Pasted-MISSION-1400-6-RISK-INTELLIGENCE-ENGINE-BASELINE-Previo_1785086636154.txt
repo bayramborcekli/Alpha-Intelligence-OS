@@ -1,0 +1,451 @@
+MISSION 1400.6
+RISK INTELLIGENCE ENGINE
+
+BASELINE
+
+Previous Mission:
+1400.5 PASS
+
+Commit:
+526feb1
+
+Branch:
+main
+
+------------------------------------------------------------
+OBJECTIVE
+------------------------------------------------------------
+
+Introduce the first deterministic Risk Intelligence Engine.
+
+This engine SHALL:
+
+• Measure portfolio risk.
+• Evaluate account health.
+• Detect concentration.
+• Monitor exposure.
+• Generate advisory alerts.
+
+This mission MUST NOT introduce:
+
+× AI
+× Machine Learning
+× Exchange write requests
+× Automatic trading
+× Order creation
+× Order cancellation
+
+Risk Engine is ADVISORY ONLY.
+
+------------------------------------------------------------
+PACKAGE 6.1
+RISK DASHBOARD
+------------------------------------------------------------
+
+Create:
+
+/risk
+
+Navigation:
+
+Risk
+
+Dashboard shows:
+
+• Risk Score
+• Portfolio Health
+• Margin Usage
+• Available Margin
+• Current Exposure
+• Open Positions
+• Open Orders
+• Largest Position
+• Largest Unrealized Gain
+• Largest Unrealized Loss
+• Daily Drawdown
+• Weekly Drawdown
+• Monthly Drawdown
+• Last Refresh
+
+Unknown values SHALL display:
+
+—
+
+Never estimate.
+
+------------------------------------------------------------
+PACKAGE 6.2
+PORTFOLIO EXPOSURE
+------------------------------------------------------------
+
+Calculate exposure by:
+
+• Exchange
+• Asset
+• Quote Currency
+• Market
+• Long
+• Short
+• Cash
+• Stablecoins
+
+Display:
+
+Exposure %
+
+Exposure Value
+
+If data unavailable:
+
+Display "Veri Yok".
+
+------------------------------------------------------------
+PACKAGE 6.3
+POSITION CONCENTRATION
+------------------------------------------------------------
+
+Calculate:
+
+Largest Position
+
+Top 5 Positions
+
+Largest Position %
+
+Exchange %
+
+Warnings:
+
+Medium
+
+High
+
+Critical
+
+Thresholds configurable.
+
+No AI.
+
+------------------------------------------------------------
+PACKAGE 6.4
+ACCOUNT HEALTH SCORE
+------------------------------------------------------------
+
+Produce deterministic score:
+
+0–100
+
+Classification:
+
+90–100
+Excellent
+
+75–89
+Good
+
+60–74
+Moderate
+
+40–59
+Elevated Risk
+
+0–39
+Critical
+
+Inputs:
+
+Exposure
+
+Margin Usage
+
+Drawdown
+
+Concentration
+
+Open Orders
+
+Available Balance
+
+Never invent values.
+
+------------------------------------------------------------
+PACKAGE 6.5
+RISK ALERT ENGINE
+------------------------------------------------------------
+
+Generate advisory alerts.
+
+Examples:
+
+High Margin Usage
+
+High Concentration
+
+High Exposure
+
+Negative Drawdown
+
+Low Available Balance
+
+Duplicate alerts prohibited.
+
+Every alert contains:
+
+Timestamp
+
+Severity
+
+Source
+
+Explanation
+
+------------------------------------------------------------
+PACKAGE 6.6
+PRE-TRADE SIMULATOR
+------------------------------------------------------------
+
+Read-only simulator.
+
+Inputs:
+
+Exchange
+
+Symbol
+
+Direction
+
+Entry Price
+
+Quantity
+
+Leverage
+
+Calculates:
+
+Position Value
+
+Estimated Margin
+
+Exposure After Trade
+
+Largest Position %
+
+Estimated Concentration
+
+Estimated Liquidation Buffer
+(if calculable)
+
+NO exchange communication.
+
+------------------------------------------------------------
+PACKAGE 6.7
+RISK HISTORY
+------------------------------------------------------------
+
+Store snapshots.
+
+Each snapshot:
+
+Timestamp
+
+Risk Score
+
+Exposure
+
+Margin Usage
+
+Drawdown
+
+Alerts
+
+History append-only.
+
+No overwrite.
+
+------------------------------------------------------------
+PACKAGE 6.8
+RISK API
+------------------------------------------------------------
+
+Create:
+
+GET /api/v1/risk/summary
+
+GET /api/v1/risk/exposure
+
+GET /api/v1/risk/alerts
+
+GET /api/v1/risk/history
+
+POST /api/v1/risk/simulator
+
+NOTE:
+
+Simulator POST performs local calculations only.
+
+It MUST NEVER communicate with exchanges.
+
+------------------------------------------------------------
+PACKAGE 6.9
+VISUALIZATION
+------------------------------------------------------------
+
+Charts:
+
+Exposure Allocation
+
+Margin Usage
+
+Risk Trend
+
+Drawdown
+
+Portfolio Allocation
+
+Requirements:
+
+Responsive
+
+Accessible
+
+No animations
+
+------------------------------------------------------------
+PACKAGE 6.10
+CONFIGURATION
+------------------------------------------------------------
+
+Create configurable thresholds.
+
+Example:
+
+RISK_HIGH_MARGIN
+
+RISK_CRITICAL_MARGIN
+
+MAX_POSITION_PERCENT
+
+MAX_EXCHANGE_PERCENT
+
+Values loaded from configuration.
+
+No hardcoded constants in business logic.
+
+------------------------------------------------------------
+PACKAGE 6.11
+READ-ONLY GUARANTEE
+------------------------------------------------------------
+
+Forbidden:
+
+POST Orders
+
+Cancel Orders
+
+Transfer
+
+Withdraw
+
+Leverage Change
+
+Margin Change
+
+Position Close
+
+Exchange Write Requests
+
+Mission must preserve:
+
+Write Counter = 0
+
+------------------------------------------------------------
+PACKAGE 6.12
+SECURITY
+------------------------------------------------------------
+
+Authentication required.
+
+CSRF enforced.
+
+Rate limiting.
+
+Decimal arithmetic only.
+
+Typed validation.
+
+Secrets never exposed.
+
+No raw exchange payloads.
+
+------------------------------------------------------------
+PACKAGE 6.13
+TESTING
+------------------------------------------------------------
+
+Backend
+
+Risk Score
+
+Exposure
+
+Alerts
+
+Simulator
+
+History
+
+Thresholds
+
+Frontend
+
+Dashboard
+
+Accessibility
+
+Charts
+
+Regression
+
+All previous missions remain green.
+
+------------------------------------------------------------
+MISSION SUCCESS
+------------------------------------------------------------
+
+PASS only if:
+
+✓ Risk page operational
+
+✓ Risk Score deterministic
+
+✓ Health Score operational
+
+✓ Exposure calculated
+
+✓ Concentration calculated
+
+✓ Alerts generated
+
+✓ Simulator operational
+
+✓ History append-only
+
+✓ Configurable thresholds
+
+✓ Charts rendered
+
+✓ Exchange writes = 0
+
+✓ Secret exposure = 0
+
+✓ Existing tests PASS
+
+✓ New tests added
+
+✓ Security scan PASS
+
+✓ Code review PASS
+
+✓ Git commit created
+
+✓ GitHub push successful
