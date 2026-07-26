@@ -359,9 +359,12 @@ def build_intelligence_summary(account: dict | None = None,
     # Pozisyon geneli eksik-değer durumunda maruziyet oranları kısmidir;
     # bu, POSITION_VALUE_UNKNOWN içgörüsüyle açıkça raporlanır.
 
+    # Boş pozisyon listesi GEÇERLİ veridir (sıfır portföy) — yalnızca
+    # None "veri yok" sayılır.
     sources = {"account": account, "positions": positions,
                "risk": risk_summary}
-    missing = [k for k, v in sources.items() if not v]
+    missing = [k for k, v in sources.items()
+               if v is None or (k != "positions" and not v)]
     stale = any(f.status in (IntelligenceStatus.STALE,
                              IntelligenceStatus.UNAVAILABLE)
                 for f in freshness_list or [])
