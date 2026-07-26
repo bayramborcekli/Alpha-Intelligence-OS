@@ -1,0 +1,326 @@
+{% extends "dash_base.html" %}
+{% block title %}Workspace{% endblock %}
+{% block heading %}🗂️ Intelligence Workspace{% endblock %}
+{% block subheading %}Geçmiş Intelligence kayıtları — salt-okunur, yalnızca tavsiye{% endblock %}
+
+{% block content %}
+<style>
+  .ws-sec { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+            padding:16px; margin-bottom:18px; }
+  .ws-sec h2 { font-size:.9rem; margin-bottom:12px; }
+  .ws-note { color:var(--muted); font-size:.76rem; margin-top:8px; }
+  .ws-banner { border-left:3px solid var(--warn); background:rgba(210,153,34,.08);
+               padding:10px 14px; border-radius:6px; margin-bottom:14px;
+               font-size:.85rem; display:none; }
+  table.ws { width:100%; border-collapse:collapse; font-size:.8rem; }
+  table.ws th, table.ws td { padding:5px 8px; text-align:left;
+    border-bottom:1px solid rgba(48,54,61,.5); }
+  table.ws th { color:var(--muted); font-weight:600; }
+  .ws-controls { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  .ws-controls label { font-size:.76rem; color:var(--muted); display:flex;
+                       flex-direction:column; gap:3px; }
+  .ws-controls input, .ws-controls select {
+    background:var(--soft); color:inherit; border:1px solid var(--border);
+    border-radius:6px; padding:5px 8px; font-size:.8rem; min-width:120px; }
+  .ws-btn { background:rgba(88,166,255,.12); border:1px solid rgba(88,166,255,.4);
+            color:var(--accent); border-radius:8px; padding:6px 14px;
+            font-size:.8rem; cursor:pointer; align-self:flex-end; }
+  .ws-bar { display:inline-block; height:10px; background:rgba(88,166,255,.55);
+            border-radius:3px; vertical-align:middle; }
+  .advisory-tag { background:rgba(88,166,255,.1); border:1px solid rgba(88,166,255,.4);
+                  color:var(--accent); border-radius:12px; padding:2px 10px;
+                  font-size:.72rem; font-weight:700; }
+  pre.ws-json { background:var(--soft); border:1px solid var(--border);
+                border-radius:8px; padding:10px; font-size:.74rem;
+                overflow-x:auto; max-height:340px; }
+  @media (max-width: 700px) {
+    table.ws.stack thead { display:none; }
+    table.ws.stack tr { display:block; border-bottom:1px solid var(--border);
+                        padding:6px 0; }
+    table.ws.stack td { display:flex; justify-content:space-between; border:none; }
+    table.ws.stack td::before { content:attr(data-l); color:var(--muted);
+                                font-weight:600; padding-right:10px; }
+  }
+</style>
+
+<p class="ws-note" style="margin-bottom:12px">
+  <span class="advisory-tag">YALNIZCA TAVSİYE</span>
+  Bu sayfa geçmiş Intelligence kayıtlarını yalnızca görüntüler; hiçbir
+  kayıt değiştirilemez, işlem veya emir oluşturulmaz.
+</p>
+
+<div class="ws-banner" id="ws-error" role="alert">
+  ⚠️ Workspace verisi alınamadı. Alanlar boş bırakıldı — değer tahmin edilmez.
+</div>
+
+<section class="ws-sec" aria-labelledby="h-tl">
+  <h2 id="h-tl">🕒 Zaman Çizelgesi</h2>
+  <div style="overflow-x:auto"><table class="ws stack" id="tl-table">
+    <thead><tr><th scope="col">#</th><th scope="col">Zaman</th>
+      <th scope="col">Durum</th><th scope="col">Kısmi</th>
+      <th scope="col">İçgörü</th><th scope="col">Öneri</th></tr></thead>
+    <tbody><tr><td colspan="6">Yükleniyor…</td></tr></tbody>
+  </table></div>
+  <p class="ws-note">Kayıtlar ekle-yalnız geçmişten gelir; en yeni kayıt en alttadır.</p>
+</section>
+
+<section class="ws-sec" aria-labelledby="h-snap">
+  <h2 id="h-snap">📄 Snapshot Detayı</h2>
+  <div class="ws-controls">
+    <label>Kayıt no
+      <input type="number" id="snap-id" min="1" step="1" inputmode="numeric"></label>
+    <button type="button" class="ws-btn" id="snap-btn">Görüntüle</button>
+  </div>
+  <div id="snap-box"><p class="ws-note">Kayıt numarası seçin.</p></div>
+</section>
+
+<section class="ws-sec" aria-labelledby="h-cmp">
+  <h2 id="h-cmp">🆚 İki Snapshot Karşılaştırma</h2>
+  <div class="ws-controls">
+    <label>Kayıt A <input type="number" id="cmp-a" min="1" step="1"></label>
+    <label>Kayıt B <input type="number" id="cmp-b" min="1" step="1"></label>
+    <button type="button" class="ws-btn" id="cmp-btn">Karşılaştır</button>
+  </div>
+  <div style="overflow-x:auto"><table class="ws stack" id="cmp-table">
+    <thead><tr><th scope="col">Alan</th><th scope="col">Değişim</th>
+      <th scope="col">A</th><th scope="col">B</th></tr></thead>
+    <tbody><tr><td colspan="4">İki kayıt numarası seçin.</td></tr></tbody>
+  </table></div>
+  <p class="ws-note">Yalnızca kayıtlı alanlar karşılaştırılır; eksik taraf
+  "Veri Yok" gösterilir, değer türetilmez.</p>
+</section>
+
+<section class="ws-sec" aria-labelledby="h-rh">
+  <h2 id="h-rh">📋 Tavsiye Geçmişi</h2>
+  <div style="overflow-x:auto"><table class="ws stack" id="rh-table">
+    <thead><tr><th scope="col">Kod</th><th scope="col">Görülme</th>
+      <th scope="col">Güven değişti</th><th scope="col">Öncelik değişti</th></tr></thead>
+    <tbody><tr><td colspan="4">Yükleniyor…</td></tr></tbody>
+  </table></div>
+</section>
+
+<section class="ws-sec" aria-labelledby="h-re">
+  <h2 id="h-re">📈 Risk Evrimi</h2>
+  <div style="overflow-x:auto"><table class="ws stack" id="re-table">
+    <thead><tr><th scope="col">#</th><th scope="col">Zaman</th>
+      <th scope="col">Skor</th><th scope="col">Gösterge</th>
+      <th scope="col">Durum</th></tr></thead>
+    <tbody><tr><td colspan="5">Yükleniyor…</td></tr></tbody>
+  </table></div>
+  <p class="ws-note">Yalnızca geçmiş kayıtlardaki skorlar gösterilir;
+  tahmin veya trend kestirimi yapılmaz.</p>
+</section>
+
+<section class="ws-sec" aria-labelledby="h-search">
+  <h2 id="h-search">🔎 Arama ve Filtreler</h2>
+  <div class="ws-controls">
+    <label>Durum
+      <select id="f-status"><option value="">Tümü</option>
+        <option>OK</option><option>PARTIAL</option>
+        <option>STALE</option><option>UNAVAILABLE</option></select></label>
+    <label>Güven
+      <select id="f-conf"><option value="">Tümü</option>
+        <option>HIGH</option><option>MEDIUM</option><option>LOW</option>
+        <option>INSUFFICIENT_DATA</option></select></label>
+    <label>Kısmi
+      <select id="f-partial"><option value="">Tümü</option>
+        <option value="true">Evet</option>
+        <option value="false">Hayır</option></select></label>
+    <label>Öneri kodu <input type="text" id="f-rec" maxlength="64"></label>
+    <label>İçgörü kodu <input type="text" id="f-ins" maxlength="64"></label>
+    <label>Başlangıç <input type="datetime-local" id="f-start"></label>
+    <label>Bitiş <input type="datetime-local" id="f-end"></label>
+    <button type="button" class="ws-btn" id="f-btn">Ara</button>
+  </div>
+  <div style="overflow-x:auto"><table class="ws stack" id="sr-table">
+    <thead><tr><th scope="col">#</th><th scope="col">Zaman</th>
+      <th scope="col">Durum</th><th scope="col">Kısmi</th></tr></thead>
+    <tbody><tr><td colspan="4">Filtre seçip arayın.</td></tr></tbody>
+  </table></div>
+</section>
+
+<section class="ws-sec" aria-labelledby="h-exp">
+  <h2 id="h-exp">📤 Dışa Aktarım</h2>
+  <p class="ws-note">JSON/CSV dışa aktarım uçları ayrı bir görevde
+  eklenecektir. Bu alan yalnızca yer tutucudur; şimdilik zaman
+  çizelgesi verisine salt-okunur JSON olarak
+  <a href="/api/workspace/timeline">/api/workspace/timeline</a>
+  ucundan erişilebilir.</p>
+</section>
+
+<script>
+(function () {
+  "use strict";
+  function el(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s === null || s === undefined ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function vy(v, suffix) {
+    return (v === null || v === undefined || v === "")
+      ? "—" : esc(v) + (suffix || "");
+  }
+  function txt(v, suffix) {           // textContent için (escape gerekmez)
+    return (v === null || v === undefined || v === "")
+      ? "—" : String(v) + (suffix || "");
+  }
+  function evet(v) {
+    return v === true ? "Evet" : v === false ? "Hayır" : "—";
+  }
+  function tbody(id) { return el(id).querySelector("tbody"); }
+  function failState(msg) {
+    el("ws-error").style.display = "block";
+    ["tl-table", "rh-table", "re-table"].forEach(function (t) {
+      var cols = el(t).querySelectorAll("th").length;
+      tbody(t).innerHTML =
+        "<tr><td colspan='" + cols + "'>" + esc(msg) + "</td></tr>";
+    });
+  }
+  function getJSON(url) {
+    return fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); });
+  }
+  function sterileRows(t, cols, body) {
+    // API hatası: sabit metin — API mesajı bile ekrana taşınmaz
+    tbody(t).innerHTML = "<tr><td colspan='" + cols + "'>" +
+      esc(body || "Veri alınamadı.") + "</td></tr>";
+  }
+
+  // ── Zaman Çizelgesi ─────────────────────────────────────────────
+  getJSON("/api/workspace/timeline").then(function (d) {
+    if (!d || d.ok !== true) { sterileRows("tl-table", 6); return; }
+    var rows = d.entries || [];
+    tbody("tl-table").innerHTML = rows.length ? rows.map(function (e) {
+      return "<tr><td data-l='#'>" + vy(e.id) +
+        "</td><td data-l='Zaman'>" + vy((e.generated_at || "").replace("T", " ")) +
+        "</td><td data-l='Durum'>" + vy(e.status) +
+        "</td><td data-l='Kısmi'>" + evet(e.partial) +
+        "</td><td data-l='İçgörü'>" + vy(e.insight_count) +
+        "</td><td data-l='Öneri'>" + vy(e.recommendation_count) +
+        "</td></tr>";
+    }).join("") : "<tr><td colspan='6'>Henüz kayıt yok.</td></tr>";
+  }).catch(function () { failState("Veri alınamadı."); });
+
+  // ── Snapshot Detayı ─────────────────────────────────────────────
+  el("snap-btn").addEventListener("click", function () {
+    var id = parseInt(el("snap-id").value, 10);
+    if (!id || id < 1) {
+      el("snap-box").innerHTML = "<p class='ws-note'>Geçerli bir kayıt numarası girin.</p>";
+      return;
+    }
+    getJSON("/api/workspace/snapshot/" + id).then(function (d) {
+      if (!d || d.ok !== true) {
+        el("snap-box").innerHTML = "<p class='ws-note'>Kayıt bulunamadı.</p>";
+        return;
+      }
+      var pre = document.createElement("pre");
+      pre.className = "ws-json";
+      pre.textContent = JSON.stringify(d.snapshot, null, 2); // güvenli: textContent
+      el("snap-box").innerHTML = "";
+      el("snap-box").appendChild(pre);
+    }).catch(function () {
+      el("snap-box").innerHTML = "<p class='ws-note'>Veri alınamadı.</p>";
+    });
+  });
+
+  // ── Karşılaştırma ───────────────────────────────────────────────
+  el("cmp-btn").addEventListener("click", function () {
+    var a = parseInt(el("cmp-a").value, 10);
+    var b = parseInt(el("cmp-b").value, 10);
+    if (!a || !b || a < 1 || b < 1) {
+      sterileRows("cmp-table", 4, "İki geçerli kayıt numarası girin.");
+      return;
+    }
+    getJSON("/api/workspace/compare?a=" + a + "&b=" + b)
+      .then(function (d) {
+        if (!d || d.ok !== true) {
+          sterileRows("cmp-table", 4, "Karşılaştırma yapılamadı.");
+          return;
+        }
+        var diffs = d.differences || [];
+        tbody("cmp-table").innerHTML = diffs.length
+          ? diffs.map(function (x) {
+              var av = (x.a !== null && typeof x.a === "object")
+                ? JSON.stringify(x.a) : x.a;
+              var bv = (x.b !== null && typeof x.b === "object")
+                ? JSON.stringify(x.b) : x.b;
+              return "<tr><td data-l='Alan'>" + vy(x.field) +
+                "</td><td data-l='Değişim'>" + vy(x.change) +
+                "</td><td data-l='A'>" + vy(av) +
+                "</td><td data-l='B'>" + vy(bv) + "</td></tr>";
+            }).join("")
+          : "<tr><td colspan='4'>Kayıtlar özdeş.</td></tr>";
+      }).catch(function () {
+        sterileRows("cmp-table", 4, "Veri alınamadı.");
+      });
+  });
+
+  // ── Tavsiye Geçmişi ─────────────────────────────────────────────
+  getJSON("/api/workspace/recommendations").then(function (d) {
+    if (!d || d.ok !== true) { sterileRows("rh-table", 4); return; }
+    var items = d.items || [];
+    tbody("rh-table").innerHTML = items.length ? items.map(function (i) {
+      return "<tr><td data-l='Kod'>" + vy(i.code) +
+        "</td><td data-l='Görülme'>" + vy(i.occurrences) +
+        "</td><td data-l='Güven değişti'>" + evet(i.confidence_changed) +
+        "</td><td data-l='Öncelik değişti'>" + evet(i.priority_changed) +
+        "</td></tr>";
+    }).join("") : "<tr><td colspan='4'>Henüz tavsiye kaydı yok.</td></tr>";
+  }).catch(function () { sterileRows("rh-table", 4, "Veri alınamadı."); });
+
+  // ── Risk Evrimi (yerel, CSP uyumlu çubuk gösterim) ──────────────
+  getJSON("/api/workspace/risk-evolution").then(function (d) {
+    if (!d || d.ok !== true) { sterileRows("re-table", 5); return; }
+    var pts = d.series || [];
+    tbody("re-table").innerHTML = pts.length ? pts.map(function (p) {
+      var score = p.risk_score;
+      var known = (score !== null && score !== undefined && score !== "");
+      var n = known ? parseInt(score, 10) : NaN;
+      var bar = (known && !isNaN(n))
+        ? "<span class='ws-bar' style='width:" +
+          Math.max(0, Math.min(100, n)) + "px'></span> " + esc(score)
+        : "—";
+      return "<tr><td data-l='#'>" + vy(p.snapshot_id) +
+        "</td><td data-l='Zaman'>" + vy((p.generated_at || "").replace("T", " ")) +
+        "</td><td data-l='Skor'>" + vy(score) +
+        "</td><td data-l='Gösterge'>" + bar +
+        "</td><td data-l='Durum'>" + vy(p.risk_status) + "</td></tr>";
+    }).join("") : "<tr><td colspan='5'>Henüz kayıt yok.</td></tr>";
+  }).catch(function () { sterileRows("re-table", 5, "Veri alınamadı."); });
+
+  // ── Arama ───────────────────────────────────────────────────────
+  el("f-btn").addEventListener("click", function () {
+    var q = [];
+    function add(name, val) {
+      if (val) { q.push(name + "=" + encodeURIComponent(val)); }
+    }
+    add("status", el("f-status").value);
+    add("confidence", el("f-conf").value);
+    add("partial", el("f-partial").value);
+    add("recommendation", el("f-rec").value.trim());
+    add("insight", el("f-ins").value.trim());
+    // datetime-local YEREL saattir; UTC ISO'ya çevrilerek gönderilir.
+    function toUtcIso(localValue, endOfMinute) {
+      if (!localValue) { return ""; }
+      var d = new Date(localValue + (endOfMinute ? ":59.999" : ":00"));
+      if (isNaN(d.getTime())) { return ""; }
+      return d.toISOString();
+    }
+    add("start", toUtcIso(el("f-start").value, false));
+    add("end", toUtcIso(el("f-end").value, true));  // dakika sonu dahil
+    getJSON("/api/workspace/search" + (q.length ? "?" + q.join("&") : ""))
+      .then(function (d) {
+        if (!d || d.ok !== true) { sterileRows("sr-table", 4); return; }
+        var rows = d.entries || [];
+        tbody("sr-table").innerHTML = rows.length ? rows.map(function (x) {
+          return "<tr><td data-l='#'>" + vy(x.id) +
+            "</td><td data-l='Zaman'>" + vy((x.generated_at || "").replace("T", " ")) +
+            "</td><td data-l='Durum'>" + vy(x.status) +
+            "</td><td data-l='Kısmi'>" + evet(x.partial) + "</td></tr>";
+        }).join("") : "<tr><td colspan='4'>Eşleşen kayıt yok.</td></tr>";
+      }).catch(function () { sterileRows("sr-table", 4, "Veri alınamadı."); });
+  });
+})();
+</script>
+{% endblock %}

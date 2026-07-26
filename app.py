@@ -1842,6 +1842,11 @@ def _ws_bad_request(param):
         "message": f"Geçersiz parametre: {param}"}}, 400)
 
 
+@app.get("/workspace")
+def workspace_page():
+    return _render_workspace("intelligence_workspace.html", "workspace")
+
+
 @app.get("/api/workspace/timeline")
 @app.get("/api/v1/workspace/timeline")
 def api_workspace_timeline():
