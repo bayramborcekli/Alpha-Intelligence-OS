@@ -10,6 +10,7 @@
 | 1400.5 | Yönetici üst çubuğu | ✅ TAMAM | `executive_api.py` |
 | 1400.6 | Risk İstihbarat Motoru | ✅ TAMAM | `risk_api.py` (deterministik skor, simülatör) |
 | **1500.1** | **Intelligence Katmanı** | ✅ TAMAM | Aşağıdaki agent dökümü |
+| **1500.2** | **Intelligence Workspace** | ✅ TAMAM (CLOSED) | Aşağıdaki agent dökümü |
 
 ## Mission 1500.1 — Agent dökümü
 
@@ -29,3 +30,20 @@
 | 12 | Dokümantasyon ve kapanış | `df56692` | — |
 
 Toplam yeni 1500.1 testi: **212** · Kapanış toplamı: **805 PASS**
+
+## Mission 1500.2 — Agent dökümü
+
+| Agent | Görev | Commit | Test |
+|---|---|---|---|
+| 01 | Keşif/mimari plan | — (plan) | — |
+| 02 | Append-only timeline (`intelligence_timeline.py`) | `a6c319f` | 24 |
+| 03 | Workspace servis (`intelligence_workspace_service.py`) | `cc3a9cb` | 26 |
+| 04 | Read-Only API (`/api/workspace/*`) | `ee64aa3` | 18 |
+| 05 | Workspace UI (`/workspace`) | `d0d0245` | 23 |
+| 06 | Export (`workspace_export_api.py`) | `7081d97` | 20 |
+| 07 | Güvenlik doğrulaması | `4130c04` | 45 |
+| 08 | Tam regresyon & sürüm doğrulama | `a6305d1` | 8 |
+| 09 | Dokümantasyon ve kapanış | (bu commit) | — |
+
+Toplam yeni 1500.2 testi: **164** · Kapanış toplamı: **969 PASS / 0 FAIL / 0 SKIP**
+Ayrıntı: `docs/RELEASE_NOTES_1500_2.md`

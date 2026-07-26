@@ -41,6 +41,17 @@ yoktur ve bu sürümde planlanmamaktadır.
 
 ---
 
+## Intelligence Workspace (Mission 1500.2)
+
+Salt-okunur geçmiş yüzeyi. Zincir:
+`Intelligence Snapshot → Append-Only Timeline (intelligence_timeline.py)
+→ Workspace Service (intelligence_workspace_service.py) → Read-Only API
+(/api/workspace/*) → UI (/workspace) → Export (/api/workspace/export/*)`.
+Timeline katmanı yalnızca kayıt üretimi sırasında append-only yazar
+(değiştirme/silme yok); Workspace Service/API/UI/Export katmanları hiçbir
+kayıt yazmaz veya değiştirmez; risk otoritesi Risk Motoru'nda
+kalır (`forecast: null`). Ayrıntı: `docs/RELEASE_NOTES_1500_2.md`.
+
 ## Intelligence Katmanı (Mission 1500.1)
 
 Salt-okunur, deterministik, yalnızca-tavsiye analiz zinciri:

@@ -58,4 +58,5 @@ kilitlidir (ortamdan bile açılamaz). Diğer belgeler:
 - [docs/MISSION_INDEX.md](docs/MISSION_INDEX.md)
 - [docs/TEST_PROGRAM.md](docs/TEST_PROGRAM.md)
 - [docs/RELEASE_NOTES_1500_1.md](docs/RELEASE_NOTES_1500_1.md)
+- [docs/RELEASE_NOTES_1500_2.md](docs/RELEASE_NOTES_1500_2.md)
 - [CHANGELOG.md](CHANGELOG.md) · [AGENTS.md](AGENTS.md)

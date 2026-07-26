@@ -30,6 +30,38 @@ Her ucun `/api/v1/...` takma adı vardır.
 - Tüm çıktılar `read_only:true` ve `advisory_only:true` işaretlidir;
   emir dili ve emir parametresi içermez.
 
+## Intelligence Workspace (Mission 1500.2)
+
+Feature flag'siz çalışır (geçmiş boşsa dürüst boş sonuç). Veri kaynağı
+yalnızca `intelligence_workspace_service` → append-only
+`intelligence_history.jsonl`'dir. Her ucun `/api/v1/...` takma adı vardır.
+Geçersiz parametre → `400 INVALID_PARAMETER`; sağlayıcı hatası → `200`
++ sterile zarf; tüm yanıtlar `read_only`/`advisory_only` taşır.
+
+| Uç | Parametreler / notlar |
+|---|---|
+| `GET /api/workspace/timeline` | `limit`, `offset` (negatif olmayan tamsayı) |
+| `GET /api/workspace/snapshot/<id>` | pozitif tamsayı id; bulunamazsa `404 SNAPSHOT_NOT_FOUND` |
+| `GET /api/workspace/compare` | `a`, `b` zorunlu pozitif tamsayı; derin deterministik fark (NEW/CHANGED/REMOVED, indeks tabanlı liste farkları, eksik taraf "Veri Yok"); bulunamayan id → 404 |
+| `GET /api/workspace/recommendations` | kod bazlı tavsiye geçmişi (ardışık tekrarlar `count` ile birleşik, `confidence_changed`/`priority_changed`) |
+| `GET /api/workspace/risk-evolution` | geçmiş risk skoru serisi; `forecast: null` — tahmin yok |
+| `GET /api/workspace/search` | `start`/`date`, `end`/`date_end` (ISO), `status`, `confidence`, `recommendation`, `insight`, `partial`, `advisory_only` (yalnız `true`/`false`) |
+
+### Workspace Export (`/api/workspace/export/*`)
+
+Aynı altı yüzeyin dışa aktarımı: `timeline`, `snapshot/<id>`, `compare`,
+`recommendations`, `risk-evolution`, `search` (+`/api/v1` takma adları).
+`format=json` varsayılan; `json|csv` dışı → 400. JSON deterministiktir;
+CSV düz metin hücrelidir (formül-enjeksiyon korumalı, UTF-8 BOM, CRLF,
+yapısal değerler canonical JSON metnine düzleştirilir). Başlıklar:
+`Content-Disposition: attachment`, doğru `Content-Type`,
+`X-Content-Type-Options: nosniff`, `Cache-Control: no-store, private`.
+
+### Workspace UI
+`GET /workspace` — salt-okunur sayfa (login yönlendirmeli); yalnız
+Workspace GET API'lerini kullanır; işlem düğmesi yoktur; yanıt
+`no-store, private` taşır. Ayrıntı: `docs/RELEASE_NOTES_1500_2.md`.
+
 ## Diğer salt-okunur yüzeyler (1400 serisi)
 - `GET /api/risk/{summary,exposure,alerts,history,simulator}` — Risk Motoru
   (simülatörün POST varyantı yalnızca YEREL hesap yapar; borsaya istek yok)

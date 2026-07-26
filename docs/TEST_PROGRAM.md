@@ -2,7 +2,22 @@
 
 Çalıştırma: `python -m pytest tests/ -q`
 
-**Kapanış durumu (Mission 1500.1):** 805 PASS / 0 FAIL / 0 SKIP
+**Kapanış durumu (Mission 1500.2):** 969 PASS / 0 FAIL / 0 SKIP
+(1500.1 kapanışı 805 + 1500.2 ile eklenen 164).
+
+## 1500.2 test grupları
+
+| Dosya | Kapsam | Test |
+|---|---|---|
+| `test_mission1500_2_timeline.py` | Append-only JSONL, Decimal, float reddi, kilit, sınırlar | 24 |
+| `test_mission1500_2_workspace_service.py` | Timeline/snapshot/compare/tavsiye/risk/arama | 26 |
+| `test_mission1500_2_workspace_api.py` | API: auth, alias, 400/404/405, no-store, determinizm | 18 |
+| `test_mission1500_2_workspace_ui.py` | UI: bölümler, XSS, salt-okunurluk, data-l, CDN yokluğu | 23 |
+| `test_mission1500_2_workspace_export.py` | JSON/CSV export, başlıklar, formül koruması | 20 |
+| `test_mission1500_2_workspace_security.py` | Auth/metot/CSRF/traversal/sterile/sızıntı/bütünlük | 45 |
+| `test_mission1500_2_full_regression.py` | Uçtan uca zincir: boş/tek/çoklu/eski şema | 8 |
+
+**1500.1 kapanış durumu:** 805 PASS / 0 FAIL / 0 SKIP
 (taban 593 + 1500.1 ile eklenen 212).
 
 ## 1500.1 test grupları
