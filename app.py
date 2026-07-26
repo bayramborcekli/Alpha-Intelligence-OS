@@ -1903,6 +1903,35 @@ def api_automation_run():
         "run_id": out.get("run_id")})
 
 
+# ── Mission 1600 / Agent 06: Automation Export ──────────────────────
+# YALNIZCA GET. Veri tek kaynaktan gelir: automation_export_api →
+# automation_engine durum okuma sözleşmesi. Koşu başlatılmaz, snapshot
+# yazılmaz. History modeli yoktur; history export bilinçli olarak YOK.
+
+def _aex_response(result):
+    env, body, mime, filename = result
+    if body is None:  # sterile zarf — kaynak okunamadı
+        return _automation_json(env, 503)
+    resp = app.response_class(body, mimetype=mime)
+    resp.headers["Cache-Control"] = "no-store, private"
+    resp.headers["Content-Disposition"] = \
+        f'attachment; filename="{filename}"'
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+@app.get("/api/automation/export/status")
+@app.get("/api/v1/automation/export/status")
+def api_automation_export_status():
+    import automation_export_api as aex
+    raw = (request.args.get("format") or "json").strip().lower()
+    if raw not in aex.FORMATS:
+        return _automation_json({"ok": False, "error": {
+            "code": "INVALID_FORMAT",
+            "message": "Geçersiz format parametresi."}}, 400)
+    return _aex_response(aex.export_status(raw))
+
+
 # ── Mission 1500.2: Workspace Read-Only API ──────────────────────────
 # YALNIZCA GET. Veri tek kaynaktan gelir: intelligence_workspace_service
 # (timeline modülüne doğrudan erişilmez). Kimlik doğrulama _security_gate
