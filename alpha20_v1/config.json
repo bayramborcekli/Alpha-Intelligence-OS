@@ -1,0 +1,19 @@
+{
+  "mode": "PAPER",
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT"
+  ],
+  "interval": "15m",
+  "trend_interval": "1h",
+  "scan_seconds": 60,
+  "starting_balance_usdt": 10000.0,
+  "risk_per_trade_pct": 0.5,
+  "daily_loss_limit_pct": 1.5,
+  "max_consecutive_losses": 3,
+  "minimum_score": 75,
+  "reward_risk_ratio": 2.0,
+  "atr_stop_multiplier": 1.5,
+  "max_open_positions": 1
+}

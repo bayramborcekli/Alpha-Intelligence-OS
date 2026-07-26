@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.pythonlibs/
+
+# Generated PAPER trading state and logs
+alpha20_v1/state.json
+alpha20_v1/alpha20.log
+state.json
+alpha20.log
