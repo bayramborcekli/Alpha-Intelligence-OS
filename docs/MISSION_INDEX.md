@@ -26,6 +26,6 @@
 | 09 | Ayarlar/feature flag (`intelligence_settings.py`) | `4a67ff5` | 20 |
 | 10 | Güvenlik ve denetim doğrulaması | `bec367e` | 36 |
 | 11 | Tam test ve regresyon | `4f253b5` | 28 |
-| 12 | Dokümantasyon ve kapanış | `6a1ece9` | — |
+| 12 | Dokümantasyon ve kapanış | `df56692` | — |
 
 Toplam yeni 1500.1 testi: **212** · Kapanış toplamı: **805 PASS**
