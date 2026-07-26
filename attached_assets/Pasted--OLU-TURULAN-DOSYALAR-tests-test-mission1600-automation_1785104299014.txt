@@ -1,0 +1,78 @@
+── OLUŞTURULAN DOSYALAR ──
+tests/test_mission1600_automation_api.py   21 test (API + lifecycle)
+
+── DEĞİŞTİRİLEN DOSYALAR ──
+app.py                    Automation Management API bölümü +
+                          start_automation_scheduler() (tekil guard)
+gunicorn.conf.py          post_fork'a scheduler bağlanışı (mevcut desen)
+tests/test_mission1500_1_regression.py
+                          ALLOWED_WRITE_ROUTES'a iki yeni POST run
+                          rotası eklendi — bilinçli, gerekçeli genişletme
+                          (guard listesi; 1600 spec'inin öngördüğü uçlar)
+
+── API YÜZEYİ ──
+GET  /api/automation/status (+ /api/v1)  — auth: _security_gate
+     (anonim → 401) · CSRF gerekmez (GET) · 200: sterile read-only
+     {enabled, interval_minutes, state, running, run_id, last_run_*,
+     last_error_code, last_snapshot_recorded, next_due} ·
+     Cache-Control: no-store, private
+POST /api/automation/run (+ /api/v1)  — auth: _security_gate ·
+     CSRF: global CSRFProtect (istisna YOK; eksik/geçersiz token → 400
+     mevcut _api_error deseni) · 200 {ran, appended, error_code,
+     final_state, run_id} · 409 DUPLICATE_RUN · 503 AUTOMATION_DISABLED
+     · 500 sterile AUTOMATION_ERROR
+POST /api/automation/enable|disable — EKLENMEDİ (OUT OF SCOPE):
+     yapılandırma ortam tabanlı (ALPHA_AUTOMATION_ENABLED); kalıcı
+     runtime config modeli repo'da yok — kanıtsız endpoint eklenmedi.
+
+── LIFECYCLE BAĞLANTISI ──
+gunicorn post_fork → app.start_automation_scheduler() (universe_manager
+/auto_controller ile aynı kanıtlı worker-içi thread deseni). Guard'lar:
+• Varsayılan KAPALI — yalnız literal "true" ise loop başlar.
+• Aynı process'te ikinci loop başlamaz (threading.Lock + canlılık
+  kontrolü); thread daemon + stop_event kontrollü.
+• Başlatma hatası worker'ı çökertmez (sterile log).
+• 2 worker → worker başına BİR loop; tekil koşu garantisi dağıtık
+  scheduler iddiasıyla değil, Core'daki süreçler-arası flock ile
+  sağlanır (açıkça raporlanır — Agent 01 kararı).
+
+── GÜVENLİK KONTROLLERİ ──
+Mevcut auth modeli (tek sahip, _security_gate) aynen; yeni/paralel auth
+yok · Tüm state-changing uçlar CSRF korumalı (bypass/istisna/query-
+token yok; anonim POST'ta CSRF 400 auth 401'den önce gelir — middleware
+sırası gereği, test kapsamında ve dokümante) · Route katmanı ince:
+append_snapshot / IntelligenceService / get_summary çağrısı route
+bloğunda YOK (statik test) · Duplicate → Core flock → 409 · Yanıtlar
+sterile: secret/path/traceback sızıntısı testli · Kullanıcıdan
+fonksiyon/modül/yol/komut alınmaz — sabit davranış tetiklenir.
+
+── YENİ TESTLER ── 21: anonim status/run 401 · authenticated status ·
+CSRF eksik/geçersiz 400 · manuel run başarı (+timeline'da tek kayıt,
+status yansıması, next_due) · duplicate 409 · disabled 503 ·
+unavailable'da snapshot yok · sterile exception (sızıntı yok) ·
+deterministik JSON · secret/path sızıntı taraması · route sınırı
+statik testleri · lifecycle: varsayılan kapalıda loop yok, literal
+true'da başlar + stop_event ile kapanır, aynı process'te ikinci loop
+yok, startup hatası çökertmez, aktif koşuda tick duplicate append
+üretmez, post_fork bağlanışı AST doğrulaması.
+
+── TAM TEST SONUCU ── 1049 PASS (1028 → 1049)
+── FAIL / SKIP ── FAIL: 0 · SKIP: 0
+── EXCHANGE WRITE REQUEST SAYISI ── 0
+── SECRET EXPOSURE ── 0
+── CANLI SMOKE ── /health 200 · anonim status 401 · anonim POST run
+400 (CSRF) — workflow yeniden başlatıldı, temiz açıldı.
+
+── BİLİNEN SINIRLAMALAR ──
+• Anonim POST'ta 401 yerine 400 (CSRF) döner — mevcut middleware
+  sırası; erişim yine engellidir.
+• Tek-global-scheduler garantisi yoktur; worker başına loop + Core
+  flock modeli geçerlidir (tasarım kararı, kanıtlı).
+• Enable/disable uçları OUT OF SCOPE (ortam tabanlı yapılandırma).
+
+── MİMARİ İNCELEME ── PASS (ilk turda) — bulgular yalnız dokümantasyon
+önerisi (Agent 09 kapsamına not edildi).
+
+── COMMIT ── 34d9f4e (56d5abc → 34d9f4e), GitHub push OK
+
+── SONRAKİ AGENT ── AGENT 05 — UI

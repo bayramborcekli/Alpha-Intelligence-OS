@@ -1,0 +1,318 @@
+ALPHA INTELLIGENCE OS
+MISSION 1600 — INTELLIGENCE AUTOMATION
+AGENT 05 — USER INTERFACE
+
+ROL
+
+Sen MISSION 1600'ün User Interface agentısın.
+
+Görevin, Agent 04 tarafından sağlanan Automation API'lerini kullanarak
+Automation yönetim ekranını oluşturmak.
+
+Bu agent yalnız kullanıcı arayüzünü geliştirecektir.
+
+İş mantığı UI içinde bulunmayacaktır.
+
+────────────────────────────────────────
+1. BASELINE
+
+Referans commit:
+
+[AGENT 04 commit]
+
+Referans test sonucu:
+
+PASS
+FAIL = 0
+SKIP = 0
+
+Korunacak garantiler:
+
+• Workspace Read-Only
+• Timeline Append-Only
+• Exchange Isolation
+• Ledger Immutable
+• Audit Immutable
+• Recommendation Advisory-Only
+• Risk Engine Authority
+• Deterministic Output
+• Sterile Error Responses
+
+────────────────────────────────────────
+2. AMAÇ
+
+Automation sistemini yönetmek için
+mevcut Workspace içerisine
+Read-Only yönetim paneli ekle.
+
+UI yalnız API çağıracaktır.
+
+Automation mantığı
+tarayıcı içinde yazılmayacaktır.
+
+────────────────────────────────────────
+3. GÖSTERİLECEK BİLGİLER
+
+Automation Status
+
+• Enabled / Disabled
+
+• Current State
+
+• Running
+
+• Last Run
+
+• Next Run
+
+• Last Result
+
+• Duration
+
+• Last Error Code
+(sterile)
+
+Execution History
+
+• Son çalıştırmalar
+
+• Status
+
+• Timestamp
+
+• Duration
+
+• Sonuç kodu
+
+Health
+
+• Scheduler Alive
+
+• Service Available
+
+• Core Available
+
+Hiçbir secret
+gösterilmeyecektir.
+
+────────────────────────────────────────
+4. KULLANICI İŞLEMLERİ
+
+Repository destekliyorsa:
+
+• Run Now
+
+• Enable
+
+• Disable
+
+• Refresh
+
+Desteklenmiyorsa
+gösterme.
+
+UI'da
+çalışmayan buton bırakma.
+
+────────────────────────────────────────
+5. KESİNLİKLE YASAK
+
+UI
+
+YAPMAYACAK
+
+• Intelligence hesaplaması
+
+• Risk hesaplaması
+
+• Recommendation üretimi
+
+• Snapshot oluşturma
+
+• append_snapshot()
+
+• Exchange çağrısı
+
+• Ledger yazımı
+
+• Audit yazımı
+
+• Timeline değişikliği
+
+• Secret gösterimi
+
+• Traceback gösterimi
+
+• Exception metni gösterimi
+
+────────────────────────────────────────
+6. GÖRSEL KURALLAR
+
+Mevcut Workspace
+tasarım dili korunacaktır.
+
+Yeni tema ekleme.
+
+Yeni framework ekleme.
+
+Yeni CSS sistemi ekleme.
+
+Mevcut component
+yeniden kullanılacaktır.
+
+────────────────────────────────────────
+7. DURUM GÖSTERİMİ
+
+Automation State
+
+Disabled
+
+Scheduled
+
+Running
+
+Succeeded
+
+Failed
+
+Interrupted
+
+Unknown
+
+Her durum
+renk ve ikon ile
+gösterilebilir.
+
+────────────────────────────────────────
+8. AUTO REFRESH
+
+Repository destekliyorsa
+
+yalnız status endpoint'i
+
+belirli aralıklarla okunabilir.
+
+Yeni polling sistemi
+icat etme.
+
+WebSocket ekleme.
+
+SSE ekleme.
+
+────────────────────────────────────────
+9. HATA GÖSTERİMİ
+
+Sterile olmalıdır.
+
+Örnek:
+
+FAILED
+
+UNAVAILABLE
+
+TIMEOUT
+
+DUPLICATE_RUN
+
+INTERRUPTED
+
+Exception metni
+asla gösterilmez.
+
+────────────────────────────────────────
+10. TESTLER
+
+En az:
+
+UI render
+
+status render
+
+running render
+
+failed render
+
+manual run
+
+enable
+
+disable
+
+refresh
+
+loading
+
+error
+
+sterile response
+
+permission denied
+
+csrf denied
+
+deterministic render
+
+responsive layout
+
+testleri.
+
+────────────────────────────────────────
+11. TESLİMAT
+
+Rapor:
+
+── OLUŞTURULAN DOSYALAR ──
+
+── DEĞİŞTİRİLEN DOSYALAR ──
+
+── UI EKRANLARI ──
+
+── KULLANILAN API'LAR ──
+
+── YENİ TESTLER ──
+
+── PASS ──
+
+── FAIL ──
+
+── SKIP ──
+
+── Exchange Write Request ──
+
+0
+
+── Secret Exposure ──
+
+0
+
+── Commit ──
+
+────────────────────────────────────────
+12. PASS
+
+PASS için
+
+• UI tamamlanmış olmalıdır.
+
+• Yalnız API kullanılmalıdır.
+
+• İş mantığı UI'da olmamalıdır.
+
+• Workspace Read-Only korunmalıdır.
+
+• Timeline korunmalıdır.
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Tüm testler PASS
+
+• Commit oluşturulmalıdır.
+
+────────────────────────────────────────
+SONRAKİ AGENT
+
+MISSION 1600
+
+AGENT 06 — EXPORT
