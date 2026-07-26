@@ -8,6 +8,10 @@ Tasarım kuralları:
 - Negatif miktar veya negatif maliyet mümkün değildir.
 - Exchange-independent: sembol formatına bağımlılık yok.
 
+WAVG invariant:
+  Tüm lotlar aynı sembol ve aynı yöne (side) ait olmalıdır.
+  Karışık sembol veya yön durumunda CostBasisError fırlatılır.
+
 WAVG formülü:
   new_avg = (Σ cost_i) / (Σ quantity_i)
 
@@ -34,6 +38,39 @@ class CostBasisError(Exception):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# WAVG invariant kontrolü
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _validate_lot_homogeneity(lots: Sequence[CostBasisLot], context: str = "") -> None:
+    """
+    Tüm lotların aynı sembol ve yöne (side) ait olduğunu doğrula.
+
+    Kural: WAVG yalnızca homojen lot listelerinde geçerlidir.
+    Karışık sembol veya karışık side → CostBasisError.
+
+    Args:
+        lots:    Kontrol edilecek lot listesi.
+        context: Hata mesajına eklenen bağlam bilgisi.
+    """
+    if len(lots) <= 1:
+        return
+    first = lots[0]
+    for i, lot in enumerate(lots[1:], start=1):
+        if lot.symbol != first.symbol:
+            raise CostBasisError(
+                f"{context}WAVG invariant ihlali: karışık sembol. "
+                f"Beklenen '{first.symbol}', lot[{i}]='{lot.symbol}'. "
+                f"Her sembol için ayrı lot listesi tutun."
+            )
+        if lot.side != first.side:
+            raise CostBasisError(
+                f"{context}WAVG invariant ihlali: karışık yön (side). "
+                f"Beklenen '{first.side.value}', lot[{i}]='{lot.side.value}'. "
+                f"LONG ve SHORT ayrı lot listelerinde tutulmalı."
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Temel hesaplamalar
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -46,12 +83,15 @@ def compute_weighted_average(lots: Sequence[CostBasisLot]) -> Decimal:
     Değişmezlik:
     - Lots boş olmamalı.
     - Toplam miktar > 0 olmalı.
-    - Tüm lotlar aynı sembol ve yöne (side) ait olmalı.
+    - Tüm lotlar aynı sembol ve yöne (side) ait olmalı [WAVG invariant].
 
-    Boş lots veya sıfır toplam miktar → 0 döner (hata vermez).
+    Boş lots → 0 döner (hata vermez).
+    Karışık sembol veya side → CostBasisError.
     """
     if not lots:
         return ZERO
+
+    _validate_lot_homogeneity(lots, context="compute_weighted_average: ")
 
     total_cost = sum((lt.total_cost_usdt for lt in lots), ZERO)
     total_qty  = sum((lt.quantity for lt in lots), ZERO)
@@ -72,6 +112,7 @@ def add_lot_and_recompute(
     Değişmezlik:
     - new_lot.quantity > 0 olmalı.
     - new_lot.total_cost_usdt >= 0 olmalı.
+    - new_lot, mevcut lotlarla aynı symbol ve side'a sahip olmalı [WAVG invariant].
     """
     if new_lot.quantity <= ZERO:
         raise CostBasisError(
@@ -83,6 +124,21 @@ def add_lot_and_recompute(
             f"add_lot_and_recompute: lot maliyeti negatif olamaz, "
             f"{new_lot.total_cost_usdt} verildi."
         )
+
+    # Mevcut lotlarla homojenlik kontrolü
+    if existing_lots:
+        first = existing_lots[0]
+        if new_lot.symbol != first.symbol:
+            raise CostBasisError(
+                f"add_lot_and_recompute: WAVG invariant ihlali. "
+                f"Mevcut sembol='{first.symbol}', yeni lot sembol='{new_lot.symbol}'."
+            )
+        if new_lot.side != first.side:
+            raise CostBasisError(
+                f"add_lot_and_recompute: WAVG invariant ihlali. "
+                f"Mevcut side='{first.side.value}', yeni lot side='{new_lot.side.value}'."
+            )
+
     updated = list(existing_lots) + [new_lot]
     return updated, compute_weighted_average(updated)
 
@@ -98,7 +154,7 @@ def consume_lots_wavg(
     Lot listesi tek bir birleşik lot gibi davranır (WAVG'nin doğası).
 
     Args:
-        lots:         Mevcut açık lot listesi.
+        lots:         Mevcut açık lot listesi (aynı symbol ve side).
         qty_to_close: Kapatılacak miktar.
 
     Returns:
@@ -109,11 +165,15 @@ def consume_lots_wavg(
     Hata durumları:
     - qty_to_close <= 0 → CostBasisError
     - qty_to_close > toplam miktar → CostBasisError
+    - Karışık symbol/side → CostBasisError (WAVG invariant)
     """
     if qty_to_close <= ZERO:
         raise CostBasisError(
             f"consume_lots_wavg: kapatılacak miktar pozitif olmalı, {qty_to_close} verildi."
         )
+
+    _validate_lot_homogeneity(lots, context="consume_lots_wavg: ")
+
     total_qty = sum((lt.quantity for lt in lots), ZERO)
     if qty_to_close > total_qty + Decimal("0.00000001"):  # tolerans
         raise CostBasisError(
@@ -121,8 +181,8 @@ def consume_lots_wavg(
             f"toplam miktarı ({total_qty}) aşıyor."
         )
 
-    avg_cost     = compute_weighted_average(lots)
-    cost_closed  = q_amount(avg_cost * qty_to_close)
+    avg_cost      = compute_weighted_average(lots)
+    cost_closed   = q_amount(avg_cost * qty_to_close)
     qty_remaining = q_qty(total_qty - qty_to_close)
 
     if qty_remaining <= ZERO:
@@ -130,8 +190,8 @@ def consume_lots_wavg(
         return cost_closed, []
 
     # Kalan toplam maliyet
-    total_cost   = sum((lt.total_cost_usdt for lt in lots), ZERO)
-    cost_remain  = q_amount(total_cost - cost_closed)
+    total_cost  = sum((lt.total_cost_usdt for lt in lots), ZERO)
+    cost_remain = q_amount(total_cost - cost_closed)
 
     # Birleşik tek lot olarak döndür (WAVG convention)
     if lots:

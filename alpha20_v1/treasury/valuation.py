@@ -3,13 +3,27 @@ treasury/valuation.py — Pozisyon ve portföy değerleme (mark-to-market).
 
 Tasarım kuralları:
 - Tüm değerlemeler anlık fiyata (current_price) dayanır.
-- NAV = Nakit + Σ(açık pozisyon mark-to-market değerleri).
 - Gerçekleşmemiş K/Z: yön duyarlı (LONG/SHORT).
 - Değerleme nesneleri değiştirilemez (frozen dataclass).
 - Exchange-independent: fiyat dışarıdan enjekte edilir.
 
-LONG  unrealized = (current_price - avg_cost) × quantity
-SHORT unrealized = (avg_cost - current_price) × quantity
+LONG ve SHORT NAV modeli:
+  LONG  unrealized = (current_price - avg_cost) × quantity
+  SHORT unrealized = (avg_cost - current_price) × quantity
+
+  NAV = nakit + LONG pozisyon değeri + SHORT özkaynak
+  LONG pozisyon değeri = Σ(LONG quantity × current_price)
+  SHORT özkaynak       = Σ(SHORT collateral + SHORT unrealized_pnl)
+
+  NOT: SHORT mark_to_market_usdt (qty × current) portföy NAV'ına doğrudan
+  eklenmez. SHORT bir yükümlülüktür; NAV katkısı = teminat ± K/Z.
+
+  Örnek (SHORT kâr):
+    cash=3500, SHORT 0.1 BTC avg=65000 current=60000
+    collateral = 65000 × 0.1 = 6500
+    unrealized_pnl = (65000-60000) × 0.1 = 500
+    short_equity = 6500 + 500 = 7000
+    NAV = 3500 + 7000 = 10500  ✓  (başlangıç 10000 + kâr 500)
 """
 from __future__ import annotations
 
@@ -74,14 +88,15 @@ def valuate_position(
             f"{current_price} verildi."
         )
 
-    mark_to_market = q_amount(quantity * current_price)
+    mark_to_market  = q_amount(quantity * current_price)
+    collateral_usdt = q_amount(avg_cost_per_unit * quantity)
 
     if side == TradeSide.LONG:
         unrealized_pnl = q_amount((current_price - avg_cost_per_unit) * quantity)
     else:
         unrealized_pnl = q_amount((avg_cost_per_unit - current_price) * quantity)
 
-    cost_basis_total = q_amount(avg_cost_per_unit * quantity)
+    cost_basis_total = collateral_usdt
     unrealized_pnl_pct = q_rate(
         safe_divide(unrealized_pnl, cost_basis_total) * Decimal("100")
         if cost_basis_total > ZERO else ZERO
@@ -94,6 +109,7 @@ def valuate_position(
         avg_cost_per_unit=avg_cost_per_unit,
         current_price=current_price,
         mark_to_market_usdt=mark_to_market,
+        collateral_usdt=collateral_usdt,
         unrealized_pnl=unrealized_pnl,
         unrealized_pnl_pct=unrealized_pnl_pct,
     )
@@ -113,7 +129,7 @@ def valuate_portfolio(
     Tüm portföyün anlık değerlemesini hesapla.
 
     Args:
-        cash_usdt:      Mevcut nakit bakiyesi (USDT).
+        cash_usdt:      Mevcut nakit bakiyesi (USDT, teminatlar düşülmüş).
         open_positions: Her biri şu alanları içeren dict listesi:
                           - symbol: str
                           - side: TradeSide (veya "LONG"/"SHORT" str)
@@ -125,9 +141,14 @@ def valuate_portfolio(
     Returns:
         PortfolioValuation (değiştirilemez).
 
+    NAV modeli:
+      NAV = cash + long_position_value + short_equity
+      long_position_value = Σ(LONG mark_to_market_usdt)
+      short_equity        = Σ(SHORT nav_contribution)
+                          = Σ(SHORT collateral + unrealized_pnl)
+
     Değişmezlik:
     - cash_usdt >= 0.
-    - NAV = cash + Σ(mark_to_market_usdt).
     """
     if cash_usdt < ZERO:
         raise ValuationError(
@@ -148,17 +169,31 @@ def valuate_portfolio(
         )
         position_vals.append(pv)
 
-    total_position_value = q_amount(
-        sum((pv.mark_to_market_usdt for pv in position_vals), ZERO)
+    # LONG ve SHORT'u ayrı hesapla
+    long_position_value = q_amount(
+        sum(
+            (pv.mark_to_market_usdt for pv in position_vals if pv.side == TradeSide.LONG),
+            ZERO,
+        )
     )
+    short_equity = q_amount(
+        sum(
+            (pv.nav_contribution for pv in position_vals if pv.side == TradeSide.SHORT),
+            ZERO,
+        )
+    )
+
+    total_position_value = q_amount(long_position_value + short_equity)
     total_unrealized_pnl = q_amount(
         sum((pv.unrealized_pnl for pv in position_vals), ZERO)
     )
-    nav = q_amount(cash_usdt + total_position_value)
+    nav = q_amount(cash_usdt + long_position_value + short_equity)
 
     return PortfolioValuation(
         cash_usdt=q_amount(cash_usdt),
         positions=tuple(position_vals),
+        long_position_value=long_position_value,
+        short_equity=short_equity,
         total_position_value=total_position_value,
         nav_usdt=nav,
         total_unrealized_pnl=total_unrealized_pnl,

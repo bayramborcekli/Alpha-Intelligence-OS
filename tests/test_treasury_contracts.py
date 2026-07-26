@@ -44,6 +44,7 @@ from treasury.ledger import (
     compute_cash_from_journals, compute_realized_pnl_from_journals,
     compute_total_fees_from_journals, get_ledger_summary,
     account_cash, account_position, account_realized_pnl, account_fee_expense,
+    account_funding_expense, account_funding_income,
 )
 from treasury.precision import (
     from_float, to_decimal, q_amount, q_price, q_qty, q_rate,
@@ -1063,3 +1064,648 @@ class TestPublicAPI:
         assert isinstance(pv.unrealized_pnl, Decimal)
         assert isinstance(pv.mark_to_market_usdt, Decimal)
         assert isinstance(pv.unrealized_pnl_pct, Decimal)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 11. SHORT muhasebesi testleri (ES-002 Rev 1)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSHORTAccounting:
+    """SHORT pozisyon journal semantiği ve K/Z doğruluğu."""
+
+    def test_short_open_journal_balanced(self):
+        """SHORT açılış: teminat nakitten ayrılır, journal dengeli."""
+        j = build_position_open_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            risk_usdt=Decimal("6500"), timestamp=_TS,
+        )
+        assert j.is_balanced()
+        assert j.debit_total()  == q_amount(Decimal("6500"))
+        assert j.credit_total() == q_amount(Decimal("6500"))
+
+    def test_short_open_debit_position_credit_cash(self):
+        """SHORT açılışta POSITION DR, CASH CR olmalı."""
+        j = build_position_open_journal(
+            symbol="ETHUSDT", side=TradeSide.SHORT,
+            risk_usdt=Decimal("3200"), timestamp=_TS,
+        )
+        dr = [ln.account for ln in j.lines if ln.entry_type == EntryType.DEBIT]
+        cr = [ln.account for ln in j.lines if ln.entry_type == EntryType.CREDIT]
+        assert "PAPER_POSITION:ETHUSDT" in dr
+        assert account_cash() in cr
+
+    def test_short_close_profit_balanced(self):
+        """SHORT kâr (fiyat düştü): exit < cost → pnl > 0, journal dengeli."""
+        j = build_position_close_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            cost_basis_usdt=Decimal("6500"),
+            exit_value_usdt=Decimal("6000"),   # fiyat düştü
+            timestamp=_TS,
+        )
+        assert j.is_balanced()
+
+    def test_short_close_profit_pnl_correct(self):
+        """SHORT kâr: pnl = cost - exit = 6500 - 6000 = 500."""
+        j = build_position_close_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            cost_basis_usdt=Decimal("6500"),
+            exit_value_usdt=Decimal("6000"),
+            timestamp=_TS,
+        )
+        cr_pnl = sum(
+            ln.amount for ln in j.lines
+            if ln.account == account_realized_pnl() and ln.entry_type == EntryType.CREDIT
+        )
+        assert cr_pnl == q_amount(Decimal("500"))
+
+    def test_short_close_profit_cash_effect(self):
+        """SHORT kâr: nakit DR = cost + pnl = 6500 + 500 = 7000."""
+        j = build_position_close_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            cost_basis_usdt=Decimal("6500"),
+            exit_value_usdt=Decimal("6000"),
+            timestamp=_TS,
+        )
+        dr_cash = sum(
+            ln.amount for ln in j.lines
+            if ln.account == account_cash() and ln.entry_type == EntryType.DEBIT
+        )
+        assert dr_cash == q_amount(Decimal("7000"))
+
+    def test_short_close_loss_balanced(self):
+        """SHORT zarar (fiyat arttı): exit > cost → pnl < 0, journal dengeli."""
+        j = build_position_close_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            cost_basis_usdt=Decimal("6500"),
+            exit_value_usdt=Decimal("7000"),   # fiyat arttı
+            timestamp=_TS,
+        )
+        assert j.is_balanced()
+
+    def test_short_close_loss_pnl_correct(self):
+        """SHORT zarar: pnl = cost - exit = 6500 - 7000 = -500."""
+        j = build_position_close_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            cost_basis_usdt=Decimal("6500"),
+            exit_value_usdt=Decimal("7000"),
+            timestamp=_TS,
+        )
+        dr_pnl = sum(
+            ln.amount for ln in j.lines
+            if ln.account == account_realized_pnl() and ln.entry_type == EntryType.DEBIT
+        )
+        assert dr_pnl == q_amount(Decimal("500"))
+
+    def test_short_close_loss_cash_effect(self):
+        """SHORT zarar: nakit DR = cost - zarar = 6500 - 500 = 6000."""
+        j = build_position_close_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            cost_basis_usdt=Decimal("6500"),
+            exit_value_usdt=Decimal("7000"),
+            timestamp=_TS,
+        )
+        dr_cash = sum(
+            ln.amount for ln in j.lines
+            if ln.account == account_cash() and ln.entry_type == EntryType.DEBIT
+        )
+        assert dr_cash == q_amount(Decimal("6000"))
+
+    def test_short_close_breakeven_balanced(self):
+        """SHORT başabaş: exit == cost → journal dengeli, K/Z satırı yok."""
+        j = build_position_close_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            cost_basis_usdt=Decimal("6500"),
+            exit_value_usdt=Decimal("6500"),
+            timestamp=_TS,
+        )
+        assert j.is_balanced()
+        pnl_lines = [ln for ln in j.lines if ln.account == account_realized_pnl()]
+        assert len(pnl_lines) == 0
+
+    def test_short_net_cash_profit(self):
+        """SHORT aç+kapat net nakit = kâr."""
+        j_open = build_position_open_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            risk_usdt=Decimal("6500"), timestamp=_TS,
+        )
+        j_close = build_position_close_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            cost_basis_usdt=Decimal("6500"),
+            exit_value_usdt=Decimal("6000"),  # 500 kâr
+            timestamp=_TS,
+        )
+        net_cash = compute_cash_from_journals([j_open, j_close])
+        assert net_cash == q_amount(Decimal("500"))
+
+    def test_short_net_cash_loss(self):
+        """SHORT aç+kapat net nakit = zarar (negatif)."""
+        j_open = build_position_open_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            risk_usdt=Decimal("6500"), timestamp=_TS,
+        )
+        j_close = build_position_close_journal(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            cost_basis_usdt=Decimal("6500"),
+            exit_value_usdt=Decimal("7000"),  # 500 zarar
+            timestamp=_TS,
+        )
+        net_cash = compute_cash_from_journals([j_open, j_close])
+        assert net_cash == q_amount(Decimal("-500"))
+
+    def test_short_margin_call_raises(self):
+        """SHORT zarar > teminat → ValueError (margin call PAPER modda desteklenmiyor)."""
+        with pytest.raises(ValueError, match="margin call"):
+            build_position_close_journal(
+                symbol="BTCUSDT", side=TradeSide.SHORT,
+                cost_basis_usdt=Decimal("500"),
+                exit_value_usdt=Decimal("1100"),  # zarar = 600 > teminat 500
+                timestamp=_TS,
+            )
+
+    def test_long_behavior_unchanged_after_rev1(self):
+        """LONG kapanış davranışı ES-002 Rev 1 sonrası değişmedi."""
+        j = build_position_close_journal(
+            symbol="BTCUSDT", side=TradeSide.LONG,
+            cost_basis_usdt=Decimal("50"),
+            exit_value_usdt=Decimal("75"),
+            timestamp=_TS,
+        )
+        assert j.is_balanced()
+        dr_cash = sum(
+            ln.amount for ln in j.lines
+            if ln.account == account_cash() and ln.entry_type == EntryType.DEBIT
+        )
+        assert dr_cash == q_amount(Decimal("75"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 12. Portfolio NAV testleri — LONG / SHORT / karma (ES-002 Rev 1)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestPortfolioNAV:
+    """LONG, SHORT ve karma portföy NAV doğruluğu."""
+
+    def test_long_only_nav(self):
+        """LONG-only: NAV = nakit + LONG mark_to_market."""
+        pv = valuate_portfolio(
+            cash_usdt=Decimal("4000"),
+            open_positions=[{
+                "symbol": "BTCUSDT",
+                "side": TradeSide.LONG,
+                "quantity": "1",
+                "avg_cost_per_unit": "60000",
+                "current_price": "65000",
+            }],
+            timestamp=_TS,
+        )
+        assert pv.long_position_value == q_amount(Decimal("65000"))
+        assert pv.short_equity        == q_amount(Decimal("0"))
+        assert pv.nav_usdt            == q_amount(Decimal("69000"))
+        assert pv.total_unrealized_pnl == q_amount(Decimal("5000"))
+
+    def test_short_only_nav(self):
+        """
+        SHORT-only: cash=3500, SHORT 0.1 BTC avg=65000 current=60000
+        collateral = 65000 × 0.1 = 6500 (nakitten düşülmüş)
+        unrealized_pnl = (65000-60000) × 0.1 = 500 (kâr)
+        short_equity = 6500 + 500 = 7000
+        NAV = 3500 + 0 + 7000 = 10500
+        """
+        pv = valuate_portfolio(
+            cash_usdt=Decimal("3500"),
+            open_positions=[{
+                "symbol": "BTCUSDT",
+                "side": TradeSide.SHORT,
+                "quantity": "0.1",
+                "avg_cost_per_unit": "65000",
+                "current_price": "60000",
+            }],
+            timestamp=_TS,
+        )
+        assert pv.long_position_value == q_amount(Decimal("0"))
+        assert pv.short_equity        == q_amount(Decimal("7000"))
+        assert pv.nav_usdt            == q_amount(Decimal("10500"))
+        assert pv.total_unrealized_pnl == q_amount(Decimal("500"))
+
+    def test_short_mark_to_market_not_added_to_nav(self):
+        """SHORT mark_to_market_usdt doğrudan NAV'a eklenmemeli."""
+        pv = valuate_portfolio(
+            cash_usdt=Decimal("3500"),
+            open_positions=[{
+                "symbol": "BTCUSDT",
+                "side": TradeSide.SHORT,
+                "quantity": "0.1",
+                "avg_cost_per_unit": "65000",
+                "current_price": "60000",
+            }],
+            timestamp=_TS,
+        )
+        pos = pv.positions[0]
+        # mark_to_market = 60000 × 0.1 = 6000
+        assert pos.mark_to_market_usdt == q_amount(Decimal("6000"))
+        # NAV = 3500 + 7000 = 10500 (mark_to_market 6000 doğrudan eklenmedi)
+        assert pv.nav_usdt != q_amount(Decimal("3500") + pos.mark_to_market_usdt)
+        assert pv.nav_usdt == q_amount(Decimal("10500"))
+
+    def test_short_loss_nav(self):
+        """
+        SHORT zarar: cash=3500, SHORT 0.1 BTC avg=60000 current=65000
+        collateral = 6000, unrealized_pnl = -500
+        short_equity = 6000 - 500 = 5500
+        NAV = 3500 + 5500 = 9000
+        """
+        pv = valuate_portfolio(
+            cash_usdt=Decimal("3500"),
+            open_positions=[{
+                "symbol": "BTCUSDT",
+                "side": TradeSide.SHORT,
+                "quantity": "0.1",
+                "avg_cost_per_unit": "60000",
+                "current_price": "65000",
+            }],
+            timestamp=_TS,
+        )
+        assert pv.short_equity        == q_amount(Decimal("5500"))
+        assert pv.nav_usdt            == q_amount(Decimal("9000"))
+        assert pv.total_unrealized_pnl == q_amount(Decimal("-500"))
+
+    def test_mixed_long_short_nav(self):
+        """
+        Karma portföy:
+          cash = 2000
+          LONG 0.1 BTC avg=60000 current=65000:
+            long_mtm = 6500, unrealized = +500
+          SHORT 0.1 BTC avg=65000 current=60000:
+            collateral = 6500, unrealized = +500
+            short_equity = 7000
+          NAV = 2000 + 6500 + 7000 = 15500
+        """
+        pv = valuate_portfolio(
+            cash_usdt=Decimal("2000"),
+            open_positions=[
+                {
+                    "symbol": "BTCUSDT", "side": TradeSide.LONG,
+                    "quantity": "0.1", "avg_cost_per_unit": "60000",
+                    "current_price": "65000",
+                },
+                {
+                    "symbol": "ETHUSDT", "side": TradeSide.SHORT,
+                    "quantity": "0.1", "avg_cost_per_unit": "65000",
+                    "current_price": "60000",
+                },
+            ],
+            timestamp=_TS,
+        )
+        assert pv.long_position_value == q_amount(Decimal("6500"))
+        assert pv.short_equity        == q_amount(Decimal("7000"))
+        assert pv.nav_usdt            == q_amount(Decimal("15500"))
+        assert pv.total_unrealized_pnl == q_amount(Decimal("1000"))
+
+    def test_total_position_value_backward_compat(self):
+        """total_position_value = long + short (backward compat)."""
+        pv = valuate_portfolio(
+            cash_usdt=Decimal("1000"),
+            open_positions=[
+                {
+                    "symbol": "BTCUSDT", "side": TradeSide.LONG,
+                    "quantity": "1", "avg_cost_per_unit": "60000",
+                    "current_price": "62000",
+                },
+                {
+                    "symbol": "ETHUSDT", "side": TradeSide.SHORT,
+                    "quantity": "1", "avg_cost_per_unit": "4000",
+                    "current_price": "3800",
+                },
+            ],
+            timestamp=_TS,
+        )
+        assert pv.total_position_value == q_amount(
+            pv.long_position_value + pv.short_equity
+        )
+
+    def test_collateral_usdt_field(self):
+        """PositionValuation.collateral_usdt = avg_cost × qty."""
+        pv_long = valuate_position(
+            symbol="BTCUSDT", side=TradeSide.LONG,
+            quantity=Decimal("2"),
+            avg_cost_per_unit=Decimal("30000"),
+            current_price=Decimal("35000"),
+        )
+        assert pv_long.collateral_usdt == q_amount(Decimal("60000"))
+
+        pv_short = valuate_position(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            quantity=Decimal("0.5"),
+            avg_cost_per_unit=Decimal("65000"),
+            current_price=Decimal("60000"),
+        )
+        assert pv_short.collateral_usdt == q_amount(Decimal("32500"))
+
+    def test_nav_contribution_long(self):
+        """LONG nav_contribution = mark_to_market_usdt."""
+        pv = valuate_position(
+            symbol="BTCUSDT", side=TradeSide.LONG,
+            quantity=Decimal("1"),
+            avg_cost_per_unit=Decimal("60000"),
+            current_price=Decimal("65000"),
+        )
+        assert pv.nav_contribution == pv.mark_to_market_usdt
+        assert pv.nav_contribution == q_amount(Decimal("65000"))
+
+    def test_nav_contribution_short(self):
+        """SHORT nav_contribution = collateral + unrealized_pnl."""
+        pv = valuate_position(
+            symbol="BTCUSDT", side=TradeSide.SHORT,
+            quantity=Decimal("0.1"),
+            avg_cost_per_unit=Decimal("65000"),
+            current_price=Decimal("60000"),
+        )
+        assert pv.nav_contribution == q_amount(
+            pv.collateral_usdt + pv.unrealized_pnl
+        )
+        assert pv.nav_contribution == q_amount(Decimal("7000"))
+
+    def test_empty_portfolio_nav(self):
+        """Açık pozisyon yokken NAV = nakit."""
+        pv = valuate_portfolio(cash_usdt=Decimal("10000"), open_positions=[], timestamp=_TS)
+        assert pv.nav_usdt            == q_amount(Decimal("10000"))
+        assert pv.long_position_value == q_amount(Decimal("0"))
+        assert pv.short_equity        == q_amount(Decimal("0"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 13. Funding journal testleri — ödeme ve tahsilat (ES-002 Rev 1)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestFundingJournal:
+    """Fonlama ödemesi (gider) ve tahsilatı (gelir) ayrı kaydedilmeli."""
+
+    def test_funding_payment_balanced(self):
+        """Ödeme: DR FUNDING_EXPENSE, CR CASH — dengeli."""
+        j = build_funding_journal(
+            symbol="BTCUSDT", funding_usdt=Decimal("2.5"),
+            is_income=False, timestamp=_TS,
+        )
+        assert j.is_balanced()
+
+    def test_funding_payment_decreases_cash(self):
+        """Ödeme: nakit AZALMALI (CR CASH)."""
+        j = build_funding_journal(
+            symbol="BTCUSDT", funding_usdt=Decimal("2.5"),
+            is_income=False, timestamp=_TS,
+        )
+        cr_cash = sum(
+            ln.amount for ln in j.lines
+            if ln.account == account_cash() and ln.entry_type == EntryType.CREDIT
+        )
+        assert cr_cash == q_amount(Decimal("2.5"))
+
+    def test_funding_payment_uses_expense_account(self):
+        """Ödeme: PAPER_FUNDING_EXPENSE hesabı kullanılmalı."""
+        j = build_funding_journal(
+            symbol="BTCUSDT", funding_usdt=Decimal("2.5"),
+            is_income=False, timestamp=_TS,
+        )
+        dr_accounts = [ln.account for ln in j.lines if ln.entry_type == EntryType.DEBIT]
+        assert account_funding_expense() in dr_accounts
+
+    def test_funding_payment_transfer_type(self):
+        """Ödeme transfer tipi FUNDING_PAYMENT olmalı."""
+        from treasury.types import TransferType
+        j = build_funding_journal(
+            symbol="BTCUSDT", funding_usdt=Decimal("1"),
+            is_income=False, timestamp=_TS,
+        )
+        assert j.transfer_type == TransferType.FUNDING_PAYMENT
+
+    def test_funding_income_balanced(self):
+        """Tahsilat: DR CASH, CR FUNDING_INCOME — dengeli."""
+        j = build_funding_journal(
+            symbol="ETHUSDT", funding_usdt=Decimal("1.75"),
+            is_income=True, timestamp=_TS,
+        )
+        assert j.is_balanced()
+
+    def test_funding_income_increases_cash(self):
+        """Tahsilat: nakit ARTMALI (DR CASH)."""
+        j = build_funding_journal(
+            symbol="ETHUSDT", funding_usdt=Decimal("1.75"),
+            is_income=True, timestamp=_TS,
+        )
+        dr_cash = sum(
+            ln.amount for ln in j.lines
+            if ln.account == account_cash() and ln.entry_type == EntryType.DEBIT
+        )
+        assert dr_cash == q_amount(Decimal("1.75"))
+
+    def test_funding_income_uses_income_account(self):
+        """Tahsilat: PAPER_FUNDING_INCOME hesabı kullanılmalı."""
+        j = build_funding_journal(
+            symbol="ETHUSDT", funding_usdt=Decimal("1.75"),
+            is_income=True, timestamp=_TS,
+        )
+        cr_accounts = [ln.account for ln in j.lines if ln.entry_type == EntryType.CREDIT]
+        assert account_funding_income() in cr_accounts
+
+    def test_funding_income_transfer_type(self):
+        """Tahsilat transfer tipi FUNDING_INCOME olmalı."""
+        from treasury.types import TransferType
+        j = build_funding_journal(
+            symbol="ETHUSDT", funding_usdt=Decimal("1"),
+            is_income=True, timestamp=_TS,
+        )
+        assert j.transfer_type == TransferType.FUNDING_INCOME
+
+    def test_funding_payment_income_opposite_cash_effect(self):
+        """Ödeme ve tahsilat nakit üzerinde zıt etki yaratmalı."""
+        j_pay = build_funding_journal(
+            symbol="BTCUSDT", funding_usdt=Decimal("3"),
+            is_income=False, timestamp=_TS,
+        )
+        j_inc = build_funding_journal(
+            symbol="BTCUSDT", funding_usdt=Decimal("3"),
+            is_income=True, timestamp=_TS,
+        )
+        cash_from_pay = compute_cash_from_journals([j_pay])
+        cash_from_inc = compute_cash_from_journals([j_inc])
+        assert cash_from_pay == q_amount(Decimal("-3"))
+        assert cash_from_inc == q_amount(Decimal("3"))
+        assert cash_from_pay + cash_from_inc == q_amount(Decimal("0"))
+
+    def test_funding_zero_raises(self):
+        """Sıfır funding_usdt → ValueError."""
+        with pytest.raises(ValueError):
+            build_funding_journal(symbol="BTCUSDT", funding_usdt=Decimal("0"), timestamp=_TS)
+
+    def test_funding_default_is_payment(self):
+        """Varsayılan (is_income belirtilmezse) = ödeme."""
+        j = build_funding_journal(symbol="BTCUSDT", funding_usdt=Decimal("1"), timestamp=_TS)
+        cr_accounts = [ln.account for ln in j.lines if ln.entry_type == EntryType.CREDIT]
+        assert account_cash() in cr_accounts
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 14. WAVG invariant testleri (ES-002 Rev 1)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestWAVGInvariant:
+    """Lot homojenliği — karışık sembol veya side CostBasisError fırlatmalı."""
+
+    def _make_lot(self, symbol: str, side: TradeSide, qty: str, cost: str,
+                  trade_id: str = "T001") -> CostBasisLot:
+        return CostBasisLot(
+            symbol=symbol, side=side,
+            quantity=q_qty(Decimal(qty)),
+            total_cost_usdt=q_amount(Decimal(cost)),
+            opened_at=_TS, trade_id=trade_id,
+        )
+
+    def test_homogeneous_lots_ok(self):
+        """Aynı sembol ve side → hata yok."""
+        lots = [
+            self._make_lot("BTCUSDT", TradeSide.LONG, "1", "60000", "T1"),
+            self._make_lot("BTCUSDT", TradeSide.LONG, "1", "64000", "T2"),
+        ]
+        avg = compute_weighted_average(lots)
+        assert avg == q_price(Decimal("62000"))
+
+    def test_mixed_symbol_raises(self):
+        """Farklı sembol → CostBasisError."""
+        lots = [
+            self._make_lot("BTCUSDT", TradeSide.LONG, "1", "60000", "T1"),
+            self._make_lot("ETHUSDT", TradeSide.LONG, "1", "3000",  "T2"),
+        ]
+        with pytest.raises(CostBasisError, match="sembol"):
+            compute_weighted_average(lots)
+
+    def test_mixed_side_raises(self):
+        """Farklı side (LONG + SHORT) → CostBasisError."""
+        lots = [
+            self._make_lot("BTCUSDT", TradeSide.LONG,  "1", "60000", "T1"),
+            self._make_lot("BTCUSDT", TradeSide.SHORT, "1", "65000", "T2"),
+        ]
+        with pytest.raises(CostBasisError, match="yön"):
+            compute_weighted_average(lots)
+
+    def test_add_lot_wrong_symbol_raises(self):
+        """add_lot_and_recompute: yeni lot farklı sembol → CostBasisError."""
+        btc_lot = self._make_lot("BTCUSDT", TradeSide.LONG, "1", "60000")
+        eth_lot = self._make_lot("ETHUSDT", TradeSide.LONG, "1", "3000", "T2")
+        with pytest.raises(CostBasisError):
+            add_lot_and_recompute([btc_lot], eth_lot)
+
+    def test_add_lot_wrong_side_raises(self):
+        """add_lot_and_recompute: yeni lot farklı side → CostBasisError."""
+        long_lot  = self._make_lot("BTCUSDT", TradeSide.LONG,  "1", "60000")
+        short_lot = self._make_lot("BTCUSDT", TradeSide.SHORT, "1", "65000", "T2")
+        with pytest.raises(CostBasisError):
+            add_lot_and_recompute([long_lot], short_lot)
+
+    def test_consume_mixed_symbol_raises(self):
+        """consume_lots_wavg: karışık sembol → CostBasisError."""
+        lots = [
+            self._make_lot("BTCUSDT", TradeSide.LONG, "1", "60000", "T1"),
+            self._make_lot("ETHUSDT", TradeSide.LONG, "1", "3000",  "T2"),
+        ]
+        with pytest.raises(CostBasisError):
+            consume_lots_wavg(lots, q_qty(Decimal("1")))
+
+    def test_single_lot_no_invariant_check(self):
+        """Tek lot → invariant kontrol edilmez, hata yok."""
+        lot = self._make_lot("BTCUSDT", TradeSide.LONG, "1", "60000")
+        avg = compute_weighted_average([lot])
+        assert avg == q_price(Decimal("60000"))
+
+    def test_empty_lots_no_error(self):
+        """Boş lot listesi → 0 döner, hata yok."""
+        assert compute_weighted_average([]) == ZERO
+
+    def test_short_homogeneous_lots_ok(self):
+        """SHORT lotlar kendi aralarında homojen olduğunda OK."""
+        lots = [
+            self._make_lot("ETHUSDT", TradeSide.SHORT, "2", "8000", "T1"),
+            self._make_lot("ETHUSDT", TradeSide.SHORT, "2", "8400", "T2"),
+        ]
+        avg = compute_weighted_average(lots)
+        assert avg == q_price(Decimal("4100"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 15. Decimal context testleri (ES-002 Rev 1)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestDecimalContext:
+    """Global Decimal context import sonrası değişmemeli."""
+
+    def test_import_does_not_change_global_context(self):
+        """
+        treasury.precision import edildiğinde global context değişmemeli.
+        Bu test import öncesi ve sonrası context'i karşılaştırır.
+        """
+        import decimal
+        import importlib
+
+        ctx_before = decimal.getcontext().copy()
+        # precision zaten import edilmiş; modülü yeniden yükle
+        import alpha20_v1.treasury.precision as prec_mod
+        importlib.reload(prec_mod)
+        ctx_after = decimal.getcontext()
+
+        # prec ve rounding değişmemiş olmalı
+        assert ctx_after.prec == ctx_before.prec, (
+            f"Import sonrası precision değişti: {ctx_before.prec} → {ctx_after.prec}"
+        )
+        assert ctx_after.rounding == ctx_before.rounding, (
+            f"Import sonrası rounding değişti: {ctx_before.rounding} → {ctx_after.rounding}"
+        )
+
+    def test_q_amount_explicit_rounding(self):
+        """q_amount global context'e bağımlı değil — açık quantize kullanır."""
+        import decimal
+        # Farklı bir context ayarla
+        with decimal.localcontext() as ctx:
+            ctx.rounding = decimal.ROUND_DOWN
+            # q_amount kendi ROUND_HALF_EVEN ile çalışmalı
+            result = q_amount(Decimal("1.000000015"))
+        # ROUND_HALF_EVEN: 1.000000015 → 1.00000002 (5 → çift sayıya)
+        assert result == Decimal("1.00000002"), (
+            f"q_amount global context'ten etkilendi: {result}"
+        )
+
+    def test_q_price_explicit_rounding(self):
+        """q_price açık ROUND_HALF_EVEN kullanır, global context'ten bağımsız."""
+        import decimal
+        with decimal.localcontext() as ctx:
+            ctx.rounding = decimal.ROUND_CEILING
+            result = q_price(Decimal("64999.999999999"))
+        # Beklenen: ROUND_HALF_EVEN ile 65000.00000000
+        assert result == Decimal("65000.00000000")
+
+    def test_precision_module_has_no_setcontext_side_effect(self):
+        """precision.py kaynak kodunda setcontext çağrısı olmamalı."""
+        import inspect
+        import alpha20_v1.treasury.precision as prec_mod
+        source = inspect.getsource(prec_mod)
+        assert "setcontext(" not in source, (
+            "precision.py kaynak kodu setcontext() içeriyor — "
+            "global context yan etkisi kaldırılmalı."
+        )
+
+    def test_financial_results_consistent_across_contexts(self):
+        """Farklı global context'lerde aynı finansal sonuç üretilmeli."""
+        import decimal
+
+        def compute(rounding):
+            with decimal.localcontext() as ctx:
+                ctx.rounding = rounding
+                return q_amount(Decimal("0.000000015"))
+
+        result_heven  = compute(decimal.ROUND_HALF_EVEN)
+        result_down   = compute(decimal.ROUND_DOWN)
+        result_up     = compute(decimal.ROUND_UP)
+
+        # Tüm bağlamlarda aynı sonuç (ROUND_HALF_EVEN açık olarak uygulandı)
+        assert result_heven == result_down == result_up, (
+            f"Context bağımlılığı tespit edildi: "
+            f"HALF_EVEN={result_heven}, DOWN={result_down}, UP={result_up}"
+        )

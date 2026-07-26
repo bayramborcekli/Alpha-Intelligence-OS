@@ -29,12 +29,15 @@ class AccountType(str, Enum):
     Hesap adı: "<AccountType>[:<SYMBOL>]" formatında kullanılır.
     Örnek: "PAPER_POSITION:BTCUSDT"
     """
-    PAPER_CASH          = "PAPER_CASH"           # Nakit (USDT) — Varlık
-    PAPER_POSITION      = "PAPER_POSITION"       # Açık pozisyon — Varlık
-    PAPER_REALIZED_PNL  = "PAPER_REALIZED_PNL"   # Gerçekleşmiş K/Z — Özkaynak
-    PAPER_UNREALIZED_PNL = "PAPER_UNREALIZED_PNL" # Gerçekleşmemiş K/Z — Özkaynak
-    PAPER_FEE_EXPENSE   = "PAPER_FEE_EXPENSE"    # İşlem ücreti — Gider
-    PAPER_FUNDING       = "PAPER_FUNDING"        # Fonlama maliyeti — Gider
+    PAPER_CASH            = "PAPER_CASH"             # Nakit (USDT) — Varlık
+    PAPER_POSITION        = "PAPER_POSITION"         # Açık pozisyon teminatı — Varlık
+    PAPER_REALIZED_PNL    = "PAPER_REALIZED_PNL"     # Gerçekleşmiş K/Z — Özkaynak
+    PAPER_UNREALIZED_PNL  = "PAPER_UNREALIZED_PNL"   # Gerçekleşmemiş K/Z — Özkaynak
+    PAPER_FEE_EXPENSE     = "PAPER_FEE_EXPENSE"      # İşlem ücreti — Gider
+    PAPER_FUNDING_EXPENSE = "PAPER_FUNDING_EXPENSE"  # Fonlama ödemesi — Gider
+    PAPER_FUNDING_INCOME  = "PAPER_FUNDING_INCOME"   # Fonlama tahsilatı — Gelir
+    # Backward compat: eski PAPER_FUNDING adı, expense anlamında kullanılırdı
+    PAPER_FUNDING         = "PAPER_FUNDING_EXPENSE"  # Alias — kullanımdan kalkıyor
 
 
 class EntryType(str, Enum):
@@ -58,12 +61,13 @@ class TradeResult(str, Enum):
 
 class TransferType(str, Enum):
     """Transfer / işlem olayı türü."""
-    POSITION_OPEN   = "POSITION_OPEN"    # Pozisyon açma
-    POSITION_CLOSE  = "POSITION_CLOSE"   # Pozisyon kapama
-    FEE             = "FEE"              # İşlem ücreti
-    FUNDING_PAYMENT = "FUNDING_PAYMENT"  # Fonlama ödemesi
-    DEPOSIT         = "DEPOSIT"          # Bakiye yükleme (başlangıç)
-    ADJUSTMENT      = "ADJUSTMENT"       # Manuel düzeltme
+    POSITION_OPEN    = "POSITION_OPEN"    # Pozisyon açma
+    POSITION_CLOSE   = "POSITION_CLOSE"   # Pozisyon kapama
+    FEE              = "FEE"              # İşlem ücreti
+    FUNDING_PAYMENT  = "FUNDING_PAYMENT"  # Fonlama ödemesi (gider)
+    FUNDING_INCOME   = "FUNDING_INCOME"   # Fonlama tahsilatı (gelir)
+    DEPOSIT          = "DEPOSIT"          # Bakiye yükleme (başlangıç)
+    ADJUSTMENT       = "ADJUSTMENT"       # Manuel düzeltme
 
 
 class TransferStatus(str, Enum):
@@ -85,15 +89,15 @@ class TransferStatus(str, Enum):
 
 class FeeType(str, Enum):
     """İşlem ücreti türü."""
-    TAKER    = "TAKER"       # Piyasa emri ücreti
-    MAKER    = "MAKER"       # Limit emir ücreti
-    FUNDING  = "FUNDING"     # Perp futures fonlama ücreti
-    WITHDRAWAL = "WITHDRAWAL" # Para çekme ücreti
+    TAKER      = "TAKER"       # Piyasa emri ücreti
+    MAKER      = "MAKER"       # Limit emir ücreti
+    FUNDING    = "FUNDING"     # Perp futures fonlama ücreti
+    WITHDRAWAL = "WITHDRAWAL"  # Para çekme ücreti
 
 
 class CostBasisMethod(str, Enum):
     """Maliyet esası hesaplama yöntemi."""
-    WAVG = "WAVG"   # Ağırlıklı ortalama (Weighted Average) — bu sistemde kullanılır
+    WAVG = "WAVG"   # Ağırlıklı ortalama — bu sistemde kullanılır
     FIFO = "FIFO"   # İlk giren ilk çıkar (gelecek için ayrılmıştır)
 
 
@@ -209,6 +213,9 @@ class CostBasisLot:
     """
     Ağırlıklı ortalama maliyet hesabı için bir pozisyon lotu.
     Birden fazla lot birleştirilerek WAVG hesabı yapılır.
+
+    Değişmezlik:
+    - Tüm lotlar aynı symbol ve side'a ait olmalı (WAVG invariant).
     """
     symbol:         str
     side:           TradeSide
@@ -289,13 +296,20 @@ class PositionValuation:
     """
     Tek bir açık pozisyonun anlık değerlemesi.
     Tüm tutarlar USDT cinsinden.
+
+    NAV katkısı modeli:
+      LONG:  nav_contribution = mark_to_market_usdt (qty × current_price)
+      SHORT: nav_contribution = collateral_usdt + unrealized_pnl
+             NOT: SHORT mark_to_market_usdt portföy NAV'ına doğrudan eklenmez;
+             bu değer yalnızca ham piyasa verisi olarak saklanır.
     """
     symbol:              str
     side:                TradeSide
     quantity:            Decimal
     avg_cost_per_unit:   Decimal       # Birim başına giriş maliyeti
     current_price:       Decimal       # Anlık piyasa fiyatı
-    mark_to_market_usdt: Decimal       # quantity * current_price
+    mark_to_market_usdt: Decimal       # qty × current_price (ham piyasa değeri)
+    collateral_usdt:     Decimal       # avg_cost × qty (teminat/maliyet esası)
     unrealized_pnl:      Decimal       # Gerçekleşmemiş K/Z (negatif olabilir)
     unrealized_pnl_pct:  Decimal       # Yüzde değişim
 
@@ -303,17 +317,41 @@ class PositionValuation:
     def is_profitable(self) -> bool:
         return self.unrealized_pnl > Decimal("0")
 
+    @property
+    def nav_contribution(self) -> Decimal:
+        """
+        Bu pozisyonun portföy NAV'ına katkısı.
+
+        LONG:  current piyasa değeri (mark_to_market_usdt)
+        SHORT: teminat + gerçekleşmemiş K/Z
+               = collateral + (avg_cost - current) × qty
+
+        Mantık: SHORT açılışta nakit azaldı (teminat ayrıldı). Kapanışta
+        teminat + K/Z geri döner. NAV'daki anlık değer = geri dönecek olan.
+        """
+        if self.side == TradeSide.LONG:
+            return self.mark_to_market_usdt
+        else:
+            return self.collateral_usdt + self.unrealized_pnl
+
 
 @dataclass(frozen=True)
 class PortfolioValuation:
     """
     Tüm portföyün anlık değerlemesi.
-    NAV = Nakit + Σ(pozisyon mark-to-market değerleri)
+
+    NAV hesaplama modeli:
+      NAV = nakit + LONG pozisyon değeri + SHORT özkaynak
+      long_position_value = Σ(LONG mark_to_market_usdt)
+      short_equity        = Σ(SHORT collateral + unrealized_pnl)
+      total_position_value = long_position_value + short_equity (compat)
     """
     cash_usdt:             Decimal
     positions:             tuple[PositionValuation, ...]
-    total_position_value:  Decimal      # Σ(mark_to_market_usdt)
-    nav_usdt:              Decimal      # Nakit + pozisyon değerleri
+    long_position_value:   Decimal      # Σ(LONG mark_to_market_usdt)
+    short_equity:          Decimal      # Σ(SHORT collateral + unrealized_pnl)
+    total_position_value:  Decimal      # long + short (backward compat)
+    nav_usdt:              Decimal      # cash + long_position_value + short_equity
     total_unrealized_pnl:  Decimal      # Σ(unrealized_pnl)
     timestamp:             datetime
 

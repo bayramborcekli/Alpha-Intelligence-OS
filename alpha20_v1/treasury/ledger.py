@@ -5,11 +5,20 @@ Her muhasebe olayı dengeli bir journal kaydı üretir:
   Σ(Borç tutarları) == Σ(Alacak tutarları)
 
 Hesap yapısı:
-  PAPER_CASH              → Nakit USDT varlığı
-  PAPER_POSITION:{SYMBOL} → Açık pozisyon maliyeti
-  PAPER_REALIZED_PNL      → Gerçekleşmiş K/Z toplamı
-  PAPER_FEE_EXPENSE       → Kümülatif ücret giderleri
-  PAPER_FUNDING           → Fonlama giderleri
+  PAPER_CASH               → Nakit USDT varlığı
+  PAPER_POSITION:{SYMBOL}  → Açık pozisyon teminatı (LONG ve SHORT)
+  PAPER_REALIZED_PNL       → Gerçekleşmiş K/Z toplamı
+  PAPER_FEE_EXPENSE        → Kümülatif ücret giderleri
+  PAPER_FUNDING_EXPENSE    → Fonlama ödemesi gideri (perp futures — borçlu)
+  PAPER_FUNDING_INCOME     → Fonlama tahsilatı geliri (perp futures — alacaklı)
+
+SHORT pozisyon muhasebesi (PAPER basitleştirilmiş model):
+  Açılış: Teminat (cost_basis) nakitten ayrılır → DR POSITION, CR CASH
+  Kapanış: Teminat + K/Z net olarak nakde döner.
+    - Kâr: DR CASH (cost+pnl), CR POSITION cost, CR PNL pnl
+    - Zarar: DR CASH (cost-zarar), DR PNL zarar,  CR POSITION cost
+  Not: exit_value_usdt parametresi SHORT için exit_nominal (qty×exit_price).
+       Nakit etkisi fonksiyon içinde side-aware hesaplanır.
 
 Exchange-independent: Borsa API'sine bağımlılık yok.
 PAPER: Gerçek emir gönderilmez.
@@ -46,8 +55,19 @@ def account_fee_expense() -> str:
     return AccountType.PAPER_FEE_EXPENSE.value
 
 
+def account_funding_expense() -> str:
+    """Fonlama ödemesi gider hesabı (trader borçlu)."""
+    return AccountType.PAPER_FUNDING_EXPENSE.value
+
+
+def account_funding_income() -> str:
+    """Fonlama tahsilatı gelir hesabı (trader alacaklı)."""
+    return AccountType.PAPER_FUNDING_INCOME.value
+
+
 def account_funding() -> str:
-    return AccountType.PAPER_FUNDING.value
+    """Backward compat: eski PAPER_FUNDING → expense hesabına yönlendirir."""
+    return account_funding_expense()
 
 
 # ── Journal ID üretici ────────────────────────────────────────────────────────
@@ -103,11 +123,14 @@ def build_position_open_journal(
     metadata: dict[str, Any] | None = None,
 ) -> JournalEntry:
     """
-    Pozisyon açma journal kaydı.
+    Pozisyon açma journal kaydı — LONG ve SHORT için aynı muhasebe yapısı.
 
-    Risk miktarı (risk_usdt) nakitten pozisyon hesabına aktarılır:
+    LONG ve SHORT için teminat (risk_usdt) nakitten pozisyon hesabına aktarılır:
       DR  PAPER_POSITION:{SYMBOL}   risk_usdt
           CR  PAPER_CASH            risk_usdt
+
+    LONG:  risk_usdt = qty × entry_price (pozisyon nominal değeri)
+    SHORT: risk_usdt = teminat miktarı (margin / collateral)
 
     Değişmezlik:
     - risk_usdt > 0 olmalı.
@@ -115,7 +138,9 @@ def build_position_open_journal(
     """
     amount = q_amount(risk_usdt)
     if amount <= ZERO:
-        raise ValueError(f"build_position_open_journal: risk_usdt pozitif olmalı, {risk_usdt} verildi.")
+        raise ValueError(
+            f"build_position_open_journal: risk_usdt pozitif olmalı, {risk_usdt} verildi."
+        )
 
     lines = (
         LedgerLine(account=account_position(symbol), entry_type=EntryType.DEBIT,  amount=amount),
@@ -124,7 +149,7 @@ def build_position_open_journal(
     entry = JournalEntry(
         id=new_journal_id(),
         timestamp=timestamp or _now_utc(),
-        description=f"Pozisyon açma: {symbol} {side.value} risk={amount:.8f} USDT",
+        description=f"Pozisyon açma: {symbol} {side.value} teminat={amount:.8f} USDT",
         transfer_type=TransferType.POSITION_OPEN,
         lines=lines,
         metadata=metadata or {},
@@ -143,58 +168,82 @@ def build_position_close_journal(
     metadata: dict[str, Any] | None = None,
 ) -> JournalEntry:
     """
-    Pozisyon kapama journal kaydı.
+    Pozisyon kapama journal kaydı — side-aware K/Z hesaplama.
 
-    Kâr durumunda:
-      DR  PAPER_CASH                    exit_value_usdt
-          CR  PAPER_POSITION:{SYMBOL}   cost_basis_usdt
-          CR  PAPER_REALIZED_PNL        (exit_value - cost_basis)
+    Parametre semantiği:
+      cost_basis_usdt : Açılışta ayrılan teminat (= qty × avg_cost)
+      exit_value_usdt : LONG → qty × exit_price (nakite giren)
+                        SHORT → qty × exit_price (exit nominal, kapama maliyeti)
 
-    Zarar durumunda:
-      DR  PAPER_CASH                    exit_value_usdt
-      DR  PAPER_REALIZED_PNL            (cost_basis - exit_value)
-          CR  PAPER_POSITION:{SYMBOL}   cost_basis_usdt
+    LONG K/Z: pnl = exit_value - cost_basis  (fiyat artarsa kâr)
+    SHORT K/Z: pnl = cost_basis - exit_value (fiyat düşerse kâr)
 
-    Başabaş durumunda:
-      DR  PAPER_CASH                    exit_value_usdt
-          CR  PAPER_POSITION:{SYMBOL}   exit_value_usdt
+    Nakit etkisi:
+      LONG:  cash_dr = exit_value  (exit tutarı nakde dönüşür)
+      SHORT: cash_dr = cost_basis + pnl = cost_basis + (cost_basis - exit_value)
+             (teminat geri + net K/Z; net kâr olduğunda artı, zarar ≤ teminat olmalı)
+
+    Journal yapısı (her iki yön için):
+      Kâr:     DR CASH cash_dr / CR POSITION cost / CR PNL pnl
+      Zarar:   DR CASH cash_dr / DR PNL loss      / CR POSITION cost
+      Başabaş: DR CASH cash_dr / CR POSITION cash_dr
 
     Değişmezlik:
     - cost_basis_usdt > 0 olmalı.
     - exit_value_usdt >= 0 olmalı.
-    - Denge her üç senaryoda da sağlanmalı.
+    - SHORT zarar teminatı aşamaz (PAPER margin call desteklenmiyor).
+    - Denge her üç senaryoda sağlanır.
     """
     cost  = q_amount(cost_basis_usdt)
     exit_ = q_amount(exit_value_usdt)
-    pnl   = q_amount(exit_ - cost)
 
     if cost <= ZERO:
-        raise ValueError(f"build_position_close_journal: cost_basis_usdt pozitif olmalı, {cost_basis_usdt} verildi.")
+        raise ValueError(
+            f"build_position_close_journal: cost_basis_usdt pozitif olmalı, "
+            f"{cost_basis_usdt} verildi."
+        )
     if exit_ < ZERO:
-        raise ValueError(f"build_position_close_journal: exit_value_usdt negatif olamaz, {exit_value_usdt} verildi.")
+        raise ValueError(
+            f"build_position_close_journal: exit_value_usdt negatif olamaz, "
+            f"{exit_value_usdt} verildi."
+        )
+
+    # Yön-duyarlı K/Z ve nakit etkisi
+    if side == TradeSide.LONG:
+        signed_pnl = q_amount(exit_ - cost)
+        cash_dr    = exit_
+    else:  # SHORT: fiyat düşünce kâr
+        signed_pnl = q_amount(cost - exit_)
+        cash_dr    = q_amount(cost + signed_pnl)  # = 2×cost - exit
+        if cash_dr < ZERO:
+            raise ValueError(
+                f"build_position_close_journal: SHORT zarar teminatı ({cost:.8f}) aşıyor — "
+                f"margin call PAPER modda desteklenmiyor. "
+                f"exit={exit_:.8f}, loss={q_amount(-signed_pnl):.8f}"
+            )
 
     lines: list[LedgerLine] = []
 
-    if pnl > ZERO:
-        # Kâr: nakite geri dön + K/Z alacağı
+    if signed_pnl > ZERO:
+        # Kâr
         lines = [
-            LedgerLine(account=account_cash(),            entry_type=EntryType.DEBIT,  amount=exit_),
-            LedgerLine(account=account_position(symbol),  entry_type=EntryType.CREDIT, amount=cost),
-            LedgerLine(account=account_realized_pnl(),    entry_type=EntryType.CREDIT, amount=pnl),
+            LedgerLine(account=account_cash(),           entry_type=EntryType.DEBIT,  amount=cash_dr),
+            LedgerLine(account=account_position(symbol), entry_type=EntryType.CREDIT, amount=cost),
+            LedgerLine(account=account_realized_pnl(),   entry_type=EntryType.CREDIT, amount=signed_pnl),
         ]
-    elif pnl < ZERO:
-        # Zarar: K/Z borç kaydı
-        loss = q_amount(abs(pnl))
+    elif signed_pnl < ZERO:
+        # Zarar
+        loss = q_amount(abs(signed_pnl))
         lines = [
-            LedgerLine(account=account_cash(),            entry_type=EntryType.DEBIT,  amount=exit_),
-            LedgerLine(account=account_realized_pnl(),    entry_type=EntryType.DEBIT,  amount=loss),
-            LedgerLine(account=account_position(symbol),  entry_type=EntryType.CREDIT, amount=cost),
+            LedgerLine(account=account_cash(),           entry_type=EntryType.DEBIT,  amount=cash_dr),
+            LedgerLine(account=account_realized_pnl(),   entry_type=EntryType.DEBIT,  amount=loss),
+            LedgerLine(account=account_position(symbol), entry_type=EntryType.CREDIT, amount=cost),
         ]
     else:
         # Başabaş
         lines = [
-            LedgerLine(account=account_cash(),            entry_type=EntryType.DEBIT,  amount=exit_),
-            LedgerLine(account=account_position(symbol),  entry_type=EntryType.CREDIT, amount=exit_),
+            LedgerLine(account=account_cash(),           entry_type=EntryType.DEBIT,  amount=cash_dr),
+            LedgerLine(account=account_position(symbol), entry_type=EntryType.CREDIT, amount=cash_dr),
         ]
 
     entry = JournalEntry(
@@ -202,7 +251,7 @@ def build_position_close_journal(
         timestamp=timestamp or _now_utc(),
         description=(
             f"Pozisyon kapama: {symbol} {side.value} "
-            f"maliyet={cost:.8f} çıkış={exit_:.8f} K/Z={pnl:+.8f} USDT"
+            f"maliyet={cost:.8f} exit_nominal={exit_:.8f} K/Z={signed_pnl:+.8f} USDT"
         ),
         transfer_type=TransferType.POSITION_CLOSE,
         lines=tuple(lines),
@@ -230,7 +279,9 @@ def build_fee_journal(
     """
     amount = q_amount(fee_usdt)
     if amount <= ZERO:
-        raise ValueError(f"build_fee_journal: fee_usdt pozitif olmalı, {fee_usdt} verildi.")
+        raise ValueError(
+            f"build_fee_journal: fee_usdt pozitif olmalı, {fee_usdt} verildi."
+        )
 
     lines = (
         LedgerLine(account=account_fee_expense(), entry_type=EntryType.DEBIT,  amount=amount),
@@ -252,32 +303,52 @@ def build_funding_journal(
     *,
     symbol: str,
     funding_usdt: Decimal,
+    is_income: bool = False,
     timestamp: datetime | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> JournalEntry:
     """
-    Fonlama ödemesi journal kaydı (perp futures).
+    Fonlama journal kaydı (perp futures).
 
-    Ödeme (negatif funding rate):
-      DR  PAPER_FUNDING   |funding_usdt|
-          CR  PAPER_CASH  |funding_usdt|
+    Ödeme (is_income=False, varsayılan) — trader borçlu (short taraf):
+      DR  PAPER_FUNDING_EXPENSE   |funding_usdt|
+          CR  PAPER_CASH          |funding_usdt|
+      Nakit etkisi: azalır (gider).
 
-    Tahsilat (pozitif funding rate) aynı muhasebe yapısını kullanır;
-    yön metadata üzerinden ayırt edilir.
+    Tahsilat (is_income=True) — trader alacaklı (long taraf veya negatif rate):
+      DR  PAPER_CASH              |funding_usdt|
+          CR  PAPER_FUNDING_INCOME |funding_usdt|
+      Nakit etkisi: artar (gelir).
+
+    Değişmezlik:
+    - funding_usdt > 0 olmalı (yön is_income ile belirlenir).
     """
     amount = q_amount(abs(to_decimal(funding_usdt)))
     if amount <= ZERO:
-        raise ValueError(f"build_funding_journal: funding_usdt sıfır olamaz.")
+        raise ValueError(
+            f"build_funding_journal: funding_usdt sıfır olamaz."
+        )
 
-    lines = (
-        LedgerLine(account=account_funding(), entry_type=EntryType.DEBIT,  amount=amount),
-        LedgerLine(account=account_cash(),    entry_type=EntryType.CREDIT, amount=amount),
-    )
+    if is_income:
+        lines: tuple[LedgerLine, ...] = (
+            LedgerLine(account=account_cash(),            entry_type=EntryType.DEBIT,  amount=amount),
+            LedgerLine(account=account_funding_income(),  entry_type=EntryType.CREDIT, amount=amount),
+        )
+        transfer_type = TransferType.FUNDING_INCOME
+        direction_label = "tahsilat"
+    else:
+        lines = (
+            LedgerLine(account=account_funding_expense(), entry_type=EntryType.DEBIT,  amount=amount),
+            LedgerLine(account=account_cash(),            entry_type=EntryType.CREDIT, amount=amount),
+        )
+        transfer_type = TransferType.FUNDING_PAYMENT
+        direction_label = "ödeme"
+
     entry = JournalEntry(
         id=new_journal_id(),
         timestamp=timestamp or _now_utc(),
-        description=f"Fonlama ödemesi: {symbol} {amount:.8f} USDT",
-        transfer_type=TransferType.FUNDING_PAYMENT,
+        description=f"Fonlama {direction_label}: {symbol} {amount:.8f} USDT",
+        transfer_type=transfer_type,
         lines=lines,
         metadata=metadata or {},
     )
@@ -295,12 +366,13 @@ def compute_account_balance(
     """
     Verilen hesap için tüm journal kayıtlarından net bakiye hesapla.
 
-    Nakit ve pozisyon hesapları için:
-      Net = Σ(DR tutarları) - Σ(CR tutarları)
+    Net = Σ(DR tutarları) - Σ(CR tutarları)
 
-    Muhasebe convention'ına göre:
-    - PAPER_CASH normalde CR ağırlıklı → Net < 0 (pasif perspektif)
-    - Bu fonksiyon ham net değeri döndürür; yorum çağırana aittir.
+    Varlık hesapları (CASH, POSITION) için:
+    - DR artı → nakit girişi / pozisyon büyümesi
+    - CR eksi → nakit çıkışı / pozisyon kapanması
+
+    Bu fonksiyon ham net değeri döndürür; yorum çağırana aittir.
     """
     balance = ZERO
     for journal in journals:
@@ -315,10 +387,9 @@ def compute_account_balance(
 
 def compute_cash_from_journals(journals: list[JournalEntry]) -> Decimal:
     """
-    PAPER_CASH hesabının journal'lardan hesaplanan net bakiyesi.
+    PAPER_CASH hesabının journal'lardan hesaplanan net değişimi.
 
-    Nakit hesabı için DR net perspektif kullanılır (varlık hesabı):
-      Cash = Σ(DR tutarları) - Σ(CR tutarları)
+    Net = Σ(DR tutarları) - Σ(CR tutarları)
 
     Yorumlama:
     - Pozitif → bu journal grubundan nakit net girişi
@@ -351,9 +422,9 @@ def compute_total_fees_from_journals(journals: list[JournalEntry]) -> Decimal:
 def get_ledger_summary(journals: list[JournalEntry]) -> dict:
     """Journal listesinden muhasebe özeti döndür."""
     return {
-        "journal_count":   len(journals),
-        "cash_balance":    compute_cash_from_journals(journals),
-        "realized_pnl":    compute_realized_pnl_from_journals(journals),
-        "total_fees":      compute_total_fees_from_journals(journals),
-        "all_balanced":    all(j.is_balanced() for j in journals),
+        "journal_count": len(journals),
+        "cash_balance":  compute_cash_from_journals(journals),
+        "realized_pnl":  compute_realized_pnl_from_journals(journals),
+        "total_fees":    compute_total_fees_from_journals(journals),
+        "all_balanced":  all(j.is_balanced() for j in journals),
     }

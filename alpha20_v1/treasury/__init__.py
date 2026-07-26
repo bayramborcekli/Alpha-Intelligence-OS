@@ -11,11 +11,19 @@ Exchange-independent tasarım:
 PAPER kilidi:
   Bu paket gerçek emir göndermez; yalnızca muhasebe kayıtlarını yönetir.
 
+Float politikası:
+  float yalnızca giriş sınırında (from_float, to_decimal) kabul edilir ve
+  Decimal(str(value)) ile normalize edilir. İç hesaplamalar tamamen Decimal'dir.
+
+Decimal context:
+  Bu modül import edildiğinde global Decimal context değiştirilmez.
+  Tüm yuvarlama açık quantize() çağrılarıyla yapılır (ROUND_HALF_EVEN).
+
 Alt modüller:
   precision      → Sabit ondalık hassasiyet (Decimal)
   types          → Tüm domain tipleri (enum + frozen dataclass)
   ledger         → Çift kayıtlı muhasebe + journal şablonları
-  cost_basis     → Ağırlıklı ortalama maliyet esası
+  cost_basis     → Ağırlıklı ortalama maliyet esası (WAVG)
   fees           → İşlem ücreti hesaplama ve birikimi
   transfer       → Transfer yaşam döngüsü durum makinesi
   valuation      → Mark-to-market pozisyon ve portföy değerleme
@@ -46,7 +54,8 @@ from .types import (
 from .ledger import (
     LedgerImbalanceError,
     account_cash, account_position, account_realized_pnl,
-    account_fee_expense, account_funding,
+    account_fee_expense,
+    account_funding_expense, account_funding_income, account_funding,
     validate_journal,
     build_position_open_journal,
     build_position_close_journal,
@@ -132,7 +141,8 @@ __all__ = [
     # Defter
     "LedgerImbalanceError",
     "account_cash", "account_position", "account_realized_pnl",
-    "account_fee_expense", "account_funding",
+    "account_fee_expense",
+    "account_funding_expense", "account_funding_income", "account_funding",
     "validate_journal",
     "build_position_open_journal", "build_position_close_journal",
     "build_fee_journal", "build_funding_journal",

@@ -4,6 +4,16 @@ treasury/precision.py — Sabit ondalık hassasiyet sistemi.
 Tüm muhasebe hesaplamalarında float yerine Decimal kullanılır.
 IEEE 754 yuvarlama hataları (örn. 9949.999999999998) bu modül ile önlenir.
 
+Float politikası:
+  float yalnızca giriş sınırında kabul edilir: from_float(x) veya to_decimal(x)
+  aracılığıyla Decimal(str(x)) ile normalize edilir. İç hesaplamalar tamamen
+  Decimal'dir; float aritmetiği hiçbir zaman muhasebe değerlerine uygulanmaz.
+
+Global context yan etkisi:
+  Bu modül import edildiğinde global Decimal context'i DEĞİŞTİRMEZ.
+  Tüm yuvarlama işlemleri açık quantize(..., rounding=ROUND_HALF_EVEN) ile
+  çağrı bazında yapılır. Yan etki riski yoktur.
+
 Kurallar:
 - Tüm finansal miktarlar Decimal tipinde saklanır.
 - Yuvarlama: ROUND_HALF_EVEN (banker's rounding) — sistematik hatayı önler.
@@ -12,12 +22,8 @@ Kurallar:
 """
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_HALF_EVEN, Context, setcontext, localcontext
+from decimal import Decimal, ROUND_HALF_EVEN, localcontext
 from typing import Union
-
-# ── Global Decimal bağlamı ────────────────────────────────────────────────────
-_TREASURY_CTX = Context(prec=28, rounding=ROUND_HALF_EVEN)
-setcontext(_TREASURY_CTX)
 
 # ── Hassasiyet sabitleri ──────────────────────────────────────────────────────
 QUANT_AMOUNT  = Decimal("0.00000001")   # 8 basamak — USDT miktarları
@@ -39,7 +45,8 @@ Number = Union[Decimal, int, str, float]
 def from_float(value: float) -> Decimal:
     """
     float'ı hassas Decimal'e dönüştür.
-    float('...') yerine str() üzerinden gidilir — IEEE 754 kirliliği önlenir.
+    str() üzerinden gidilir — IEEE 754 kirliliği önlenir.
+    Bu, domain API'sinin float kabul eden tek giriş noktasıdır.
 
     >>> from_float(9949.999999999998)
     Decimal('9949.999999999998')
@@ -55,7 +62,7 @@ def to_decimal(value: Number) -> Decimal:
     """
     Herhangi bir sayısal türü Decimal'e dönüştür.
     - Decimal  → değişmeden döner
-    - int/float → from_float üzerinden
+    - int/float → from_float üzerinden (giriş sınırı normalleştirmesi)
     - str       → Decimal(str) — leading whitespace strip edilir
     """
     if isinstance(value, Decimal):
@@ -68,24 +75,25 @@ def to_decimal(value: Number) -> Decimal:
 
 
 # ── Quantize yardımcıları ─────────────────────────────────────────────────────
+# Tüm yuvarlama açık quantize() ile yapılır — global context'e bağımlılık yok.
 
 def q_amount(value: Number) -> Decimal:
-    """USDT miktarını 8 basamağa yuvarla."""
+    """USDT miktarını 8 basamağa yuvarla (ROUND_HALF_EVEN)."""
     return to_decimal(value).quantize(QUANT_AMOUNT, rounding=ROUND_HALF_EVEN)
 
 
 def q_qty(value: Number) -> Decimal:
-    """Coin miktarını 8 basamağa yuvarla."""
+    """Coin miktarını 8 basamağa yuvarla (ROUND_HALF_EVEN)."""
     return to_decimal(value).quantize(QUANT_QTY, rounding=ROUND_HALF_EVEN)
 
 
 def q_price(value: Number) -> Decimal:
-    """Fiyatı 8 basamağa yuvarla."""
+    """Fiyatı 8 basamağa yuvarla (ROUND_HALF_EVEN)."""
     return to_decimal(value).quantize(QUANT_PRICE, rounding=ROUND_HALF_EVEN)
 
 
 def q_rate(value: Number) -> Decimal:
-    """Oranı / yüzdeyi 8 basamağa yuvarla."""
+    """Oranı / yüzdeyi 8 basamağa yuvarla (ROUND_HALF_EVEN)."""
     return to_decimal(value).quantize(QUANT_RATE, rounding=ROUND_HALF_EVEN)
 
 
