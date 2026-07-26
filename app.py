@@ -1844,7 +1844,11 @@ def _ws_bad_request(param):
 
 @app.get("/workspace")
 def workspace_page():
-    return _render_workspace("intelligence_workspace.html", "workspace")
+    # Kimlik doğrulamalı sayfa içeriği önbelleğe alınmaz (Agent 07 bulgusu)
+    resp = app.make_response(
+        _render_workspace("intelligence_workspace.html", "workspace"))
+    resp.headers["Cache-Control"] = "no-store, private"
+    return resp
 
 
 @app.get("/api/workspace/timeline")
