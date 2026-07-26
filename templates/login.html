@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alpha-20 v1 — Giriş</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1117; --panel: #161b22; --soft: #1c2430;
+      --border: #30363d; --text: #f0f6fc; --muted: #8b949e;
+      --accent: #58a6ff; --success: #3fb950; --danger: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: radial-gradient(circle at top, #17243a 0, var(--bg) 48%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      margin: 0; min-height: 100vh; padding: 20px;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center;
+    }
+    .login-card {
+      background: rgba(22,27,34,.97); border: 1px solid var(--border);
+      border-radius: 16px; box-shadow: 0 24px 64px rgba(0,0,0,.35);
+      padding: 36px 40px; width: 100%; max-width: 400px;
+    }
+    .eyebrow { color: var(--accent); font-size: .74rem; font-weight: 800;
+      letter-spacing: .15em; margin: 0 0 8px; text-transform: uppercase; }
+    h1 { font-size: 1.6rem; margin: 0 0 6px; }
+    .paper-badge {
+      background: rgba(63,185,80,.13); border: 1px solid rgba(63,185,80,.45);
+      border-radius: 8px; color: #7ee787; font-size: .78rem; font-weight: 700;
+      padding: 7px 12px; margin-bottom: 24px; display: inline-block;
+    }
+    .message {
+      border-radius: 9px; font-size: .88rem; line-height: 1.45;
+      margin: 0 0 18px; padding: 11px 14px;
+    }
+    .error { background: rgba(248,81,73,.12); border: 1px solid rgba(248,81,73,.45); color: #ffaaa5; }
+    .info  { background: rgba(88,166,255,.10); border: 1px solid rgba(88,166,255,.35); color: #a5d6ff; }
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: .84rem; font-weight: 700; margin-bottom: 6px; }
+    input[type="text"], input[type="password"] {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font: inherit; padding: 11px 12px; width: 100%;
+      transition: border-color .15s;
+    }
+    input[type="text"]:focus-visible, input[type="password"]:focus-visible {
+      outline: 3px solid rgba(88,166,255,.45); outline-offset: 2px;
+      border-color: var(--accent);
+    }
+    .submit-btn {
+      background: var(--accent); border: none; border-radius: 9px;
+      color: #08111d; cursor: pointer; font: 700 .95rem/1 inherit;
+      padding: 13px 20px; width: 100%; margin-top: 4px;
+      transition: filter .15s;
+    }
+    .submit-btn:hover { filter: brightness(1.1); }
+    .submit-btn:focus-visible { outline: 3px solid rgba(88,166,255,.45); outline-offset: 2px; }
+    .footer-note {
+      color: var(--muted); font-size: .76rem; line-height: 1.55;
+      margin-top: 20px; text-align: center;
+    }
+    @media (max-width: 460px) {
+      .login-card { padding: 28px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="login-card">
+  <p class="eyebrow">Alpha-20 v1</p>
+  <h1>Kontrol Paneli</h1>
+  <div class="paper-badge">PAPER modu — Gerçek emir gönderilmez</div>
+
+  {% if error %}
+    <div class="message error" role="alert">{{ error }}</div>
+  {% endif %}
+
+  {% if not_configured %}
+    <div class="message info" role="alert">
+      Parola henüz yapılandırılmamış. Lütfen <code>ADMIN_PASSWORD_HASH</code>
+      ortam değişkenini ayarlayın.
+    </div>
+  {% endif %}
+
+  <form method="post" action="/login">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if next %}
+      <input type="hidden" name="next" value="{{ next }}">
+    {% endif %}
+
+    <div class="field">
+      <label for="username">Kullanıcı Adı</label>
+      <input id="username" name="username" type="text"
+        autocomplete="username" required autofocus
+        placeholder="admin">
+    </div>
+
+    <div class="field">
+      <label for="password">Parola</label>
+      <input id="password" name="password" type="password"
+        autocomplete="current-password" required
+        placeholder="••••••••">
+    </div>
+
+    <button class="submit-btn" type="submit">Giriş Yap</button>
+  </form>
+
+  <p class="footer-note">
+    Bu panel yalnızca yönetici erişimine açıktır.<br>
+    Tüm işlemler simülasyon (PAPER) modunda gerçekleşir.
+  </p>
+</div>
+</body>
+</html>

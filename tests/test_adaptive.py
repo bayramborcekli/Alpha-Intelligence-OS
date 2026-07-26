@@ -614,7 +614,8 @@ class TestFlaskRoutes:
     @pytest.fixture(autouse=True)
     def client(self):
         import app as flask_app
-        flask_app.app.config["TESTING"] = True
+        flask_app.app.config["TESTING"]          = True
+        flask_app.app.config["WTF_CSRF_ENABLED"] = False
         with flask_app.app.test_client() as c:
             yield c
 

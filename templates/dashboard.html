@@ -188,7 +188,14 @@
       <h1>Kontrol Paneli</h1>
       <p class="intro">PAPER botunu, ayarlarını ve coin listesini tek yerden yönetin.</p>
     </div>
-    <div class="paper-badge">PAPER modu aktif — Gerçek emir gönderilmez.</div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div class="paper-badge">PAPER modu aktif — Gerçek emir gönderilmez.</div>
+      <a href="/logout" style="
+        background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.35);
+        border-radius:8px;color:#ff9492;font-size:.78rem;font-weight:700;
+        padding:6px 11px;text-decoration:none;white-space:nowrap;
+      " onclick="return confirm('Çıkış yapmak istediğinize emin misiniz?')">Çıkış Yap</a>
+    </div>
   </header>
 
   {% if message %}
@@ -1171,6 +1178,21 @@
     refreshSmartStatus();
     refreshAdaptiveStatus();
   }, 5000);
+
+  // ── CSRF token — tüm POST form'larına otomatik enjekte ───────────────────
+  (function () {
+    var token = "{{ csrf_token() }}";
+    var forms = document.querySelectorAll('form[method="post"], form[method="POST"]');
+    for (var i = 0; i < forms.length; i++) {
+      if (!forms[i].querySelector('input[name="csrf_token"]')) {
+        var inp = document.createElement("input");
+        inp.type  = "hidden";
+        inp.name  = "csrf_token";
+        inp.value = token;
+        forms[i].appendChild(inp);
+      }
+    }
+  })();
 </script>
 </body>
 </html>

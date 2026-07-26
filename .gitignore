@@ -2,10 +2,26 @@ __pycache__/
 *.py[cod]
 .pythonlibs/
 
+# Secrets — gerçek değer içerir, asla commit etme
+.env
+
+# Yedekler — hassas veri içerebilir
+backups/
+
 # Generated PAPER trading state and logs
 alpha20_v1/state.json
 alpha20_v1/alpha20.log
 alpha20_v1/.bot.pid
 alpha20_v1/bot_process.log
+alpha20_v1/safety_state.json
+alpha20_v1/panel_status.json
+alpha20_v1/*.jsonl
 state.json
 alpha20.log
+
+# Security event log
+security.log
+security.log.*
+
+# Temp files
+*.tmp

@@ -21,20 +21,48 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
+import secrets
 
-from flask import Flask, Response, render_template, request
+from flask import Flask, Response, render_template, request, redirect, session, url_for
+from flask_wtf.csrf import CSRFProtect, CSRFError
 
 # ── alpha20_v1/ modülleri sys.path üzerinden import ──────────────────────────
 ROOT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT_DIR / "alpha20_v1"))
 
-import universe_manager as um   # noqa: E402
-import metrics_store    as ms   # noqa: E402
-import safety_guard     as sg   # noqa: E402
-import auto_controller  as ac   # noqa: E402
-import learning_engine  as le   # noqa: E402
+import universe_manager as um    # noqa: E402
+import metrics_store    as ms    # noqa: E402
+import safety_guard     as sg    # noqa: E402
+import auto_controller  as ac    # noqa: E402
+import learning_engine  as le    # noqa: E402
+import auth                      # noqa: E402
+import security_log     as slog  # noqa: E402
 
 app = Flask(__name__)
+
+# ── Güvenlik yapılandırması ───────────────────────────────────────────────────
+_secret = (
+    os.environ.get("FLASK_SECRET_KEY") or
+    os.environ.get("SESSION_SECRET") or None
+)
+if not _secret:
+    _secret = secrets.token_hex(32)
+    print(
+        "[WARN] FLASK_SECRET_KEY/SESSION_SECRET tanımlı değil. "
+        "Geçici key üretildi; yeniden başlatmada oturumlar geçersiz olur.",
+        flush=True,
+    )
+
+app.config.update({
+    "SECRET_KEY":                 _secret,
+    "SESSION_COOKIE_HTTPONLY":    True,
+    "SESSION_COOKIE_SAMESITE":    "Lax",
+    "SESSION_COOKIE_SECURE":      os.environ.get("FLASK_ENV") == "production",
+    "PERMANENT_SESSION_LIFETIME": 8 * 3600,
+    "WTF_CSRF_TIME_LIMIT":        3600,
+})
+
+csrf = CSRFProtect(app)
 
 ROOT        = ROOT_DIR
 CONFIG_PATH = ROOT / "alpha20_v1" / "config.json"
@@ -98,6 +126,106 @@ DEFAULT_PRESETS = {
 @app.template_filter("fmt_volume")
 def fmt_volume_filter(vol: float) -> str:
     return um.fmt_volume(vol)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Güvenlik ara katmanı
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.before_request
+def _security_gate():
+    """Her istekte kimlik doğrulama kontrolü. TESTING=True ise atlanır."""
+    if app.config.get("TESTING"):
+        app.config["WTF_CSRF_ENABLED"] = False
+        return
+    exempt = {"/login", "/logout", "/favicon.ico"}
+    if request.path in exempt or request.path.startswith("/static/"):
+        return
+    if not session.get("logged_in"):
+        return redirect(url_for("login", next=request.path))
+    if auth._session_expired():
+        session.clear()
+        return redirect(url_for("login"))
+
+
+@app.after_request
+def _security_headers(response: Response) -> Response:
+    """Tüm yanıtlara güvenlik HTTP başlıkları ekle."""
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"]        = "DENY"
+    response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"]     = "geolocation=(), camera=(), microphone=()"
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none';"
+    )
+    response.headers["Content-Security-Policy"] = csp
+    if os.environ.get("FLASK_ENV") == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    return response
+
+
+@app.errorhandler(CSRFError)
+def _csrf_error(exc: CSRFError):  # type: ignore[misc]
+    ip = auth.get_client_ip()
+    slog.log_event(slog.CSRF_FAIL, ip=ip, detail=str(exc)[:80])
+    # Kimlik doğrulanmamış istekte dashboard içeriği ASLA gönderme.
+    # Oturum yoksa veya süresi dolmuşsa login'e yönlendir (302).
+    if not session.get("logged_in") or auth._session_expired():
+        session.clear()
+        return redirect(url_for("login")), 302
+    return render_dashboard(
+        "Güvenlik hatası: CSRF token geçersiz veya süresi dolmuş. Lütfen sayfayı yenileyin.",
+        "error"
+    ), 400
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Başlangıç doğrulama
+# ══════════════════════════════════════════════════════════════════════════════
+
+def validate_startup_config() -> None:
+    """Kritik yapılandırmayı kontrol et ve güvenlik loguna yaz."""
+    secret_ok = bool(os.environ.get("FLASK_SECRET_KEY") or os.environ.get("SESSION_SECRET"))
+    hash_ok   = auth.password_hash_configured()
+    warnings: list[str] = []
+    if not secret_ok:
+        warnings.append("FLASK_SECRET_KEY/SESSION_SECRET tanımlı değil (geçici key kullanılıyor)")
+    if not hash_ok:
+        warnings.append("ADMIN_PASSWORD_HASH tanımlı değil (giriş devre dışı)")
+        print(
+            "[WARN] ADMIN_PASSWORD_HASH ortam değişkeni ayarlanmamış. "
+            "Dashboard erişimi devre dışı. Kurulum için SECURITY.md belgesi.\n"
+            "  Hash üretmek: python3 -c \""
+            "from werkzeug.security import generate_password_hash; "
+            "import getpass; print(generate_password_hash(getpass.getpass()))\"",
+            flush=True,
+        )
+    detail = "; ".join(warnings) if warnings else "Yapılandırma tamam."
+    slog.log_event(slog.STARTUP, detail=detail)
+
+
+def enforce_paper_mode_lock() -> None:
+    """Başlangıçta config.json'un PAPER modunda olduğunu garanti et."""
+    with CONFIG_LOCK:
+        cfg, err = load_config()
+        if err or cfg is None:
+            slog.log_event(slog.CONFIG_ERROR, detail=f"config.json okunamadı: {err}")
+            return
+        if cfg.get("mode") != "PAPER":
+            cfg["mode"] = "PAPER"
+            try:
+                atomic_write_json(CONFIG_PATH, cfg)
+                slog.log_event(slog.PAPER_MODE_ACTIVE, detail="Mode zorla PAPER'a alındı.")
+            except OSError as exc:
+                slog.log_event(slog.CONFIG_ERROR, detail=f"Mode düzeltilemedi: {exc}")
+        else:
+            slog.log_event(slog.PAPER_MODE_ACTIVE, detail="PAPER modu doğrulandı.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -466,6 +594,59 @@ def _build_daily_report(config: dict | None) -> dict[str, Any]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Kimlik doğrulama rotaları
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("logged_in"):
+        return redirect(url_for("index"))
+
+    error: str | None = None
+    not_configured    = not auth.password_hash_configured()
+    # next_url — yalnızca aynı origin göreceli yollar
+    next_url = request.args.get("next") or request.form.get("next") or "/"
+    if not next_url.startswith("/") or next_url.startswith("//"):
+        next_url = "/"
+
+    if request.method == "POST":
+        ip = auth.get_client_ip()
+        allowed, secs = auth.check_rate_limit(ip)
+        if not allowed:
+            slog.log_event(slog.LOGIN_FAIL, detail=f"Rate limited {secs}s", ip=ip)
+            error = f"Çok fazla başarısız deneme. {secs} saniye bekleyin."
+        else:
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "")
+            if auth.verify_credentials(username, password):
+                auth.record_attempt(ip, success=True)
+                auth.start_session(username)
+                slog.log_event(slog.LOGIN_OK, username=username, ip=ip)
+                return redirect(next_url)
+            else:
+                auth.record_attempt(ip, success=False)
+                slog.log_event(slog.LOGIN_FAIL,
+                               detail=f"user={username[:20]}",
+                               ip=ip)
+                error = "Kullanıcı adı veya parola hatalı."
+
+    return render_template(
+        "login.html",
+        error=error,
+        not_configured=not_configured,
+        next=next_url,
+    )
+
+
+@app.get("/logout")
+def logout():
+    username = auth.clear_session()
+    ip       = auth.get_client_ip()
+    slog.log_event(slog.LOGOUT, username=username, ip=ip)
+    return redirect(url_for("login"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Sayfa render
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -507,8 +688,13 @@ def save_settings():
     ok, msg = update_config(updates)
     if ok and bot_running():
         msg += " Değişikliklerin etkili olması için botu yeniden başlatın."
-    ms.append_system_error(component="settings", error_type="SETTINGS_CHANGE",
-                           message=f"Ayarlar güncellendi: {list(updates.keys())}") if ok else None
+    if ok:
+        ms.append_system_error(component="settings", error_type="SETTINGS_CHANGE",
+                               message=f"Ayarlar güncellendi: {list(updates.keys())}")
+        slog.log_event(slog.SETTINGS_CHANGE,
+                       username=session.get("username", ""),
+                       ip=auth.get_client_ip(),
+                       detail=str(list(updates.keys()))[:80])
     return render_dashboard(msg, "success" if ok else "error")
 
 
@@ -524,8 +710,13 @@ def add_coin():
     if sym in syms:
         return render_dashboard(f"Hata: {sym} zaten listede.", "error")
     ok, msg = save_symbols(syms + [sym])
-    if ok and bot_running():
-        msg += " Bot çalışıyor; etkili olması için yeniden başlatın."
+    if ok:
+        if bot_running():
+            msg += " Bot çalışıyor; etkili olması için yeniden başlatın."
+        slog.log_event(slog.COIN_ADD,
+                       username=session.get("username", ""),
+                       ip=auth.get_client_ip(),
+                       detail=sym)
     return render_dashboard(msg, "success" if ok else "error")
 
 
@@ -541,8 +732,13 @@ def delete_coin():
     if len(syms) <= 1:
         return render_dashboard("Hata: En az bir coin kalmalıdır.", "error")
     ok, msg = save_symbols([s for s in syms if s != sym])
-    if ok and bot_running():
-        msg += " Bot çalışıyor; etkili olması için yeniden başlatın."
+    if ok:
+        if bot_running():
+            msg += " Bot çalışıyor; etkili olması için yeniden başlatın."
+        slog.log_event(slog.COIN_DEL,
+                       username=session.get("username", ""),
+                       ip=auth.get_client_ip(),
+                       detail=sym)
     return render_dashboard(msg, "success" if ok else "error")
 
 
@@ -584,12 +780,20 @@ def apply_preset():
 @app.post("/bot/start")
 def bot_start():
     ok, msg = start_bot()
+    if ok:
+        slog.log_event(slog.BOT_START,
+                       username=session.get("username", ""),
+                       ip=auth.get_client_ip())
     return render_dashboard(msg, "success" if ok else "error")
 
 
 @app.post("/bot/stop")
 def bot_stop():
     ok, msg = stop_bot()
+    if ok:
+        slog.log_event(slog.BOT_STOP,
+                       username=session.get("username", ""),
+                       ip=auth.get_client_ip())
     return render_dashboard(msg, "success" if ok else "error")
 
 
@@ -819,16 +1023,23 @@ def kill_switch():
     activate = request.form.get("activate") == "1"
     if activate:
         sg.activate_kill_switch("Panelden kullanıcı etkinleştirdi.")
-        # config'e de yaz
         cfg = _get_adaptive_cfg()
         cfg["kill_switch"] = True
         _save_adaptive_cfg(cfg)
+        slog.log_event(slog.KILL_SWITCH,
+                       username=session.get("username", ""),
+                       ip=auth.get_client_ip(),
+                       detail="activated")
         return render_dashboard("⛔ Acil durdur etkinleştirildi. Yeni işlem açılmayacak.", "error")
     else:
         sg.deactivate_kill_switch()
         cfg = _get_adaptive_cfg()
         cfg["kill_switch"] = False
         _save_adaptive_cfg(cfg)
+        slog.log_event(slog.KILL_SWITCH,
+                       username=session.get("username", ""),
+                       ip=auth.get_client_ip(),
+                       detail="deactivated")
         return render_dashboard("Acil durdur devre dışı bırakıldı.", "success")
 
 
@@ -1019,11 +1230,15 @@ def _get_main_config() -> dict[str, Any]:
 
 
 if __name__ == "__main__":
+    # Başlangıç güvenlik kontrolleri
+    validate_startup_config()
+    enforce_paper_mode_lock()
     # Akıllı seçim otomatik döngüsü
     um.start_auto_loop(_get_main_config)
     # Uyarlanabilir motor — yalnızca config'de enabled=true ise
     cfg0 = _get_main_config()
     if cfg0.get("adaptive_system", {}).get("enabled", False):
         ac.start_controller_loop()
-    port = int(os.environ.get("PORT", "5000"))
-    app.run(host="0.0.0.0", port=port)
+    port    = int(os.environ.get("PORT", "5000"))
+    _debug  = os.environ.get("FLASK_ENV", "").lower() == "development"
+    app.run(host="0.0.0.0", port=port, debug=_debug)
