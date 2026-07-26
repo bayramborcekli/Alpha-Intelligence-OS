@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import sqlite3
 import time
 import threading
 from datetime import datetime, timezone
@@ -24,8 +25,84 @@ SESSION_MAX_AGE    = 8 * 3600  # 8 saatlik oturum
 SESSION_WARN_SECS  = 300       # Son 5 dakikada uyarı göster
 SESSION_REFRESH_AT = 3600      # Son 1 saat kaldığında oturumu uzat
 
-_LOCK    = threading.Lock()
-_ATTEMPTS: dict[str, list[float]] = {}   # IP → [timestamp, ...]
+_LOCK = threading.Lock()
+
+# ── Paylaşımlı deneme deposu (SQLite) ─────────────────────────────────────────
+# Deneme sayaçları süreç belleği yerine SQLite dosyasında tutulur; böylece
+# birden fazla gunicorn worker'ı aynı sayaçları görür ve worker yeniden
+# başlasa bile kilit penceresi korunur.
+
+def _attempts_db_path() -> str:
+    return os.environ.get(
+        "LOGIN_ATTEMPTS_DB",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "login_attempts.db"),
+    )
+
+
+def _connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(_attempts_db_path(), timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=10000")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS login_attempts ("
+        " ip TEXT NOT NULL,"
+        " ts REAL NOT NULL)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip)"
+    )
+    return conn
+
+
+class _AttemptStore:
+    """Dict benzeri arayüzle SQLite destekli deneme deposu.
+
+    Eski `_ATTEMPTS: dict[str, list[float]]` kullanımıyla (testler dahil)
+    geriye dönük uyumludur, ancak veriler tüm worker süreçleri arasında
+    paylaşılan SQLite dosyasında saklanır.
+    """
+
+    def get(self, ip: str, default: list[float] | None = None) -> list[float]:
+        with _connect() as conn:
+            rows = conn.execute(
+                "SELECT ts FROM login_attempts WHERE ip = ? ORDER BY ts", (ip,)
+            ).fetchall()
+        if rows:
+            return [r[0] for r in rows]
+        return default if default is not None else []
+
+    def __getitem__(self, ip: str) -> list[float]:
+        return self.get(ip)
+
+    def __setitem__(self, ip: str, timestamps: list[float]) -> None:
+        with _connect() as conn:
+            conn.execute("DELETE FROM login_attempts WHERE ip = ?", (ip,))
+            conn.executemany(
+                "INSERT INTO login_attempts (ip, ts) VALUES (?, ?)",
+                [(ip, float(t)) for t in timestamps],
+            )
+
+    def __contains__(self, ip: str) -> bool:
+        with _connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM login_attempts WHERE ip = ? LIMIT 1", (ip,)
+            ).fetchone()
+        return row is not None
+
+    def __iter__(self):
+        with _connect() as conn:
+            rows = conn.execute("SELECT DISTINCT ip FROM login_attempts").fetchall()
+        return iter([r[0] for r in rows])
+
+    def keys(self):
+        return list(self)
+
+    def clear(self) -> None:
+        with _connect() as conn:
+            conn.execute("DELETE FROM login_attempts")
+
+
+_ATTEMPTS = _AttemptStore()   # IP → [timestamp, ...] (SQLite destekli)
 
 
 # ── Yardımcılar ───────────────────────────────────────────────────────────────
@@ -103,28 +180,38 @@ def check_rate_limit(ip: str) -> tuple[bool, int]:
     allowed=False ise giriş denenemez.
     """
     now = time.time()
-    with _LOCK:
-        attempts = [t for t in _ATTEMPTS.get(ip, []) if now - t < WINDOW_SECONDS]
-        _ATTEMPTS[ip] = attempts
+    with _LOCK, _connect() as conn:
+        conn.execute(
+            "DELETE FROM login_attempts WHERE ip = ? AND ts <= ?",
+            (ip, now - WINDOW_SECONDS),
+        )
+        rows = conn.execute(
+            "SELECT ts FROM login_attempts WHERE ip = ?", (ip,)
+        ).fetchall()
+        attempts = [r[0] for r in rows]
         if len(attempts) >= MAX_ATTEMPTS:
             oldest = min(attempts)
             remaining = int(LOCKOUT_SECONDS - (now - oldest))
             if remaining > 0:
                 return False, remaining
-            _ATTEMPTS[ip] = []
+            conn.execute("DELETE FROM login_attempts WHERE ip = ?", (ip,))
         return True, 0
 
 
 def record_attempt(ip: str, *, success: bool) -> None:
     """Giriş denemesini kaydet. Başarılıysa sayacı sıfırla."""
     now = time.time()
-    with _LOCK:
+    with _LOCK, _connect() as conn:
         if success:
-            _ATTEMPTS[ip] = []
+            conn.execute("DELETE FROM login_attempts WHERE ip = ?", (ip,))
         else:
-            prev = [t for t in _ATTEMPTS.get(ip, []) if now - t < WINDOW_SECONDS]
-            prev.append(now)
-            _ATTEMPTS[ip] = prev
+            conn.execute(
+                "DELETE FROM login_attempts WHERE ip = ? AND ts <= ?",
+                (ip, now - WINDOW_SECONDS),
+            )
+            conn.execute(
+                "INSERT INTO login_attempts (ip, ts) VALUES (?, ?)", (ip, now)
+            )
 
 
 # ── Kimlik doğrulama ──────────────────────────────────────────────────────────
