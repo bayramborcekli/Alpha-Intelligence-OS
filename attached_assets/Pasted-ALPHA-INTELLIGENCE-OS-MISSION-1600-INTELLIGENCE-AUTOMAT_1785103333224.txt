@@ -1,0 +1,388 @@
+ALPHA INTELLIGENCE OS
+MISSION 1600 — INTELLIGENCE AUTOMATION
+AGENT 04 — API & APPLICATION LIFECYCLE
+
+ROL
+
+Sen MISSION 1600'ün API ve Application Lifecycle agentısın.
+
+Görevin:
+
+• Automation Service için güvenli yönetim API'lerini oluşturmak,
+• scheduler'ı mevcut uygulama yaşam döngüsüne güvenli biçimde bağlamak,
+• mevcut authentication, authorization ve CSRF desenlerini korumaktır.
+
+Bu agent UI, Export veya Intelligence algoritması geliştirmeyecektir.
+
+────────────────────────────────────────
+1. BASELINE
+
+Referans commit:
+
+56d5abc
+
+Referans test sonucu:
+
+1028 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request:
+0
+
+Secret Exposure:
+0
+
+Korunacak baseline garantileri:
+
+• Workspace read-only
+• Timeline append-only
+• Exchange isolation
+• Ledger immutable
+• Audit immutable
+• Recommendation advisory-only
+• Risk Engine authority
+• Decimal integrity
+• Deterministic output
+• Sterile error responses
+• Authentication
+• Authorization
+• CSRF protection
+
+────────────────────────────────────────
+2. AMAÇ
+
+Mevcut Automation Core ve Automation Service için sınırlı, güvenli ve
+test edilebilir bir API yüzeyi oluştur.
+
+Önerilen akış:
+
+Authenticated Client
+        ↓
+Automation API
+        ↓
+Automation Service
+        ↓
+Automation Core
+        ↓
+Existing Intelligence Engine
+        ↓
+append_snapshot(...)
+        ↓
+Append-Only Timeline
+
+Scheduler başlangıcı:
+
+Application Lifecycle Hook
+        ↓
+Automation Configuration Check
+        ↓
+Single Scheduler Loop Per Worker/Process
+        ↓
+scheduler_tick(...)
+
+Repository'deki gerçek uygulama modelini incele ve mevcut desenle uyumlu
+bağlantı kullan.
+
+────────────────────────────────────────
+3. API KAPSAMI
+
+Repository mimarisine uygunsa en az aşağıdaki yüzeyleri oluştur:
+
+A. Durum sorgulama
+
+GET /api/automation/status
+
+Amaç:
+
+• enabled
+• current state
+• last run
+• next due
+• last result code
+• running durumu
+
+gibi sterile ve read-only bilgileri döndürmek.
+
+B. Manuel tetikleme
+
+POST /api/automation/run
+
+Amaç:
+
+• tek kontrollü automation çalışması başlatmak,
+• duplicate run durumunda güvenli cevap vermek,
+• hata ayrıntısı veya exception metni sızdırmamak.
+
+C. Etkinleştirme / devre dışı bırakma
+
+Yalnız mevcut mimari gerçekten destekliyorsa:
+
+POST /api/automation/enable
+POST /api/automation/disable
+
+Bu uçlar runtime güvenliği ve kalıcı yapılandırma modeliyle uyumlu değilse
+eklenmeyecek ve BLOCKED/OUT OF SCOPE olarak raporlanacaktır.
+
+Kanıtsız endpoint ekleme.
+
+────────────────────────────────────────
+4. AUTHENTICATION / AUTHORIZATION
+
+Tüm management endpoint'leri mevcut auth modelini kullanmalıdır.
+
+Zorunlu kurallar:
+
+• anonim kullanıcı erişemez,
+• yalnız uygun yetkiye sahip kullanıcı manuel tetikleyebilir,
+• durum endpoint'i dahi mevcut authorization politikasına uymalıdır,
+• yeni ve paralel auth sistemi oluşturulmayacaktır,
+• role/permission isimleri repository'deki mevcut sözleşmeden alınacaktır.
+
+Yetki modeli kanıtlanamıyorsa yeni rol icat etme.
+
+────────────────────────────────────────
+5. CSRF
+
+Durum değiştiren tüm POST uçları mevcut CSRF mekanizmasıyla korunmalıdır.
+
+Yasak:
+
+• CSRF bypass
+• özel istisna
+• yalnız API olduğu gerekçesiyle korumayı kaldırma
+• token'ı query string ile kabul etme
+
+Mevcut sistem JSON endpoint'leri için farklı, kanıtlı bir güvenlik deseni
+kullanıyorsa onu uygula ve raporla.
+
+────────────────────────────────────────
+6. RESPONSE SÖZLEŞMESİ
+
+API cevapları:
+
+• deterministik,
+• sterile,
+• minimum alanlı,
+• secret içermeyen,
+• path/traceback/exception metni içermeyen
+
+yapıda olmalıdır.
+
+Örnek durum kodları repository sözleşmesine göre seçilmelidir:
+
+• 200 — başarılı sorgu veya kabul edilen senkron işlem
+• 202 — asenkron kabul, gerçekten asenkron model varsa
+• 400 — geçersiz istek
+• 401 — kimlik doğrulama yok
+• 403 — yetki veya CSRF reddi
+• 409 — duplicate/running conflict
+• 503 — servis devre dışı veya kullanılamıyor
+
+Mevcut API standardı farklıysa mevcut standardı koru.
+
+────────────────────────────────────────
+7. MANUEL ÇALIŞTIRMA KURALLARI
+
+POST run endpoint'i:
+
+• Automation Service üzerinden çalışmalıdır.
+• Core'u atlamamalıdır.
+• Intelligence Engine'i doğrudan çağırmamalıdır.
+• append_snapshot() doğrudan çağırmamalıdır.
+• Aynı anda ikinci çalışma başlatmamalıdır.
+• Duplicate durumunu 409 veya mevcut eşdeğer sözleşmeyle bildirmelidir.
+• Başarısız çalışmada snapshot üretmemelidir.
+• Exchange çağrısı yapmamalıdır.
+
+Endpoint cevabı, mümkün olduğunca yalnız çalışma sonucu kodunu ve güvenli
+durum bilgisini içermelidir.
+
+────────────────────────────────────────
+8. APPLICATION LIFECYCLE / SCHEDULER BAĞLANTISI
+
+Agent 01 kararı ve repository'deki kanıtlı uygulama modeli uygulanacaktır.
+
+İncelenecekler:
+
+• Gunicorn kullanılıyor mu?
+• post_fork hook mevcut mu?
+• app factory var mı?
+• debug reloader duplicate thread riski var mı?
+• her worker'da scheduler çalışması isteniyor mu?
+• tek global scheduler garantisi gerçekten mümkün mü?
+
+Zorunlu davranış:
+
+• Automation varsayılan olarak kapalı kalmalıdır.
+• Yalnız enabled literal true ise scheduler başlatılmalıdır.
+• Aynı process içinde birden fazla loop başlatılmamalıdır.
+• Scheduler thread'i daemon ve stop_event kontrollü olmalıdır.
+• Startup hatası uygulamayı çökertmemelidir.
+• Exception ayrıntısı secret veya response yüzeyine taşınmamalıdır.
+• Lock mekanizması duplicate execution'ı yine Core seviyesinde önlemelidir.
+
+Her worker'da loop başlatma mimarisi varsa bunu açıkça raporla.
+Dağıtık tek-scheduler garantisini kanıtsız iddia etme.
+
+────────────────────────────────────────
+9. ZORUNLU GÜVENLİK SINIRLARI
+
+Bu agent aşağıdakileri ihlal edemez:
+
+• API'den Exchange emri
+• Ledger yazımı
+• Audit geçmişi mutasyonu
+• Workspace yazımı
+• Timeline overwrite/update/delete
+• append_snapshot'a doğrudan route erişimi
+• risk veya recommendation hesaplarını değiştirme
+• secret içeren response
+• traceback döndürme
+• auth veya CSRF bypass
+• debug endpoint
+• keyfi task payload çalıştırma
+
+API sabit ve önceden tanımlı automation davranışını tetiklemelidir.
+Kullanıcıdan fonksiyon adı, modül adı, dosya yolu veya çalıştırılabilir
+komut kabul edilmemelidir.
+
+────────────────────────────────────────
+10. KAPSAM DIŞI
+
+Bu agent yapmayacaktır:
+
+• UI
+• HTML şablonu
+• JavaScript
+• Export
+• Ekonomik veya siyasi veri analizi
+• Haber toplama
+• Yeni Intelligence algoritması
+• Queue/broker ekleme
+• Yeni framework veya paket
+• Portfolio Intelligence
+• Strategy Intelligence
+• Monitoring dashboard
+• Mission 1700+ kapsamı
+
+────────────────────────────────────────
+11. TESTLER
+
+En az aşağıdaki testler eklenmelidir:
+
+API:
+
+• authenticated status success
+• unauthenticated status denied
+• unauthorized status/run denied
+• CSRF missing denied
+• CSRF invalid denied
+• manual run success
+• duplicate run conflict
+• disabled automation response
+• unavailable service response
+• sterile exception response
+• deterministic JSON
+• no secret/path/traceback leakage
+• route does not call append_snapshot directly
+• route does not call IntelligenceService directly
+• no Exchange import/call
+
+Lifecycle:
+
+• disabled by default → loop başlamaz
+• literal true → loop başlar
+• aynı process'te ikinci loop başlamaz
+• scheduler exception uygulamayı çökertmez
+• stop_event ile loop kapanır
+• debug/reloader duplicate guard, uygulanıyorsa
+• post_fork bağlantısı, gerçekten kullanılıyorsa
+• aktif koşu sırasında yeni tick duplicate append üretmez
+
+Regression:
+
+• Agent 02 core testleri
+• Agent 03 service testleri
+• 1400
+• 1500.1
+• 1500.2
+• MISSION 1600 mevcut testleri
+
+────────────────────────────────────────
+12. UYGULAMA KALİTESİ
+
+• Mevcut proje kod stilini koru.
+• Yeni bağımlılık ekleme.
+• Route mantığını ince tut.
+• İş mantığını Service Layer'da bırak.
+• Testlerde gerçek ağ veya Exchange erişimi yapma.
+• Dosya sistemi yan etkilerini temporary path ile sınırla.
+• Test sonuçlarını deterministik tut.
+• Config mutasyonu oluşursa commit'li durumu geri yükle ve raporla.
+
+────────────────────────────────────────
+13. TESLİMAT RAPORU
+
+Rapor şu başlıkları içermelidir:
+
+── OLUŞTURULAN DOSYALAR ──
+[Dosya ve amacı]
+
+── DEĞİŞTİRİLEN DOSYALAR ──
+[Dosya ve değişikliğin gerekçesi]
+
+── API YÜZEYİ ──
+[Endpoint, method, auth, CSRF, response ve status code]
+
+── LIFECYCLE BAĞLANTISI ──
+[Scheduler'ın nerede ve hangi guard'larla başlatıldığı]
+
+── GÜVENLİK KONTROLLERİ ──
+[Auth, authorization, CSRF, sterile response, duplicate guard]
+
+── YENİ TESTLER ──
+[Test sayısı ve kapsamı]
+
+── TAM TEST SONUCU ──
+PASS sayısı
+
+── FAIL / SKIP ──
+FAIL ve SKIP sayısı
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+0 olmalıdır
+
+── SECRET EXPOSURE ──
+0 olmalıdır
+
+── BİLİNEN SINIRLAMALAR ──
+[Varsa]
+
+── COMMIT ──
+[Commit hash ve push durumu]
+
+── SONRAKİ AGENT ──
+AGENT 05 — UI
+
+────────────────────────────────────────
+14. PASS KRİTERİ
+
+PASS için:
+
+• Güvenli Automation API tamamlanmış olmalıdır.
+• Mevcut auth ve authorization kullanılmalıdır.
+• Tüm state-changing endpoint'ler CSRF korumalı olmalıdır.
+• Lifecycle bağlantısı repository modeline uygun olmalıdır.
+• Automation varsayılan kapalı kalmalıdır.
+• Aynı process'te duplicate scheduler loop engellenmelidir.
+• Route katmanı Core/Service sınırını atlamamalıdır.
+• Workspace ve Timeline baseline'ı değişmemelidir.
+• Exchange Write Request = 0 olmalıdır.
+• Secret Exposure = 0 olmalıdır.
+• Tüm testler PASS olmalıdır.
+• FAIL = 0 olmalıdır.
+• SKIP = 0 olmalı veya zorunlu gerekçe açıkça onaylanmalıdır.
+• Commit oluşturulmalı ve push edilmelidir.
+
+Kod tamamlanmadan PASS verilmez.
