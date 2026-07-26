@@ -1,0 +1,695 @@
+MISSION 1500.2 — AGENT 09
+Documentation & Mission Closure
+
+AMAÇ
+
+MISSION 1500.2 Intelligence Workspace çalışmasını belgelemek,
+operasyonel sınırlarını açıkça tanımlamak ve seriyi resmî olarak
+kapatmak.
+
+Bu agent yalnızca dokümantasyon ve kapanış işlemlerini yapacaktır.
+
+Ürün davranışı değiştirilmeyecektir.
+
+────────────────────────────────────────
+
+ÖN KOŞUL
+
+AGENT 08 aşağıdaki koşullarla PASS almış olmalıdır:
+
+• Tam test paketi PASS
+• FAIL = 0
+• SKIP = 0
+• Exchange Write = 0
+• Secret Exposure = 0
+
+Bu koşullar doğrulanmadan:
+
+MISSION 1500.2 — CLOSED
+
+yazılamaz.
+
+────────────────────────────────────────
+
+GÖREVLER
+
+1.
+
+MISSION 1500.2 mimarisini belgeleyen dokümanı oluştur
+veya mevcut uygun dokümana ekle.
+
+Belgelenecek zincir:
+
+Intelligence Snapshot
+
+↓
+
+Append-Only Timeline
+
+↓
+
+Workspace Service
+
+↓
+
+Read-Only API
+
+↓
+
+Workspace UI
+
+↓
+
+Workspace Export
+
+2.
+
+Aşağıdaki güvenlik ve davranış garantilerini açıkça yaz:
+
+• Read-only Workspace
+
+• Advisory-only
+
+• Exchange Write = 0
+
+• Deterministic output
+
+• Decimal değerler string olarak korunur
+
+• Unknown → null / "—" / "Veri Yok"
+
+• Risk Engine authoritative
+
+• History append-only
+
+• Ledger immutable
+
+• Audit immutable
+
+• External LLM yok
+
+• Authentication korunur
+
+• CSRF korunur
+
+• Rate limiting korunur
+
+• Sterile error modeli korunur
+
+3.
+
+Timeline katmanını belge:
+
+• append-only JSONL
+
+• kayıt sırası eski → yeni
+
+• Decimal → string
+
+• float reddi
+
+• canonical JSON
+
+• dosya ve kayıt boyut sınırları
+
+• file locking
+
+• environment path override
+
+• overwrite/update/delete yok
+
+4.
+
+Workspace Service fonksiyonlarını belge:
+
+• get_timeline(limit, offset)
+
+• get_snapshot(id)
+
+• compare_snapshots(a, b)
+
+• get_recommendation_history()
+
+• get_risk_evolution()
+
+• search(...)
+
+Aşağıdakileri açıkça belirt:
+
+• karşılaştırma derin ve deterministiktir
+
+• liste farkları indeks tabanlıdır
+
+• NEW / CHANGED / REMOVED durumları vardır
+
+• eksik taraf "Veri Yok" olarak gösterilir
+
+• recommendation tekrarları count ile birleştirilir
+
+• risk forecast = null
+
+• tahmin veya trend kestirimi yapılmaz
+
+5.
+
+Workspace API uçlarını belge:
+
+GET /api/workspace/timeline
+
+GET /api/workspace/snapshot/<id>
+
+GET /api/workspace/compare
+
+GET /api/workspace/recommendations
+
+GET /api/workspace/risk-evolution
+
+GET /api/workspace/search
+
+Tüm /api/v1 takma adlarını da listele.
+
+6.
+
+Her API ucu için aşağıdakileri belirt:
+
+• HTTP metodu
+
+• parametreler
+
+• authentication gereksinimi
+
+• başarı durumu
+
+• 400 davranışı
+
+• 404 davranışı
+
+• 405 davranışı
+
+• Cache-Control: no-store, private
+
+• read_only / advisory_only zarfı
+
+7.
+
+Workspace UI sayfasını belge:
+
+GET /workspace
+
+Bölümler:
+
+• Zaman Çizelgesi
+
+• Snapshot Detayı
+
+• Snapshot Karşılaştırma
+
+• Tavsiye Geçmişi
+
+• Risk Evrimi
+
+• Arama ve Filtreler
+
+• Dışa Aktarım alanı
+
+Aşağıdakileri açıkça yaz:
+
+• UI salt-okunurdur
+
+• yalnız Workspace GET API'lerini kullanır
+
+• işlem/emir/güncelleme/silme butonu yoktur
+
+• null → "—"
+
+• eksik karşılaştırma → "Veri Yok"
+
+• XSS kaçışı uygulanır
+
+• harici JS/CSS/CDN yoktur
+
+• CSP ile uyumludur
+
+8.
+
+Export uçlarını belge:
+
+GET /api/workspace/export/timeline
+
+GET /api/workspace/export/snapshot/<id>
+
+GET /api/workspace/export/compare
+
+GET /api/workspace/export/recommendations
+
+GET /api/workspace/export/risk-evolution
+
+GET /api/workspace/export/search
+
+Tüm /api/v1 takma adlarını da listele.
+
+9.
+
+Export formatlarını belge:
+
+• JSON
+
+• CSV
+
+Aşağıdakileri belirt:
+
+• format=json varsayılan
+
+• json|csv dışı → 400
+
+• Decimal string korunur
+
+• CSV düz metin hücrelerden oluşur
+
+• CSV formül enjeksiyon koruması vardır
+
+• yapısal değerler canonical JSON metnine düzleştirilir
+
+• UTF-8 BOM
+
+• CRLF
+
+• Content-Disposition attachment
+
+• X-Content-Type-Options: nosniff
+
+• Cache-Control: no-store, private
+
+10.
+
+Güvenlik doğrulamasını belge:
+
+• tüm API/export uçlarında authentication
+
+• /workspace anonim erişimde login yönlendirmesi
+
+• yalnız GET/HEAD/OPTIONS
+
+• POST/PUT/PATCH/DELETE → 405
+
+• yeni CSRF istisnası yok
+
+• rate-limit bypass yok
+
+• template autoescape açık
+
+• |safe yok
+
+• path traversal etkisiz
+
+• kullanıcı girdisi dosya yolunu belirleyemez
+
+• exception/stack/path/env/credential/secret sızmaz
+
+• exchange/network/LLM erişimi yok
+
+• history dosyası okuma sonrası bayt-özdeş kalır
+
+11.
+
+Bilinen sınırlamaları dürüstçe belge:
+
+• geçmiş üretimde henüz beslenmiyorsa boş sonuç döner
+
+• boş geçmiş total: 0 üretir
+
+• eski/kısmi şema kayıtlarında eksik alan türetilmez
+
+• liste karşılaştırması indeks tabanlıdır
+
+• sıra değişimi değişiklik olarak görülebilir
+
+• risk forecast = null
+
+• trend tahmini yoktur
+
+• büyük limit/offset/a/b için özel üst sınır yoktur
+
+• veri boyutu MAX_RECORDS sınırıyla sınırlıdır
+
+• UI export alanı hâlâ yer tutucuysa bunu açıkça belirt
+
+12.
+
+Operasyonel yapılandırmayı belge:
+
+• history dosya yolu
+
+• environment override adı
+
+• MAX_RECORDS
+
+• kayıt boyut sınırı
+
+• dosya boyut sınırı
+
+• locking davranışı
+
+Gerçek secret, token veya credential yazılmayacaktır.
+
+13.
+
+Test ve doğrulama sonuçlarını belge:
+
+• 1500.2 başlangıç test sayısı
+
+• Agent 02 sonrası test sayısı
+
+• Agent 03 sonrası test sayısı
+
+• Agent 04 sonrası test sayısı
+
+• Agent 05 sonrası test sayısı
+
+• Agent 06 sonrası test sayısı
+
+• Agent 07 sonrası test sayısı
+
+• Agent 08 final test sayısı
+
+• FAIL
+
+• SKIP
+
+• Exchange Write Request
+
+• Secret Exposure
+
+• final commit / HEAD
+
+Sayılar yalnızca doğrulanmış Agent raporlarından alınmalıdır.
+
+Tahmin yapılmayacaktır.
+
+14.
+
+Değişiklik özetini hazırla:
+
+Oluşturulan dosyalar:
+
+• intelligence_timeline.py
+
+• intelligence_workspace_service.py
+
+• workspace_export_api.py
+
+• templates/intelligence_workspace.html
+
+• ilgili test dosyaları
+
+Değiştirilen dosyalar:
+
+• app.py
+
+• templates/dash_base.html
+
+• dokümantasyon dosyaları
+
+Dokunulmayan kritik bileşenler:
+
+• Risk Engine
+
+• Recommendation Engine
+
+• 1500.1 modelleri
+
+• Exchange
+
+• Ledger
+
+• Audit
+
+• Settings
+
+15.
+
+Migration ve rollback notu hazırla.
+
+Rollback sırasında:
+
+• Workspace UI rotası kaldırılabilir
+
+• Workspace API rotaları kaldırılabilir
+
+• Export rotaları kaldırılabilir
+
+• nav bağlantısı kaldırılabilir
+
+• Workspace modülleri devre dışı bırakılabilir
+
+• geçmiş dosyasının silinmesi zorunlu değildir
+
+• 1500.1 sistemi bağımsız çalışmaya devam eder
+
+• Ledger/Audit/Exchange verisine müdahale edilmez
+
+16.
+
+Kod ve doküman arasında tutarlılık kontrolü yap.
+
+Aşağıdakileri kaynak koddan doğrula:
+
+• endpoint listesi
+
+• parametre adları
+
+• HTTP metotları
+
+• header davranışı
+
+• export formatları
+
+• error kodları
+
+• environment değişkenleri
+
+• dosya limitleri
+
+• test sonuçları
+
+Tutarsızlık varsa doküman düzeltilir.
+
+Ürün kodu değiştirilmez.
+
+17.
+
+MISSION 1500.2 kapanış kaydını oluştur.
+
+Yalnız Agent 08 tam PASS ise:
+
+MISSION 1500.2 — CLOSED
+
+Aşağıdaki özetle yazılmalıdır:
+
+• Final Tests: X PASS / 0 FAIL / 0 SKIP
+
+• Exchange Write: 0
+
+• Secret Exposure: 0
+
+• Read-only: Confirmed
+
+• Advisory-only: Confirmed
+
+• Deterministic: Confirmed
+
+• Decimal Integrity: Confirmed
+
+• History Append-only: Confirmed
+
+• Authentication: Preserved
+
+• CSRF: Preserved
+
+• Rate Limiting: Preserved
+
+• Ledger: Immutable
+
+• Audit: Immutable
+
+────────────────────────────────────────
+
+KISITLAR
+
+Ürün kodu değiştirilmeyecek.
+
+Endpoint eklenmeyecek.
+
+Endpoint kaldırılmayacak.
+
+UI değiştirilmeyecek.
+
+Export davranışı değiştirilmeyecek.
+
+Servis davranışı değiştirilmeyecek.
+
+Timeline davranışı değiştirilmeyecek.
+
+Test beklentisi değiştirilmeyecek.
+
+Security davranışı değiştirilmeyecek.
+
+────────────────────────────────────────
+
+YASAKLAR
+
+Yeni özellik
+
+Yeni servis
+
+Yeni API
+
+Yeni UI
+
+Yeni export formatı
+
+Yeni filtre
+
+Test silme
+
+Test skip
+
+Test beklentisini gevşetme
+
+Exchange request
+
+Exchange write
+
+Harici LLM
+
+Tahmin
+
+Otomatik karar
+
+Gerçek secret veya credential belgeleme
+
+Agent 08 PASS olmadan CLOSED yazma
+
+────────────────────────────────────────
+
+DOKÜMANTASYON KONTROLÜ
+
+• Mimari kodla uyumlu
+
+• Endpoint listesi doğru
+
+• Parametreler doğru
+
+• HTTP metotları doğru
+
+• Header bilgileri doğru
+
+• Export formatları doğru
+
+• Güvenlik garantileri doğru
+
+• Sınırlamalar dürüstçe yazılmış
+
+• Test sayıları doğrulanmış
+
+• Commit bilgisi doğrulanmış
+
+• Secret yok
+
+• Eski davranışlarla çelişki yok
+
+• 1500.1 garantileri korunuyor
+
+────────────────────────────────────────
+
+TESTLER
+
+Bu agent yeni ürün testi yazmak zorunda değildir.
+
+En az aşağıdakiler doğrulanmalıdır:
+
+• dokümantasyon dosyaları repository içinde mevcut
+
+• endpoint isimleri kaynak kodla eşleşiyor
+
+• /api/v1 aliasları eksiksiz
+
+• parametre listeleri kaynak kodla eşleşiyor
+
+• export formatları doğru
+
+• güvenlik garantileri Agent 07 ile uyumlu
+
+• final test sayısı Agent 08 raporuyla uyumlu
+
+• dokümanda secret/token/credential bulunmuyor
+
+• MISSION CLOSED yalnız PASS koşuluyla yazılmış
+
+• tam test paketi yeniden çalıştırıldığında regresyon yok
+
+────────────────────────────────────────
+
+TESLİM RAPORU
+
+── DEĞİŞEN DOSYALAR ──
+
+── MİMARİ DOKÜMANTASYON ──
+
+── TIMELINE DOKÜMANTASYONU ──
+
+── SERVICE DOKÜMANTASYONU ──
+
+── API DOKÜMANTASYONU ──
+
+── UI DOKÜMANTASYONU ──
+
+── EXPORT DOKÜMANTASYONU ──
+
+── SECURITY GARANTİLERİ ──
+
+── OPERASYON / ROLLBACK NOTLARI ──
+
+── TEST TARİHÇESİ ──
+
+── FINAL TEST SONUCU ──
+
+── FAIL / SKIP SAYISI ──
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+
+── SECRET EXPOSURE ──
+
+── COMMIT / HEAD ──
+
+── BİLİNEN SINIRLAMALAR ──
+
+── MISSION STATUS ──
+
+────────────────────────────────────────
+
+PASS KRİTERİ
+
+• Dokümantasyon kodla tamamen uyumlu.
+
+• Timeline, Service, API, UI ve Export belgelenmiş.
+
+• Güvenlik ve operasyon sınırları açık.
+
+• Bilinen sınırlamalar dürüstçe yazılmış.
+
+• Rollback planı hazır.
+
+• Agent 08 final sonucu PASS.
+
+• FAIL = 0
+
+• SKIP = 0
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Ürün davranışı değişmedi.
+
+• MISSION 1500.2 resmî olarak CLOSED.
