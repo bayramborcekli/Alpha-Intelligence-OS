@@ -1,0 +1,278 @@
+{
+  "mission": "1310A — Binance TR API Authentication",
+  "run_id": "M1310A-3d1dbee9c3",
+  "commit": "7acf86b",
+  "tests": "359 passed in 4.33s",
+  "endpoint": "https://www.trbinance.com",
+  "key_masked": "5415…0okg",
+  "checks": {
+    "account": "OK"
+  },
+  "authentication": "PASS",
+  "account_status": 1,
+  "asset_count": 380,
+  "balances_nonzero": [
+    {
+      "asset": "TRY",
+      "free": "1.3942",
+      "locked": "0"
+    },
+    {
+      "asset": "USDT",
+      "free": "20.9685",
+      "locked": "0"
+    }
+  ],
+  "recent_deposits": {
+    "count": 6,
+    "latest": [
+      {
+        "id": 10627033,
+        "asset": "USDT",
+        "network": "BSC",
+        "address": "0xcff0a35ca2ccb6cc8d6c1ee887eb2360d046bfce",
+        "addressTag": "",
+        "txId": "0xf3925198e3f7f447c31fc8caae45b7806bcfbf58028368323bcd97c96998f073",
+        "amount": "1083.494586",
+        "transferType": 0,
+        "status": 1,
+        "insertTime": "1666589730000",
+        "bStatus": 1,
+        "selfReturnStatus": 0,
+        "bId": "",
+        "travelRuleStatus": 0,
+        "refundApplyTime": "0",
+        "refundRequestId": ""
+      },
+      {
+        "id": 8811696,
+        "asset": "BTC",
+        "network": "BSC",
+        "address": "0xcff0a35ca2ccb6cc8d6c1ee887eb2360d046bfce",
+        "addressTag": "",
+        "txId": "0x067cd176bbcfac764fe75c4ba261b125ed19642d4f42649a82b2c802bac92386",
+        "amount": "0.048886",
+        "transferType": 0,
+        "status": 1,
+        "insertTime": "1656296430000",
+        "bStatus": 1,
+        "selfReturnStatus": 0,
+        "bId": "",
+        "travelRuleStatus": 0,
+        "refundApplyTime": "0",
+        "refundRequestId": ""
+      },
+      {
+        "id": 7926918,
+        "asset": "BTC",
+        "network": "BSC",
+        "address": "0xcff0a35ca2ccb6cc8d6c1ee887eb2360d046bfce",
+        "addressTag": "",
+        "txId": "0xe765ca8b40d833087d7766537e77589ce52d2a7565e6d6ae045d0011b0b4ab3b",
+        "amount": "0.034939",
+        "transferType": 0,
+        "status": 1,
+        "insertTime": "1652967991000",
+        "bStatus": 1,
+        "selfReturnStatus": 0,
+        "bId": "",
+        "travelRuleStatus": 0,
+        "refundApplyTime": "0",
+        "refundRequestId": ""
+      }
+    ]
+  },
+  "recent_withdrawals": {
+    "count": 10,
+    "latest": [
+      {
+        "id": 7843202,
+        "clientId": "546dc4e3731949cfa20ac043347d3ca8",
+        "asset": "USDT",
+        "network": "BSC",
+        "address": "0xD1B4524FA093b7Cc66CD4B3c6AFC70b3B6572d9e",
+        "addressTag": "",
+        "amount": "853.44016",
+        "fee": "0.29",
+        "txId": "0xf12379439ee998d9f0c3180399d9acf260ddc7a28d8c0ebf2475ef20b2169d9f",
+        "transferType": 0,
+        "status": 10,
+        "createTime": 1665721073076
+      },
+      {
+        "id": 7390420,
+        "clientId": "ac6cf2ff7d214f2ca3418f392022849b",
+        "asset": "BTC",
+        "network": "BSC",
+        "address": "0xD1B4524FA093b7Cc66CD4B3c6AFC70b3B6572d9e",
+        "addressTag": "",
+        "amount": "0.0145",
+        "fee": "0.0000042",
+        "txId": "0x321f68fca47c73bc54997f835e3ea0caee02a94bb710c3953a7dc66b68c29634",
+        "transferType": 0,
+        "status": 10,
+        "createTime": 1662526056309
+      },
+      {
+        "id": 5557021,
+        "clientId": "8e5f9fdbcd374dfdb62752f01987d2c4",
+        "asset": "BTC",
+        "network": "BSC",
+        "address": "0xD1B4524FA093b7Cc66CD4B3c6AFC70b3B6572d9e",
+        "addressTag": "",
+        "amount": "0.007832",
+        "fee": "0.0000052",
+        "txId": "0x906822762f800309bd6dc873cb9e8fbdee9cd6f56f944f6ee1df940a271e147e",
+        "transferType": 0,
+        "status": 10,
+        "createTime": 1652083903359
+      }
+    ]
+  },
+  "ledger_snapshot": {
+    "taken_at": "2026-07-26T14:29:35.740487+00:00",
+    "balances": [
+      {
+        "asset": "TRY",
+        "free": "1.3942",
+        "locked": "0"
+      },
+      {
+        "asset": "USDT",
+        "free": "20.9685",
+        "locked": "0"
+      }
+    ],
+    "deposits": {
+      "count": 6,
+      "latest": [
+        {
+          "id": 10627033,
+          "asset": "USDT",
+          "network": "BSC",
+          "address": "0xcff0a35ca2ccb6cc8d6c1ee887eb2360d046bfce",
+          "addressTag": "",
+          "txId": "0xf3925198e3f7f447c31fc8caae45b7806bcfbf58028368323bcd97c96998f073",
+          "amount": "1083.494586",
+          "transferType": 0,
+          "status": 1,
+          "insertTime": "1666589730000",
+          "bStatus": 1,
+          "selfReturnStatus": 0,
+          "bId": "",
+          "travelRuleStatus": 0,
+          "refundApplyTime": "0",
+          "refundRequestId": ""
+        },
+        {
+          "id": 8811696,
+          "asset": "BTC",
+          "network": "BSC",
+          "address": "0xcff0a35ca2ccb6cc8d6c1ee887eb2360d046bfce",
+          "addressTag": "",
+          "txId": "0x067cd176bbcfac764fe75c4ba261b125ed19642d4f42649a82b2c802bac92386",
+          "amount": "0.048886",
+          "transferType": 0,
+          "status": 1,
+          "insertTime": "1656296430000",
+          "bStatus": 1,
+          "selfReturnStatus": 0,
+          "bId": "",
+          "travelRuleStatus": 0,
+          "refundApplyTime": "0",
+          "refundRequestId": ""
+        },
+        {
+          "id": 7926918,
+          "asset": "BTC",
+          "network": "BSC",
+          "address": "0xcff0a35ca2ccb6cc8d6c1ee887eb2360d046bfce",
+          "addressTag": "",
+          "txId": "0xe765ca8b40d833087d7766537e77589ce52d2a7565e6d6ae045d0011b0b4ab3b",
+          "amount": "0.034939",
+          "transferType": 0,
+          "status": 1,
+          "insertTime": "1652967991000",
+          "bStatus": 1,
+          "selfReturnStatus": 0,
+          "bId": "",
+          "travelRuleStatus": 0,
+          "refundApplyTime": "0",
+          "refundRequestId": ""
+        }
+      ]
+    },
+    "withdrawals": {
+      "count": 10,
+      "latest": [
+        {
+          "id": 7843202,
+          "clientId": "546dc4e3731949cfa20ac043347d3ca8",
+          "asset": "USDT",
+          "network": "BSC",
+          "address": "0xD1B4524FA093b7Cc66CD4B3c6AFC70b3B6572d9e",
+          "addressTag": "",
+          "amount": "853.44016",
+          "fee": "0.29",
+          "txId": "0xf12379439ee998d9f0c3180399d9acf260ddc7a28d8c0ebf2475ef20b2169d9f",
+          "transferType": 0,
+          "status": 10,
+          "createTime": 1665721073076
+        },
+        {
+          "id": 7390420,
+          "clientId": "ac6cf2ff7d214f2ca3418f392022849b",
+          "asset": "BTC",
+          "network": "BSC",
+          "address": "0xD1B4524FA093b7Cc66CD4B3c6AFC70b3B6572d9e",
+          "addressTag": "",
+          "amount": "0.0145",
+          "fee": "0.0000042",
+          "txId": "0x321f68fca47c73bc54997f835e3ea0caee02a94bb710c3953a7dc66b68c29634",
+          "transferType": 0,
+          "status": 10,
+          "createTime": 1662526056309
+        },
+        {
+          "id": 5557021,
+          "clientId": "8e5f9fdbcd374dfdb62752f01987d2c4",
+          "asset": "BTC",
+          "network": "BSC",
+          "address": "0xD1B4524FA093b7Cc66CD4B3c6AFC70b3B6572d9e",
+          "addressTag": "",
+          "amount": "0.007832",
+          "fee": "0.0000052",
+          "txId": "0x906822762f800309bd6dc873cb9e8fbdee9cd6f56f944f6ee1df940a271e147e",
+          "transferType": 0,
+          "status": 10,
+          "createTime": 1652083903359
+        }
+      ]
+    }
+  },
+  "request_log": [
+    {
+      "time": "2026-07-26T14:29:34.953057+00:00",
+      "method": "GET",
+      "path": "/open/v1/account/spot",
+      "status": 200
+    },
+    {
+      "time": "2026-07-26T14:29:35.357040+00:00",
+      "method": "GET",
+      "path": "/open/v1/deposits",
+      "status": 200
+    },
+    {
+      "time": "2026-07-26T14:29:35.740364+00:00",
+      "method": "GET",
+      "path": "/open/v1/withdraws",
+      "status": 200
+    }
+  ],
+  "order_endpoint_requests": 0,
+  "other_write_requests": 0,
+  "secrets_exposed": 0,
+  "result": "PASS",
+  "finished_at": "2026-07-26T14:29:35.740497+00:00"
+}
