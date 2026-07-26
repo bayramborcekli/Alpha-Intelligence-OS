@@ -651,6 +651,7 @@ def logout():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def render_dashboard(message: str | None = None, message_type: str = "success"):
+    from version import get_version
     config, config_error = load_config()
     status, state_error  = build_status()
     safe_config          = config or DEFAULT_CONFIG
@@ -664,6 +665,7 @@ def render_dashboard(message: str | None = None, message_type: str = "success"):
         message=message, message_type=message_type,
         smart=smart, perf=perf,
         adaptive=adaptive_ctx,
+        app_version=get_version(),
     )
 
 

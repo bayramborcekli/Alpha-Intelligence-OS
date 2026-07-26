@@ -1,14 +1,55 @@
+# ═══════════════════════════════════════════════════════════════════
+# Alpha Intelligence OS — .gitignore
+# Son güncelleme: ownership-baseline-v1
+# ═══════════════════════════════════════════════════════════════════
+
+# ── Python ──────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# ── Sanal ortamlar ───────────────────────────────────────────────────
+.env_dir/
+.venv/
+venv/
+env/
+ENV/
 .pythonlibs/
 
-# Secrets — gerçek değer içerir, asla commit etme
+# ── Sırlar ve kimlik bilgileri (ASLA commit edilmemeli) ──────────────
 .env
+.env.*
+secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+*.jks
+*.keystore
+*.secret
+*_secret*
+*_private*
 
-# Yedekler — hassas veri içerebilir
+# ── Veritabanı dosyaları ─────────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+*.db3
+
+# ── Yedekler (hassas veri içerebilir, repo dışında tutulur) ──────────
 backups/
 
-# Generated PAPER trading state and logs
+# ── Çalışma zamanı verileri (PAPER bot state) ────────────────────────
 alpha20_v1/state.json
 alpha20_v1/alpha20.log
 alpha20_v1/.bot.pid
@@ -19,9 +60,47 @@ alpha20_v1/*.jsonl
 state.json
 alpha20.log
 
-# Security event log
+# ── Log dosyaları ────────────────────────────────────────────────────
 security.log
 security.log.*
+*.log
+logs/
+audit.log
+restore_audit.log
 
-# Temp files
+# ── Geçici dosyalar ──────────────────────────────────────────────────
 *.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── IDE ve editör dosyaları ──────────────────────────────────────────
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+*.iml
+
+# ── Cache ────────────────────────────────────────────────────────────
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ── İşletim sistemi dosyaları ────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/

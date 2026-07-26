@@ -1,0 +1,138 @@
+Görev: Ownership Baseline v1
+
+Amaç:
+Alpha Intelligence OS projesinin kod sahipliği, sürüm kontrolü, secret güvenliği,
+yedekleme ve geri yükleme temelini oluştur.
+
+Kurallar:
+- Mevcut PAPER modu korunacak.
+- Gerçek emir gönderme özelliği eklenmeyecek.
+- Mevcut çalışan davranış bozulmayacak.
+- Secret, parola veya API anahtarı repoya yazılmayacak.
+- İş tamamlandığında tüm testler çalıştırılacak.
+- Sonuç checkpoint ile kaydedilecek.
+
+Yapılacaklar:
+
+1. Git ve sahiplik kontrolü
+- Projenin Git repository durumunu kontrol et.
+- Repository yoksa başlat.
+- Ana branch yapısını doğrula.
+- Değişikliklerin takip edildiğini kontrol et.
+- Uygun bir .gitignore oluştur veya mevcut olanı güçlendir.
+
+.gitignore en az şunları kapsamalı:
+- .env
+- .env.*
+- secrets/
+- *.key
+- *.pem
+- *.p12
+- *.sqlite
+- runtime verileri
+- log dosyaları
+- backup dosyaları
+- cache klasörleri
+- Python sanal ortamları
+- IDE ve işletim sistemi dosyaları
+
+2. Secret taraması
+- Kaynak kodda aşağıdaki riskleri tara:
+  - Düz metin parolalar
+  - API key
+  - API secret
+  - Token
+  - Private key
+  - Seed phrase
+  - Bağlantı şifreleri
+- Git geçmişinde secret bulunup bulunmadığını kontrol et.
+- Gerçek secret bulursan değeri çıktıda gösterme.
+- Yalnızca dosya, satır ve risk türünü raporla.
+- Gerekirse secret rotasyonu gerektiğini belirt.
+
+3. Ortam değişkenleri
+- Gerekli ortam değişkenlerini belirle.
+- Güvenli bir .env.example oluştur.
+- .env.example içinde gerçek değer bulunmasın.
+- Her değişkenin amacı açıklansın.
+- ADMIN_PASSWORD_HASH zorunlu olarak belgelenmeli.
+- PAPER_MODE varsayılan olarak true olmalı.
+- Canlı işlemle ilişkili her ayar varsayılan olarak kapalı olmalı.
+
+4. Proje kimliği ve lisans
+- README içinde projenin sahibi tarafından kontrol edilen özel bir proje olduğunu belirt.
+- Uygun bir proprietary / all rights reserved lisans metni ekle.
+- Kullanım, kopyalama ve dağıtımın sahibin açık iznine bağlı olduğunu belirt.
+- Gerçek kişi adı bilinmiyorsa OWNER_NAME gibi placeholder kullan.
+
+5. Sürümleme
+- Semantic Versioning yaklaşımını belgele.
+- Mevcut sürümü örneğin 0.1.0-alpha olarak tanımla.
+- Build ve checkpoint bilgisini merkezi bir dosyada tut.
+- Uygulamada mümkünse sürüm bilgisi güvenli biçimde görüntülenebilir olsun.
+- Gizli altyapı bilgileri arayüzde gösterilmesin.
+
+6. Mimari dokümantasyon
+Aşağıdaki belgeleri oluştur:
+- docs/architecture.md
+- docs/security.md
+- docs/backup-restore.md
+- docs/ownership.md
+- docs/versioning.md
+
+architecture.md içinde mevcut modüller ve planlanan modüller ayrıştırılsın:
+- Authentication
+- PAPER Lock
+- Alpha Brain
+- Alpha Risk
+- Alpha Treasury
+- Alpha Guardian
+- Alpha Learning
+- Exchange Adapter
+
+Henüz geliştirilmemiş modüller açıkça “planned” olarak işaretlensin.
+
+7. Yedekleme
+- Uygulama verileri için şifreli yedekleme yaklaşımı oluştur.
+- Yedek dosyaları repository dışında tutulmalı.
+- Atomic write kullanılmalı.
+- Yedek dosyası bütünlük kontrolü içermeli.
+- Yedeklerin tarih ve sürüm bilgisi olmalı.
+- Retention politikası tanımlanmalı.
+- Varsayılan öneri:
+  - 7 günlük günlük yedek
+  - 4 haftalık haftalık yedek
+  - 6 aylık aylık yedek
+- Gerçek şifreleme anahtarı kod içine yazılmamalı.
+
+8. Geri yükleme
+- Geri yükleme prosedürünü belgele.
+- Restore işlemi varsayılan olarak dry-run desteklemeli.
+- Mevcut verinin üzerine yazmadan önce ek yedek alınmalı.
+- Bozuk veya uyumsuz yedek reddedilmeli.
+- Restore işlemleri audit log’a yazılmalı.
+
+9. Testler
+Aşağıdaki testleri ekle:
+- .env dosyasının Git tarafından izlenmediği testi
+- PAPER_MODE varsayılanının true olduğu testi
+- Canlı emir özelliğinin varsayılan kapalı olduğu testi
+- Yedek bütünlük testi
+- Bozuk yedeğin reddedilmesi testi
+- Restore dry-run testi
+- Secret örneklerinin repoda bulunmadığını doğrulayan test
+- Sürüm bilgisinin geçerli formatta olduğu testi
+
+10. Raporlama
+Görev sonunda aşağıdaki çıktıları ver:
+- Değiştirilen dosyalar
+- Eklenen dosyalar
+- Çalıştırılan test komutları
+- Test sonucu
+- Secret tarama sonucu
+- Kalan riskler
+- Manuel yapılması gereken işlemler
+- Oluşturulan checkpoint veya commit kimliği
+
+Checkpoint adı:
+ownership-baseline-v1
