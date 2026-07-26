@@ -1,0 +1,238 @@
+MISSION 1500.2 — AGENT 12
+Documentation & Mission Closure
+
+AMAÇ
+
+MISSION 1500.2'nin resmî kapanışını gerçekleştirmek.
+
+Bu agent kod geliştirmeyecektir.
+
+Yeni test yazmayacaktır.
+
+Yeni özellik eklemeyecektir.
+
+Yalnızca mission'ın tamamlandığını,
+teslim edilen kapsamın plana uygun olduğunu
+ve bir sonraki mission için başlangıç durumunu
+belgeleyecektir.
+
+────────────────────────────────────────
+
+GÖREVLER
+
+1.
+
+Orijinal MISSION 1500.2 planını doğrula.
+
+AGENT 01–12 kapsamlarının
+tamamlandığını kontrol et.
+
+Hiçbir agent atlanmamış olmalıdır.
+
+2.
+
+Teslim edilen kapsamı doğrula.
+
+• Workspace Architecture
+
+• Timeline
+
+• Workspace Service
+
+• Workspace API
+
+• Workspace UI
+
+• Export
+
+• Security Verification
+
+• Full Regression
+
+• Documentation
+
+planla uyumlu olmalıdır.
+
+3.
+
+Mission metriklerini doğrula.
+
+• PASS
+
+• FAIL
+
+• SKIP
+
+• Exchange Write
+
+• Secret Exposure
+
+• Commit
+
+• Test tarihçesi
+
+raporlar arasında tutarlı olmalıdır.
+
+4.
+
+Mimari garantileri özetle.
+
+En az aşağıdakiler doğrulanmalıdır.
+
+• Read-only
+
+• Advisory-only
+
+• Append-only Timeline
+
+• Deterministic
+
+• Decimal Integrity
+
+• Unknown davranışı
+
+• Risk Engine otoritesi
+
+• Ledger immutable
+
+• Audit immutable
+
+• Exchange Write = 0
+
+5.
+
+Güvenlik durumunu özetle.
+
+• Authentication
+
+• Authorization davranışı
+
+• GET-only
+
+• CSRF
+
+• Rate limiting
+
+• XSS
+
+• CSP
+
+• Sterile errors
+
+• Path traversal
+
+• Secret protection
+
+6.
+
+Regresyon sonucunu doğrula.
+
+1400
+
+1500.1
+
+1500.2
+
+davranışları korunmuş olmalıdır.
+
+7.
+
+Teknik borç listesini oluştur.
+
+Yalnız gerçek ve bilinen
+sınırlamalar yazılacaktır.
+
+Yeni kapsam önerisi
+teknik borç olarak yazılmayacaktır.
+
+8.
+
+Sonraki mission için
+devir notlarını oluştur.
+
+Kapanan kapsam tekrar açılmayacaktır.
+
+Tamamlanan garantiler
+referans olarak kaydedilecektir.
+
+9.
+
+MISSION durumunu belirle.
+
+Koşullar sağlanıyorsa:
+
+MISSION 1500.2 — CLOSED
+
+olarak işaretlenmelidir.
+
+────────────────────────────────────────
+
+YASAKLAR
+
+Kod değişikliği
+
+Yeni test
+
+Yeni endpoint
+
+Yeni servis
+
+Yeni UI
+
+Yeni export
+
+Yeni güvenlik değişikliği
+
+Migration
+
+Exchange Write
+
+History Write
+
+────────────────────────────────────────
+
+TESLİM RAPORU
+
+── PLAN DOĞRULAMASI ──
+
+── TAMAMLANAN AGENTLER ──
+
+── TESLİM EDİLEN KAPSAM ──
+
+── MİMARİ GARANTİLER ──
+
+── GÜVENLİK ÖZETİ ──
+
+── REGRESYON ÖZETİ ──
+
+── TEST TARİHÇESİ ──
+
+── FİNAL METRİKLER ──
+
+── TEKNİK BORÇ ──
+
+── SONRAKİ MISSION İÇİN DEVİR NOTLARI ──
+
+── COMMIT / HEAD ──
+
+── SON KARAR ──
+
+────────────────────────────────────────
+
+PASS KRİTERİ
+
+• Orijinal plan eksiksiz tamamlandı.
+
+• Tüm agent'lar PASS.
+
+• Final testleri başarılı.
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Mission boyunca tanımlanan mimari ve güvenlik garantileri korunuyor.
+
+• Yeni kod eklenmedi.
+
+• MISSION 1500.2 resmî olarak CLOSED.
