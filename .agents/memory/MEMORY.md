@@ -2,4 +2,5 @@
 - [Fee dominance with tight stops](fee-dominance-1m.md) — 1m ATR stops make qty huge so fees dwarf gross PnL; not an accounting bug.
 - [Replay harness resume](replay-harness-resume.md) — resume needs open_time anchors, scheduler state, and history truncation to snapshot, or false ledger mismatches appear.
 - [Real-signal replay sizing](real-signal-replay-sizing.md) — score≥65 fires ~0.06 trades/candle/3sym; size the data window to the trade target or the run OOMs; precompute the signal stream once for cross-variant determinism.
+- [Mission 1500.2 baseline](mission-1500-2-baseline.md) — Workspace scope frozen as reference baseline; immutable contracts + regression rules for all future missions.
 - [Binance TR API quirks](binance-tr-api.md) — `data` may be list or dict; movements API omits trades so reconciliation is PARTIAL by design; transferType=1 = internal.

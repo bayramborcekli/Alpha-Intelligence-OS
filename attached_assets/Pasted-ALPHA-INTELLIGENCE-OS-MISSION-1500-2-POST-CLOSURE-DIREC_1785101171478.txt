@@ -1,0 +1,158 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1500.2
+POST-CLOSURE DIRECTIVES
+
+Bu yönergeler yalnızca MISSION 1500.2 tamamlandıktan sonra geçerlidir.
+
+────────────────────────────────────────
+
+1. KAPANAN KAPSAM
+
+MISSION 1500.2 yeniden açılmayacaktır.
+
+Aşağıdaki bileşenler referans (baseline) kabul edilir.
+
+• Workspace Architecture
+• Intelligence Timeline
+• Workspace Service
+• Read-Only Workspace API
+• Workspace UI
+• Workspace Export
+• Security Model
+• Regression Suite
+• Documentation
+
+Bu bileşenlerde değişiklik yapılmayacaktır.
+
+────────────────────────────────────────
+
+2. MİMARİ SÖZLEŞMELER
+
+Aşağıdaki kurallar değiştirilemez.
+
+• Workspace read-only kalacaktır.
+
+• Timeline append-only kalacaktır.
+
+• Workspace hiçbir durumda Exchange'e emir gönderemez.
+
+• Workspace Ledger değiştiremez.
+
+• Workspace Audit değiştiremez.
+
+• Recommendation advisory-only kalacaktır.
+
+• Risk Engine tek hesaplama otoritesidir.
+
+────────────────────────────────────────
+
+3. YENİ MISSION KURALI
+
+Yeni özellikler yalnız yeni mission altında geliştirilecektir.
+
+1500.2 commit geçmişi değiştirilmeyecektir.
+
+Hiçbir agent kapanmış mission üzerinde yeniden çalışmayacaktır.
+
+────────────────────────────────────────
+
+4. DEĞİŞİKLİK KURALI
+
+Yeni mission;
+
+1500.2 davranışını bozamaz.
+
+Bozulması gerekiyorsa
+
+breaking change
+
+olarak açıkça belirtilmelidir.
+
+────────────────────────────────────────
+
+5. REGRESYON ZORUNLULUĞU
+
+Her yeni mission sonunda
+
+1400
+
+1500.1
+
+1500.2
+
+tam regresyonu çalıştırılacaktır.
+
+PASS olmadan mission kapanmayacaktır.
+
+────────────────────────────────────────
+
+6. GÜVENLİK GARANTİLERİ
+
+Aşağıdaki garantiler korunacaktır.
+
+• Read-only
+
+• Append-only
+
+• Decimal Integrity
+
+• Deterministic Output
+
+• Exchange Isolation
+
+• Ledger Immutable
+
+• Audit Immutable
+
+• Secret Protection
+
+• CSP
+
+• XSS Protection
+
+• Authentication
+
+• Authorization
+
+────────────────────────────────────────
+
+7. DOKÜMANTASYON
+
+Yeni mission
+
+1500.2 dokümanlarını değiştirmeyecek,
+
+yalnız gerekli referans güncellemelerini ekleyecektir.
+
+Geçmiş mission kayıtları silinmeyecektir.
+
+────────────────────────────────────────
+
+8. BAŞARI KRİTERİ
+
+Yeni mission başarılı sayılabilmesi için
+
+• kendi kapsamını tamamlamalı,
+
+• 1500.2 davranışını korumalı,
+
+• güvenlik garantilerini bozmamalı,
+
+• regresyonu temiz geçmelidir.
+
+────────────────────────────────────────
+
+9. OPERASYON KURALI
+
+MISSION 1500.2 artık referans sürümdür.
+
+Sonraki tüm missionlar
+
+bu sürümü temel alarak geliştirilecektir.
+
+MISSION 1500.2
+
+RESMÎ BASELINE
+
+olarak kabul edilir.
