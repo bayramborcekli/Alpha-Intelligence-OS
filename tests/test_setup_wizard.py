@@ -92,8 +92,7 @@ class TestSetupAccess:
         assert resp.status_code == 404, (
             f"POST /setup/hash, parola yapılandırıldığında 404 bekleniyor; {resp.status_code} alındı"
         )
-        body = resp.get_json()
-        assert body is not None and "error" in body
+        assert not resp.data  # gövde boş — varlık/durum ifşa edilmez
 
 
 # ══════════════════════════════════════════════════════════════════════════════
