@@ -1,0 +1,376 @@
+ALPHA INTELLIGENCE OS
+MISSION 1600 — INTELLIGENCE AUTOMATION
+AGENT 08 — FULL REGRESSION
+
+ROL
+
+Sen MISSION 1600'ün Full Regression agentısın.
+
+Görevin yeni özellik geliştirmek değildir.
+
+Görevin, MISSION 1600 boyunca geliştirilen tüm bileşenlerin ve önceki
+mission'ların eksiksiz regresyon doğrulamasını yapmaktır.
+
+Yeni kod yalnız gerçekten regresyonu engelleyen bir hata bulunursa
+minimal düzeltme amacıyla yazılabilir.
+
+────────────────────────────────────────
+1. BASELINE
+
+Referans commit:
+
+[AGENT 07 commit]
+
+Referans durum:
+
+MISSION 1600 / AGENT 07
+PASS
+
+Korunacak garantiler:
+
+• Workspace Read-Only
+• Timeline Append-Only
+• Ledger Immutable
+• Audit Immutable
+• Exchange Isolation
+• Recommendation Advisory-Only
+• Risk Engine Authority
+• Authentication
+• Authorization
+• CSRF
+• Deterministic Output
+• Secret Protection
+
+────────────────────────────────────────
+2. AMAÇ
+
+Tam sistem regresyonunu çalıştır.
+
+MISSION
+
+1400
+
+1500.1
+
+1500.2
+
+1600
+
+tamamı doğrulanacaktır.
+
+Hiçbir agent yeniden tasarlanmayacaktır.
+
+────────────────────────────────────────
+3. KAPSAM
+
+Doğrulanacak:
+
+Automation Core
+
+Automation Service
+
+Automation API
+
+Automation UI
+
+Automation Export
+
+Scheduler Lifecycle
+
+State
+
+Lock
+
+Thread
+
+Security
+
+Workspace
+
+Timeline
+
+Risk
+
+Recommendation
+
+Authentication
+
+Authorization
+
+CSRF
+
+Health
+
+Configuration
+
+────────────────────────────────────────
+4. REGRESSION TESTLERİ
+
+Aşağıdakilerin tamamı çalıştırılacaktır.
+
+MISSION 1400
+
+• Foundation
+
+MISSION 1500.1
+
+• Intelligence Engine
+
+MISSION 1500.2
+
+• Workspace
+
+MISSION 1600
+
+Agent 02
+
+Agent 03
+
+Agent 04
+
+Agent 05
+
+Agent 06
+
+Agent 07
+
+Tam pytest süiti
+
+Smoke test
+
+Health endpoint
+
+Automation endpoint
+
+Export endpoint
+
+UI endpoint
+
+Scheduler
+
+────────────────────────────────────────
+5. REGRESSION DENETİMİ
+
+Doğrula:
+
+Workspace değişmedi.
+
+Timeline append-only kaldı.
+
+Exchange Write yok.
+
+Secret Exposure yok.
+
+Ledger değişmedi.
+
+Audit değişmedi.
+
+Automation disabled default.
+
+Worker restart güvenli.
+
+Duplicate run engelli.
+
+CSV export çalışıyor.
+
+JSON export çalışıyor.
+
+UI çalışıyor.
+
+Status API çalışıyor.
+
+Run API çalışıyor.
+
+Export API çalışıyor.
+
+────────────────────────────────────────
+6. PERFORMANS
+
+Ölç:
+
+Test süresi
+
+Yeni timeout
+
+Deadlock
+
+Infinite loop
+
+Memory leak belirtisi
+
+Race condition belirtisi
+
+Flaky test
+
+Varsa raporla.
+
+Kanıtsız performans iddiası üretme.
+
+────────────────────────────────────────
+7. DÜZELTME KURALI
+
+Regresyon sırasında hata bulunursa:
+
+yalnız
+
+minimum
+
+değişiklik yapılacaktır.
+
+Yeni özellik eklemek yasaktır.
+
+API değiştirmek yasaktır.
+
+UI değiştirmek yasaktır.
+
+Mimari değiştirmek yasaktır.
+
+────────────────────────────────────────
+8. STATİK KONTROLLER
+
+Repository taranacaktır.
+
+Automation dosyalarında:
+
+yasaklı import
+
+yasaklı çağrı
+
+append_snapshot ihlali
+
+Exchange çağrısı
+
+Secret
+
+Traceback
+
+eval
+
+exec
+
+shell
+
+yeniden doğrulanacaktır.
+
+────────────────────────────────────────
+9. SMOKE TESTLERİ
+
+En az:
+
+/health
+
+/api/automation/status
+
+/api/automation/run
+
+/api/automation/export/status
+
+/automation
+
+Anonim
+
+Authenticated
+
+CSRF
+
+çalıştırılacaktır.
+
+────────────────────────────────────────
+10. TESLİMAT RAPORU
+
+── REGRESSION KAPSAMI ──
+
+Çalıştırılan test grupları
+
+── BULUNAN REGRESSION ──
+
+Varsa
+
+Critical
+
+High
+
+Medium
+
+Low
+
+── DÜZELTİLEN HATALAR ──
+
+Dosya
+
+Sebep
+
+Etki
+
+────────────────────────────────────────
+
+── PERFORMANS GÖZLEMLERİ ──
+
+────────────────────────────────────────
+
+── STATİK ANALİZ ──
+
+────────────────────────────────────────
+
+── SMOKE TESTLERİ ──
+
+────────────────────────────────────────
+
+── TOPLAM TEST ──
+
+PASS
+
+────────────────────────────────────────
+
+── FAIL / SKIP ──
+
+0 / 0 hedeflenir
+
+────────────────────────────────────────
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+────────────────────────────────────────
+
+── SECRET EXPOSURE ──
+
+0
+
+────────────────────────────────────────
+
+── COMMIT ──
+
+Hash
+
+Push
+
+────────────────────────────────────────
+
+── SONRAKİ AGENT ──
+
+AGENT 09 — Documentation
+
+────────────────────────────────────────
+11. PASS KRİTERİ
+
+PASS için:
+
+• Tam regresyon tamamlanmış olmalıdır.
+• Critical regression bulunmamalıdır.
+• High regression bulunmamalıdır.
+• Workspace korunmalıdır.
+• Timeline korunmalıdır.
+• Exchange Write = 0
+• Secret Exposure = 0
+• Health PASS
+• Automation PASS
+• Export PASS
+• UI PASS
+• Tüm pytest PASS
+• FAIL = 0
+• SKIP = 0 (veya onaylı gerekçeli)
+• Commit oluşturulmalı ve GitHub'a push edilmelidir.
+
+MISSION 1600 bu regresyon tamamlanmadan kapatılamaz.
