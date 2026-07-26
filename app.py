@@ -852,6 +852,11 @@ def apply_preset():
 
 @app.post("/bot/start")
 def bot_start():
+    # BOTTLENECK NOTE: start_bot() calls subprocess.Popen() which returns
+    # immediately — it does NOT wait for the bot process to initialise.
+    # Worker hold-time is typically < 100 ms. If BOT_PATH is on a slow
+    # filesystem the open() call can add a few hundred ms, but this is
+    # well within the gunicorn timeout. No threading change is needed.
     ok, msg = start_bot()
     if ok:
         slog.log_event(slog.BOT_START,
@@ -862,6 +867,12 @@ def bot_start():
 
 @app.post("/bot/stop")
 def bot_stop():
+    # BOTTLENECK NOTE: stop_bot() sends SIGTERM then polls /proc/<pid> for
+    # up to 2 s (20 × 0.1 s) before escalating to SIGKILL. Worst-case
+    # worker hold-time is ~2 s — acceptable, but concurrent stop requests
+    # would each hold a worker for 2 s. The CONFIG_LOCK prevents concurrent
+    # execution, so only one stop call runs at a time; the second caller
+    # blocks on the lock and returns quickly ("bot not found").
     ok, msg = stop_bot()
     if ok:
         slog.log_event(slog.BOT_STOP,
@@ -1228,6 +1239,12 @@ def api_daily_report():
 
 @app.get("/api/daily-report/export")
 def export_daily_report():
+    # BOTTLENECK NOTE: this route reads state.json (disk I/O) and builds a
+    # CSV in memory. For typical paper-trading runs (hundreds of trades) it
+    # completes in < 50 ms. With tens of thousands of trades the in-memory
+    # StringIO build could take 200–500 ms. If that becomes an issue, switch
+    # to a streaming Response with a generator so the worker is released
+    # incrementally rather than held for the full build time.
     cfg, _  = load_config()
     report  = _build_daily_report(cfg)
     state, _ = read_json(STATE_PATH)
