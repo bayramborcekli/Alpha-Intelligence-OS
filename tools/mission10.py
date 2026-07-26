@@ -37,9 +37,11 @@ from alpha20 import (  # noqa: E402
 def independent_pnl(entry: float, exit_: float, qty: float, side: str) -> dict:
     """Motor kodundan BAĞIMSIZ oracle — compute_realized_pnl KULLANILMAZ."""
     direction = 1.0 if side == "LONG" else -1.0
-    gross = round((exit_ - entry) * qty * direction, 8)
-    fee = round((entry + exit_) * qty * FEE_RATE, 8)
-    return {"gross_pnl": gross, "fee_usdt": fee, "pnl": round(gross - fee, 8)}
+    gross_raw = (exit_ - entry) * qty * direction
+    fee_raw = (entry + exit_) * qty * FEE_RATE
+    # pnl, yuvarlanmamış ara değerlerden yuvarlanır (motorla aynı yuvarlama sırası)
+    return {"gross_pnl": round(gross_raw, 8), "fee_usdt": round(fee_raw, 8),
+            "pnl": round(gross_raw - fee_raw, 8)}
 
 MISSION_DIR = ROOT / "alpha20_v1" / "mission10"
 MISSION_DIR.mkdir(exist_ok=True)

@@ -1,0 +1,36 @@
+# Mission 100 — Yönetici Özeti
+
+- **mission**: Mission 100
+- **commit**: 79bda78
+- **run_id**: M100-351aa2fd14
+- **mode**: PAPER (izole replay, gerçek Binance 15m verisi, ekonomik filtre aktif)
+- **started_at**: 2026-07-26T10:46:38.386248+00:00
+- **finished_at**: 2026-07-26T10:46:58.464496+00:00
+- **duration_seconds**: 20.1
+- **tests**: 349 passed in 4.20s
+- **opened_trades**: 100
+- **closed_trades**: 100
+- **skipped_trades**: 10
+- **wins**: 27
+- **losses**: 73
+- **breakeven**: 0
+- **win_rate_pct**: 27.0
+- **gross_profit**: 1639.3545
+- **gross_loss**: 4568.4158
+- **total_fees**: 2093.3263
+- **net_pnl**: -2929.0613
+- **profit_factor**: 0.3588
+- **max_drawdown_pct**: 29.3716
+- **starting_balance**: 10000.0
+- **final_balance**: 7070.9387
+- **balance_change**: -2929.0613
+- **ledger_validation_count**: 201
+- **ledger_mismatch_count**: 0
+- **pnl_mismatch_count**: 0
+- **risk_violation_count**: 0
+- **warning_count**: 0
+- **exception_count**: 0
+- **recovery_count**: 0
+- **open_positions**: 0
+- **result**: PASS
+- **fail_reasons**: []
