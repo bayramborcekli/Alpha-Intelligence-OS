@@ -1,0 +1,69 @@
+Alpha Intelligence OS — ES-002 Revision 1
+
+ES-002 Engineering Review sonucunda aşağıdaki finansal ve mimari düzeltmeleri uygula.
+
+1. SHORT muhasebesini açıkça modelle.
+   - build_position_open_journal ve build_position_close_journal içinde side yalnızca açıklamada kalmamalı.
+   - LONG ve SHORT için doğru journal semantiği tanımlanmalı.
+   - SHORT gerçekleşmiş K/Z, giriş ve çıkış değerlerine göre doğru hesaplanmalı.
+   - Gerekirse SHORT liability veya margin hesapları eklenmeli.
+
+2. Portfolio NAV modelini düzelt.
+   - LONG spot değerleme ile SHORT değerlemeyi birbirinden ayır.
+   - SHORT piyasa değerini doğrudan varlık gibi NAV’a ekleme.
+   - Teminat, yükümlülük ve unrealized PnL semantiğini ADR’de açıkla.
+   - LONG, SHORT ve karma portföy testleri ekle.
+
+3. Funding muhasebesini düzelt.
+   - Funding ödeme ve funding tahsilatını farklı yönlerde kaydet.
+   - Tahsilat nakdi artırmalı.
+   - Gerekirse funding expense ve funding income hesaplarını ayır.
+   - Her iki yön için test ekle.
+
+4. WAVG invariant doğrulaması ekle.
+   - Tüm lotların aynı symbol ve side’a ait olduğunu doğrula.
+   - Karışık symbol veya side durumunda CostBasisError fırlat.
+   - Testlerini ekle.
+
+5. Decimal global context yan etkisini kaldır.
+   - precision.py import edildiğinde global setcontext çağırma.
+   - localcontext veya açık quantize rounding kullan.
+   - Mevcut sonuçların değişmediğini test et.
+
+6. Float politikasını netleştir.
+   - Ya public domain API’de float kabulünü kaldır,
+   - ya da ADR’de float’ın yalnızca giriş sınırında Decimal(str(value)) ile normalize edildiğini açıkça belirt.
+   - “Float kullanımı sıfır” gibi doğrulanamayan mutlak ifadeyi düzelt.
+
+7. ADR test sonucunu teslim paketiyle uyumlu hâle getir.
+   - Treasury test sonucu ayrı yazılmalı: 107 passed.
+   - Tüm repository sonucu yalnızca gerçekten temiz çalışıyorsa belirtilmeli.
+
+8. Yeni özellik veya ES-003 geliştirme.
+9. Tüm treasury testlerini çalıştır.
+10. Revizyon sonunda aşağıdaki formatta rapor ver:
+
+ES-002 Revision 1 Complete
+
+Changed Files:
+Financial Model Changes:
+LONG Tests:
+SHORT Tests:
+Mixed Portfolio Tests:
+Funding Payment Tests:
+Funding Income Tests:
+WAVG Invariant Tests:
+Decimal Context Tests:
+
+Treasury Tests:
+- Passed:
+- Failed:
+
+Full Repository Tests:
+- Passed:
+- Failed:
+- Errors:
+
+Known Limitations:
+Commit Hash:
+Push Result:
