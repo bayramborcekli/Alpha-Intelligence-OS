@@ -1,0 +1,575 @@
+Mevcut Alpha20_v1 PAPER trading sistemine “Uyarlanabilir Karar ve Risk Motoru” ekle.
+
+ÇOK ÖNEMLİ SINIRLAR:
+- Sistem yalnızca PAPER modunda kalacak.
+- Gerçek Binance emri, API key, canlı para veya gerçek hesap entegrasyonu ekleme.
+- Kârlılık garantisi veren hiçbir ifade kullanma.
+- Sistem kendi kaynak kodunu değiştirmeyecek.
+- Sistem kendi güvenlik limitlerini aşamayacak.
+- Martingale, zarar sonrası risk artırma, stop-loss’suz işlem ve kontrolsüz pozisyon büyütme kesinlikle yasak.
+- Mevcut çalışan stratejiyi bozma.
+- Geliştirmeden önce ilgili dosyaların yedeğini oluştur.
+- Mevcut config.json, symbols listesi ve paper bakiyesini kendiliğinden sıfırlama.
+
+AMAÇ:
+Sistem piyasayı sürekli izlesin, piyasa rejimini belirlesin, uygun coinleri seçsin, işlem sinyallerini değerlendirsin, riski piyasa koşullarına göre ayarlasın, paper işlemleri yönetsin ve sonuçlardan ölçülebilir şekilde öğrenerek karar ağırlıklarını güncellesin.
+
+1. MİMARİ
+
+Yeni modülleri mümkün olduğunca ayrı dosyalarda oluştur:
+
+- alpha20_v1/market_regime.py
+  Piyasa rejimi tespiti
+
+- alpha20_v1/adaptive_risk.py
+  Dinamik risk ve güvenlik limitleri
+
+- alpha20_v1/decision_engine.py
+  Sinyal, piyasa rejimi, coin puanı ve risk puanını birleştiren karar motoru
+
+- alpha20_v1/learning_engine.py
+  Paper sonuçlarından performans istatistikleri ve ağırlık güncellemesi
+
+- alpha20_v1/safety_guard.py
+  Günlük kayıp, drawdown, ardışık zarar, veri hatası ve kill-switch kontrolleri
+
+- alpha20_v1/metrics_store.py
+  Kararları, işlemleri, rejimleri ve performans metriklerini JSON veya SQLite ile kalıcı saklama
+
+- alpha20_v1/auto_controller.py
+  Tüm modülleri yöneten otomatik çalışma döngüsü
+
+Mevcut alpha20.py strateji hesaplamalarını kullanmaya devam et.
+Gerekirse alpha20.py içindeki fonksiyonları import edilebilir hale getir, fakat mevcut tek seferlik ve sürekli çalışma davranışını bozma.
+
+2. ÇALIŞMA MODLARI
+
+Panelde dört çalışma modu olsun:
+
+A) İzleme
+- Piyasayı analiz eder.
+- Karar üretir.
+- İşlem açmaz.
+
+B) Öneri
+- İşlem önerisi üretir.
+- Kullanıcı onayı olmadan paper işlem açmaz.
+
+C) Otomatik PAPER
+- Kurallar uygunsa paper işlemi otomatik açar ve kapatır.
+- Varsayılan olarak kapalı gelsin.
+- Kullanıcı panelden açıkça etkinleştirmeden başlamasın.
+
+D) Güvenli Durum
+- Yeni işlem açmaz.
+- Açık paper pozisyon varsa mevcut stop ve hedef kurallarıyla yönetir.
+- Sistem problemi çözülene kadar işlem üretmez.
+
+Varsayılan mod İzleme olsun.
+
+3. PİYASA REJİMİ TESPİTİ
+
+Sistem genel piyasa ve coin bazında piyasa rejimi belirlesin.
+
+Rejimler:
+- Güçlü yükseliş
+- Zayıf yükseliş
+- Güçlü düşüş
+- Zayıf düşüş
+- Yatay
+- Yüksek volatilite
+- Düşük volatilite
+- Belirsiz
+- Veri yetersiz
+
+Kullanılabilecek ölçümler:
+- 15m, 1h ve 4h EMA yönü
+- EMA eğimi
+- ADX veya benzeri trend gücü
+- ATR yüzdesi
+- Bollinger bant genişliği
+- RSI
+- Hacim değişimi
+- BTCUSDT genel piyasa yönü
+- Coin ile BTC korelasyonu
+- Son mumlarda ani fiyat sıçraması
+- Spread veya likidite kalite göstergeleri
+
+Kurallar:
+- Tek bir indikatöre göre rejim belirleme.
+- En az iki zaman dilimi doğrulaması kullan.
+- Veri yetersizse “Veri yetersiz” sonucu üret.
+- Rejim güven puanı 0-100 arasında olsun.
+- Güven puanı düşükse işlem açma.
+- Aşırı volatil ve düzensiz koşullarda işlem riskini azalt veya işlemi engelle.
+
+4. KARAR MOTORU
+
+Her potansiyel işlem için 0-100 arası nihai karar puanı hesapla.
+
+Bileşenler:
+- Mevcut strateji sinyal puanı
+- Piyasa rejimi uyumu
+- Coin fırsat puanı
+- Likidite puanı
+- Trend doğrulama puanı
+- Volatilite uygunluğu
+- Hacim doğrulaması
+- Paper geçmiş performans puanı
+- Veri kalite puanı
+- Risk uygunluk puanı
+
+Örnek ağırlıklar:
+- Strateji sinyali: %35
+- Piyasa rejimi: %20
+- Coin fırsat puanı: %15
+- Likidite ve hacim: %10
+- Volatilite uygunluğu: %10
+- Paper geçmiş performansı: en fazla %10
+
+Bu ağırlıklar config üzerinden değiştirilebilir olsun fakat toplamlarının 100 olması doğrulansın.
+
+Karar sonucu:
+- 0-49: İşlem yok
+- 50-64: İzle
+- 65-74: Zayıf aday
+- 75-84: Uygun aday
+- 85-100: Güçlü aday
+
+Otomatik PAPER işlem için varsayılan minimum nihai karar puanı 78 olsun.
+
+Ek koşullar:
+- Piyasa rejimi güven puanı en az 65
+- Veri kalite puanı en az 80
+- Likidite puanı en az 60
+- Risk koruması aktif değil
+- Günlük zarar limiti aşılmamış
+- Maksimum açık pozisyon sayısı aşılmamış
+- Aynı sembolde zaten pozisyon bulunmamalı
+- Aynı sembolde son kapanıştan sonra cooldown süresi dolmuş olmalı
+
+5. DİNAMİK RİSK MOTORU
+
+Risk piyasa koşullarına göre ayarlansın fakat sınırlar içinde kalsın.
+
+Varsayılan risk seviyeleri:
+- Belirsiz piyasa: işlem yok
+- Zayıf sinyal: işlem yok
+- Normal koşul: bakiye başına %0.25 risk
+- Güçlü ve doğrulanmış koşul: en fazla %0.50 risk
+- Yüksek volatilite: normal riskin %50’si
+- Art arda 2 zarar: risk %50 azalt
+- Art arda 3 zarar: yeni işlemleri durdur
+- Günlük zarar %1.0: yeni işlemleri durdur
+- Toplam drawdown %5.0: sistem kill-switch ile kilitlensin
+- Günlük kâr %2.0 üzerine çıkarsa yeni işlem riskini artırma; mevcut riski koru veya azalt
+
+Kesin üst sınırlar:
+- İşlem başına maksimum risk: %0.50
+- Günlük maksimum kayıp: %1.0
+- Maksimum toplam drawdown: %5.0
+- Maksimum açık pozisyon: 1 varsayılan
+- Maksimum aynı yön pozisyonu: 1
+- Minimum reward/risk: 1.5
+- Varsayılan reward/risk: 2.0
+
+Risk hiçbir koşulda zarar sonrası artırılmasın.
+
+Pozisyon büyüklüğü:
+- Stop mesafesine göre hesaplanmalı.
+- ATR tabanlı stop kullanılmalı.
+- Minimum ve maksimum stop mesafesi sınırları olsun.
+- Aşırı küçük stop nedeniyle aşırı büyük pozisyon oluşmasını engelle.
+- Pozisyon büyüklüğü bakiye ve nominal maruz kalma limitiyle sınırlandırılsın.
+
+6. STOP VE POZİSYON YÖNETİMİ
+
+Her paper işlemde zorunlu:
+- Giriş fiyatı
+- Stop-loss
+- Hedef
+- Pozisyon büyüklüğü
+- Risk tutarı
+- Beklenen reward/risk
+- İşlem gerekçesi
+- Piyasa rejimi
+- Karar puanı
+- Kullanılan indikatör değerleri
+
+Pozisyon yönetimi:
+- Stop-loss asla kaldırılmasın.
+- Stop sadece riski azaltacak yönde taşınabilsin.
+- Kâra geçen işlemde isteğe bağlı break-even desteği olsun.
+- Trailing stop varsayılan kapalı olsun.
+- Trailing stop açılırsa ATR tabanlı olsun.
+- Zarardaki pozisyona ekleme yapma.
+- Kısmi kâr alma opsiyonu config üzerinden açılıp kapanabilsin.
+- Açık pozisyon varken coin otomatik listeden çıkarılmasın.
+
+7. ÖĞRENME MOTORU
+
+Öğrenme sistemi kendi kodunu değiştirmesin.
+Yalnızca ölçümlere dayalı parametre ağırlıkları ve güven puanları üretsin.
+
+Öğrenilecek konular:
+- Hangi coinlerde performans daha iyi?
+- Hangi piyasa rejiminde performans daha iyi?
+- Long ve short performans farkı
+- Saatlik performans
+- Gün bazında performans
+- Minimum score aralıklarının sonucu
+- ATR stop çarpanı performansı
+- Karar puanı aralıklarının başarısı
+- Trend gücü ile sonuç ilişkisi
+- Volatilite seviyesi ile sonuç ilişkisi
+
+Her kategori için hesapla:
+- İşlem sayısı
+- Kazanma oranı
+- Net PnL
+- Ortalama kazanç
+- Ortalama zarar
+- Profit factor
+- Beklenen değer
+- Maksimum drawdown
+- Ardışık zarar
+- Ortalama işlem süresi
+
+Güvenilirlik kuralları:
+- 5 işlemden az veri: yetersiz veri
+- 5-19 işlem: düşük güven
+- 20-49 işlem: orta güven
+- 50+ işlem: daha yüksek güven
+- Az işlemle oluşan yüksek kazanma oranına aşırı ağırlık verme
+- Eski işlemlerin etkisini zamanla azalt
+- Son işlemlere daha fazla, ancak aşırı olmayan ağırlık ver
+- Paper performansı toplam karar puanının %10’unu geçmesin
+- Sistem geçmişte kötü performans gösteren coini tamamen yasaklamak yerine riskini azaltabilsin
+- Sistem geçmişte iyi performans gösteren coinde risk üst sınırını aşamasın
+
+Öğrenme güncelleme aralığı varsayılan 24 saat olsun.
+En az 20 yeni işlem oluşmadan temel ağırlıkları büyük ölçüde değiştirme.
+Tek gün içinde herhangi bir ağırlığı en fazla %5 değiştir.
+
+8. WALK-FORWARD VE AŞIRI UYUM KORUMASI
+
+Sistem geçmiş sonuçlara aşırı uyum sağlamasın.
+
+Kurallar:
+- Eğitim ve değerlendirme verilerini ayır.
+- Son dönem verisini doğrulama için kullan.
+- Aynı işlemleri hem öğrenme hem değerlendirme için kullanma.
+- En iyi ayarı doğrudan otomatik seçme.
+- Bir parametre değişikliğini önce gölge testte dene.
+- Gölge test, gerçek paper kararlarını etkilemeden paralel performans toplasın.
+- Yeni ağırlıklar mevcut ağırlıklardan anlamlı biçimde daha iyi görünse bile minimum örnek sayısı olmadan aktive edilmesin.
+- Yeni model performansı kötüleşirse önceki kararlı sürüme dön.
+- Öğrenme durumlarının sürüm numarası olsun.
+- Her ağırlık değişimi audit log’a yazılsın.
+
+9. GÜVENLİK KORUMALARI
+
+Safety Guard şu durumlarda yeni işlemleri durdursun:
+- Günlük kayıp limiti
+- Maksimum drawdown
+- Maksimum ardışık zarar
+- Binance veri erişim hatası
+- Zaman damgası veya mum verisi tutarsızlığı
+- Bozuk config
+- Bozuk state dosyası
+- Aynı bot sürecinden iki tane çalışması
+- Çok eski piyasa verisi
+- Ani ve olağan dışı fiyat hareketi
+- Hesaplanan stop veya pozisyon büyüklüğünün geçersiz olması
+- Disk yazma hatası
+- Karar motorunda beklenmeyen hata
+
+Hata durumunda:
+- Mevcut açık paper pozisyonları güvenli şekilde yönetmeye devam et.
+- Yeni pozisyon açma.
+- Panelde açık Türkçe hata göster.
+- Hata audit log’a yazılsın.
+- Veri düzelmeden otomatik moda dönme.
+- Kullanıcı onayı gerektiren hatalarda “Kilidi Aç” butonu göster.
+
+Kill-switch:
+- Panelde büyük ve açık bir “Acil Durdur” butonu olsun.
+- Yeni işlem açmayı anında durdursun.
+- Açık pozisyonların yönetimini durdurmasın.
+- Yeniden etkinleştirmek için açık onay istesin.
+
+10. OTOMATİK COIN SEÇİMİYLE ENTEGRASYON
+
+Mevcut universe_manager.py ile entegre et.
+
+Coin seçimi:
+- Likidite
+- Hacim
+- Volatilite
+- Trend uyumu
+- Veri kalitesi
+- Paper performansı
+- Piyasa rejimi uyumu
+
+kullanılarak yapılsın.
+
+Kurallar:
+- Varsayılan mod Öneri olsun.
+- Otomatik coin ekleme/çıkarma ancak kullanıcı açarsa çalışsın.
+- Sabitlenmiş coinleri çıkarma.
+- Açık pozisyonlu coinleri çıkarma.
+- Maksimum aktif coin varsayılan 10.
+- Minimum aktif coin varsayılan 3.
+- Aynı değerlendirmede listenin en fazla %30’u değişsin.
+- Ekleme eşiği 70, çıkarma eşiği 50.
+- En az 24 saat listede kalma süresi.
+- Çıkarılan coin için 12 saat cooldown.
+- BTCUSDT varsayılan sabit büyük likit coin olsun.
+- Piyasa verisi sorunluysa listeyi değiştirme.
+
+11. PANEL
+
+Dashboard’a yeni bölümler ekle:
+
+A) Otomatik Sistem Durumu
+- Çalışma modu
+- Bot çalışıyor/durdu
+- Otomatik PAPER açık/kapalı
+- Kill-switch açık/kapalı
+- Güvenli durum aktif mi
+- Son karar zamanı
+- Bir sonraki analiz zamanı
+- Son öğrenme güncellemesi
+- Model/öğrenme sürümü
+
+B) Piyasa Rejimi
+- Genel piyasa rejimi
+- Güven puanı
+- BTC yönü
+- Volatilite seviyesi
+- Trend gücü
+- İşlem için uygun / uygun değil sonucu
+- Kısa Türkçe gerekçe
+
+C) Risk Paneli
+- Mevcut işlem riski
+- İzin verilen maksimum risk
+- Günlük PnL
+- Günlük zarar limiti
+- Mevcut drawdown
+- Maksimum drawdown limiti
+- Ardışık zarar
+- Risk azaltma durumu
+- Yeni işlem izni var mı
+
+D) Karar Paneli
+Son 20 karar için:
+- Zaman
+- Sembol
+- Long/Short
+- Strateji puanı
+- Rejim puanı
+- Coin puanı
+- Risk puanı
+- Nihai karar puanı
+- Sonuç: işlem aç / izle / reddet
+- Reddetme veya kabul gerekçesi
+
+E) Öğrenme Paneli
+- Toplam değerlendirilen işlem
+- Veri güven seviyesi
+- En iyi performans gösteren rejimler
+- En zayıf rejimler
+- Long/Short karşılaştırması
+- Coin bazlı performans
+- Saat bazlı performans
+- Son ağırlık değişiklikleri
+- Gölge model sonucu
+- Yeterli veri yoksa açıkça “İstatistiksel olarak yetersiz veri” yaz
+
+F) Otomasyon Kontrolleri
+- İzleme modu
+- Öneri modu
+- Otomatik PAPER modu
+- Otomatik coin seçimi
+- Dinamik risk
+- Break-even
+- Trailing stop
+- Kısmi kâr alma
+- Acil Durdur
+- Güvenlik kilidini aç
+
+Ayar değişikliğinde:
+- Açık onay iste.
+- Hangi değişiklik yapıldığını audit log’a yaz.
+- Bot yeniden başlatılmalıysa kullanıcıya bildir.
+- Otomatik yeniden başlatma varsayılan kapalı olsun.
+
+12. RAPORLAMA
+
+Günlük paper raporu oluştur:
+- Başlangıç ve kapanış bakiyesi
+- Günlük PnL
+- İşlem sayısı
+- Kazanma oranı
+- Profit factor
+- Maksimum drawdown
+- Long ve short sonuçları
+- En iyi ve en kötü coin
+- En iyi ve en kötü piyasa rejimi
+- Engellenen işlem sayısı
+- Risk korumasının kaç kez devreye girdiği
+- Coin listesi değişiklikleri
+- Öğrenme motoru değişiklikleri
+
+Raporu panelde göster ve JSON/CSV olarak dışa aktarılabilir hale getir.
+Telegram henüz yoksa entegrasyon için altyapı hazırla ancak gerçek token isteme veya kullanma.
+
+13. KAYIT VE DENETİM
+
+Ayrı loglar oluştur:
+- decisions.jsonl
+- risk_events.jsonl
+- learning_updates.jsonl
+- regime_history.jsonl
+- universe_changes.jsonl
+- system_errors.jsonl
+
+Her karar kaydında:
+- Tarih
+- Sembol
+- Fiyat
+- Piyasa rejimi
+- Rejim güveni
+- Strateji puanı
+- Nihai karar puanı
+- Risk oranı
+- Stop
+- Hedef
+- Karar
+- Gerekçe
+- Kullanılan konfigürasyon sürümü
+
+Loglara gizli bilgi yazma.
+Dosyaları atomik ve dayanıklı şekilde yaz.
+Log boyutu büyüdüğünde rotasyon uygula.
+
+14. CONFIG
+
+config.json içine mevcut değerleri koruyarak yeni bölüm ekle:
+
+adaptive_system:
+- enabled: false
+- mode: "MONITOR"
+- auto_paper_enabled: false
+- regime_min_confidence: 65
+- final_decision_threshold: 78
+- base_risk_pct: 0.25
+- max_risk_pct: 0.50
+- daily_loss_limit_pct: 1.0
+- max_drawdown_pct: 5.0
+- max_consecutive_losses: 3
+- risk_reduction_after_losses: 2
+- learning_enabled: true
+- learning_interval_hours: 24
+- minimum_learning_trades: 20
+- max_daily_weight_change_pct: 5
+- cooldown_minutes: 60
+- break_even_enabled: false
+- trailing_stop_enabled: false
+- partial_take_profit_enabled: false
+- kill_switch: false
+
+Tüm değerleri sunucu tarafında doğrula.
+Geçersiz config durumunda varsayılan güvenli değerlere dön ve yeni işlem açma.
+
+15. OTOMATİK ÇALIŞMA DÖNGÜSÜ
+
+Auto controller döngüsü:
+
+1. Config doğrula
+2. Safety Guard kontrol et
+3. Piyasa verisini al
+4. Veri kalitesini kontrol et
+5. Genel piyasa rejimini hesapla
+6. Coin havuzunu değerlendir
+7. Aktif coinleri tara
+8. Her coin için strateji sinyali üret
+9. Karar puanı hesapla
+10. Risk motorundan izin al
+11. Koşullar uygunsa paper işlem aç
+12. Açık pozisyonları yönet
+13. Sonuçları logla
+14. Belirli aralıkta öğrenme motorunu çalıştır
+15. Panel durum dosyasını güncelle
+
+Aynı anda iki auto controller çalışmasını engelle.
+Her döngüde hata yönetimi kullan.
+Bir coin hatası tüm döngüyü durdurmasın.
+Binance rate limitlerine saygı göster.
+İsteklerde timeout, retry ve exponential backoff kullan.
+
+16. TESTLER
+
+Kapsamlı otomatik test ekle.
+
+Test senaryoları:
+- Belirsiz piyasada işlem açılmaması
+- Güçlü sinyalde uygun paper işlem açılması
+- Düşük veri kalitesinde işlem engellenmesi
+- Günlük zarar limitinde sistemin durması
+- Drawdown limitinde kill-switch
+- İki ardışık zararda risk azaltılması
+- Üç ardışık zararda yeni işlemlerin durması
+- Riskin hiçbir zaman maksimum sınırı aşmaması
+- Zarardan sonra risk artırılmaması
+- Stop-loss’suz işlem oluşmaması
+- Açık pozisyonlu coinin listeden çıkarılmaması
+- Aynı sembolde ikinci pozisyon açılmaması
+- Aynı anda iki controller çalışmaması
+- Bozuk config durumunda güvenli duruma geçilmesi
+- Binance veri hatasında mevcut coin listesinin korunması
+- Öğrenme motorunun az veriyle ağırlıkları değiştirmemesi
+- Günlük ağırlık değişiminin %5’i aşmaması
+- Gölge model başarısızsa aktif modele geçmemesi
+- Kill-switch açıkken yeni işlem açılmaması
+- Panel endpointlerinin hata vermemesi
+- Log dosyalarının doğru yazılması
+- Mevcut alpha20 stratejisinin çalışmaya devam etmesi
+
+Smoke test:
+- app.py başlat
+- /api/status
+- /api/regime
+- /api/risk
+- /api/decisions
+- /api/learning
+- otomatik PAPER aç/kapat
+- kill-switch
+- bot başlat/durdur
+- ayar kaydet
+- coin analizi
+
+17. GÖRSEL VE DİL
+
+- Mevcut koyu temayı koru.
+- Mobil uyumlu yap.
+- Tüm kullanıcı mesajları Türkçe olsun.
+- PAPER modu her zaman görünür olsun.
+- “Bu sistem kârlılığı garanti etmez” uyarısını belirgin göster.
+- “Kesin fırsat”, “kesin kazanç”, “garantili” ifadelerini kullanma.
+- Karar gerekçelerini anlaşılır Türkçe yaz.
+- Teknik hata detaylarını kullanıcıya ham traceback olarak gösterme.
+- Loglarda traceback tutulabilir.
+
+18. TAMAMLAMA
+
+İş bitince:
+- Değiştirilen ve oluşturulan dosyaları listele.
+- Mevcut dosya yedeklerinin yerini göster.
+- Tüm test sonuçlarını Türkçe özetle.
+- Başarısız test varsa açıkça belirt.
+- Panelin nasıl çalıştırılacağını yaz.
+- Otomatik PAPER modunun varsayılan olarak kapalı olduğunu doğrula.
+- Mevcut bakiye, symbols ve ayarların korunup korunmadığını doğrula.
+- Gerçek emir veya API entegrasyonu eklenmediğini doğrula.

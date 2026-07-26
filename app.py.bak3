@@ -1,13 +1,10 @@
 """
 app.py — Alpha-20 v1 PAPER Bot Kontrol Paneli
-Flask web arayüzü: bot yönetimi, ayarlar, coin listesi,
-Akıllı Coin Seçimi ve Uyarlanabilir Karar & Risk Motoru.
+Flask web arayüzü: bot yönetimi, ayarlar, coin listesi ve Akıllı Coin Seçimi.
 API anahtarı, canlı emir veya gerçek para işlemi içermez.
 """
 from __future__ import annotations
 
-import csv
-import io
 import json
 import math
 import os
@@ -22,21 +19,14 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, render_template, request
+from flask import Flask, render_template, request
 
-# ── alpha20_v1/ modülleri sys.path üzerinden import ──────────────────────────
-ROOT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT_DIR / "alpha20_v1"))
-
-import universe_manager as um   # noqa: E402
-import metrics_store    as ms   # noqa: E402
-import safety_guard     as sg   # noqa: E402
-import auto_controller  as ac   # noqa: E402
-import learning_engine  as le   # noqa: E402
+# universe_manager alpha20_v1/ altında; sys.path ile import
+sys.path.insert(0, str(Path(__file__).resolve().parent / "alpha20_v1"))
+import universe_manager as um  # noqa: E402
 
 app = Flask(__name__)
-
-ROOT        = ROOT_DIR
+ROOT        = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "alpha20_v1" / "config.json"
 STATE_PATH  = ROOT / "alpha20_v1" / "state.json"
 LOG_PATH    = ROOT / "alpha20_v1" / "alpha20.log"
@@ -44,9 +34,9 @@ BOT_PATH    = ROOT / "alpha20_v1" / "alpha20.py"
 PID_PATH    = ROOT / "alpha20_v1" / ".bot.pid"
 BOT_OUTPUT  = ROOT / "alpha20_v1" / "bot_process.log"
 
-CONFIG_LOCK           = threading.RLock()
-INTEGER_PATTERN       = re.compile(r"^[0-9]+$")
-SYMBOL_PATTERN        = re.compile(r"^[A-Z0-9]+USDT$")
+CONFIG_LOCK          = threading.RLock()
+INTEGER_PATTERN      = re.compile(r"^[0-9]+$")
+SYMBOL_PATTERN       = re.compile(r"^[A-Z0-9]+USDT$")
 LOG_TIMESTAMP_PATTERN = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d{3}")
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -59,42 +49,31 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 SETTING_RULES: dict[str, tuple[str, float, float]] = {
-    "minimum_score":           ("int",   0,   100),
-    "scan_seconds":            ("int",   15,  3600),
-    "risk_per_trade_pct":      ("float", 0.1, 2.0),
-    "daily_loss_limit_pct":    ("float", 0.5, 10.0),
-    "max_consecutive_losses":  ("int",   1,   10),
-    "reward_risk_ratio":       ("float", 1.0, 5.0),
-    "atr_stop_multiplier":     ("float", 0.5, 5.0),
-    "max_open_positions":      ("int",   1,   5),
-}
-
-ADAPTIVE_SETTING_RULES: dict[str, tuple[str, float, float]] = {
-    "regime_min_confidence":      ("float", 0,   100),
-    "final_decision_threshold":   ("float", 50,  100),
-    "base_risk_pct":              ("float", 0.05, 0.50),
-    "max_risk_pct":               ("float", 0.05, 0.50),
-    "daily_loss_limit_pct":       ("float", 0.1,  5.0),
-    "max_drawdown_pct":           ("float", 1.0,  20.0),
-    "max_consecutive_losses":     ("int",   1,    10),
-    "risk_reduction_after_losses":("int",   1,    10),
-    "learning_interval_hours":    ("float", 1,    168),
-    "minimum_learning_trades":    ("int",   5,    200),
-    "max_daily_weight_change_pct":("float", 0.5,  20.0),
-    "cooldown_minutes":           ("int",   0,    1440),
+    "minimum_score":        ("int",   0,   100),
+    "scan_seconds":         ("int",   15,  3600),
+    "risk_per_trade_pct":   ("float", 0.1, 2.0),
+    "daily_loss_limit_pct": ("float", 0.5, 10.0),
+    "max_consecutive_losses": ("int", 1,   10),
+    "reward_risk_ratio":    ("float", 1.0, 5.0),
+    "atr_stop_multiplier":  ("float", 0.5, 5.0),
+    "max_open_positions":   ("int",   1,   5),
 }
 
 DEFAULT_PRESETS = {
     "default": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-    "top10": ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
-              "DOGEUSDT","ADAUSDT","LINKUSDT","AVAXUSDT","SUIUSDT"],
-    "top20": ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
-              "DOGEUSDT","ADAUSDT","LINKUSDT","AVAXUSDT","SUIUSDT",
-              "LTCUSDT","BCHUSDT","DOTUSDT","TRXUSDT","UNIUSDT",
-              "ETCUSDT","ATOMUSDT","NEARUSDT","ICPUSDT","AAVEUSDT"],
+    "top10": [
+        "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
+        "DOGEUSDT","ADAUSDT","LINKUSDT","AVAXUSDT","SUIUSDT",
+    ],
+    "top20": [
+        "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
+        "DOGEUSDT","ADAUSDT","LINKUSDT","AVAXUSDT","SUIUSDT",
+        "LTCUSDT","BCHUSDT","DOTUSDT","TRXUSDT","UNIUSDT",
+        "ETCUSDT","ATOMUSDT","NEARUSDT","ICPUSDT","AAVEUSDT",
+    ],
 }
 
-
+# Jinja2 özel filtresi
 @app.template_filter("fmt_volume")
 def fmt_volume_filter(vol: float) -> str:
     return um.fmt_volume(vol)
@@ -154,13 +133,10 @@ def update_config(updates: dict[str, Any]) -> tuple[bool, str]:
     return True, "Ayarlar başarıyla kaydedildi."
 
 
-def parse_setting(name: str, raw: str | None, rules: dict | None = None) -> int | float | None:
+def parse_setting(name: str, raw: str | None) -> int | float | None:
     if raw is None:
         return None
-    r = rules or SETTING_RULES
-    if name not in r:
-        return None
-    kind, lo, hi = r[name]
+    kind, lo, hi = SETTING_RULES[name]
     val = raw.strip()
     if kind == "int":
         if not INTEGER_PATTERN.fullmatch(val):
@@ -231,8 +207,7 @@ def read_pid() -> int | None:
 
 
 def write_pid(pid: int) -> None:
-    atomic_write_json(PID_PATH, {"pid": pid,
-                                  "started_at": datetime.now(timezone.utc).isoformat()})
+    atomic_write_json(PID_PATH, {"pid": pid, "started_at": datetime.now(timezone.utc).isoformat()})
 
 
 def bot_running() -> bool:
@@ -241,15 +216,17 @@ def bot_running() -> bool:
 
 def start_bot() -> tuple[bool, str]:
     with CONFIG_LOCK:
-        if find_bot_pids():
-            return False, "Bot zaten çalışıyor."
+        pids = find_bot_pids()
+        if pids:
+            return False, "Bot zaten çalışıyor; ikinci süreç başlatılmadı."
         if not BOT_PATH.exists():
             return False, "Bot dosyası bulunamadı."
         try:
-            out  = BOT_OUTPUT.open("a", encoding="utf-8")
+            out = BOT_OUTPUT.open("a", encoding="utf-8")
             proc = subprocess.Popen(
                 [sys.executable, str(BOT_PATH)],
-                cwd=str(ROOT), stdin=subprocess.DEVNULL,
+                cwd=str(ROOT),
+                stdin=subprocess.DEVNULL,
                 stdout=out, stderr=subprocess.STDOUT,
                 start_new_session=True, close_fds=True,
             )
@@ -264,8 +241,9 @@ def stop_bot() -> tuple[bool, str]:
     with CONFIG_LOCK:
         pid = read_pid()
         if pid is None or not is_bot_command(pid):
-            PID_PATH.unlink(missing_ok=True)
-            return False, "Uygulamanın başlattığı çalışan bot bulunamadı."
+            if PID_PATH.exists():
+                PID_PATH.unlink(missing_ok=True)
+            return False, "Uygulamanın başlattığı çalışan bir bot bulunamadı."
         try:
             os.kill(pid, signal.SIGTERM)
             for _ in range(20):
@@ -298,9 +276,7 @@ def read_last_log() -> tuple[str, str]:
     if not LOG_PATH.exists():
         return "Log dosyası bulunamadı.", "Bilinmiyor"
     try:
-        lines = [ln.strip() for ln in
-                 LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
-                 if ln.strip()]
+        lines = [ln.strip() for ln in LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
         last  = lines[-1] if lines else "Henüz log yok."
         m     = LOG_TIMESTAMP_PATTERN.match(last)
         scan  = f"{m.group('ts')} UTC" if m else datetime.fromtimestamp(
@@ -313,7 +289,7 @@ def read_last_log() -> tuple[str, str]:
 def build_status() -> tuple[dict[str, Any], str | None]:
     state, state_err = read_json(STATE_PATH)
     log_msg, last_scan = read_last_log()
-    state  = state or {}
+    state = state or {}
     trades = state.get("trades") if isinstance(state.get("trades"), list) else []
     return {
         "running":            bot_running(),
@@ -330,46 +306,49 @@ def build_status() -> tuple[dict[str, Any], str | None]:
 
 
 def setting_fields(config: dict[str, Any] | None) -> list[dict[str, Any]]:
-    cfg    = config or DEFAULT_CONFIG
-    labels = {
-        "minimum_score":          ("Minimum Sinyal Skoru",     "number", "1"),
-        "scan_seconds":           ("Tarama Aralığı (sn)",       "number", "1"),
-        "risk_per_trade_pct":     ("İşlem Başına Risk (%)",      "number", "0.1"),
-        "daily_loss_limit_pct":   ("Günlük Zarar Limiti (%)",   "number", "0.1"),
-        "max_consecutive_losses": ("Maks. Ardışık Zarar",        "number", "1"),
-        "reward_risk_ratio":      ("Ödül / Risk Oranı",          "number", "0.1"),
-        "atr_stop_multiplier":    ("ATR Stop Çarpanı",           "number", "0.1"),
-        "max_open_positions":     ("Maks. Açık Pozisyon",        "number", "1"),
+    cfg = config or DEFAULT_CONFIG
+    labels: dict[str, tuple[str, str, str]] = {
+        "minimum_score":         ("Minimum Sinyal Skoru",      "number", "1"),
+        "scan_seconds":          ("Tarama Aralığı (sn)",        "number", "1"),
+        "risk_per_trade_pct":    ("İşlem Başına Risk (%)",       "number", "0.1"),
+        "daily_loss_limit_pct":  ("Günlük Zarar Limiti (%)",    "number", "0.1"),
+        "max_consecutive_losses":("Maks. Ardışık Zarar",        "number", "1"),
+        "reward_risk_ratio":     ("Ödül / Risk Oranı",          "number", "0.1"),
+        "atr_stop_multiplier":   ("ATR Stop Çarpanı",           "number", "0.1"),
+        "max_open_positions":    ("Maks. Açık Pozisyon",        "number", "1"),
     }
     fields = []
     for name, (kind, lo, hi) in SETTING_RULES.items():
         label, inp_type, step = labels[name]
         fields.append({
-            "name": name, "label": label, "input_type": inp_type,
-            "min": lo, "max": hi, "step": step,
-            "value": cfg.get(name, DEFAULT_CONFIG.get(name, "")),
+            "name": name, "label": label,
+            "input_type": inp_type, "min": lo, "max": hi, "step": step,
+            "value": cfg.get(name, DEFAULT_CONFIG[name]),
         })
     return fields
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Akıllı seçim bağlamı
+# Akıllı seçim yardımcıları
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_smart_context(config: dict[str, Any] | None) -> tuple[dict, dict]:
-    smart_cfg   = um.get_smart_config()
-    suggestions = smart_cfg.get("last_suggestions", [])
-    change_log  = um.get_smart_log()[:20]
-    last_ts     = smart_cfg.get("last_analysis_time")
-    last_str    = (datetime.fromisoformat(last_ts).strftime("%Y-%m-%d %H:%M UTC")
-                   if last_ts else None)
-    state, _    = read_json(STATE_PATH)
-    trades      = (state or {}).get("trades", [])
+def build_smart_context(config: dict[str, Any] | None) -> dict[str, Any]:
+    smart_cfg    = um.get_smart_config()
+    suggestions  = smart_cfg.get("last_suggestions", [])
+    change_log   = um.get_smart_log()[:20]
+    last_ts      = smart_cfg.get("last_analysis_time")
+    last_str     = (datetime.fromisoformat(last_ts).strftime("%Y-%m-%d %H:%M UTC")
+                    if last_ts else None)
+
+    # Performans karşılaştırması
+    state, _ = read_json(STATE_PATH)
+    trades   = (state or {}).get("trades", [])
     if not isinstance(trades, list):
         trades = []
     manual_list = smart_cfg.get("manual_list")
-    perf        = um.get_performance_comparison(trades, manual_list)
-    smart       = {
+    perf = um.get_performance_comparison(trades, manual_list)
+
+    return {
         "mode":           smart_cfg.get("mode", "MANUEL"),
         "cfg":            smart_cfg,
         "suggestions":    suggestions,
@@ -381,100 +360,14 @@ def build_smart_context(config: dict[str, Any] | None) -> tuple[dict, dict]:
         "manual_list":    manual_list,
         "pinned":         set(smart_cfg.get("pinned", [])),
         "error":          um.analysis_status.get("error"),
-    }
-    return smart, perf
+    }, perf
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Uyarlanabilir motor bağlamı
-# ══════════════════════════════════════════════════════════════════════════════
-
-def build_adaptive_context(config: dict[str, Any] | None) -> dict[str, Any]:
-    cfg         = config or DEFAULT_CONFIG
-    adaptive    = cfg.get("adaptive_system", {})
-    panel_st    = ms.read_panel_status()
-    ctrl_st     = ac.get_status()
-    safety_st   = sg.get_safety_state()
-    learn_panel = {}
-    try:
-        learn_panel = le.get_panel_data()
-    except Exception:
-        pass
-    recent_dec   = ms.get_recent_decisions(20)
-    recent_risk  = ms.get_recent_risk_events(10)
-    recent_err   = ms.get_recent_errors(5)
-
-    # Günlük rapor özeti
-    daily_report = _build_daily_report(config)
-
-    return {
-        "adaptive":      adaptive,
-        "ctrl":          ctrl_st,
-        "safety":        safety_st,
-        "panel":         panel_st,
-        "learn":         learn_panel,
-        "decisions":     recent_dec,
-        "risk_events":   recent_risk,
-        "errors":        recent_err,
-        "daily_report":  daily_report,
-        "market_regime": panel_st.get("market_regime", {}),
-    }
-
-
-def _build_daily_report(config: dict | None) -> dict[str, Any]:
-    state, _ = read_json(STATE_PATH)
-    if not state:
-        return {}
-    trades    = state.get("trades", [])
-    if not isinstance(trades, list):
-        trades = []
-    today     = datetime.now(timezone.utc).date().isoformat()
-    today_t   = [t for t in trades if (t.get("closed_at", "") or "").startswith(today)]
-    balance   = float(state.get("balance", 0))
-    day_start = float(state.get("day_start_balance", balance) or balance)
-    daily_pnl = round(balance - day_start, 4)
-    n         = len(today_t)
-    if n == 0:
-        return {
-            "trade_count": 0, "daily_pnl": daily_pnl,
-            "start_balance": day_start, "end_balance": balance,
-            "win_rate": None, "profit_factor": None,
-        }
-    wins    = [t for t in today_t if t.get("result") == "WIN"]
-    wr      = round(len(wins) / n * 100, 1)
-    pos_pnl = sum(float(t.get("pnl", 0) or 0) for t in today_t if float(t.get("pnl", 0) or 0) > 0)
-    neg_pnl = abs(sum(float(t.get("pnl", 0) or 0) for t in today_t if float(t.get("pnl", 0) or 0) < 0))
-    pf      = round(pos_pnl / neg_pnl, 3) if neg_pnl > 0 else None
-    by_sym  = {}
-    for t in today_t:
-        s = t.get("symbol", "?")
-        by_sym.setdefault(s, []).append(float(t.get("pnl", 0) or 0))
-    sym_pnl = {s: round(sum(v), 4) for s, v in by_sym.items()}
-    best_c  = max(sym_pnl, key=lambda k: sym_pnl[k], default="—")
-    worst_c = min(sym_pnl, key=lambda k: sym_pnl[k], default="—")
-    return {
-        "trade_count":    n,
-        "daily_pnl":      daily_pnl,
-        "start_balance":  day_start,
-        "end_balance":    balance,
-        "win_rate":       wr,
-        "profit_factor":  pf,
-        "best_coin":      best_c,
-        "worst_coin":     worst_c,
-        "date":           today,
-    }
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Sayfa render
-# ══════════════════════════════════════════════════════════════════════════════
 
 def render_dashboard(message: str | None = None, message_type: str = "success"):
     config, config_error = load_config()
     status, state_error  = build_status()
     safe_config          = config or DEFAULT_CONFIG
     smart, perf          = build_smart_context(safe_config)
-    adaptive_ctx         = build_adaptive_context(safe_config)
     return render_template(
         "dashboard.html",
         config=safe_config, status=status,
@@ -482,12 +375,11 @@ def render_dashboard(message: str | None = None, message_type: str = "success"):
         config_error=config_error, state_error=state_error,
         message=message, message_type=message_type,
         smart=smart, perf=perf,
-        adaptive=adaptive_ctx,
     )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Rotalar — temel panel
+# Rotalar — mevcut panel
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/")
@@ -502,13 +394,11 @@ def save_settings():
         parsed = parse_setting(name, request.form.get(name))
         if parsed is None:
             _, lo, hi = SETTING_RULES[name]
-            return render_dashboard(f"Hata: {name} değeri {lo}–{hi} arasında olmalıdır.", "error")
+            return render_dashboard(f"Hata: {name} değeri {lo} ile {hi} arasında olmalıdır.", "error")
         updates[name] = parsed
     ok, msg = update_config(updates)
     if ok and bot_running():
         msg += " Değişikliklerin etkili olması için botu yeniden başlatın."
-    ms.append_system_error(component="settings", error_type="SETTINGS_CHANGE",
-                           message=f"Ayarlar güncellendi: {list(updates.keys())}") if ok else None
     return render_dashboard(msg, "success" if ok else "error")
 
 
@@ -520,7 +410,7 @@ def add_coin():
         return render_dashboard(err or "Ayar dosyası okunamadı.", "error")
     syms = [str(s) for s in cfg.get("symbols", [])]
     if sym is None:
-        return render_dashboard("Hata: Sembol A-Z ve 0-9 içermeli, USDT ile bitmeli.", "error")
+        return render_dashboard("Hata: Sembol yalnızca A-Z ve 0-9 içermeli ve USDT ile bitmelidir.", "error")
     if sym in syms:
         return render_dashboard(f"Hata: {sym} zaten listede.", "error")
     ok, msg = save_symbols(syms + [sym])
@@ -539,7 +429,7 @@ def delete_coin():
     if sym is None or sym not in syms:
         return render_dashboard("Hata: Silinecek coin bulunamadı.", "error")
     if len(syms) <= 1:
-        return render_dashboard("Hata: En az bir coin kalmalıdır.", "error")
+        return render_dashboard("Hata: En az bir coin listede kalmalıdır.", "error")
     ok, msg = save_symbols([s for s in syms if s != sym])
     if ok and bot_running():
         msg += " Bot çalışıyor; etkili olması için yeniden başlatın."
@@ -556,7 +446,7 @@ def move_coin():
     syms = [str(s) for s in cfg.get("symbols", [])]
     if sym not in syms or direction not in {"up", "down"}:
         return render_dashboard("Hata: Coin sıralaması değiştirilemedi.", "error")
-    idx     = syms.index(sym)
+    idx = syms.index(sym)
     new_idx = idx - 1 if direction == "up" else idx + 1
     if new_idx < 0 or new_idx >= len(syms):
         return render_dashboard("Coin zaten listenin sınırında.", "error")
@@ -569,13 +459,13 @@ def move_coin():
 
 @app.post("/coins/preset")
 def apply_preset():
-    name = request.form.get("preset")
-    syms = DEFAULT_PRESETS.get(name or "")
+    name  = request.form.get("preset")
+    syms  = DEFAULT_PRESETS.get(name or "")
     if syms is None:
         return render_dashboard("Hata: Geçersiz hazır liste.", "error")
     ok, msg = save_symbols(list(syms))
     if ok:
-        msg = "Hazır coin listesi kaydedildi."
+        msg = "Hazır coin listesi başarıyla kaydedildi."
         if bot_running():
             msg += " Bot çalışıyor; etkili olması için yeniden başlatın."
     return render_dashboard(msg, "success" if ok else "error")
@@ -597,7 +487,8 @@ def bot_stop():
 # Rotalar — Akıllı Coin Seçimi
 # ══════════════════════════════════════════════════════════════════════════════
 
-VALID_SMART_MODES = {"MANUEL", "ONERI", "OTOMATIK"}
+VALID_MODES = {"MANUEL", "ONERI", "OTOMATIK"}
+
 SMART_SETTING_RULES: dict[str, tuple[str, float, float]] = {
     "max_coins":           ("int",   1,   30),
     "min_coins":           ("int",   1,   10),
@@ -612,16 +503,17 @@ SMART_SETTING_RULES: dict[str, tuple[str, float, float]] = {
 @app.post("/smart/mode")
 def set_smart_mode():
     mode = (request.form.get("mode") or "").strip().upper()
-    if mode not in VALID_SMART_MODES:
+    if mode not in VALID_MODES:
         return render_dashboard("Hata: Geçersiz mod.", "error")
     cfg = um.get_smart_config()
+    # Mevcut mod MANUEL ise symbols listesini kaydet
     main_cfg, _ = load_config()
     if cfg.get("mode") == "MANUEL" and main_cfg and mode != "MANUEL":
         cfg["manual_list"] = list(main_cfg.get("symbols", []))
     cfg["mode"] = mode
     um.save_smart_config(cfg)
-    label = {"MANUEL": "Manuel", "ONERI": "Öneri", "OTOMATIK": "Otomatik"}[mode]
-    msg = f"Akıllı seçim modu: {label}."
+    mode_label = {"MANUEL": "Manuel", "ONERI": "Öneri", "OTOMATIK": "Otomatik"}[mode]
+    msg = f"Mod {mode_label} olarak ayarlandı."
     if mode == "OTOMATIK":
         msg += " Otomatik analiz saatler içinde devreye girer."
     return render_dashboard(msg, "success")
@@ -634,8 +526,9 @@ def save_smart_settings():
         raw = request.form.get(name)
         if raw is None:
             continue
+        raw = raw.strip()
         try:
-            val: int | float = int(raw.strip()) if kind == "int" else float(raw.strip())
+            val: int | float = int(raw) if kind == "int" else float(raw)
             if not (lo <= val <= hi):
                 return render_dashboard(f"Hata: {name} değeri {lo}–{hi} arasında olmalıdır.", "error")
             cfg[name] = val
@@ -651,14 +544,14 @@ def save_smart_settings():
 @app.post("/smart/analyze")
 def trigger_analyze():
     if um.analysis_status["running"] or um.get_smart_config().get("analysis_running"):
-        return render_dashboard("Analiz zaten çalışıyor.", "error")
+        return render_dashboard("Analiz zaten çalışıyor. Lütfen tamamlanmasını bekleyin.", "error")
     main_cfg, _ = load_config()
-    current   = list((main_cfg or DEFAULT_CONFIG).get("symbols", []))
+    current = list((main_cfg or DEFAULT_CONFIG).get("symbols", []))
     smart_cfg = um.get_smart_config()
-    started   = um.trigger_analysis(current, smart_cfg, apply_if_auto=False)
+    started = um.trigger_analysis(current, smart_cfg, apply_if_auto=False)
     if started:
         return render_dashboard("Analiz başlatıldı. Sonuçlar birkaç dakika içinde görünür.", "success")
-    return render_dashboard("Analiz başlatılamadı.", "error")
+    return render_dashboard("Analiz başlatılamadı; zaten çalışıyor olabilir.", "error")
 
 
 @app.post("/smart/apply")
@@ -666,18 +559,18 @@ def apply_smart_suggestions():
     smart_cfg   = um.get_smart_config()
     suggestions = smart_cfg.get("last_suggestions", [])
     if not suggestions:
-        return render_dashboard("Uygulanacak öneri bulunamadı. Önce analiz çalıştırın.", "error")
+        return render_dashboard("Hata: Uygulanacak öneri bulunamadı. Önce analiz çalıştırın.", "error")
     main_cfg, err = load_config()
     if err or main_cfg is None:
         return render_dashboard(err or "Ayar dosyası okunamadı.", "error")
-    current     = list(main_cfg.get("symbols", []))
+    current  = list(main_cfg.get("symbols", []))
     to_add, to_remove = um.compute_auto_changes(suggestions, current, smart_cfg)
     if not to_add and not to_remove:
-        return render_dashboard("Değişiklik gerekmedi.", "success")
+        return render_dashboard("Öneriler uygulandı; değişiklik gerekmedi.", "success")
     ok, msg = um.apply_auto_changes(to_add, to_remove, smart_cfg, smart_cfg.get("mode", "ONERI"))
     um.save_smart_config(smart_cfg)
     if ok and bot_running():
-        msg += " Bot çalışıyor; etkili olması için yeniden başlatın."
+        msg += " Bot çalışıyor; değişikliklerin etkili olması için yeniden başlatın."
     return render_dashboard(msg, "success" if ok else "error")
 
 
@@ -686,7 +579,7 @@ def restore_manual_list():
     smart_cfg   = um.get_smart_config()
     manual_list = smart_cfg.get("manual_list")
     if not manual_list:
-        return render_dashboard("Kaydedilmiş manuel liste bulunamadı.", "error")
+        return render_dashboard("Hata: Kaydedilmiş manuel liste bulunamadı.", "error")
     ok, msg = save_symbols(list(manual_list))
     if ok:
         msg = "Manuel coin listesi geri yüklendi."
@@ -699,7 +592,7 @@ def restore_manual_list():
 def toggle_pin():
     sym = normalize_symbol(request.form.get("symbol"))
     if sym is None:
-        return render_dashboard("Geçersiz sembol.", "error")
+        return render_dashboard("Hata: Geçersiz sembol.", "error")
     smart_cfg = um.get_smart_config()
     pinned    = list(smart_cfg.get("pinned", []))
     if sym in pinned:
@@ -707,7 +600,7 @@ def toggle_pin():
         msg = f"{sym} sabitlemesi kaldırıldı."
     else:
         pinned.append(sym)
-        msg = f"{sym} sabitlendi."
+        msg = f"{sym} sabitlendi; otomatik çıkarma engellendi."
     smart_cfg["pinned"] = pinned
     um.save_smart_config(smart_cfg)
     return render_dashboard(msg, "success")
@@ -718,139 +611,24 @@ def smart_coin_action():
     sym    = normalize_symbol(request.form.get("symbol"))
     action = (request.form.get("action") or "").strip().lower()
     if sym is None or action not in {"add", "remove"}:
-        return render_dashboard("Geçersiz sembol veya işlem.", "error")
+        return render_dashboard("Hata: Geçersiz sembol veya işlem.", "error")
     cfg, err = load_config()
     if err or cfg is None:
         return render_dashboard(err or "Ayar dosyası okunamadı.", "error")
     syms = [str(s) for s in cfg.get("symbols", [])]
     if action == "add":
         if sym in syms:
-            return render_dashboard(f"{sym} zaten listede.", "error")
+            return render_dashboard(f"Hata: {sym} zaten listede.", "error")
         ok, msg = save_symbols(syms + [sym])
     else:
         if sym not in syms:
-            return render_dashboard(f"{sym} listede bulunamadı.", "error")
+            return render_dashboard(f"Hata: {sym} listede bulunamadı.", "error")
         if len(syms) <= 1:
-            return render_dashboard("En az bir coin kalmalıdır.", "error")
+            return render_dashboard("Hata: En az bir coin listede kalmalıdır.", "error")
         ok, msg = save_symbols([s for s in syms if s != sym])
     if ok and bot_running():
         msg += " Bot çalışıyor; etkili olması için yeniden başlatın."
     return render_dashboard(msg, "success" if ok else "error")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Rotalar — Uyarlanabilir Motor
-# ══════════════════════════════════════════════════════════════════════════════
-
-VALID_ADAPTIVE_MODES = {"MONITOR", "SUGGEST", "AUTO", "SAFE"}
-
-
-@app.post("/adaptive/enable")
-def adaptive_enable():
-    enabled = request.form.get("enabled") == "1"
-    ok, msg = update_config({"adaptive_system": {
-        **(_get_adaptive_cfg()), "enabled": enabled
-    }})
-    if ok:
-        if enabled:
-            ac.start_controller_loop()
-            msg = "Uyarlanabilir motor etkinleştirildi."
-        else:
-            ac.stop_controller_loop()
-            msg = "Uyarlanabilir motor devre dışı bırakıldı."
-    ms.append_system_error(component="adaptive", error_type="ENABLE_CHANGE",
-                           message=f"enabled={enabled}") if ok else None
-    return render_dashboard(msg, "success" if ok else "error")
-
-
-@app.post("/adaptive/mode")
-def set_adaptive_mode():
-    mode = (request.form.get("mode") or "").strip().upper()
-    if mode not in VALID_ADAPTIVE_MODES:
-        return render_dashboard("Hata: Geçersiz çalışma modu.", "error")
-    cfg = _get_adaptive_cfg()
-    cfg["mode"] = mode
-    ok, msg = _save_adaptive_cfg(cfg)
-    mode_label = {"MONITOR": "İzleme", "SUGGEST": "Öneri",
-                  "AUTO": "Otomatik PAPER", "SAFE": "Güvenli Durum"}[mode]
-    ms.append_system_error(component="adaptive", error_type="MODE_CHANGE",
-                           message=f"Mod değiştirildi: {mode}") if ok else None
-    return render_dashboard(f"Çalışma modu: {mode_label}.", "success" if ok else "error")
-
-
-@app.post("/adaptive/settings")
-def save_adaptive_settings():
-    cfg = _get_adaptive_cfg()
-    for name, (kind, lo, hi) in ADAPTIVE_SETTING_RULES.items():
-        raw = request.form.get(name)
-        if raw is None:
-            continue
-        parsed = parse_setting(name, raw, ADAPTIVE_SETTING_RULES)
-        if parsed is None:
-            return render_dashboard(f"Hata: {name} değeri {lo}–{hi} arasında olmalıdır.", "error")
-        cfg[name] = parsed
-    # Boolean toggles
-    for flag in ("break_even_enabled", "trailing_stop_enabled",
-                 "partial_take_profit_enabled", "learning_enabled"):
-        cfg[flag] = request.form.get(flag) == "1"
-    ok, msg = _save_adaptive_cfg(cfg)
-    ms.append_system_error(component="adaptive", error_type="SETTINGS_CHANGE",
-                           message="Adaptive ayarlar güncellendi.") if ok else None
-    return render_dashboard("Uyarlanabilir motor ayarları kaydedildi." if ok else msg,
-                            "success" if ok else "error")
-
-
-@app.post("/adaptive/auto-paper")
-def toggle_auto_paper():
-    cfg     = _get_adaptive_cfg()
-    enabled = request.form.get("enabled") == "1"
-    if enabled and not cfg.get("enabled", False):
-        return render_dashboard("Otomatik PAPER açmak için önce uyarlanabilir motoru etkinleştirin.", "error")
-    cfg["auto_paper_enabled"] = enabled
-    ok, msg = _save_adaptive_cfg(cfg)
-    label   = "Otomatik PAPER açıldı." if enabled else "Otomatik PAPER kapatıldı."
-    ms.append_system_error(component="adaptive", error_type="AUTO_PAPER_TOGGLE",
-                           message=label) if ok else None
-    return render_dashboard(label if ok else msg, "success" if ok else "error")
-
-
-@app.post("/adaptive/kill-switch")
-def kill_switch():
-    activate = request.form.get("activate") == "1"
-    if activate:
-        sg.activate_kill_switch("Panelden kullanıcı etkinleştirdi.")
-        # config'e de yaz
-        cfg = _get_adaptive_cfg()
-        cfg["kill_switch"] = True
-        _save_adaptive_cfg(cfg)
-        return render_dashboard("⛔ Acil durdur etkinleştirildi. Yeni işlem açılmayacak.", "error")
-    else:
-        sg.deactivate_kill_switch()
-        cfg = _get_adaptive_cfg()
-        cfg["kill_switch"] = False
-        _save_adaptive_cfg(cfg)
-        return render_dashboard("Acil durdur devre dışı bırakıldı.", "success")
-
-
-@app.post("/adaptive/unlock")
-def unlock_safety():
-    sg.unlock_safety()
-    return render_dashboard("Güvenlik kilidi açıldı.", "success")
-
-
-@app.post("/adaptive/learn-now")
-def trigger_learning():
-    cfg = _get_adaptive_cfg()
-    try:
-        result = le.run_learning_update(cfg, force=True)
-        if result:
-            return render_dashboard(
-                f"Öğrenme güncellendi. Sürüm: {result.get('version', '?')}  "
-                f"({result.get('trade_count', 0)} işlem, {result.get('confidence', '—')}).",
-                "success")
-        return render_dashboard("Öğrenme için yeterli veri yok.", "error")
-    except Exception as exc:
-        return render_dashboard(f"Öğrenme hatası: {str(exc)[:100]}", "error")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -862,6 +640,7 @@ def api_status():
     status, err = build_status()
     resp = dict(status)
     resp["error"] = err
+    # position ve trades hassas veri içermez ama trade detaylarını çıkart
     resp.pop("trades", None)
     return resp
 
@@ -870,143 +649,18 @@ def api_status():
 def api_smart_status():
     smart_cfg = um.get_smart_config()
     return {
-        "running":         smart_cfg.get("analysis_running", False) or um.analysis_status["running"],
-        "mode":            smart_cfg.get("mode", "MANUEL"),
-        "last_analysis":   smart_cfg.get("last_analysis_time"),
-        "candidate_count": smart_cfg.get("candidate_count", 0),
-        "next_analysis":   um.next_analysis_str(smart_cfg),
-        "error":           um.analysis_status.get("error"),
+        "running":          smart_cfg.get("analysis_running", False) or um.analysis_status["running"],
+        "mode":             smart_cfg.get("mode", "MANUEL"),
+        "last_analysis":    smart_cfg.get("last_analysis_time"),
+        "candidate_count":  smart_cfg.get("candidate_count", 0),
+        "next_analysis":    um.next_analysis_str(smart_cfg),
+        "error":            um.analysis_status.get("error"),
     }
-
-
-@app.get("/api/regime")
-def api_regime():
-    panel = ms.read_panel_status()
-    regime = panel.get("market_regime", {})
-    if not regime:
-        cfg, _ = load_config()
-        symbols = (cfg or DEFAULT_CONFIG).get("symbols", ["BTCUSDT"])
-        try:
-            import market_regime as mr
-            regime = mr.detect_market_regime(symbols)
-        except Exception as exc:
-            return {"error": str(exc)}, 500
-    return regime
-
-
-@app.get("/api/risk")
-def api_risk():
-    state, _  = read_json(STATE_PATH)
-    cfg, _    = load_config()
-    adaptive  = (cfg or {}).get("adaptive_system", {})
-    if not state:
-        return {"error": "state.json okunamadı"}, 500
-    import adaptive_risk as ar
-    risk_panel = ar.get_risk_panel(state, adaptive)
-    return risk_panel
-
-
-@app.get("/api/decisions")
-def api_decisions():
-    return {"decisions": ms.get_recent_decisions(20)}
-
-
-@app.get("/api/learning")
-def api_learning():
-    try:
-        return le.get_panel_data()
-    except Exception as exc:
-        return {"error": str(exc)}, 500
-
-
-@app.get("/api/adaptive/status")
-def api_adaptive_status():
-    ctrl    = ac.get_status()
-    safety  = sg.get_safety_state()
-    panel   = ms.read_panel_status()
-    return {
-        "controller": ctrl,
-        "safety":     safety,
-        "panel":      {k: v for k, v in panel.items() if k != "last_decisions"},
-    }
-
-
-@app.get("/api/daily-report")
-def api_daily_report():
-    cfg, _ = load_config()
-    return _build_daily_report(cfg)
-
-
-@app.get("/api/daily-report/export")
-def export_daily_report():
-    cfg, _  = load_config()
-    report  = _build_daily_report(cfg)
-    state, _ = read_json(STATE_PATH)
-    trades  = (state or {}).get("trades", []) or []
-    today   = datetime.now(timezone.utc).date().isoformat()
-    today_t = [t for t in trades if (t.get("closed_at", "") or "").startswith(today)]
-
-    si  = io.StringIO()
-    w   = csv.writer(si)
-    w.writerow(["symbol","side","opened_at","closed_at","entry","stop","target",
-                "quantity","pnl","result","balance_after"])
-    for t in today_t:
-        w.writerow([
-            t.get("symbol",""), t.get("side",""),
-            t.get("opened_at",""), t.get("closed_at",""),
-            t.get("entry",""), t.get("stop",""), t.get("target",""),
-            t.get("quantity",""), t.get("pnl",""),
-            t.get("result",""), t.get("balance_after",""),
-        ])
-    output = si.getvalue()
-    return Response(
-        output,
-        mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment;filename=paper_report_{today}.csv"},
-    )
 
 
 @app.get("/favicon.ico")
 def favicon():
     return "", 204
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Adaptive config yardımcıları
-# ══════════════════════════════════════════════════════════════════════════════
-
-ADAPTIVE_DEFAULTS: dict[str, Any] = {
-    "enabled": False, "mode": "MONITOR", "auto_paper_enabled": False,
-    "regime_min_confidence": 65, "final_decision_threshold": 78,
-    "base_risk_pct": 0.25, "max_risk_pct": 0.50,
-    "daily_loss_limit_pct": 1.0, "max_drawdown_pct": 5.0,
-    "max_consecutive_losses": 3, "risk_reduction_after_losses": 2,
-    "learning_enabled": True, "learning_interval_hours": 24,
-    "minimum_learning_trades": 20, "max_daily_weight_change_pct": 5,
-    "cooldown_minutes": 60, "break_even_enabled": False,
-    "trailing_stop_enabled": False, "partial_take_profit_enabled": False,
-    "kill_switch": False,
-}
-
-
-def _get_adaptive_cfg() -> dict[str, Any]:
-    cfg, _ = load_config()
-    base   = dict(ADAPTIVE_DEFAULTS)
-    base.update((cfg or {}).get("adaptive_system", {}))
-    return base
-
-
-def _save_adaptive_cfg(adaptive: dict[str, Any]) -> tuple[bool, str]:
-    with CONFIG_LOCK:
-        cfg, err = load_config()
-        if err or cfg is None:
-            return False, err or "Ayar dosyası okunamadı."
-        cfg["adaptive_system"] = adaptive
-        try:
-            atomic_write_json(CONFIG_PATH, cfg)
-        except OSError as exc:
-            return False, f"Kaydedilemedi: {exc}"
-    return True, "Kaydedildi."
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1019,11 +673,7 @@ def _get_main_config() -> dict[str, Any]:
 
 
 if __name__ == "__main__":
-    # Akıllı seçim otomatik döngüsü
+    # Otomatik döngüyü yalnızca ana süreçte başlat
     um.start_auto_loop(_get_main_config)
-    # Uyarlanabilir motor — yalnızca config'de enabled=true ise
-    cfg0 = _get_main_config()
-    if cfg0.get("adaptive_system", {}).get("enabled", False):
-        ac.start_controller_loop()
     port = int(os.environ.get("PORT", "5000"))
     app.run(host="0.0.0.0", port=port)

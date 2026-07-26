@@ -3,7 +3,8 @@
   "symbols": [
     "BTCUSDT",
     "ETHUSDT",
-    "SOLUSDT"
+    "SOLUSDT",
+    "XRPUSDT"
   ],
   "interval": "15m",
   "trend_interval": "1h",
@@ -12,8 +13,30 @@
   "risk_per_trade_pct": 0.5,
   "daily_loss_limit_pct": 1.5,
   "max_consecutive_losses": 3,
-  "minimum_score": 64,
+  "minimum_score": 65,
   "reward_risk_ratio": 2.0,
   "atr_stop_multiplier": 1.5,
-  "max_open_positions": 1
+  "max_open_positions": 1,
+  "adaptive_system": {
+    "enabled": false,
+    "mode": "MONITOR",
+    "auto_paper_enabled": false,
+    "regime_min_confidence": 65.0,
+    "final_decision_threshold": 78.0,
+    "base_risk_pct": 0.25,
+    "max_risk_pct": 0.5,
+    "daily_loss_limit_pct": 1.0,
+    "max_drawdown_pct": 5.0,
+    "max_consecutive_losses": 3,
+    "risk_reduction_after_losses": 2,
+    "learning_enabled": true,
+    "learning_interval_hours": 24.0,
+    "minimum_learning_trades": 20,
+    "max_daily_weight_change_pct": 5,
+    "cooldown_minutes": 60,
+    "break_even_enabled": false,
+    "trailing_stop_enabled": false,
+    "partial_take_profit_enabled": false,
+    "kill_switch": true
+  }
 }
