@@ -1,0 +1,277 @@
+MISSION 1500.2 — AGENT 03
+Workspace Service Layer
+
+AMAÇ
+
+Timeline altyapısını kullanarak Workspace için tek servis katmanını
+oluşturmak.
+
+Bu agent yalnızca servis orkestrasyonunu geliştirecektir.
+
+Route, UI, export ve güvenlik bu agent'ın kapsamında değildir.
+
+────────────────────────────────────────
+
+GÖREVLER
+
+1.
+
+Yeni servis dosyasını oluştur.
+
+Önerilen dosya:
+
+intelligence_workspace_service.py
+
+2.
+
+Timeline katmanını kullanarak aşağıdaki servisleri oluştur.
+
+get_timeline()
+
+get_snapshot()
+
+compare_snapshots()
+
+get_recommendation_history()
+
+get_risk_evolution()
+
+search()
+
+3.
+
+Tüm hesaplamalar deterministik olacak.
+
+Aynı veri
+
+↓
+
+aynı çıktı
+
+↓
+
+aynı sıralama.
+
+4.
+
+Karşılaştırma yalnızca kayıtlı alanlarda yapılacak.
+
+Yeni
+
+Değişen
+
+Kaldırılan
+
+alanlar açıkça raporlanacak.
+
+Veri olmayan alanlar
+
+"Veri Yok"
+
+olarak işaretlenecek.
+
+Asla türetilmeyecek.
+
+5.
+
+Recommendation History
+
+• code bazlı grupla
+
+• confidence değişimini göster
+
+• priority değişimini göster
+
+• tekrarları birleştir
+
+6.
+
+Risk Evolution
+
+• risk score
+
+• risk status
+
+• risk factors
+
+• freshness
+
+yalnızca geçmiş kayıtlarından üretilecek.
+
+Tahmin yapılmayacak.
+
+Trend tahmini yapılmayacak.
+
+7.
+
+Search
+
+Desteklenecek filtreler:
+
+• tarih
+
+• status
+
+• confidence
+
+• recommendation code
+
+• insight code
+
+• partial
+
+• advisory_only
+
+8.
+
+Tüm çıktılar Agent 02 model sözleşmesine uyumlu olacak.
+
+Decimal korunacak.
+
+Unknown
+
+↓
+
+null / "—"
+
+9.
+
+Steril hata yönetimi kullanılacak.
+
+Ham exception
+
+Secret
+
+Credential
+
+Stack trace
+
+çıktıya taşınmayacak.
+
+────────────────────────────────────────
+
+KISITLAR
+
+Dokunulmayacak:
+
+app.py
+
+templates/
+
+API
+
+Route
+
+UI
+
+Export
+
+Risk Engine
+
+Recommendation Engine
+
+1500.1 modelleri
+
+Exchange
+
+Ledger
+
+Audit
+
+────────────────────────────────────────
+
+YASAKLAR
+
+POST
+
+PUT
+
+PATCH
+
+DELETE
+
+Exchange request
+
+Exchange write
+
+History update
+
+History delete
+
+Harici LLM
+
+Tahmin
+
+Otomatik karar
+
+────────────────────────────────────────
+
+TESTLER
+
+En az aşağıdakiler doğrulanmalıdır.
+
+• timeline okuma
+
+• snapshot okuma
+
+• compare
+
+• recommendation history
+
+• risk evolution
+
+• search
+
+• boş history
+
+• partial history
+
+• determinizm
+
+• Decimal doğruluğu
+
+• unknown davranışı
+
+• advisory_only korunması
+
+• sterile error
+
+• secret sızıntısı yokluğu
+
+────────────────────────────────────────
+
+TESLİM RAPORU
+
+── DEĞİŞEN DOSYALAR ──
+
+── WORKSPACE SERVICE ──
+
+── KURAL UYUMU ──
+
+── TESTLER ──
+
+── TAM TEST SONUCU ──
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+
+── SECRET EXPOSURE ──
+
+── COMMIT / HEAD ──
+
+── BİLİNEN SINIRLAMALAR ──
+
+────────────────────────────────────────
+
+PASS KRİTERİ
+
+• Workspace servis katmanı hazır.
+
+• Timeline katmanı üzerinden çalışıyor.
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Regresyon yok.
+
+• 1500.1 davranışı değişmedi.
