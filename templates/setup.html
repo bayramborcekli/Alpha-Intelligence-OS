@@ -174,12 +174,13 @@
       Parola hiçbir zaman sunucuda saklanmaz — yalnızca kriptografik özeti (hash) kaydedilir.
     </div>
 
+    <form onsubmit="generateHash(); return false;" autocomplete="on">
     <div class="field">
       <label for="pw1">
         Yeni Parola
         <span class="label-hint">— en az 10 karakter önerilir</span>
       </label>
-      <input id="pw1" type="password" autocomplete="new-password"
+      <input id="pw1" name="new-password" type="password" autocomplete="new-password"
              placeholder="Güçlü bir parola seçin" oninput="checkStrength()">
       <div class="strength-bar"><div class="strength-fill" id="sbar"></div></div>
       <div class="strength-label" id="slabel"></div>
@@ -187,16 +188,17 @@
 
     <div class="field">
       <label for="pw2">Parola Tekrar</label>
-      <input id="pw2" type="password" autocomplete="new-password"
+      <input id="pw2" name="confirm-password" type="password" autocomplete="new-password"
              placeholder="Aynı parolayı tekrar girin" oninput="checkMatch()">
       <div id="match-msg" style="font-size:.77rem;margin-top:5px;"></div>
     </div>
 
     <div id="gen-error" class="info-box error" style="display:none;"></div>
 
-    <button class="btn btn-primary" id="gen-btn" onclick="generateHash()" disabled>
+    <button class="btn btn-primary" id="gen-btn" type="submit" disabled>
       Hash Oluştur
     </button>
+    </form>
 
     <div class="hash-box" id="hash-box">
       <div class="hash-label">ADMIN_PASSWORD_HASH değeri — kopyalayın</div>

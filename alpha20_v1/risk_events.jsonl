@@ -114,3 +114,11 @@
 {"ts":"2026-07-26T07:31:22.957426+00:00","event_type":"KILL_SWITCH_OFF","reason":"Kullanıcı tarafından kapatıldı.","details":{}}
 {"ts":"2026-07-26T07:31:24.675260+00:00","event_type":"RISK_REDUCED","reason":"Ardışık 2 zarar: risk %50 azaltıldı.","details":{"from_base":0.25,"to":0.125,"consec":2}}
 {"ts":"2026-07-26T07:31:24.680069+00:00","event_type":"RISK_REDUCED","reason":"Yüksek volatilite: risk %50 azaltıldı.","details":{"from_base":0.25,"to":0.125,"consec":0}}
+{"ts":"2026-07-26T07:32:14.207996+00:00","event_type":"KILL_SWITCH_ON","reason":"Test kill-switch.","details":{}}
+{"ts":"2026-07-26T07:32:14.223646+00:00","event_type":"KILL_SWITCH_OFF","reason":"Kullanıcı tarafından kapatıldı.","details":{}}
+{"ts":"2026-07-26T07:32:14.231123+00:00","event_type":"DAILY_LOSS_BLOCK","reason":"Günlük zarar limiti aşıldı: %1.05 >= %1.0","details":{"daily_loss_pct":1.05}}
+{"ts":"2026-07-26T07:32:14.249267+00:00","event_type":"CONSEC_LOSS_BLOCK","reason":"Ardışık zarar limiti: 3 >= 3","details":{"consecutive_losses":3}}
+{"ts":"2026-07-26T07:32:14.273088+00:00","event_type":"KILL_SWITCH_ON","reason":"Test.","details":{}}
+{"ts":"2026-07-26T07:32:14.280579+00:00","event_type":"KILL_SWITCH_OFF","reason":"Kullanıcı tarafından kapatıldı.","details":{}}
+{"ts":"2026-07-26T07:32:14.685438+00:00","event_type":"RISK_REDUCED","reason":"Ardışık 2 zarar: risk %50 azaltıldı.","details":{"from_base":0.25,"to":0.125,"consec":2}}
+{"ts":"2026-07-26T07:32:14.690115+00:00","event_type":"RISK_REDUCED","reason":"Yüksek volatilite: risk %50 azaltıldı.","details":{"from_base":0.25,"to":0.125,"consec":0}}

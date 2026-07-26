@@ -22,3 +22,5 @@
 {"ts":"2026-07-26T07:30:06.045515+00:00","component":"adaptive","error_type":"SETTINGS_CHANGE","message":"Adaptive ayarlar güncellendi.","safe_state_activated":false}
 {"ts":"2026-07-26T07:31:25.218672+00:00","component":"settings","error_type":"SETTINGS_CHANGE","message":"Ayarlar güncellendi: ['minimum_score', 'scan_seconds', 'risk_per_trade_pct', 'daily_loss_limit_pct', 'max_consecutive_losses', 'reward_risk_ratio', 'atr_stop_multiplier', 'max_open_positions']","safe_state_activated":false}
 {"ts":"2026-07-26T07:31:25.260526+00:00","component":"adaptive","error_type":"SETTINGS_CHANGE","message":"Adaptive ayarlar güncellendi.","safe_state_activated":false}
+{"ts":"2026-07-26T07:32:14.941586+00:00","component":"settings","error_type":"SETTINGS_CHANGE","message":"Ayarlar güncellendi: ['minimum_score', 'scan_seconds', 'risk_per_trade_pct', 'daily_loss_limit_pct', 'max_consecutive_losses', 'reward_risk_ratio', 'atr_stop_multiplier', 'max_open_positions']","safe_state_activated":false}
+{"ts":"2026-07-26T07:32:14.984061+00:00","component":"adaptive","error_type":"SETTINGS_CHANGE","message":"Adaptive ayarlar güncellendi.","safe_state_activated":false}
