@@ -14,7 +14,7 @@
   "max_consecutive_losses": 3,
   "minimum_score": 65,
   "reward_risk_ratio": 2.0,
-  "atr_stop_multiplier": 1.5,
+  "atr_stop_multiplier": 3.0,
   "fee_safety_factor": 2.0,
   "max_open_positions": 1,
   "adaptive_system": {

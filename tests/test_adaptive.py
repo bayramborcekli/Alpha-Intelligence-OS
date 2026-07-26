@@ -683,13 +683,19 @@ class TestFlaskRoutes:
         assert resp.status_code == 200
 
     def test_settings_save_valid(self, client):
-        resp = client.post("/settings", data={
-            "minimum_score": "65", "scan_seconds": "60",
-            "risk_per_trade_pct": "0.5", "daily_loss_limit_pct": "1.5",
-            "max_consecutive_losses": "3", "reward_risk_ratio": "2.0",
-            "atr_stop_multiplier": "1.5", "max_open_positions": "1",
-        })
-        assert resp.status_code == 200
+        cfg_path = "alpha20_v1/config.json"
+        original = open(cfg_path).read()
+        try:
+            resp = client.post("/settings", data={
+                "minimum_score": "65", "scan_seconds": "60",
+                "risk_per_trade_pct": "0.5", "daily_loss_limit_pct": "1.5",
+                "max_consecutive_losses": "3", "reward_risk_ratio": "2.0",
+                "atr_stop_multiplier": "1.5", "max_open_positions": "1",
+            })
+            assert resp.status_code == 200
+        finally:
+            with open(cfg_path, "w") as f:
+                f.write(original)
 
     def test_coin_add_valid(self, client):
         cfg_path = "alpha20_v1/config.json"

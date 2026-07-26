@@ -1,0 +1,3 @@
+{"time": "2026-07-26T12:36:01.620495+00:00", "kind": "warning", "detail": "[A_control_1_5] BTCUSDT SHORT: veri sonunda SL/TP yok — giriş iptal"}
+{"time": "2026-07-26T12:36:04.075480+00:00", "kind": "warning", "detail": "[C_candidate_3_0] SOLUSDT SHORT: veri sonunda SL/TP yok — giriş iptal"}
+{"time": "2026-07-26T12:36:06.511248+00:00", "kind": "warning", "detail": "[C_repeat] SOLUSDT SHORT: veri sonunda SL/TP yok — giriş iptal"}
