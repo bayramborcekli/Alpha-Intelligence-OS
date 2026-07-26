@@ -1,0 +1,65 @@
+{
+  "mission": "1310B — TR Movement Monitoring & Ledger Reconciliation",
+  "run_id": "M1310B-ea80cdda02",
+  "commit": "2b62901",
+  "tests": "372 passed in 5.40s",
+  "endpoint": "https://www.trbinance.com",
+  "key_masked": "5415…0okg",
+  "authentication": "PASS",
+  "account_status": 1,
+  "balances": {
+    "TRY": "1.3942",
+    "USDT": "20.9685"
+  },
+  "deposit_records": 6,
+  "withdrawal_records": 10,
+  "unique_ledger_events": 16,
+  "duplicates_blocked": 16,
+  "events_added_this_run": 0,
+  "unknown_events": 0,
+  "internal_transfers": 7,
+  "earliest_event": "2021-10-07T20:13:08.393000+00:00",
+  "latest_event": "2022-10-24T05:35:30+00:00",
+  "ledger_totals": {
+    "BNB": "-0.455045",
+    "AVAX": "-29.91008",
+    "BTC": "0.0614836",
+    "USDT": "229.764426"
+  },
+  "unexplained_differences": {
+    "AVAX": "29.91008",
+    "BNB": "0.455045",
+    "BTC": "-0.0614836",
+    "TRY": "1.3942",
+    "USDT": "-208.795926"
+  },
+  "ledger_reconciliation": "PARTIAL",
+  "reconciliation_note": "Yatırma/çekme kayıtları alım-satım ve dönüşüm hareketlerini kapsamaz; API'nin erişilebilir geçmişi hesabın tüm ömrünü temsil etmeyebilir. Farklar bu kapsam dışı hareketlerden kaynaklanıyor olabilir; açılış bakiyesi üretilmedi.",
+  "request_log": [
+    {
+      "time": "2026-07-26T14:41:52.461161+00:00",
+      "method": "GET",
+      "path": "/open/v1/account/spot",
+      "status": 200
+    },
+    {
+      "time": "2026-07-26T14:41:52.845123+00:00",
+      "method": "GET",
+      "path": "/open/v1/deposits",
+      "status": 200
+    },
+    {
+      "time": "2026-07-26T14:41:53.240449+00:00",
+      "method": "GET",
+      "path": "/open/v1/withdraws",
+      "status": 200
+    }
+  ],
+  "order_endpoint_requests": 0,
+  "transfer_endpoint_requests": 0,
+  "withdrawal_endpoint_requests_write": 0,
+  "other_write_requests": 0,
+  "secrets_exposed": 0,
+  "result": "PASS",
+  "finished_at": "2026-07-26T14:41:53.241445+00:00"
+}
