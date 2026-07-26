@@ -1,0 +1,175 @@
+{
+  "mission": "1300A.1 — Production Futures Dry Run",
+  "run_id": "M1300A1-a3c29e8af0",
+  "commit": "1e83f3f",
+  "tests": "356 passed in 4.33s",
+  "endpoint": "https://fapi.binance.com",
+  "symbol": "BTCUSDT",
+  "position_mode": "ONE-WAY",
+  "api_key_can_trade": true,
+  "btcusdt_price": "64449.10",
+  "price_age_ms": 3479,
+  "min_valid_quantity": "0.001",
+  "estimated_notional": "64.4491",
+  "available_usdt": "2.3E-7",
+  "leverage": "2",
+  "estimated_initial_margin": "32.2246",
+  "estimated_open_fee": "0.032225",
+  "estimated_close_fee": "0.032225",
+  "estimated_max_loss_upper_bound": "32.289050",
+  "open_positions": [],
+  "open_orders": 0,
+  "checks": {
+    "filter_present": "PASS",
+    "quantity_rounding": "PASS",
+    "price_rounding": "PASS",
+    "min_notional": "PASS",
+    "stale_data_check": "PASS",
+    "risk_validation": "PASS",
+    "payload_LONG_OPEN": "PASS",
+    "payload_LONG_CLOSE": "PASS",
+    "payload_SHORT_OPEN": "PASS",
+    "payload_SHORT_CLOSE": "PASS"
+  },
+  "problems": [],
+  "payloads_without_signature": {
+    "LONG_OPEN": {
+      "symbol": "BTCUSDT",
+      "side": "BUY",
+      "type": "MARKET",
+      "quantity": "0.001",
+      "newClientOrderId": "a20dry-0778aa346c5a4655",
+      "timestamp": 1785072805710,
+      "recvWindow": 10000
+    },
+    "LONG_CLOSE": {
+      "symbol": "BTCUSDT",
+      "side": "SELL",
+      "type": "MARKET",
+      "quantity": "0.001",
+      "newClientOrderId": "a20dry-5de3f8386fa14afc",
+      "timestamp": 1785072805710,
+      "recvWindow": 10000,
+      "reduceOnly": "true"
+    },
+    "SHORT_OPEN": {
+      "symbol": "BTCUSDT",
+      "side": "SELL",
+      "type": "MARKET",
+      "quantity": "0.001",
+      "newClientOrderId": "a20dry-d916cf84db5243a5",
+      "timestamp": 1785072805710,
+      "recvWindow": 10000
+    },
+    "SHORT_CLOSE": {
+      "symbol": "BTCUSDT",
+      "side": "BUY",
+      "type": "MARKET",
+      "quantity": "0.001",
+      "newClientOrderId": "a20dry-287a2f97609946f8",
+      "timestamp": 1785072805710,
+      "recvWindow": 10000,
+      "reduceOnly": "true"
+    }
+  },
+  "allowed_paths": [
+    "/fapi/v1/commissionRate",
+    "/fapi/v1/exchangeInfo",
+    "/fapi/v1/openOrders",
+    "/fapi/v1/positionSide/dual",
+    "/fapi/v1/ticker/price",
+    "/fapi/v1/time",
+    "/fapi/v2/account",
+    "/fapi/v2/balance",
+    "/fapi/v2/positionRisk"
+  ],
+  "forbidden_fragments": [
+    "order",
+    "batchOrders",
+    "leverage",
+    "marginType",
+    "positionMargin",
+    "transfer",
+    "countdownCancelAll"
+  ],
+  "request_log": [
+    {
+      "time": "2026-07-26T13:33:22.936541+00:00",
+      "method": "GET",
+      "path": "/fapi/v1/time",
+      "status": 200,
+      "used_weight_1m": "1"
+    },
+    {
+      "time": "2026-07-26T13:33:23.388121+00:00",
+      "method": "GET",
+      "path": "/fapi/v1/exchangeInfo",
+      "status": 200,
+      "used_weight_1m": "2"
+    },
+    {
+      "time": "2026-07-26T13:33:23.665691+00:00",
+      "method": "GET",
+      "path": "/fapi/v1/ticker/price",
+      "status": 200,
+      "used_weight_1m": "3"
+    },
+    {
+      "time": "2026-07-26T13:33:23.941357+00:00",
+      "method": "GET",
+      "path": "/fapi/v2/balance",
+      "status": 200,
+      "used_weight_1m": "8"
+    },
+    {
+      "time": "2026-07-26T13:33:24.230245+00:00",
+      "method": "GET",
+      "path": "/fapi/v2/positionRisk",
+      "status": 200,
+      "used_weight_1m": "13"
+    },
+    {
+      "time": "2026-07-26T13:33:24.506608+00:00",
+      "method": "GET",
+      "path": "/fapi/v1/openOrders",
+      "status": 200,
+      "used_weight_1m": "53"
+    },
+    {
+      "time": "2026-07-26T13:33:24.771660+00:00",
+      "method": "GET",
+      "path": "/fapi/v1/positionSide/dual",
+      "status": 200,
+      "used_weight_1m": "83"
+    },
+    {
+      "time": "2026-07-26T13:33:25.141805+00:00",
+      "method": "GET",
+      "path": "/fapi/v1/commissionRate",
+      "status": 200,
+      "used_weight_1m": "103"
+    },
+    {
+      "time": "2026-07-26T13:33:25.421219+00:00",
+      "method": "GET",
+      "path": "/fapi/v2/account",
+      "status": 200,
+      "used_weight_1m": "108"
+    },
+    {
+      "time": "2026-07-26T13:33:25.707680+00:00",
+      "method": "GET",
+      "path": "/fapi/v2/positionRisk",
+      "status": 200,
+      "used_weight_1m": "113"
+    }
+  ],
+  "order_endpoint_requests": 0,
+  "other_write_requests": 0,
+  "secrets_exposed": 0,
+  "technical_dry_run": "PASS",
+  "live_order_readiness": "BLOCKED",
+  "block_reason": "INSUFFICIENT COLLATERAL: mevcut 2.3E-7 USDT < gereken ~32.256825 USDT",
+  "result": "PASS",
+  "finished_at": "2026-07-26T13:33:25.710433+00:00"
+}
