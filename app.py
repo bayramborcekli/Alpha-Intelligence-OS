@@ -1747,6 +1747,11 @@ def _intel_json(fn):
     return resp
 
 
+@app.get("/intelligence")
+def intelligence_page():
+    return _render_workspace("intelligence.html", "intelligence")
+
+
 @app.get("/api/intelligence")
 @app.get("/api/v1/intelligence")
 @app.get("/api/intelligence/summary")

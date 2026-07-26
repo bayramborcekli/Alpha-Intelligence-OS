@@ -1,0 +1,233 @@
+{% extends "dash_base.html" %}
+{% block title %}Intelligence{% endblock %}
+{% block heading %}🧠 Intelligence Merkezi{% endblock %}
+{% block subheading %}Tavsiye niteliğinde analiz — hiçbir işlem talimatı üretmez{% endblock %}
+
+{% block content %}
+<style>
+  .in-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+             margin-bottom:18px; }
+  .in-card { background:var(--panel); border:1px solid var(--border); border-radius:10px;
+             padding:12px 14px; }
+  .in-card h3 { font-size:.72rem; color:var(--muted); text-transform:uppercase;
+                letter-spacing:.05em; margin-bottom:6px; font-weight:600; }
+  .in-card .v { font-size:1.1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .in-sec { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+            padding:16px; margin-bottom:18px; }
+  .in-sec h2 { font-size:.9rem; margin-bottom:12px; }
+  .in-note { color:var(--muted); font-size:.76rem; margin-top:8px; }
+  .in-banner { border-left:3px solid var(--warn); background:rgba(210,153,34,.08);
+               padding:10px 14px; border-radius:6px; margin-bottom:14px;
+               font-size:.85rem; display:none; }
+  .in-item { border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+             margin-bottom:10px; background:var(--soft); }
+  .in-item h4 { font-size:.88rem; margin-bottom:6px; }
+  .in-item p { font-size:.82rem; margin:3px 0; }
+  .in-item p b { color:var(--muted); font-weight:600; }
+  .in-badge { display:inline-block; border-radius:12px; padding:2px 10px;
+              font-size:.72rem; font-weight:700; margin-left:8px;
+              border:1px solid var(--border); }
+  .cf-HIGH { color:var(--ok); border-color:rgba(63,185,80,.5); }
+  .cf-MEDIUM { color:var(--warn); border-color:rgba(210,153,34,.5); }
+  .cf-LOW, .cf-INSUFFICIENT_DATA { color:var(--danger); border-color:rgba(248,81,73,.5); }
+  .sev-badge { float:right; font-size:.72rem; color:var(--muted); }
+  details.ev { margin-top:6px; font-size:.78rem; color:var(--muted); }
+  details.ev summary { cursor:pointer; }
+  table.in { width:100%; border-collapse:collapse; font-size:.8rem; }
+  table.in th, table.in td { padding:5px 8px; text-align:left;
+    border-bottom:1px solid rgba(48,54,61,.5); }
+  table.in th { color:var(--muted); font-weight:600; }
+  .advisory-tag { background:rgba(88,166,255,.1); border:1px solid rgba(88,166,255,.4);
+                  color:var(--accent); border-radius:12px; padding:2px 10px;
+                  font-size:.72rem; font-weight:700; }
+</style>
+
+<p class="in-note" style="margin-bottom:12px">
+  <span class="advisory-tag">YALNIZCA TAVSİYE</span>
+  Bu sayfadaki tüm içgörü ve öneriler bilgilendirme amaçlıdır; sistem
+  hiçbir alım-satım kararı vermez ve emir oluşturmaz.
+</p>
+
+<div class="in-banner" id="partial-banner" role="alert">
+  ⚠️ Kısmi / bayat veri: bazı kaynaklara ulaşılamadı veya veri güncel değil.
+  Aşağıdaki sonuçlar eksik olabilir. <span id="partial-detail"></span>
+</div>
+<div class="in-banner" id="error-banner" role="alert">
+  ⚠️ Intelligence verisi alınamadı. Aşağıdaki alanlar boş bırakıldı —
+  değerler tahmin edilmez.
+</div>
+<div class="in-banner" id="disabled-banner" role="alert">
+  ℹ️ Intelligence özelliği kapalı (ALPHA_ENABLE_INTELLIGENCE). Veri
+  gösterilmiyor.
+</div>
+
+<div class="in-grid" aria-live="polite">
+  <div class="in-card"><h3>Genel Durum</h3><div class="v" id="c-status">—</div></div>
+  <div class="in-card"><h3>Risk Skoru</h3><div class="v" id="c-score">—</div></div>
+  <div class="in-card"><h3>Marj Bakiyesi</h3><div class="v" id="c-margin">—</div></div>
+  <div class="in-card"><h3>Kullanılabilir</h3><div class="v" id="c-avail">—</div></div>
+  <div class="in-card"><h3>Gerçekleşmemiş PnL</h3><div class="v" id="c-upnl">—</div></div>
+  <div class="in-card"><h3>Açık Pozisyon</h3><div class="v" id="c-pos">—</div></div>
+  <div class="in-card"><h3>Son Güncelleme</h3>
+    <div class="v" style="font-size:.85rem" id="c-upd">—</div></div>
+</div>
+
+<section class="in-sec" aria-labelledby="h-fresh">
+  <h2 id="h-fresh">🕒 Veri Tazeliği</h2>
+  <div style="overflow-x:auto"><table class="in" id="fresh-table" aria-describedby="h-fresh">
+    <thead><tr><th scope="col">Kaynak</th><th scope="col">Durum</th>
+      <th scope="col">Yaş (sn)</th><th scope="col">Not</th></tr></thead>
+    <tbody><tr><td colspan="4">Yükleniyor…</td></tr></tbody>
+  </table></div>
+</section>
+
+<section class="in-sec" aria-labelledby="h-rx">
+  <h2 id="h-rx">⚖️ Risk Açıklaması</h2>
+  <div id="rx-box"><p class="in-note">Yükleniyor…</p></div>
+  <p class="in-note">Risk skoru Risk Motoru tarafından hesaplanır; burada
+  yalnızca açıklanır, değiştirilmez.</p>
+</section>
+
+<section class="in-sec" aria-labelledby="h-ins">
+  <h2 id="h-ins">🔍 İçgörüler</h2>
+  <div id="ins-box"><p class="in-note">Yükleniyor…</p></div>
+</section>
+
+<section class="in-sec" aria-labelledby="h-rec">
+  <h2 id="h-rec">📋 Öneriler (yalnızca tavsiye)</h2>
+  <div id="rec-box"><p class="in-note">Yükleniyor…</p></div>
+  <p class="in-note">Öneriler inceleme ve değerlendirme amaçlıdır;
+  hiçbir otomatik işlem tetiklemez, emir düğmesi içermez.</p>
+</section>
+
+<script>
+(function () {
+  "use strict";
+  function el(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s === null || s === undefined ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function vy(v, suffix) {
+    return (v === null || v === undefined || v === "")
+      ? "—" : esc(v) + (suffix || "");
+  }
+  function txt(v, suffix) {           // textContent için (escape gerekmez)
+    return (v === null || v === undefined || v === "")
+      ? "—" : String(v) + (suffix || "");
+  }
+  var CONF_TR = { HIGH: "Yüksek güven", MEDIUM: "Orta güven",
+                  LOW: "Düşük güven",
+                  INSUFFICIENT_DATA: "Yetersiz veri" };
+  var ST_TR = { OK: "Sağlıklı", PARTIAL: "Kısmi veri", STALE: "Bayat veri",
+                UNAVAILABLE: "Veri yok" };
+
+  function confBadge(c) {
+    // Güven yalnızca renkle değil METİNLE de anlatılır
+    return "<span class='in-badge cf-" + esc(c) + "'>" +
+      esc(CONF_TR[c] || c || "—") + "</span>";
+  }
+
+  function evidence(ev) {
+    if (!ev || !ev.length) return "";
+    return "<details class='ev'><summary>Kanıtlar (" + ev.length +
+      ")</summary><table class='in'><thead><tr><th scope='col'>Kaynak</th>" +
+      "<th scope='col'>Alan</th><th scope='col'>Değer</th></tr></thead><tbody>" +
+      ev.map(function (e) {
+        return "<tr><td data-l='Kaynak'>" + vy(e.source) +
+          "</td><td data-l='Alan'>" + vy(e.field) +
+          "</td><td data-l='Değer'>" + vy(e.value) +
+          (e.unit ? " " + esc(e.unit) : "") + "</td></tr>";
+      }).join("") + "</tbody></table></details>";
+  }
+
+  function item(x, sev) {
+    return "<article class='in-item'>" +
+      (sev ? "<span class='sev-badge'>Önem: " + esc(sev) + "</span>" : "") +
+      "<h4>" + vy(x.title) + confBadge(x.confidence) + "</h4>" +
+      "<p><b>Gözlem:</b> " + vy(x.observation) + "</p>" +
+      "<p><b>Gerekçe:</b> " + vy(x.reason) + "</p>" +
+      "<p><b>Olası etki:</b> " + vy(x.impact) + "</p>" +
+      "<p><b>Öneri:</b> " + vy(x.recommendation) + "</p>" +
+      evidence(x.evidence) + "</article>";
+  }
+
+  function empty(msg) { return "<p class='in-note'>" + esc(msg) + "</p>"; }
+
+  function failState(msg) {
+    el("error-banner").style.display = "block";
+    ["rx-box", "ins-box", "rec-box"].forEach(function (i) {
+      el(i).innerHTML = empty(msg); });
+    el("fresh-table").querySelector("tbody").innerHTML =
+      "<tr><td colspan='4'>Veri Yok</td></tr>";
+    el("c-status").textContent = "Veri Yok";
+  }
+
+  fetch("/api/intelligence/summary", { credentials: "same-origin" })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d && d.enabled === false) {
+        el("disabled-banner").style.display = "block";
+        ["rx-box", "ins-box", "rec-box"].forEach(function (i) {
+          el(i).innerHTML = empty("Özellik kapalı."); });
+        el("fresh-table").querySelector("tbody").innerHTML =
+          "<tr><td colspan='4'>—</td></tr>";
+        return;
+      }
+      if (!d || d.ok !== true) { failState("Veri alınamadı."); return; }
+      // Genel durum + partial uyarısı
+      el("c-status").textContent = ST_TR[d.status] || d.status || "—";
+      if (d.partial) {
+        el("partial-banner").style.display = "block";
+        var errs = d.source_errors || {};
+        el("partial-detail").textContent = Object.keys(errs).sort()
+          .map(function (k) {
+            return k + ": " + ((errs[k] || {}).message || "hata");
+          }).join(" · ");
+      }
+      var ps = d.portfolio_summary || {};
+      el("c-margin").textContent = txt(ps.usdt_margin_balance, " USDT");
+      el("c-avail").textContent = txt(ps.usdt_available_balance, " USDT");
+      el("c-upnl").textContent = txt(ps.unrealized_pnl, " USDT");
+      el("c-pos").textContent = txt(ps.open_position_count);
+      var rs = d.risk_summary || {};
+      el("c-score").textContent = (rs.risk_score === null ||
+        rs.risk_score === undefined) ? "—"
+        : rs.risk_score + " / 100" +
+          (rs.classification ? " (" + rs.classification + ")" : "");
+      el("c-upd").textContent = (d.generated_at || "—").replace("T", " ");
+
+      // Veri tazeliği
+      var ftb = el("fresh-table").querySelector("tbody");
+      var fr = d.freshness || [];
+      ftb.innerHTML = fr.length ? fr.map(function (f) {
+        return "<tr><td data-l='Kaynak'>" + vy(f.source) +
+          "</td><td data-l='Durum'>" +
+          esc(ST_TR[f.status] || f.status || "—") +
+          "</td><td data-l='Yaş (sn)'>" + vy(f.age_seconds) +
+          "</td><td data-l='Not'>" + vy(f.detail) + "</td></tr>";
+      }).join("") : "<tr><td colspan='4'>—</td></tr>";
+
+      // Risk açıklamaları
+      var rx = d.risk_explanations || [];
+      el("rx-box").innerHTML = rx.length
+        ? rx.map(function (x) { return item(x); }).join("")
+        : empty("Açıklanacak risk verisi yok.");
+
+      // İçgörüler
+      var ins = d.insights || [];
+      el("ins-box").innerHTML = ins.length
+        ? ins.map(function (x) { return item(x); }).join("")
+        : empty("Gösterilecek içgörü yok.");
+
+      // Öneriler (önem sırasıyla gelir)
+      var rec = d.recommendations || [];
+      el("rec-box").innerHTML = rec.length
+        ? rec.map(function (x) { return item(x, x.severity); }).join("")
+        : empty("Şu an öneri yok.");
+    })
+    .catch(function () { failState("Veri alınamadı."); });
+})();
+</script>
+{% endblock %}
