@@ -17,6 +17,7 @@ BASE_URL = "https://fapi.binance.com"
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.json"
 STATE_PATH = ROOT / "state.json"
+TRADE_HISTORY_PATH = ROOT / "trade_history.json"
 LOG_PATH = ROOT / "alpha20.log"
 
 logging.basicConfig(
@@ -107,6 +108,80 @@ def print_startup_report(config: dict[str, Any], state: dict[str, Any]) -> None:
     print(f"Leverage: 1x")
     print(f"Stop Loss: ATR x {config['atr_stop_multiplier']} (zorunlu)")
     print(f"Take Profit: stop mesafesi x {config['reward_risk_ratio']} (zorunlu)")
+
+
+def compute_realized_pnl(
+    entry_price: float,
+    exit_price: float,
+    quantity: float,
+    side: str,
+    fee_rate: float = FEE_RATE,
+) -> dict[str, float]:
+    """Tek gerçek kaynak: realized PnL hesabı (BUG-001).
+
+    Console, State, Trade History ve tüm raporlar bu fonksiyonun çıktısını kullanır.
+    Dönüş: {"gross_pnl", "fee_usdt", "pnl"} — pnl = gross_pnl - fee_usdt.
+    """
+    if side not in ("LONG", "SHORT"):
+        raise ValueError(f"Geçersiz yön: {side}")
+    if entry_price <= 0 or exit_price <= 0 or quantity <= 0:
+        raise ValueError("entry_price, exit_price ve quantity pozitif olmalı.")
+    direction = 1 if side == "LONG" else -1
+    gross_pnl = (exit_price - entry_price) * quantity * direction
+    fee_usdt = (entry_price + exit_price) * quantity * fee_rate  # giriş + çıkış
+    return {
+        "gross_pnl": round(gross_pnl, 8),
+        "fee_usdt": round(fee_usdt, 8),
+        "pnl": round(gross_pnl - fee_usdt, 8),
+    }
+
+
+def append_trade_history(trade: dict[str, Any], path: Path | None = None) -> None:
+    """Kapanan her işlemi trade_history.json dosyasına otomatik ekler (atomik)."""
+    if path is None:
+        path = TRADE_HISTORY_PATH  # çağrı anında çözülür (test izolasyonu için)
+    history = []
+    if path.exists():
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                history = json.load(f)
+            if not isinstance(history, list):
+                history = []
+        except (json.JSONDecodeError, OSError):
+            log.warning("trade_history.json okunamadı — yeni liste başlatılıyor.")
+            history = []
+    history.append(trade)
+    temp = path.with_suffix(".tmp")
+    with temp.open("w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+    temp.replace(path)
+
+
+def print_performance_summary(state: dict[str, Any]) -> None:
+    """Terminal performans özeti."""
+    trades = state.get("trades", [])
+    print("\n══════ PAPER PERFORMANS ÖZETİ ══════")
+    print(f"Bakiye: {state['balance']:.2f} USDT")
+    if not trades:
+        print("Kapanan işlem yok.")
+        print("════════════════════════════════════")
+        return
+    pnls = [float(t.get("pnl", 0) or 0) for t in trades]
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+    fees = sum(float(t.get("fee_usdt", 0) or 0) for t in trades)
+    best = max(trades, key=lambda t: float(t.get("pnl", 0) or 0))
+    worst = min(trades, key=lambda t: float(t.get("pnl", 0) or 0))
+    print(f"Toplam işlem: {len(trades)} | Kazanç: {len(wins)} | Zarar: {len(losses)}")
+    print(f"Kazanma oranı: {len(wins) / len(trades) * 100:.1f}%")
+    print(f"Net PnL: {sum(pnls):+.2f} USDT | Toplam fee: {fees:.2f} USDT")
+    if wins:
+        print(f"Ortalama kazanç: {sum(wins)/len(wins):+.2f} USDT")
+    if losses:
+        print(f"Ortalama zarar: {sum(losses)/len(losses):+.2f} USDT")
+    print(f"En iyi: {best.get('symbol')} {float(best.get('pnl', 0)):+.2f} | "
+          f"En kötü: {worst.get('symbol')} {float(worst.get('pnl', 0)):+.2f}")
+    print("════════════════════════════════════")
 
 
 def reset_day_if_needed(state: dict[str, Any]) -> None:
@@ -328,27 +403,31 @@ def manage_position(state: dict[str, Any]) -> None:
     if exit_price is None:
         return
 
-    direction = 1 if pos.side == "LONG" else -1
-    gross_pnl = (exit_price - pos.entry) * pos.quantity * direction
-    fee_usdt = (pos.entry + exit_price) * pos.quantity * FEE_RATE  # giriş + çıkış
-    pnl = gross_pnl - fee_usdt
+    # BUG-001: PnL yalnızca compute_realized_pnl ile hesaplanır (tek kaynak).
+    pnl_data = compute_realized_pnl(pos.entry, exit_price, pos.quantity, pos.side)
+    pnl = pnl_data["pnl"]
     close_reason = "STOP_LOSS" if result == "LOSS" else "TAKE_PROFIT"
     state["balance"] += pnl
     state["consecutive_losses"] = state["consecutive_losses"] + 1 if pnl < 0 else 0
-    state["trades"].append({
+    trade_record = {
         **raw,
         "closed_at": datetime.now(timezone.utc).isoformat(),
         "entry_price": pos.entry,
         "exit_price": exit_price,
         "exit": exit_price,
-        "fee_usdt": round(fee_usdt, 8),
-        "gross_pnl": round(gross_pnl, 8),
-        "pnl": round(pnl, 8),
+        "fee_usdt": pnl_data["fee_usdt"],
+        "gross_pnl": pnl_data["gross_pnl"],
+        "pnl": pnl,
         "result": result,
         "close_reason": close_reason,
         "balance_after": round(state["balance"], 8),
-    })
-    state["position"] = None
+    }
+    state["trades"].append(trade_record)
+    state["position"] = None  # Muhasebe önce kapanır — history yazımı best-effort.
+    try:
+        append_trade_history(trade_record)
+    except OSError as exc:
+        log.warning("trade_history.json yazılamadı (%s) — muhasebe etkilenmedi.", exc)
     log.info(
         "PAPER KAPANDI | %s %s | sonuç=%s pnl=%.2f bakiye=%.2f",
         pos.symbol, pos.side, result, pnl, state["balance"],
@@ -407,6 +486,7 @@ def main() -> None:
     parser.add_argument("--reset", action="store_true", help="Sanal hesabı sıfırla.")
     parser.add_argument("--dry-run", action="store_true", help="Doğrula, raporla ve çık — işlem yok.")
     parser.add_argument("--report", action="store_true", help="Başlangıç raporunu yazdır.")
+    parser.add_argument("--summary", action="store_true", help="Performans özetini yazdır ve çık.")
     args = parser.parse_args()
 
     config = load_json(CONFIG_PATH, {})
@@ -421,6 +501,9 @@ def main() -> None:
     log.info("Alpha-20 v1 başladı | MOD=PAPER | bakiye=%.2f", state["balance"])
     log.info("PAPER modu doğrulandı — gerçek emir gönderimi yok, API anahtarı yok.")
 
+    if args.summary:
+        print_performance_summary(state)
+        return
     if args.report or args.dry_run:
         print_startup_report(config, state)
     if args.dry_run:
@@ -431,6 +514,7 @@ def main() -> None:
 
     if args.once:
         run_cycle(config, state)
+        print_performance_summary(state)
         return
 
     while True:
@@ -438,6 +522,7 @@ def main() -> None:
             run_cycle(config, state)
         except KeyboardInterrupt:
             log.info("Kullanıcı tarafından durduruldu.")
+            print_performance_summary(state)
             break
         except Exception as exc:
             log.exception("Döngü hatası: %s", exc)

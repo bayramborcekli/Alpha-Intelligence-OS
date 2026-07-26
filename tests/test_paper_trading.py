@@ -17,6 +17,8 @@ sys.path.insert(0, str(ROOT / "alpha20_v1"))
 
 import alpha20  # noqa: E402
 from alpha20 import (  # noqa: E402
+    append_trade_history,
+    compute_realized_pnl,
     can_open,
     fetch_klines_safe,
     initial_state,
@@ -28,6 +30,12 @@ from alpha20 import (  # noqa: E402
 )
 
 _TS = datetime.now(timezone.utc).isoformat()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_trade_history(tmp_path, monkeypatch):
+    """Testler gerçek trade_history.json dosyasını kirletmesin."""
+    monkeypatch.setattr(alpha20, "TRADE_HISTORY_PATH", tmp_path / "trade_history.json")
 
 
 def base_config(**overrides):
@@ -247,6 +255,106 @@ class TestNetworkFailure:
         manage_position(st)
         assert st["position"] is not None  # pozisyon korunur, kapatılmaz
         assert len(st["trades"]) == 0
+
+
+# ── 5b. BUG-001: Tek PnL kaynağı + trade history + özet ───────────────────────
+
+class TestSinglePnLSource:
+    """Console, State, Trade History aynı realized PnL değerini kullanmalı."""
+
+    def test_compute_realized_pnl_long_win(self):
+        r = compute_realized_pnl(100.0, 110.0, 2.0, "LONG")
+        assert r["gross_pnl"] == pytest.approx(20.0)
+        assert r["fee_usdt"] == pytest.approx((100 + 110) * 2 * 0.001)
+        assert r["pnl"] == pytest.approx(r["gross_pnl"] - r["fee_usdt"])
+
+    def test_compute_realized_pnl_short_win(self):
+        r = compute_realized_pnl(110.0, 100.0, 2.0, "SHORT")
+        assert r["gross_pnl"] == pytest.approx(20.0)
+        assert r["pnl"] < r["gross_pnl"]  # fee düşülür
+
+    def test_compute_realized_pnl_invalid_inputs(self):
+        with pytest.raises(ValueError):
+            compute_realized_pnl(0, 100, 1, "LONG")
+        with pytest.raises(ValueError):
+            compute_realized_pnl(100, 100, 1, "SIDEWAYS")
+
+    def test_all_records_share_same_pnl(self, monkeypatch, tmp_path):
+        """Regression: state, trades kaydı, trade_history ve bakiye deltası aynı pnl."""
+        hist_path = tmp_path / "hist.json"
+        monkeypatch.setattr(alpha20, "TRADE_HISTORY_PATH", hist_path)
+        cfg, st = base_config(), fresh_state()
+        open_paper_position("BTCUSDT", "LONG", details(), cfg, st)
+        pos = st["position"]
+        expected = compute_realized_pnl(
+            pos["entry"], pos["target"], pos["quantity"], "LONG")
+        balance_before = st["balance"]
+        target = pos["target"]
+        monkeypatch.setattr(alpha20, "fetch_klines",
+                            lambda *a, **k: kline_df(high=target + 10, low=target - 5))
+        manage_position(st)
+
+        trade = st["trades"][0]                              # State / Trade History (UI)
+        history = json.loads(hist_path.read_text())          # trade_history.json
+        assert trade["pnl"] == expected["pnl"]
+        assert trade["fee_usdt"] == expected["fee_usdt"]
+        assert trade["gross_pnl"] == expected["gross_pnl"]
+        assert history[-1]["pnl"] == expected["pnl"]
+        assert st["balance"] - balance_before == pytest.approx(expected["pnl"])
+        assert trade["balance_after"] == pytest.approx(st["balance"])
+
+    def test_trade_history_appends(self, monkeypatch, tmp_path):
+        hist_path = tmp_path / "hist.json"
+        monkeypatch.setattr(alpha20, "TRADE_HISTORY_PATH", hist_path)
+        append_trade_history({"symbol": "BTCUSDT", "pnl": 1.0})
+        append_trade_history({"symbol": "ETHUSDT", "pnl": -2.0})
+        history = json.loads(hist_path.read_text())
+        assert len(history) == 2
+        assert history[0]["symbol"] == "BTCUSDT"
+
+    def test_trade_history_survives_corrupt_file(self, monkeypatch, tmp_path):
+        hist_path = tmp_path / "hist.json"
+        hist_path.write_text("BOZUK{{{")
+        monkeypatch.setattr(alpha20, "TRADE_HISTORY_PATH", hist_path)
+        append_trade_history({"symbol": "BTCUSDT", "pnl": 1.0})
+        assert len(json.loads(hist_path.read_text())) == 1
+
+    def test_history_write_failure_does_not_corrupt_close(self, monkeypatch):
+        """History yazımı patlasa bile pozisyon kapanır, çift kapanış olmaz."""
+        cfg, st = base_config(), fresh_state()
+        open_paper_position("BTCUSDT", "LONG", details(), cfg, st)
+        target = st["position"]["target"]
+        monkeypatch.setattr(alpha20, "fetch_klines",
+                            lambda *a, **k: kline_df(high=target + 10, low=target - 5))
+
+        def boom(*a, **k):
+            raise OSError("disk dolu")
+        monkeypatch.setattr(alpha20, "append_trade_history", boom)
+
+        manage_position(st)  # exception yukarı taşmamalı
+        assert st["position"] is None          # pozisyon kapandı
+        assert len(st["trades"]) == 1          # tek kayıt
+        balance_after = st["balance"]
+        manage_position(st)                    # ikinci çağrı no-op
+        assert len(st["trades"]) == 1
+        assert st["balance"] == balance_after  # çift PnL yok
+
+    def test_performance_summary_output(self, capsys):
+        st = fresh_state()
+        st["trades"] = [
+            {"symbol": "BTCUSDT", "pnl": 56.57, "fee_usdt": 43.43},
+            {"symbol": "ETHUSDT", "pnl": -25.0, "fee_usdt": 10.0},
+        ]
+        alpha20.print_performance_summary(st)
+        out = capsys.readouterr().out
+        assert "PERFORMANS ÖZETİ" in out
+        assert "Toplam işlem: 2" in out
+        assert "Kazanma oranı: 50.0%" in out
+
+    def test_performance_summary_empty(self, capsys):
+        alpha20.print_performance_summary(fresh_state())
+        out = capsys.readouterr().out
+        assert "Kapanan işlem yok" in out
 
 
 # ── 6. Başlangıç doğrulaması ──────────────────────────────────────────────────
