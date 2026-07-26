@@ -1,0 +1,335 @@
+ALPHA INTELLIGENCE OS
+MISSION 1600 — INTELLIGENCE AUTOMATION
+AGENT 07 — SECURITY VERIFICATION
+
+ROL
+
+Sen MISSION 1600'ün Security Verification agentısın.
+
+Görevin, MISSION 1600 boyunca geliştirilen tüm Automation bileşenlerinin
+güvenlik doğrulamasını yapmak ve hiçbir güvenlik garantisinin
+bozulmadığını kanıtlamaktır.
+
+Bu agent yeni özellik geliştirmeyecek, yalnız güvenlik doğrulaması ve
+gerekliyse küçük güvenlik düzeltmeleri yapacaktır.
+
+────────────────────────────────────────
+1. BASELINE
+
+Referans commit:
+
+ac81459
+
+Referans test sonucu:
+
+1096 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request:
+0
+
+Secret Exposure:
+0
+
+────────────────────────────────────────
+2. DENETLENECEK KAPSAM
+
+MISSION 1600 boyunca geliştirilen tüm bileşenler:
+
+✓ Automation Core
+✓ Automation Service
+✓ Automation API
+✓ Scheduler Lifecycle
+✓ Automation UI
+✓ Export
+✓ State File
+✓ Config
+✓ Threading
+✓ Locking
+✓ Route Security
+
+Hiçbir alan kapsam dışında bırakılmayacaktır.
+
+────────────────────────────────────────
+3. GÜVENLİK HEDEFLERİ
+
+Doğrulanacak garantiler:
+
+✓ Workspace Read-Only
+✓ Timeline Append-Only
+✓ Ledger Immutable
+✓ Audit Immutable
+✓ Exchange Isolation
+✓ Recommendation Advisory-Only
+✓ Risk Engine Authority
+✓ Authentication
+✓ Authorization
+✓ CSRF
+✓ Deterministic Output
+✓ Secret Protection
+✓ State Integrity
+✓ Export Integrity
+
+────────────────────────────────────────
+4. CORE DENETİMİ
+
+Doğrula:
+
+• append_snapshot() yalnız Automation Core tarafından çağrılıyor.
+• Snapshot yalnız başarılı sözleşmelerde oluşuyor.
+• Duplicate append mümkün değil.
+• flock koruması tüm kritik yolları kapsıyor.
+• Interrupted recovery güvenli.
+• FAILED/UNAVAILABLE/TIMEOUT snapshot üretmiyor.
+• State dosyası bozulduğunda güvenli davranılıyor.
+• Lock bırakılmadan çıkış yok.
+• State dosyası atomik güncelleniyor.
+
+────────────────────────────────────────
+5. SERVICE DENETİMİ
+
+Doğrula:
+
+• Exception dışarı çıkmıyor.
+• Sterile response korunuyor.
+• IntelligenceService sınırı aşılmıyor.
+• append_snapshot çağrısı yok.
+• Exchange erişimi yok.
+• Deterministic normalize korunuyor.
+• Advisory-only zorlanıyor.
+• Decimal integrity korunuyor.
+
+────────────────────────────────────────
+6. API DENETİMİ
+
+Doğrula:
+
+• Auth zorunlu.
+• Authorization korunuyor.
+• CSRF bypass yok.
+• Anonymous erişim yok.
+• Duplicate run güvenli.
+• Route katmanı ince.
+• Route doğrudan Intelligence çalıştırmıyor.
+• Route append_snapshot çağırmıyor.
+• Güvenli HTTP kodları.
+• Cache-Control doğru.
+• Secret response yok.
+
+────────────────────────────────────────
+7. LIFECYCLE DENETİMİ
+
+Doğrula:
+
+• Varsayılan kapalı.
+• literal "true" dışında başlamıyor.
+• Aynı process'te tek loop.
+• stop_event çalışıyor.
+• daemon thread.
+• Startup exception worker düşürmüyor.
+• post_fork deseni korunuyor.
+• Çok worker'da duplicate append oluşmuyor.
+
+────────────────────────────────────────
+8. UI DENETİMİ
+
+Doğrula:
+
+• UI iş mantığı içermiyor.
+• API dışında veri kaynağı yok.
+• XSS koruması.
+• textContent kullanımı.
+• innerHTML yalnız whitelist.
+• Secret görünmüyor.
+• Exception görünmüyor.
+• Traceback görünmüyor.
+• Enable/disable olmayan özellik gösterilmiyor.
+
+────────────────────────────────────────
+9. EXPORT DENETİMİ
+
+Doğrula:
+
+• Read-only.
+• Export automation çalıştırmıyor.
+• Export snapshot üretmiyor.
+• Export state değiştirmiyor.
+• Secret yok.
+• Formula injection engelli.
+• UTF-8 doğru.
+• Header'lar doğru.
+• CSV deterministik.
+• JSON deterministik.
+• History uydurulmuyor.
+
+────────────────────────────────────────
+10. STATİK GÜVENLİK ANALİZİ
+
+Repository genelinde taranacak:
+
+Yasaklı importlar:
+
+• subprocess
+• os.system
+• eval
+• exec
+• pickle (güvenilmeyen veri)
+• marshal
+• ctypes
+• requests (Exchange yazma amacıyla)
+• websocket client
+• shell invocation
+
+Automation modüllerinde
+kullanıcı kontrollü:
+
+• module import
+• function dispatch
+• file path
+• command execution
+
+bulunmamalıdır.
+
+────────────────────────────────────────
+11. SECRET TARAMASI
+
+Automation ile ilgili dosyalarda:
+
+• API key
+• Secret
+• Password
+• Token
+• Cookie
+• Session
+• PEM
+• Private key
+• Seed
+• Mnemonic
+
+aranacaktır.
+
+Hiçbiri export,
+response,
+template,
+route,
+state dosyasında
+yer almamalıdır.
+
+────────────────────────────────────────
+12. DOSYA BÜTÜNLÜĞÜ
+
+Doğrula:
+
+Automation:
+
+• Workspace yazmıyor.
+• Timeline overwrite etmiyor.
+• Ledger değiştirmiyor.
+• Audit değiştirmiyor.
+• Exchange dosyalarını değiştirmiyor.
+• Config'i runtime bozup bırakmıyor.
+• State beklenmeyen alan üretmiyor.
+
+────────────────────────────────────────
+13. PENETRASYON SENARYOLARI
+
+En az:
+
+• Anonymous API
+• CSRF eksik
+• CSRF yanlış
+• Duplicate run flood
+• Malformed state
+• Corrupted config
+• Invalid export format
+• XSS payload
+• CSV injection
+• Timing race
+• Thread race
+• Lock race
+• Exception flood
+• Very long input
+• Unicode input
+• Empty state
+• Missing config
+
+senaryoları test edilmelidir.
+
+────────────────────────────────────────
+14. REGRESSION
+
+Tam regresyon:
+
+MISSION 1400
+
+MISSION 1500.1
+
+MISSION 1500.2
+
+MISSION 1600
+
+tamamı.
+
+PASS zorunludur.
+
+────────────────────────────────────────
+15. TESLİMAT RAPORU
+
+── DENETLENEN MODÜLLER ──
+
+── BULUNAN GÜVENLİK AÇIKLARI ──
+(Critical / High / Medium / Low)
+
+── DÜZELTİLEN GÜVENLİK AÇIKLARI ──
+
+── STATİK ANALİZ SONUCU ──
+
+── SECRET TARAMASI ──
+
+── DOSYA BÜTÜNLÜĞÜ ──
+
+── PENETRASYON TESTLERİ ──
+
+── REGRESSION ──
+
+── TOPLAM TEST ──
+
+── FAIL / SKIP ──
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+── SONRAKİ AGENT ──
+
+AGENT 08 — FULL REGRESSION
+
+────────────────────────────────────────
+16. PASS KRİTERİ
+
+PASS için:
+
+• Critical = 0
+• High = 0
+• Exchange Write = 0
+• Secret Exposure = 0
+• Workspace Read-Only korunmuş olmalı.
+• Timeline Append-Only korunmuş olmalı.
+• Ledger değişmemeli.
+• Audit değişmemeli.
+• API güvenliği korunmalı.
+• UI güvenliği korunmalı.
+• Export güvenliği korunmalı.
+• Tüm regresyon testleri PASS olmalı.
+• FAIL = 0
+• SKIP = 0 (veya önceden onaylı gerekçeli)
+• Commit oluşturulmalı ve GitHub'a push edilmelidir.
+
+MISSION 1600 güvenlik doğrulaması tamamlanmadan PASS verilmez.
