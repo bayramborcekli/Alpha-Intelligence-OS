@@ -108,3 +108,7 @@ $RECYCLE.BIN/
 
 # Runtime state files
 alpha20_v1/risk_events.jsonl
+
+# Login rate-limit store (paylasimli SQLite)
+login_attempts.db
+login_attempts.db-*
