@@ -1,0 +1,395 @@
+MISSION 1400.6
+RISK INTELLIGENCE ENGINE
+
+OBJECTIVE
+
+Implement the first operational Risk Intelligence Engine for
+Alpha Intelligence OS.
+
+This mission introduces centralized portfolio risk analysis,
+exposure monitoring, account health scoring and pre-trade
+risk evaluation.
+
+NO exchange write capability may be added.
+
+NO automatic trading.
+
+NO order creation.
+
+The engine is advisory only.
+
+------------------------------------------------------------
+
+NEW PAGE
+
+/risk
+
+Navigation:
+
+Risk
+
+------------------------------------------------------------
+
+PACKAGE 6.1
+EXECUTIVE RISK DASHBOARD
+
+Create a professional dashboard displaying:
+
+Overall Risk Score
+
+Portfolio Health
+
+Current Exposure
+
+Available Margin
+
+Margin Usage
+
+Open Positions
+
+Open Orders
+
+Largest Position
+
+Largest Unrealized Loss
+
+Largest Unrealized Gain
+
+Daily Drawdown
+
+Weekly Drawdown
+
+30-Day Drawdown
+
+Last Update
+
+------------------------------------------------------------
+
+PACKAGE 6.2
+PORTFOLIO EXPOSURE
+
+Calculate exposure by:
+
+Asset
+
+Exchange
+
+Market
+
+Direction
+
+Long
+
+Short
+
+Cash
+
+Stablecoins
+
+Display:
+
+Exposure %
+
+Exposure Value
+
+Never estimate unavailable values.
+
+------------------------------------------------------------
+
+PACKAGE 6.3
+POSITION CONCENTRATION
+
+Identify:
+
+Largest Position
+
+Top 5 Positions
+
+Single Position %
+
+Exchange %
+
+Sector grouping
+(if available)
+
+Warn when concentration exceeds thresholds.
+
+------------------------------------------------------------
+
+PACKAGE 6.4
+ACCOUNT HEALTH SCORE
+
+Produce a score:
+
+0–100
+
+Classification:
+
+Excellent
+
+Good
+
+Moderate
+
+Elevated Risk
+
+Critical
+
+Inputs include:
+
+Drawdown
+
+Margin Usage
+
+Position Concentration
+
+Available Balance
+
+Open Orders
+
+Exposure Distribution
+
+The scoring algorithm must be deterministic.
+
+No AI.
+
+------------------------------------------------------------
+
+PACKAGE 6.5
+RISK ALERT ENGINE
+
+Generate advisory alerts.
+
+Examples:
+
+High Exposure
+
+High Margin Usage
+
+Large Drawdown
+
+Single Asset Concentration
+
+Negative Daily PnL
+
+Low Available Balance
+
+Duplicate alerts prohibited.
+
+------------------------------------------------------------
+
+PACKAGE 6.6
+PRE-TRADE RISK SIMULATOR
+
+Read-only simulator.
+
+User may enter:
+
+Symbol
+
+Direction
+
+Entry Price
+
+Quantity
+
+Leverage
+
+The simulator calculates:
+
+Position Value
+
+Estimated Margin
+
+Portfolio Exposure After Trade
+
+Concentration After Trade
+
+Estimated Liquidation Buffer
+(if calculable)
+
+NO exchange communication.
+
+NO order preview.
+
+NO submission.
+
+------------------------------------------------------------
+
+PACKAGE 6.7
+RISK HISTORY
+
+Maintain local snapshots.
+
+Display:
+
+Daily Risk Score
+
+Daily Exposure
+
+Daily Drawdown
+
+Daily Margin Usage
+
+Trend charts
+
+History must never overwrite previous entries.
+
+------------------------------------------------------------
+
+PACKAGE 6.8
+RISK API
+
+Create typed endpoints:
+
+/api/risk/summary
+
+/api/risk/exposure
+
+/api/risk/alerts
+
+/api/risk/history
+
+/api/risk/simulator
+
+Authenticated only.
+
+------------------------------------------------------------
+
+PACKAGE 6.9
+VISUALIZATION
+
+Charts:
+
+Exposure
+
+Drawdown
+
+Margin Usage
+
+Risk Trend
+
+Portfolio Allocation
+
+Responsive.
+
+Accessible.
+
+No animation-heavy rendering.
+
+------------------------------------------------------------
+
+PACKAGE 6.10
+READ-ONLY GUARANTEE
+
+Forbidden:
+
+POST to exchanges
+
+DELETE
+
+PUT
+
+PATCH
+
+Cancel
+
+Close Position
+
+Transfer
+
+Withdraw
+
+Leverage Change
+
+Margin Change
+
+Any exchange write request
+
+------------------------------------------------------------
+
+PACKAGE 6.11
+SECURITY
+
+Authentication required.
+
+CSRF enforced.
+
+Rate limiting.
+
+Typed validation.
+
+Decimal arithmetic only.
+
+No float accounting.
+
+No secret exposure.
+
+------------------------------------------------------------
+
+PACKAGE 6.12
+TESTING
+
+Backend:
+
+Risk Score
+
+Exposure
+
+Simulator
+
+Alerts
+
+History
+
+Validation
+
+Frontend:
+
+Dashboard
+
+Charts
+
+Accessibility
+
+Regression:
+
+All previous missions remain green.
+
+------------------------------------------------------------
+
+MISSION SUCCESS
+
+PASS only if:
+
+✓ Risk Dashboard operational
+
+✓ Health Score calculated
+
+✓ Exposure analysis correct
+
+✓ Concentration analysis correct
+
+✓ Alerts generated
+
+✓ Simulator operational
+
+✓ History retained
+
+✓ Read-only guarantee maintained
+
+✓ Exchange write requests = 0
+
+✓ Secret exposure = 0
+
+✓ Existing tests pass
+
+✓ New tests added
+
+✓ Security scan clean
+
+✓ Code review completed
+
+✓ Commit created
+
+✓ GitHub push successful
