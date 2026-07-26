@@ -629,7 +629,9 @@ def health():
 def setup_wizard():
     """İlk çalıştırma sihirbazı — yalnızca parola yapılandırılmamışsa erişilebilir."""
     if auth.password_hash_configured():
-        return redirect(url_for("login"))
+        # Kurulum tamamlanmışsa sihirbazı tamamen gizle (404).
+        # 302 yerine 404 döndürmek, endpoint'in varlığını ifşa etmez.
+        return "", 404
     return render_template("setup.html")
 
 
