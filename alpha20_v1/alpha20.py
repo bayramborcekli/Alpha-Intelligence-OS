@@ -487,6 +487,8 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Doğrula, raporla ve çık — işlem yok.")
     parser.add_argument("--report", action="store_true", help="Başlangıç raporunu yazdır.")
     parser.add_argument("--summary", action="store_true", help="Performans özetini yazdır ve çık.")
+    parser.add_argument("--validate", action="store_true",
+                        help="Doğrulama katmanını çalıştır (sağlık + metrikler + rapor) ve çık.")
     args = parser.parse_args()
 
     config = load_json(CONFIG_PATH, {})
@@ -501,6 +503,10 @@ def main() -> None:
     log.info("Alpha-20 v1 başladı | MOD=PAPER | bakiye=%.2f", state["balance"])
     log.info("PAPER modu doğrulandı — gerçek emir gönderimi yok, API anahtarı yok.")
 
+    if args.validate:
+        from validation import run_validation
+        ok, _ = run_validation(state=state, config=config)
+        raise SystemExit(0 if ok else 1)
     if args.summary:
         print_performance_summary(state)
         return
