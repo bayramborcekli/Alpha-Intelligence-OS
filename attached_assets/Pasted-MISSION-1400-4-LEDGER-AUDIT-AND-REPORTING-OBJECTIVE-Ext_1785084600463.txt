@@ -1,0 +1,1210 @@
+MISSION 1400.4 — LEDGER, AUDIT AND REPORTING
+
+OBJECTIVE
+
+Extend the authenticated Alpha Intelligence OS web application with secure,
+read-only Ledger, Audit and Reporting workspaces.
+
+This sprint must expose the existing deterministic append-only ledger,
+Binance TR reconciliation evidence, safe application audit events and mission
+reports through a professional searchable interface.
+
+This sprint must not mutate ledger history.
+It must not create, submit, modify or cancel orders.
+It must not transfer or withdraw funds.
+It must not change leverage, margin mode or position mode.
+
+BASELINE
+
+Mission 1400.1, 1400.2 and 1400.3 are complete and closed.
+
+Preserve:
+
+- single-owner authentication
+- secure sessions
+- CSRF protection
+- request IDs
+- Turkish default UI
+- current application shell
+- Overview, Portfolio, Positions and Orders pages
+- existing Binance Global and Binance TR read-only clients
+- existing cache and freshness policies
+- deterministic append-only ledger
+- Mission 1310B reconciliation implementation
+- current safe audit infrastructure
+- existing mission reports and evidence
+- current feature flags
+- all 498 passing tests
+- current Git history
+
+Reference baseline:
+
+- Mission 1400.3 commit: 21dd503
+- Application mode: PAPER
+- Live trading: disabled
+- Transfers: disabled
+- Withdrawals: disabled
+- Exchange write requests: zero
+
+Do not redesign authentication.
+Do not rewrite stable ledger or reconciliation modules.
+Do not duplicate existing audit storage unnecessarily.
+
+PRIMARY DELIVERABLES
+
+Implement authenticated pages:
+
+- /ledger
+- /audit
+- /reports
+
+Activate navigation entries:
+
+- Defter
+- Raporlar
+
+Add an “Denetim” or “Audit” sub-navigation entry only if it fits the existing
+navigation without creating duplicate or confusing destinations.
+
+All pages must use the current authenticated application shell.
+
+READ-ONLY GUARANTEE
+
+Forbidden:
+
+- editing ledger records
+- deleting ledger records
+- correcting balances through the UI
+- changing reconciliation outcomes manually
+- reassigning source transaction IDs
+- modifying audit events
+- deleting audit events
+- editing mission reports
+- overwriting mission evidence
+- exchange POST, PUT, PATCH or DELETE requests
+- order actions
+- transfers
+- withdrawals
+
+Counters must remain zero:
+
+- ORDER ENDPOINT REQUESTS
+- CANCEL ENDPOINT REQUESTS
+- TRANSFER ENDPOINT REQUESTS
+- WITHDRAWAL ENDPOINT REQUESTS
+- OTHER EXCHANGE WRITE REQUESTS
+
+LEDGER SOURCE OF TRUTH
+
+Use the existing append-only ledger created by Mission 1310B.
+
+Expected known source:
+
+- alpha20_v1/mission1310b/ledger_events.json
+
+Do not assume this is the only possible ledger source if the repository already
+contains a stable ledger service abstraction.
+
+Prefer the existing ledger service if available.
+
+Do not rewrite or migrate historical records in this sprint.
+
+Before implementing UI access, verify:
+
+- ledger file or store exists
+- ledger records are readable
+- previous records remain unchanged
+- event ordering is deterministic
+- duplicate-block evidence is available
+- reconciliation status is derivable from existing evidence
+
+If integrity verification fails:
+
+- mark ledger status as FAILED
+- fail closed for export
+- display a safe warning
+- do not attempt automatic repair
+
+BACKEND API
+
+Implement authenticated, versioned, typed routes:
+
+- GET /api/v1/ledger/events
+- GET /api/v1/ledger/summary
+- GET /api/v1/ledger/integrity
+- GET /api/v1/ledger/reconciliation
+- GET /api/v1/audit/events
+- GET /api/v1/audit/summary
+- GET /api/v1/reports
+- GET /api/v1/reports/{report_id}
+- GET /api/v1/ledger/export.csv
+- GET /api/v1/audit/export.csv
+- GET /api/v1/reports/{report_id}/download
+
+Only add PDF export if a stable existing PDF generation path already exists.
+Do not add a fragile PDF dependency merely to satisfy this sprint.
+
+All routes must:
+
+- require authenticated owner session
+- return sanitized typed models
+- include request ID metadata where consistent
+- validate query parameters
+- use bounded pagination
+- avoid raw payload exposure
+- avoid filesystem path exposure
+- fail safely on malformed records
+
+No route may mutate ledger, audit or report data.
+
+LEDGER EVENT MODEL
+
+Map existing records into a stable safe model.
+
+Suggested fields:
+
+- event_id
+- exchange
+- event_type
+- asset
+- amount
+- fee
+- net_amount where derivable
+- timestamp
+- source_transaction_id_masked
+- raw_payload_hash
+- reconciliation_state
+- ingestion_time
+- duplicate_status
+- internal_transfer
+- source
+- integrity_status
+
+Financial values must remain Decimal-compatible strings.
+
+Do not expose full source transaction identifiers when masking is appropriate.
+
+Masking must preserve enough information for owner-side correlation without
+revealing sensitive identifiers unnecessarily.
+
+EVENT TYPE NORMALIZATION
+
+Normalize existing records into approved display categories where possible:
+
+- DEPOSIT
+- WITHDRAWAL
+- INTERNAL_TRANSFER
+- SPOT_BUY
+- SPOT_SELL
+- FUTURES_OPEN
+- FUTURES_CLOSE
+- FEE
+- FUNDING
+- REALIZED_PNL
+- UNKNOWN
+
+Do not rewrite the stored historical event type.
+
+Store or return both:
+
+- original_event_type
+- normalized_event_type
+
+when needed.
+
+Do not infer unsupported event categories without evidence.
+
+LEDGER SUMMARY
+
+GET /api/v1/ledger/summary must return:
+
+- total event count
+- unique event count
+- duplicate blocked count
+- unknown event count
+- deposit count
+- withdrawal count
+- internal transfer count
+- earliest event timestamp
+- latest event timestamp
+- asset count
+- exchange count
+- reconciliation status
+- integrity status
+- last integrity verification
+- source freshness
+- warnings
+
+Do not present PARTIAL reconciliation as PASS.
+
+LEDGER INTEGRITY
+
+GET /api/v1/ledger/integrity must verify read-only invariants.
+
+At minimum:
+
+- records can be parsed
+- required identifiers are present
+- event IDs are unique among stored accepted events
+- deterministic ordering can be reproduced
+- existing event hashes match current stored content where supported
+- append-only evidence has not been contradicted
+- no record was silently modified by this sprint
+
+Return:
+
+- status: PASS | PARTIAL | FAIL
+- checked_record_count
+- duplicate_count
+- malformed_record_count
+- hash_mismatch_count
+- ordering_status
+- verified_at
+- warnings
+
+Do not automatically modify or repair records.
+
+RECONCILIATION
+
+GET /api/v1/ledger/reconciliation must reuse Mission 1310B evidence and logic.
+
+Return:
+
+- status: PASS | PARTIAL | FAIL
+- current balances by asset where available
+- ledger-derived balances by asset
+- differences by asset
+- excluded internal transfer count
+- historical coverage start
+- historical coverage end
+- known limitations
+- calculation timestamp
+- evidence run ID where available
+
+Known existing differences may include assets such as:
+
+- TRY
+- USDT
+- AVAX
+- BNB
+- BTC
+
+Do not hardcode specific values.
+
+Do not fabricate opening balances.
+
+Display a visible warning for PARTIAL:
+
+“Binance TR API geçmişi tüm spot işlemleri, dönüşümleri ve hesap ömrü boyunca
+gerçekleşen tüm hareketleri içermeyebilir.”
+
+LEDGER PAGE
+
+Create a professional read-only Defter page.
+
+Header:
+
+- Defter
+- application mode badge
+- “Salt okunur”
+- integrity status
+- reconciliation status
+- last verified time
+- refresh
+- CSV export
+
+Summary cards:
+
+- Toplam Olay
+- Tekil Olay
+- Engellenen Tekrar
+- Bilinmeyen Olay
+- İç Transfer
+- Mutabakat
+- Bütünlük
+
+Main event table on desktop.
+
+Suggested columns:
+
+- Zaman
+- Borsa
+- Olay
+- Varlık
+- Tutar
+- Ücret
+- Net
+- Mutabakat
+- Tekrar Durumu
+- Olay Kimliği
+
+Mobile:
+
+- stacked event cards
+- key fields visible
+- no horizontal overflow
+
+LEDGER FILTERS
+
+Support:
+
+- exchange
+- normalized event type
+- original event type where useful
+- asset
+- reconciliation state
+- duplicate status
+- internal transfer true/false
+- date from
+- date to
+- text search
+- sort:
+  - timestamp
+  - asset
+  - amount
+  - event type
+  - exchange
+- order:
+  - ascending
+  - descending
+
+Default ordering:
+
+- newest first in UI
+
+Integrity verification must use deterministic canonical ordering independent of
+display sorting.
+
+Validate:
+
+- date formats
+- bounded search length
+- approved enums
+- approved sort fields
+- page size
+- pagination cursor or offset
+
+LEDGER EVENT DETAIL
+
+Allow the user to open a read-only event detail drawer or page.
+
+Display only sanitized data:
+
+- full event ID
+- exchange
+- event type
+- asset
+- amount
+- fee
+- timestamp
+- masked source transaction ID
+- payload hash
+- reconciliation state
+- ingestion time
+- duplicate result
+- internal transfer marker
+- integrity result
+
+Do not display raw exchange payload by default.
+
+If raw evidence viewing already exists and is sanitized, it may be linked as a
+separate safe detail.
+
+AUDIT SOURCE
+
+Use the existing application audit records from Missions 1400.1–1400.3.
+
+Audit records may include:
+
+- login success
+- login failure
+- logout
+- session expiration
+- authorization denial
+- CSRF rejection
+- overview opened
+- portfolio opened
+- positions opened
+- orders opened
+- refresh requested
+- refresh completed
+- source load failure
+- stale-data display
+- CSV export
+- rate-limit event
+
+Do not combine exchange financial ledger records with application audit records.
+
+LEDGER and AUDIT must remain separate concepts.
+
+AUDIT API
+
+GET /api/v1/audit/events
+
+Suggested fields:
+
+- audit_id
+- event_type
+- timestamp
+- result
+- request_id
+- page
+- source
+- status_code where safe
+- client_metadata_masked
+- row_count where safe
+- message_code
+- severity
+
+Never return:
+
+- password
+- password hash
+- session cookie
+- session ID
+- CSRF token
+- API key
+- API secret
+- Authorization header
+- full IP address if privacy masking is required
+- raw exception
+- raw exchange payload
+
+AUDIT SUMMARY
+
+GET /api/v1/audit/summary must return:
+
+- total event count
+- login success count
+- login failure count
+- authorization denial count
+- CSRF rejection count
+- rate-limit count
+- refresh failure count
+- export count
+- recent error count
+- earliest event
+- latest event
+- audit storage status
+- warnings
+
+AUDIT PAGE
+
+Create a read-only Denetim page or a clearly separated section inside Reports.
+
+Preferred dedicated route:
+
+- /audit
+
+Header:
+
+- Denetim
+- “Salt okunur”
+- audit storage status
+- last event time
+- export button
+
+Filters:
+
+- event type
+- result
+- severity
+- page
+- source
+- request ID search
+- date from
+- date to
+
+Desktop table columns:
+
+- Zaman
+- Olay
+- Sonuç
+- Kaynak
+- Sayfa
+- İstek Kimliği
+- Önem
+- Güvenli Açıklama
+
+Mobile:
+
+- stacked cards
+
+Do not display sensitive client metadata.
+
+REPORT DISCOVERY
+
+GET /api/v1/reports must discover existing mission reports safely.
+
+Include at minimum when present:
+
+- Mission 1200
+- Mission 1250
+- Mission 1300A
+- Mission 1300A.1
+- Mission 1300A.2
+- Mission 1310A
+- Mission 1310B
+- Mission 1400.1
+- Mission 1400.1-R
+- Mission 1400.2
+- Mission 1400.3
+- Mission 1400.4
+
+Do not assume every report uses the same file structure.
+
+Create a safe report registry abstraction that maps:
+
+- report_id
+- mission_name
+- status
+- run_id
+- commit
+- timestamp
+- total_tests
+- safety result
+- source type
+- downloadable
+- available sections
+
+Do not expose internal absolute paths.
+
+REPORT DETAIL
+
+GET /api/v1/reports/{report_id}
+
+Return a sanitized rendered model.
+
+Allowed sections:
+
+- mission objective
+- status
+- run ID
+- commit
+- test counts
+- security results
+- write request counters
+- known limitations
+- next action
+- timestamps
+- safe evidence summaries
+
+Do not return:
+
+- secrets
+- raw environment content
+- credentials
+- signatures
+- full API keys
+- session data
+- unsafe stack traces
+- unrestricted arbitrary file content
+
+Unknown report IDs must return 404 safely.
+
+REPORT DOWNLOAD
+
+GET /api/v1/reports/{report_id}/download
+
+Preferred formats:
+
+- sanitized JSON
+- original sanitized report if already safe
+
+Requirements:
+
+- authenticated
+- Content-Disposition attachment
+- safe filename
+- stable serialization
+- no internal path
+- no secret values
+- no arbitrary path traversal
+- strict report registry lookup
+- no user-controlled filesystem path
+
+Do not allow inputs such as:
+
+- ../
+- absolute path
+- encoded traversal
+- null byte
+- file URI
+
+REPORTS PAGE
+
+Create a professional Raporlar page.
+
+Display report cards or table:
+
+- Görev
+- Durum
+- Çalıştırma Kimliği
+- Commit
+- Test Sayısı
+- Güvenlik
+- Tarih
+- Görüntüle
+- İndir
+
+Filters:
+
+- mission family
+- PASS / FAIL / PARTIAL
+- date
+- search
+
+Report detail page or drawer:
+
+- summary
+- tests
+- security
+- write counters
+- known limitations
+- next action
+
+Use Turkish labels.
+
+Do not permit editing.
+
+CSV EXPORT
+
+Implement:
+
+- GET /api/v1/ledger/export.csv
+- GET /api/v1/audit/export.csv
+
+Requirements:
+
+- authenticated session
+- sanitized typed data only
+- validated filters
+- UTF-8 BOM where useful
+- stable headers
+- ISO-8601 timestamps
+- raw Decimal strings
+- bounded export size
+- no raw payload
+- no secret values
+- no full API keys
+- no internal paths
+- CSV formula injection protection for text fields
+
+Do not alter legitimate negative numeric values.
+
+Suggested filenames:
+
+- alpha-ledger-YYYYMMDD-HHMMSS.csv
+- alpha-audit-YYYYMMDD-HHMMSS.csv
+
+OPTIONAL PDF
+
+Only implement PDF report generation if:
+
+- repository already includes a stable PDF generation mechanism
+- fonts and rendering work reliably in Replit
+- test coverage can verify output
+- no security or deployment regression is introduced
+
+Otherwise document PDF as deferred.
+
+Do not block Mission 1400.4 PASS solely because PDF is deferred.
+
+DATA FRESHNESS
+
+Ledger and reports are not market-live data.
+
+Use source-specific freshness labels:
+
+Ledger:
+
+- GÜNCEL: integrity checked within 15 minutes
+- ESKİ VERİ: older than 15 minutes
+- KULLANILAMIYOR: cannot read or verify
+
+Audit:
+
+- GÜNCEL: storage readable and latest event known
+- ESKİ VERİ: storage readable but verification old
+- KULLANILAMIYOR: cannot read
+
+Reports:
+
+- MEVCUT
+- EKSİK
+- GEÇERSİZ
+
+Do not use “live” terminology for historical evidence.
+
+REFRESH
+
+Reuse POST /api/v1/refresh where practical.
+
+Allow safe scopes:
+
+- ledger
+- audit
+- reports
+
+Refresh may:
+
+- re-read files
+- recompute summaries
+- rerun read-only integrity checks
+- invalidate safe caches
+
+Refresh must not:
+
+- re-ingest exchange movements automatically
+- modify ledger
+- modify audit records
+- regenerate historical mission evidence
+- call exchange write endpoints
+
+CSRF remains required.
+
+ERROR HANDLING
+
+Provide safe errors:
+
+- LEDGER_UNAVAILABLE
+- LEDGER_INTEGRITY_FAILED
+- MALFORMED_LEDGER_RECORD
+- RECONCILIATION_PARTIAL
+- AUDIT_UNAVAILABLE
+- REPORT_NOT_FOUND
+- REPORT_INVALID
+- EXPORT_FAILED
+- INVALID_FILTER
+- APPLICATION_LOCKED
+- UNAUTHORIZED
+- CSRF_FAILED
+
+Do not show:
+
+- raw stack trace
+- raw HTML
+- arbitrary file content
+- local absolute path
+- secret value
+- raw exception text
+
+AUDIT OF THIS SPRINT
+
+Record safe application audit events for:
+
+- ledger page opened
+- audit page opened
+- reports page opened
+- ledger export
+- audit export
+- report viewed
+- report downloaded
+- integrity verification requested
+- integrity verification failed
+- report parse failed
+
+Do not create an audit recursion loop when viewing audit events.
+
+Viewing the audit page may record a single page-open event, but fetching or
+rendering each row must not generate another audit record.
+
+PAGINATION
+
+Use bounded pagination.
+
+Suggested defaults:
+
+- ledger: 50
+- audit: 50
+- reports: 25
+
+Suggested maximum:
+
+- ledger: 500
+- audit: 500
+- reports: 100
+
+Return pagination metadata:
+
+- total
+- limit
+- offset or cursor
+- has_more
+
+Do not load unlimited files into frontend memory unnecessarily.
+
+PERFORMANCE
+
+Avoid repeatedly re-reading large evidence files on every UI repaint.
+
+Use safe in-process caches keyed by:
+
+- file modification time
+- content hash where practical
+- filter set
+
+Do not cache secrets.
+
+Invalidate when source file modification time changes or manual refresh occurs.
+
+MOBILE EXPERIENCE
+
+Below the current mobile breakpoint:
+
+- ledger table becomes event cards
+- audit table becomes event cards
+- report table becomes report cards
+- filters remain usable
+- date inputs remain accessible
+- export buttons remain touch-friendly
+- long hashes wrap or truncate safely with copy controls
+- no horizontal page overflow
+
+ACCESSIBILITY
+
+Implement:
+
+- semantic headings
+- table headers with scope
+- keyboard-accessible filters
+- visible focus states
+- accessible status labels
+- aria-live for refresh and errors
+- accessible pagination
+- accessible expandable event details
+- text labels in addition to status colors
+
+SECURITY
+
+Verify:
+
+- every page requires authentication
+- every API requires authentication
+- exports require authentication
+- downloads use strict report registry
+- no path traversal
+- no arbitrary file reads
+- no ledger mutation route
+- no audit mutation route
+- no report mutation route
+- no exchange write route
+- no raw payload exposure
+- no secret values in API, HTML, CSV or downloads
+- no full API keys
+- request IDs remain safe
+- audit records remain sanitized
+
+TESTING
+
+Run full baseline suite before modifications.
+
+Add tests for:
+
+LEDGER BACKEND
+
+- authentication required
+- ledger parse success
+- deterministic ordering
+- event ID uniqueness
+- duplicate blocked mapping
+- original and normalized event types
+- Decimal fields
+- masked source transaction ID
+- unknown event mapping
+- internal transfer mapping
+- filter by exchange
+- filter by asset
+- filter by event type
+- filter by reconciliation state
+- date filtering
+- search
+- approved sorting
+- invalid parameter rejection
+- pagination
+- malformed row isolation
+- source unavailable
+- no mutation of ledger file
+
+INTEGRITY
+
+- PASS result
+- PARTIAL result
+- FAIL result
+- duplicate detection
+- malformed record count
+- ordering verification
+- hash mismatch detection where supported
+- verification does not modify file
+- export blocked on integrity FAIL
+
+RECONCILIATION
+
+- existing 1310B evidence mapping
+- PARTIAL status preserved
+- differences by asset
+- internal transfer exclusion
+- no fabricated opening balance
+- missing evidence handled safely
+
+AUDIT BACKEND
+
+- authentication required
+- safe event mapping
+- secret fields excluded
+- session fields excluded
+- IP or client metadata masked
+- filtering
+- sorting
+- pagination
+- audit page does not create recursive event flood
+- unavailable audit storage handled safely
+
+REPORT BACKEND
+
+- authentication required
+- known report discovery
+- missing report handled
+- malformed report handled
+- safe registry lookup
+- path traversal rejected
+- download requires authentication
+- safe filename
+- secret redaction
+- no internal path exposure
+- report detail typed response
+
+CSV EXPORT
+
+- ledger export authentication
+- audit export authentication
+- Content-Type
+- safe filename
+- UTF-8
+- stable headers
+- formula injection protection
+- negative Decimal preserved
+- no secrets
+- no full transaction IDs where masking required
+- bounded export size
+- filters applied
+
+FRONTEND
+
+- Defter navigation active
+- Raporlar navigation active
+- Audit navigation active if implemented
+- loading state
+- empty state
+- success state
+- integrity failure state
+- partial reconciliation warning
+- filters
+- pagination
+- event detail
+- report detail
+- report download
+- mobile cards
+- no edit/delete buttons
+- no secret values
+- Turkish labels
+- keyboard navigation
+
+WRITE SAFETY
+
+- ledger write routes = 0
+- audit write routes = 0
+- report write routes = 0
+- order endpoint requests = 0
+- cancel endpoint requests = 0
+- transfer endpoint requests = 0
+- withdrawal endpoint requests = 0
+- other exchange write requests = 0
+- ledger source file unchanged after full test suite
+- mission evidence files unchanged after full test suite
+
+REGRESSION
+
+- all 1400.1 tests pass
+- all 1400.2 tests pass
+- all 1400.3 tests pass
+- owner login works
+- logout works
+- setup remains closed
+- Overview works
+- Portfolio works
+- Positions works
+- Orders works
+- refresh CSRF works
+- startup remains healthy
+
+DOCUMENTATION
+
+Update:
+
+- README.md
+- docs/live_application.md
+- docs/operator_guide_tr.md
+- docs/security_model.md
+
+Document:
+
+- Defter page
+- difference between financial ledger and application audit
+- append-only meaning
+- duplicate-block meaning
+- integrity statuses
+- PARTIAL reconciliation
+- event filters
+- audit filters
+- mission report registry
+- safe downloads
+- CSV exports
+- why records cannot be edited
+- why opening balances are not fabricated
+- PDF export status if deferred
+
+Do not include secret values or internal absolute paths.
+
+CODE REVIEW
+
+Review specifically for:
+
+- ledger mutation
+- arbitrary file access
+- path traversal
+- raw payload exposure
+- source transaction identifier leakage
+- float usage
+- incorrect duplicate handling
+- PARTIAL shown as PASS
+- automatic repair behavior
+- audit recursion
+- audit secret leakage
+- report secret leakage
+- unsafe report parsing
+- CSV injection
+- unbounded file reads
+- unauthenticated export
+- mobile overflow
+- hidden exchange write path
+
+MISSION SUCCESS CRITERIA
+
+Mission 1400.4 may declare PASS only if:
+
+1. Defter page works after owner login.
+2. Existing append-only ledger is displayed read-only.
+3. Event ordering is deterministic.
+4. Duplicate-block evidence is displayed.
+5. Integrity verification works.
+6. Integrity checks do not modify ledger files.
+7. Reconciliation preserves PASS/PARTIAL/FAIL truthfully.
+8. PARTIAL is visibly explained.
+9. Audit events are displayed separately from ledger events.
+10. Audit data is sanitized.
+11. Reports page discovers existing mission reports safely.
+12. Report details and downloads are authenticated.
+13. Path traversal is rejected.
+14. Ledger CSV export works safely.
+15. Audit CSV export works safely.
+16. Formula injection protection passes.
+17. No edit/delete/mutation controls exist.
+18. One malformed record does not crash unrelated pages.
+19. Pagination and filters work.
+20. Desktop experience works.
+21. Mobile experience works.
+22. Accessibility checks pass.
+23. Ledger write routes remain zero.
+24. Audit write routes remain zero.
+25. Report write routes remain zero.
+26. Order requests remain zero.
+27. Cancel requests remain zero.
+28. Transfer requests remain zero.
+29. Withdrawal requests remain zero.
+30. Other exchange write requests remain zero.
+31. Raw payload exposure remains zero.
+32. Secret exposure remains zero.
+33. Existing tests remain passing.
+34. New backend and frontend tests pass.
+35. Security scan passes.
+36. Code review passes.
+37. Changes are committed and pushed to GitHub.
+38. Application is not publicly published without explicit owner authorization.
+
+EXPECTED FINAL REPORT
+
+MISSION 1400.4: PASS / FAIL
+BASELINE COMMIT:
+NEW COMMIT:
+GITHUB PUSH:
+APPLICATION START:
+APPLICATION PUBLISHED:
+OWNER LOGIN:
+LEDGER PAGE:
+LEDGER SOURCE:
+LEDGER READ ONLY:
+LEDGER EVENT COUNT:
+UNIQUE EVENT COUNT:
+DUPLICATE BLOCKED COUNT:
+UNKNOWN EVENT COUNT:
+INTERNAL TRANSFER COUNT:
+DETERMINISTIC ORDERING:
+INTEGRITY STATUS:
+INTEGRITY CHECK MODIFIED FILE:
+RECONCILIATION STATUS:
+PARTIAL WARNING:
+AUDIT PAGE:
+AUDIT SANITIZATION:
+AUDIT RECURSION:
+REPORTS PAGE:
+REPORTS DISCOVERED:
+REPORT DETAIL:
+REPORT DOWNLOAD:
+PATH TRAVERSAL:
+LEDGER CSV:
+AUDIT CSV:
+CSV FORMULA INJECTION:
+FILTERING:
+SORTING:
+PAGINATION:
+MALFORMED RECORD ISOLATION:
+DATA FRESHNESS:
+MOBILE EXPERIENCE:
+ACCESSIBILITY:
+LEDGER WRITE ROUTES:
+AUDIT WRITE ROUTES:
+REPORT WRITE ROUTES:
+ORDER ENDPOINT REQUESTS:
+CANCEL ENDPOINT REQUESTS:
+TRANSFER ENDPOINT REQUESTS:
+WITHDRAWAL ENDPOINT REQUESTS:
+OTHER EXCHANGE WRITE REQUESTS:
+RAW PAYLOAD EXPOSED:
+SECRETS EXPOSED:
+BASELINE TESTS:
+NEW BACKEND TESTS:
+NEW FRONTEND TESTS:
+TOTAL TESTS:
+SECURITY SCAN:
+CODE REVIEW:
+RUN_ID:
+KNOWN LIMITATIONS:
+NEXT ACTION:
+
+FINAL RESTRICTIONS
+
+- Do not edit ledger records.
+- Do not delete ledger records.
+- Do not repair ledger records automatically.
+- Do not modify audit records.
+- Do not modify mission reports.
+- Do not overwrite mission evidence.
+- Do not allow arbitrary file paths.
+- Do not expose raw exchange payloads.
+- Do not expose secrets.
+- Do not submit, cancel or modify orders.
+- Do not transfer or withdraw funds.
+- Do not enable live trading.
+- Do not publish without explicit owner authorization.
+- Do not declare PASS without tests, security scan, code review, commit and push.

@@ -1,0 +1,120 @@
+{% extends "dash_base.html" %}
+{% block title %}Raporlar{% endblock %}
+{% block heading %}📄 Raporlar{% endblock %}
+{% block subheading %}Görev raporu kayıt defteri (düzenlenemez){% endblock %}
+{% block content %}
+  <section class="section" aria-labelledby="rp-h">
+    <h2 id="rp-h">Görev Raporları</h2>
+    <div class="fresh-line">Salt okunur · indirmeler sabit kayıt defterinden yapılır (serbest dosya yolu yok)</div>
+    <div class="toolbar" role="search">
+      <label>Ara <input type="search" id="f-search" maxlength="32" placeholder="görev adı"></label>
+      <label>Durum
+        <select id="f-status"><option value="">Tümü</option>
+          <option value="MEVCUT">MEVCUT</option><option value="EKSİK">EKSİK</option>
+          <option value="GEÇERSİZ">GEÇERSİZ</option></select></label>
+      <label>Sonuç
+        <select id="f-result"><option value="">Tümü</option>
+          <option value="PASS">PASS</option><option value="PARTIAL">PARTIAL</option>
+          <option value="FAIL">FAIL</option></select></label>
+    </div>
+    <div class="table-wrap">
+      <table aria-describedby="rp-h">
+        <thead><tr>
+          <th scope="col">Görev</th><th scope="col">Durum</th>
+          <th scope="col">Sonuç</th><th scope="col">Çalıştırma Kimliği</th>
+          <th scope="col">Commit</th><th scope="col">Test Sayısı</th>
+          <th scope="col">Tarih</th><th scope="col">İşlem</th>
+        </tr></thead>
+        <tbody id="rp-body"><tr><td colspan="8" class="skeleton">Yükleniyor…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section" id="detail-box" style="display:none" aria-live="polite">
+    <h2 id="detail-title">Rapor Detayı</h2>
+    <div id="detail-body"></div>
+  </section>
+{% endblock %}
+{% block page_script %}
+<script>
+"use strict";
+(function () {
+  var all = [];
+  function render() {
+    var body = document.getElementById("rp-body");
+    var s = document.getElementById("f-search").value.trim().toLowerCase();
+    var st = document.getElementById("f-status").value;
+    var rv = document.getElementById("f-result").value;
+    var rows = all.filter(function (r) {
+      return (!s || r.mission_name.toLowerCase().indexOf(s) >= 0) &&
+             (!st || r.status === st) && (!rv || r.result === rv);
+    });
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="8" class="empty-box">Gösterilecek rapor bulunamadı.</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(function (r) {
+      return "<tr><td data-l='Görev'>" + esc(r.mission_name) + "</td>" +
+        "<td data-l='Durum'><span class='" + (r.status === "MEVCUT" ? "st-ok" :
+          r.status === "EKSİK" ? "st-neutral" : "st-err") + "'>" + esc(r.status) + "</span></td>" +
+        "<td data-l='Sonuç'><span class='" + (r.result === "PASS" ? "st-ok" :
+          r.result === "PARTIAL" ? "st-warn" : r.result ? "st-err" : "st-neutral") + "'>" +
+        esc(r.result || "—") + "</span></td>" +
+        "<td data-l='Çalıştırma' style='overflow-wrap:anywhere'>" + esc(r.run_id || "—") + "</td>" +
+        "<td data-l='Commit'>" + esc(r.commit || "—") + "</td>" +
+        "<td data-l='Testler'>" + esc(r.total_tests || "—") + "</td>" +
+        "<td data-l='Tarih'>" + esc(r.timestamp ? new Date(r.timestamp).toLocaleDateString("tr-TR") : "—") + "</td>" +
+        "<td data-l='İşlem'>" +
+        (r.status === "MEVCUT"
+          ? "<button type='button' class='sort' data-view='" + esc(r.report_id) + "'>Görüntüle</button> · " +
+            "<a href='/api/v1/reports/" + esc(r.report_id) + "/download'>İndir</a>"
+          : "—") + "</td></tr>";
+    }).join("");
+    body.querySelectorAll("button[data-view]").forEach(function (b) {
+      b.addEventListener("click", function () { showDetail(b.dataset.view); });
+    });
+  }
+  async function showDetail(rid) {
+    var box = document.getElementById("detail-box");
+    var body = document.getElementById("detail-body");
+    box.style.display = "block";
+    body.innerHTML = '<div class="skeleton">Yükleniyor…</div>';
+    try {
+      var r = await fetch("/api/v1/reports/" + encodeURIComponent(rid));
+      if (!r.ok) { body.innerHTML = '<div class="empty-box">Rapor bulunamadı.</div>'; return; }
+      var d = await r.json();
+      document.getElementById("detail-title").textContent =
+        "Rapor Detayı — " + d.report.mission_name;
+      var c = d.content || {};
+      var keys = Object.keys(c).filter(function (k) {
+        return typeof c[k] !== "object" || c[k] === null;
+      });
+      body.innerHTML =
+        "<dl style='display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:.85rem'>" +
+        keys.map(function (k) {
+          return "<dt style='color:var(--muted)'>" + esc(k) +
+            "</dt><dd style='overflow-wrap:anywhere'>" + esc(c[k]) + "</dd>";
+        }).join("") + "</dl>" +
+        "<p class='fresh-line'>Rapor içerikleri salt okunurdur; düzenlenemez ve üzerine yazılamaz.</p>" +
+        "<button type='button' onclick=\"document.getElementById('detail-box').style.display='none'\">Kapat</button>";
+      box.scrollIntoView({ behavior: "smooth" });
+    } catch (_) { body.innerHTML = '<div class="empty-box">Rapor alınamadı.</div>'; }
+  }
+  async function load() {
+    try {
+      var d = await (await fetch("/api/v1/reports?limit=100")).json();
+      all = d.reports || []; render(); markRefreshed();
+    } catch (_) {
+      document.getElementById("rp-body").innerHTML =
+        '<tr><td colspan="8" class="empty-box">Veri alınamadı.</td></tr>';
+    }
+  }
+  ["f-search", "f-status", "f-result"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", render);
+    document.getElementById(id).addEventListener("change", render);
+  });
+  wireRefresh(load);
+  load();
+})();
+</script>
+{% endblock %}

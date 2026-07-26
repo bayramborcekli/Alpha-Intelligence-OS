@@ -56,6 +56,18 @@ ve yalnızca sunucu tarafında, açık talimatla etkinleştirilebilir.
   dosyalarda secret veya ham borsa yanıtı bulunmaz.
 - Her bölümde veri durumu görünür: GÜNCEL / ESKİ VERİ / KULLANILAMIYOR.
 
+## Defter, Denetim ve Raporlar (Mission 1400.4)
+- **📒 Defter:** borsa kaynaklı finansal olayların ekle-yalnız kaydı.
+  Kayıtlar düzenlenemez ve silinemez; bütünlük ve mutabakat durumu üstte
+  görünür. PARTIAL mutabakat bir hata değildir: TR API geçmişi hesabın tüm
+  ömrünü kapsamayabilir ve açılış bakiyesi uydurulmaz.
+- **🛡️ Denetim:** uygulamanın güvenlik olayları (giriş, CSRF, dışa aktarım).
+  Finansal defterden ayrıdır; IP'ler maskelidir, hassas veri içermez.
+- **📄 Raporlar:** geçmiş görev raporları sabit listeden görüntülenir ve
+  sterilize JSON olarak indirilir. Dosya yolu girilemez.
+- Her üç sayfada da **⬇ CSV Dışa Aktar** (defter/denetim) Excel-uyumludur;
+  bütünlük FAIL ise defter dışa aktarımı güvenlik gereği kapanır.
+
 ## Üretim başlatma komutu
 ```
 gunicorn -c gunicorn.conf.py app:app

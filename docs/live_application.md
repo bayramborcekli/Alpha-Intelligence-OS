@@ -33,6 +33,11 @@
 | `GET /api/v1/portfolio/export.csv` | korumalı | portföy CSV dışa aktarımı |
 | `GET /api/v1/global/positions/export.csv` | korumalı | pozisyonlar CSV dışa aktarımı |
 | `GET /api/v1/global/orders/export.csv` | korumalı | açık emirler CSV dışa aktarımı |
+| `GET /ledger`, `/audit`, `/reports` | korumalı | Defter / Denetim / Raporlar çalışma alanları (1400.4) |
+| `GET /api/v1/ledger/{events,summary,integrity,reconciliation}` | korumalı | ekle-yalnız defter görünümleri |
+| `GET /api/v1/audit/{events,summary}` | korumalı | uygulama denetim olayları |
+| `GET /api/v1/reports`, `/api/v1/reports/{id}`, `/{id}/download` | korumalı | görev raporu kayıt defteri |
+| `GET /api/v1/ledger/export.csv`, `/api/v1/audit/export.csv` | korumalı | defter/denetim CSV dışa aktarımı |
 
 Kimliksiz istek: API'de `401` (kilitli kurulumda `403`), tarayıcı
 sayfalarında `/login` yönlendirmesi. Her yanıtta `X-Request-ID` başlığı bulunur.
@@ -99,6 +104,42 @@ kod yolu yoktur.
   bölümde kaynak, alınma zamanı, yaş ve GÜNCEL/ESKİ VERİ/KULLANILAMIYOR
   etiketi görünür. Önbellekten sunulan veri asla "yeni alındı" gibi
   etiketlenmez.
+
+## Defter / Denetim / Raporlar (Mission 1400.4)
+- **Defter ≠ Denetim:** Defter, borsa kaynaklı finansal olayların ekle-yalnız
+  (append-only) kaydıdır (1310B); Denetim ise uygulamanın kendi güvenlik
+  olaylarıdır (giriş, CSRF, dışa aktarım vb.). İki kavram asla birleştirilmez.
+- **Ekle-yalnız:** Defter kayıtları yalnızca eklenir; UI veya API üzerinden
+  düzenleme/silme/onarma yolu YOKTUR. Bir kayıt hatalıysa bile otomatik
+  onarım yapılmaz — bu, kanıt bütünlüğünün ön koşuludur.
+- **Engellenen tekrar (duplicate-block):** Aynı kaynak işlem ikinci kez
+  alındığında deftere eklenmez; engellenen sayısı 1310B kanıtından raporlanır.
+- **Bütünlük durumları:** PASS (tüm kayıtlar geçerli, kimlikler tekil, sıra
+  deterministik) / PARTIAL (izole bozuk kayıt veya eksik özet var) /
+  FAIL (tekrarlanan kimlik, sıra bozukluğu veya kaynak okunamıyor —
+  CSV dışa aktarımı fail-closed kapanır). Hash doğrulaması "varlık kontrolü"
+  düzeyindedir; ham yük saklanmadığı için yeniden hesaplama desteklenmez.
+- **PARTIAL mutabakat:** ASLA PASS gibi gösterilmez. Neden: Binance TR API
+  geçmişi tüm spot işlemleri/dönüşümleri kapsamayabilir; açılış bakiyesi
+  ÜRETİLMEZ, farklar varlık bazında olduğu gibi raporlanır.
+- **Olay normalizasyonu:** Orijinal tip korunur; onaylı kategorilere
+  eşlenemeyenler UNKNOWN olur, kanıtsız tür çıkarımı yapılmaz. Kaynak işlem
+  kimlikleri maskeli gösterilir (baş/son karakterler).
+- **Denetim sanitizasyonu:** parola/hash/token/çerez asla loglanmaz ve API'ye
+  çıkmaz; IP adresleri maskelenir; denetim satırlarını GETİRMEK yeni denetim
+  kaydı üretmez (rekürsiyon yok), yalnızca sayfa açılışı tek olay yazar.
+- **Rapor kayıt defteri:** Raporlar sabit bir kayıt defterinden keşfedilir;
+  kullanıcıdan dosya yolu alınmaz → yol geçişi (path traversal) mümkün
+  değildir. İndirme sterilize JSON'dur; iç mutlak yollar ve hassas anahtarlar
+  temizlenir. Bilinmeyen rapor kimliği güvenli 404 döner.
+- **CSV:** UTF-8 BOM, ISO zaman, ham Decimal string; metin hücrelerinde
+  formül enjeksiyonu nötralize edilir, sayısal negatifler değişmez; dışa
+  aktarım boyutu sınırlıdır (defter/denetim ≤ 500 satır).
+- **PDF durumu:** ERTELENDİ — depoda hazır ve stabil bir PDF üretim yolu
+  yoktur; kırılgan bağımlılık eklenmedi.
+- **Tazelik:** Defter GÜNCEL (bütünlük ≤15 dk önce doğrulandı) / ESKİ VERİ /
+  KULLANILAMIYOR; raporlar MEVCUT / EKSİK / GEÇERSİZ. Tarihsel kanıt için
+  "canlı" terimi kullanılmaz.
 
 ## Dil
 Varsayılan arayüz dili Türkçe'dir (`ui_language: "tr"` yapılandırma

@@ -41,6 +41,13 @@ değerler asla loglanmaz/gösterilmez.
   modellerden yapılır ve metin hücrelerinde formül enjeksiyonu nötralize
   edilir. UI'da iptal/kapat/düzenle/gönder kontrolü yoktur; izinli rota
   istisnaları GET-only olarak test ile zorlanır.
+- Mission 1400.4: Defter/Denetim/Rapor rotalarının tamamı GET-only ve oturum
+  korumalıdır; defter ve denetim kayıtları için hiçbir mutasyon yolu yoktur.
+  Rapor indirmeleri sabit kayıt defteri üzerinden yapılır (kullanıcı dosya
+  yolu kabul edilmez → yol geçişi engellenir); rapor içerikleri hassas
+  anahtar ve iç yol temizliğinden geçirilir. Bütünlük FAIL durumunda defter
+  CSV dışa aktarımı fail-closed kapanır. Denetim API'si parola/hash/token/
+  çerez döndürmez ve satır getirme rekürsif denetim kaydı üretmez.
 
 ## Denetim (audit)
 `security.log` şu olayları maskelenmiş meta verilerle kaydeder: giriş

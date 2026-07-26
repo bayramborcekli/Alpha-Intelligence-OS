@@ -1,0 +1,217 @@
+{% extends "dash_base.html" %}
+{% block title %}Defter{% endblock %}
+{% block heading %}📒 Defter{% endblock %}
+{% block subheading %}Ekle-yalnız finansal defter (1310B kanıtı){% endblock %}
+{% block header_extra %}
+  <a class="export-btn" id="export-link" href="/api/v1/ledger/export.csv"
+     style="border:1px solid var(--accent);border-radius:8px;padding:7px 12px;font-size:.84rem;">⬇ CSV Dışa Aktar</a>
+{% endblock %}
+{% block content %}
+  <div class="summary-cards" id="cards" aria-live="polite">
+    <div class="scard"><div class="lbl">Toplam Olay</div><div class="val" id="c-total">—</div></div>
+    <div class="scard"><div class="lbl">Tekil Olay</div><div class="val" id="c-unique">—</div></div>
+    <div class="scard"><div class="lbl">Engellenen Tekrar</div><div class="val" id="c-dup">—</div></div>
+    <div class="scard"><div class="lbl">Bilinmeyen Olay</div><div class="val" id="c-unknown">—</div></div>
+    <div class="scard"><div class="lbl">İç Transfer</div><div class="val" id="c-internal">—</div></div>
+    <div class="scard"><div class="lbl">Mutabakat</div><div class="val" id="c-recon">—</div></div>
+    <div class="scard"><div class="lbl">Bütünlük</div><div class="val" id="c-integrity">—</div></div>
+  </div>
+
+  <section class="section" aria-labelledby="recon-h">
+    <h2 id="recon-h">Mutabakat Özeti</h2>
+    <div class="fresh-line" id="recon-fresh"></div>
+    <div id="recon-body" class="skeleton">Yükleniyor…</div>
+  </section>
+
+  <section class="section" aria-labelledby="ev-h">
+    <h2 id="ev-h">Defter Olayları</h2>
+    <div class="fresh-line" id="ev-fresh"></div>
+    <div class="toolbar" role="search">
+      <label>Ara <input type="search" id="f-search" maxlength="32" placeholder="varlık / olay kimliği"></label>
+      <label>Olay Türü
+        <select id="f-type"><option value="">Tümü</option>
+          <option>DEPOSIT</option><option>WITHDRAWAL</option>
+          <option>INTERNAL_TRANSFER</option><option>UNKNOWN</option>
+        </select></label>
+      <label>İç Transfer
+        <select id="f-internal"><option value="">Tümü</option>
+          <option value="true">Evet</option><option value="false">Hayır</option>
+        </select></label>
+      <label>Başlangıç <input type="date" id="f-from"></label>
+      <label>Bitiş <input type="date" id="f-to"></label>
+      <label>Sırala
+        <select id="f-sort">
+          <option value="timestamp">Zaman</option><option value="asset">Varlık</option>
+          <option value="amount">Tutar</option><option value="event_type">Olay</option>
+        </select></label>
+      <label>Yön
+        <select id="f-order"><option value="desc">Azalan</option><option value="asc">Artan</option></select></label>
+    </div>
+    <div class="table-wrap">
+      <table aria-describedby="ev-h">
+        <thead><tr>
+          <th scope="col">Zaman</th><th scope="col">Borsa</th>
+          <th scope="col">Olay</th><th scope="col">Varlık</th>
+          <th scope="col">Tutar</th><th scope="col">Ücret</th>
+          <th scope="col">Net</th><th scope="col">Mutabakat</th>
+          <th scope="col">Tekrar Durumu</th><th scope="col">Olay Kimliği</th>
+        </tr></thead>
+        <tbody id="ev-body"><tr><td colspan="10" class="skeleton">Yükleniyor…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="toolbar" aria-label="Sayfalama">
+      <button type="button" id="pg-prev">← Önceki</button>
+      <span id="pg-info" aria-live="polite">—</span>
+      <button type="button" id="pg-next">Sonraki →</button>
+    </div>
+  </section>
+
+  <section class="section" id="detail-box" style="display:none" aria-live="polite">
+    <h2>Olay Detayı (salt okunur)</h2>
+    <div id="detail-body"></div>
+  </section>
+{% endblock %}
+{% block page_script %}
+<script>
+"use strict";
+(function () {
+  var offset = 0, limit = 50, lastEvents = [];
+  function qs() {
+    var p = new URLSearchParams();
+    var s = document.getElementById("f-search").value.trim();
+    if (s) p.set("search", s);
+    var t = document.getElementById("f-type").value; if (t) p.set("event_type", t);
+    var it = document.getElementById("f-internal").value; if (it) p.set("internal_transfer", it);
+    var df = document.getElementById("f-from").value; if (df) p.set("date_from", df);
+    var dt = document.getElementById("f-to").value; if (dt) p.set("date_to", dt);
+    p.set("sort", document.getElementById("f-sort").value);
+    p.set("order", document.getElementById("f-order").value);
+    p.set("limit", String(limit)); p.set("offset", String(offset));
+    return p.toString();
+  }
+  async function loadSummary() {
+    try {
+      var r = await fetch("/api/v1/ledger/summary"); var d = await r.json();
+      document.getElementById("c-total").textContent = d.total_event_count;
+      document.getElementById("c-unique").textContent = d.unique_event_count;
+      document.getElementById("c-dup").textContent = d.duplicate_blocked_count;
+      document.getElementById("c-unknown").textContent = d.unknown_event_count;
+      document.getElementById("c-internal").textContent = d.internal_transfer_count;
+      var rc = document.getElementById("c-recon");
+      rc.textContent = d.reconciliation_status;
+      rc.className = "val " + (d.reconciliation_status === "PASS" ? "st-ok" :
+        d.reconciliation_status === "PARTIAL" ? "st-warn" : "st-err");
+      var ic = document.getElementById("c-integrity");
+      ic.textContent = d.integrity_status;
+      ic.className = "val " + (d.integrity_status === "PASS" ? "st-ok" :
+        d.integrity_status === "PARTIAL" ? "st-warn" : "st-err");
+      document.getElementById("ev-fresh").textContent =
+        "Durum: " + d.source_freshness + " · son doğrulama: " +
+        new Date(d.last_integrity_verification).toLocaleString("tr-TR") +
+        " · Salt okunur";
+      showWarnings(d.warnings || []);
+    } catch (_) {}
+  }
+  async function loadRecon() {
+    var box = document.getElementById("recon-body");
+    try {
+      var r = await fetch("/api/v1/ledger/reconciliation"); var d = await r.json();
+      if (!d.ok) { box.innerHTML = '<div class="empty-box">Mutabakat kanıtı bulunamadı.</div>'; return; }
+      var rows = Object.keys(d.differences || {}).map(function (a) {
+        return "<tr><td data-l='Varlık'>" + esc(a) + "</td>" +
+          "<td data-l='Mevcut'>" + trNum((d.current_balances || {})[a] || "0") + "</td>" +
+          "<td data-l='Defter'>" + trNum((d.ledger_derived_balances || {})[a] || "0") + "</td>" +
+          "<td data-l='Fark'>" + pnlCell(d.differences[a]) + "</td></tr>";
+      }).join("");
+      box.innerHTML =
+        "<p>Durum: <strong class='" + (d.status === "PASS" ? "st-ok" :
+          d.status === "PARTIAL" ? "st-warn" : "st-err") + "'>" + esc(d.status) +
+        "</strong> · Kapsam: " + esc(d.coverage_start || "—") + " → " +
+        esc(d.coverage_end || "—") + " · Hariç tutulan iç transfer: " +
+        esc(d.excluded_internal_transfer_count) + "</p>" +
+        (d.status === "PARTIAL" ? "<p class='st-warn' style='margin:6px 0'>⚠️ " +
+          esc((d.warnings || [])[0] || "") + "</p>" : "") +
+        (d.known_limitations ? "<p class='fresh-line'>" + esc(d.known_limitations) + "</p>" : "") +
+        "<div class='table-wrap'><table><thead><tr><th scope='col'>Varlık</th>" +
+        "<th scope='col'>Mevcut Bakiye</th><th scope='col'>Defter Bakiyesi</th>" +
+        "<th scope='col'>Fark</th></tr></thead><tbody>" + rows + "</tbody></table></div>" +
+        "<p class='fresh-line'>Açılış bakiyesi üretilmedi; kayıtlar düzenlenemez (ekle-yalnız defter).</p>";
+      document.getElementById("recon-fresh").textContent =
+        "Kanıt: " + esc(d.evidence_run_id || "—") + " · hesaplama: " +
+        (d.calculated_at ? new Date(d.calculated_at).toLocaleString("tr-TR") : "—");
+    } catch (_) { box.innerHTML = '<div class="empty-box">Mutabakat verisi alınamadı.</div>'; }
+  }
+  function showDetail(idx) {
+    var e = lastEvents[idx]; if (!e) return;
+    var box = document.getElementById("detail-box");
+    document.getElementById("detail-body").innerHTML =
+      "<dl style='display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:.85rem'>" +
+      [["Olay Kimliği", e.event_id], ["Borsa", e.exchange],
+       ["Orijinal Tür", e.original_event_type], ["Normalize Tür", e.normalized_event_type],
+       ["Varlık", e.asset], ["Tutar", e.amount], ["Ücret", e.fee], ["Net", e.net_amount],
+       ["Zaman", e.timestamp_iso], ["Kaynak İşlem (maskeli)", e.source_transaction_id_masked],
+       ["Yük Özeti (SHA-256)", e.raw_payload_hash], ["Mutabakat", e.reconciliation_state],
+       ["Alım Zamanı", e.ingestion_time], ["Tekrar Durumu", e.duplicate_status],
+       ["İç Transfer", e.internal_transfer ? "Evet" : "Hayır"], ["Kaynak", e.source]]
+      .map(function (p) { return "<dt style='color:var(--muted)'>" + esc(p[0]) +
+        "</dt><dd style='overflow-wrap:anywhere'>" + esc(p[1]) + "</dd>"; }).join("") + "</dl>" +
+      "<button type='button' onclick=\"document.getElementById('detail-box').style.display='none'\">Kapat</button>";
+    box.style.display = "block"; box.scrollIntoView({ behavior: "smooth" });
+  }
+  async function loadEvents() {
+    var body = document.getElementById("ev-body");
+    try {
+      var r = await fetch("/api/v1/ledger/events?" + qs());
+      if (!r.ok) { body.innerHTML = '<tr><td colspan="10" class="empty-box">Geçersiz filtre.</td></tr>'; return; }
+      var d = await r.json();
+      if (!d.ok) { body.innerHTML = '<tr><td colspan="10" class="empty-box">Defter kaynağı kullanılamıyor.</td></tr>'; return; }
+      lastEvents = d.events;
+      if (!d.events.length) {
+        body.innerHTML = '<tr><td colspan="10" class="empty-box">Gösterilecek defter olayı bulunamadı.</td></tr>';
+      } else {
+        body.innerHTML = d.events.map(function (e, i) {
+          return "<tr><td data-l='Zaman'>" + esc((e.timestamp_iso || "").replace("T", " ").slice(0, 19)) + "</td>" +
+            "<td data-l='Borsa'>" + esc(e.exchange) + "</td>" +
+            "<td data-l='Olay'>" + esc(e.normalized_event_type) + "</td>" +
+            "<td data-l='Varlık'>" + esc(e.asset) + "</td>" +
+            "<td data-l='Tutar'>" + trNum(e.amount) + "</td>" +
+            "<td data-l='Ücret'>" + trNum(e.fee) + "</td>" +
+            "<td data-l='Net'>" + trNum(e.net_amount) + "</td>" +
+            "<td data-l='Mutabakat'><span class='" +
+            (e.reconciliation_state === "PASS" ? "st-ok" : e.reconciliation_state === "PARTIAL" ? "st-warn" : "st-err") +
+            "'>" + esc(e.reconciliation_state) + "</span></td>" +
+            "<td data-l='Tekrar'>" + esc(e.duplicate_status) + "</td>" +
+            "<td data-l='Kimlik'><button type='button' class='sort' data-i='" + i +
+            "' aria-label='Olay detayını aç'>" + esc(e.event_id.slice(0, 14)) + "…</button></td></tr>";
+        }).join("");
+        body.querySelectorAll("button[data-i]").forEach(function (b) {
+          b.addEventListener("click", function () { showDetail(Number(b.dataset.i)); });
+        });
+      }
+      var pg = d.pagination;
+      document.getElementById("pg-info").textContent =
+        (pg.offset + 1) + "–" + Math.min(pg.offset + pg.limit, pg.total) + " / " + pg.total;
+      document.getElementById("pg-prev").disabled = pg.offset === 0;
+      document.getElementById("pg-next").disabled = !pg.has_more;
+      document.getElementById("export-link").href = "/api/v1/ledger/export.csv?" + qs();
+      markRefreshed();
+    } catch (_) {
+      body.innerHTML = '<tr><td colspan="10" class="empty-box">Veri alınamadı.</td></tr>';
+    }
+  }
+  function reloadAll() { return Promise.all([loadSummary(), loadRecon(), loadEvents()]); }
+  ["f-search", "f-type", "f-internal", "f-from", "f-to", "f-sort", "f-order"].forEach(function (id) {
+    document.getElementById(id).addEventListener("change", function () { offset = 0; loadEvents(); });
+  });
+  document.getElementById("f-search").addEventListener("input", function () {
+    clearTimeout(window.__lt); window.__lt = setTimeout(function () { offset = 0; loadEvents(); }, 350);
+  });
+  document.getElementById("pg-prev").addEventListener("click", function () {
+    offset = Math.max(0, offset - limit); loadEvents(); });
+  document.getElementById("pg-next").addEventListener("click", function () {
+    offset += limit; loadEvents(); });
+  wireRefresh(reloadAll);
+  reloadAll();
+})();
+</script>
+{% endblock %}

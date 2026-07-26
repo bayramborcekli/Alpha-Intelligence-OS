@@ -1472,7 +1472,9 @@ def api_v1_refresh():
     temizler ve yeni GET istekleri başlatır. CSRF korumalıdır (Flask-WTF
     POST'ları otomatik doğrular). Hiçbir borsa yazma ucu çağrılmaz."""
     import dashboard_api as dapi
+    import ledger_api as la
     cleared = dapi.invalidate_caches()
+    cleared += la.invalidate_ledger_caches()   # defter/denetim önbellekleri
     ip = auth.get_client_ip()
     slog.log_event(slog.STARTUP, ip=ip,
                    detail=f"manual refresh: {len(cleared)} cache cleared")
@@ -1616,6 +1618,161 @@ def positions_page():
 @app.get("/orders")
 def orders_page():
     return _render_workspace("orders.html", "orders")
+
+
+# ── Mission 1400.4 — Defter / Denetim / Raporlar (salt okunur) ──────────────
+
+@app.get("/api/v1/ledger/events")
+def api_v1_ledger_events():
+    import ledger_api as la
+    try:
+        f = la.parse_ledger_filters(request.args)
+    except la.InvalidParameter as e:
+        return _invalid_param(e.name)
+    return _dash_json(la.ledger_events(f))
+
+
+@app.get("/api/v1/ledger/summary")
+def api_v1_ledger_summary():
+    import ledger_api as la
+    return _dash_json(la.ledger_summary())
+
+
+@app.get("/api/v1/ledger/integrity")
+def api_v1_ledger_integrity():
+    import ledger_api as la
+    result = la.ledger_integrity()
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   detail=f"integrity check: {result['status']}")
+    return _dash_json({"ok": result["status"] != "FAIL", **result})
+
+
+@app.get("/api/v1/ledger/reconciliation")
+def api_v1_ledger_reconciliation():
+    import ledger_api as la
+    return _dash_json(la.ledger_reconciliation())
+
+
+@app.get("/api/v1/audit/events")
+def api_v1_audit_events():
+    # Denetim satırlarını getirmek YENİ denetim kaydı üretmez (rekürsiyon yok)
+    import ledger_api as la
+    try:
+        f = la.parse_audit_filters(request.args)
+    except la.InvalidParameter as e:
+        return _invalid_param(e.name)
+    return _dash_json(la.audit_events(f))
+
+
+@app.get("/api/v1/audit/summary")
+def api_v1_audit_summary():
+    import ledger_api as la
+    return _dash_json(la.audit_summary())
+
+
+@app.get("/api/v1/reports")
+def api_v1_reports():
+    import ledger_api as la
+    try:
+        limit, offset = la.parse_page(request.args, la.REPORTS_DEFAULT_LIMIT,
+                                      la.REPORTS_MAX_LIMIT)
+    except la.InvalidParameter as e:
+        return _invalid_param(e.name)
+    return _dash_json(la.reports_list(limit, offset))
+
+
+@app.get("/api/v1/reports/<report_id>")
+def api_v1_report_detail(report_id: str):
+    import ledger_api as la
+    d = la.report_detail(report_id)
+    if d is None:
+        return jsonify({"ok": False,
+                        "error": {"code": "REPORT_NOT_FOUND",
+                                  "message": "Rapor bulunamadı."}}), 404
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   detail=f"report viewed: {report_id}")
+    return _dash_json(d)
+
+
+@app.get("/api/v1/reports/<report_id>/download")
+def api_v1_report_download(report_id: str):
+    import ledger_api as la
+    r = la.report_download(report_id)
+    if r is None:
+        return jsonify({"ok": False,
+                        "error": {"code": "REPORT_NOT_FOUND",
+                                  "message": "Rapor bulunamadı."}}), 404
+    body, fname = r
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   detail=f"report downloaded: {report_id}")
+    return app.response_class(
+        body, mimetype="application/json; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={fname}",
+                 "Cache-Control": "no-store, private"})
+
+
+@app.get("/api/v1/ledger/export.csv")
+def api_v1_ledger_export():
+    import ledger_api as la
+    try:
+        f = la.parse_ledger_filters(request.args)
+    except la.InvalidParameter as e:
+        return _invalid_param(e.name)
+    try:
+        body, fname = la.ledger_csv(f)
+    except RuntimeError:
+        # Bütünlük FAIL → dışa aktarma kapalı (fail-closed)
+        return jsonify({"ok": False,
+                        "error": {"code": "LEDGER_INTEGRITY_FAILED",
+                                  "message": "Bütünlük doğrulanamadı; dışa "
+                                             "aktarma kapalı."}}), 503
+    except Exception:
+        return _api_error("CSV üretimi başarısız oldu.", 500)
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   detail="csv export: ledger")
+    return app.response_class(
+        body, mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={fname}",
+                 "Cache-Control": "no-store, private"})
+
+
+@app.get("/api/v1/audit/export.csv")
+def api_v1_audit_export():
+    import ledger_api as la
+    try:
+        f = la.parse_audit_filters(request.args)
+    except la.InvalidParameter as e:
+        return _invalid_param(e.name)
+    try:
+        body, fname = la.audit_csv(f)
+    except RuntimeError:
+        return jsonify({"ok": False,
+                        "error": {"code": "AUDIT_UNAVAILABLE",
+                                  "message": "Denetim günlüğü okunamadı."
+                                  }}), 503
+    except Exception:
+        return _api_error("CSV üretimi başarısız oldu.", 500)
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   detail="csv export: audit")
+    return app.response_class(
+        body, mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={fname}",
+                 "Cache-Control": "no-store, private"})
+
+
+@app.get("/ledger")
+def ledger_page():
+    return _render_workspace("ledger.html", "ledger")
+
+
+@app.get("/audit")
+def audit_page():
+    return _render_workspace("audit.html", "audit")
+
+
+@app.get("/reports")
+def reports_page():
+    return _render_workspace("reports.html", "reports")
 
 
 @app.get("/api/exchange/summary")

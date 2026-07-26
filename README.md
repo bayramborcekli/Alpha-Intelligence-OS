@@ -12,6 +12,9 @@ açık talimatla etkinleştirilebilir.
   tazelik politikası, yazma sayaçları — Mission 1400.2)
 - `portfolio_api.py` — Portföy/Pozisyon/Emir servis katmanı + güvenli CSV
   dışa aktarım (formül-enjeksiyon korumalı — Mission 1400.3)
+- `ledger_api.py` — Defter/Denetim/Rapor servis katmanı: ekle-yalnız defter
+  görünümü, bütünlük doğrulaması, 1310B mutabakat kanıtı, sabit rapor kayıt
+  defteri, güvenli CSV (Mission 1400.4; PDF ertelendi)
 - `tools/` — görev (mission) betikleri
 - `tests/` — test paketi (`python -m pytest tests/ -q`)
 

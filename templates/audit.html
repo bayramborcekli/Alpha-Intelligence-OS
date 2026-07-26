@@ -1,0 +1,139 @@
+{% extends "dash_base.html" %}
+{% block title %}Denetim{% endblock %}
+{% block heading %}🛡️ Denetim{% endblock %}
+{% block subheading %}Uygulama güvenlik olayları (finansal defterden ayrıdır){% endblock %}
+{% block header_extra %}
+  <a class="export-btn" id="export-link" href="/api/v1/audit/export.csv"
+     style="border:1px solid var(--accent);border-radius:8px;padding:7px 12px;font-size:.84rem;">⬇ CSV Dışa Aktar</a>
+{% endblock %}
+{% block content %}
+  <div class="summary-cards" aria-live="polite">
+    <div class="scard"><div class="lbl">Toplam Olay</div><div class="val" id="c-total">—</div></div>
+    <div class="scard"><div class="lbl">Başarılı Giriş</div><div class="val" id="c-ok">—</div></div>
+    <div class="scard"><div class="lbl">Başarısız Giriş</div><div class="val" id="c-fail">—</div></div>
+    <div class="scard"><div class="lbl">Yetki Reddi</div><div class="val" id="c-deny">—</div></div>
+    <div class="scard"><div class="lbl">CSRF Reddi</div><div class="val" id="c-csrf">—</div></div>
+    <div class="scard"><div class="lbl">Dışa Aktarım</div><div class="val" id="c-export">—</div></div>
+    <div class="scard"><div class="lbl">Depo Durumu</div><div class="val" id="c-store">—</div></div>
+  </div>
+
+  <section class="section" aria-labelledby="au-h">
+    <h2 id="au-h">Denetim Olayları</h2>
+    <div class="fresh-line" id="au-fresh">Salt okunur · kayıtlar değiştirilemez ve silinemez</div>
+    <div class="toolbar" role="search">
+      <label>Ara <input type="search" id="f-search" maxlength="32" placeholder="olay / açıklama"></label>
+      <label>Sonuç
+        <select id="f-result"><option value="">Tümü</option>
+          <option value="OK">Başarılı</option><option value="FAIL">Başarısız</option></select></label>
+      <label>Önem
+        <select id="f-sev"><option value="">Tümü</option>
+          <option>INFO</option><option>WARN</option><option>ERROR</option></select></label>
+      <label>Başlangıç <input type="date" id="f-from"></label>
+      <label>Bitiş <input type="date" id="f-to"></label>
+      <label>Yön
+        <select id="f-order"><option value="desc">Yeni → Eski</option><option value="asc">Eski → Yeni</option></select></label>
+    </div>
+    <div class="table-wrap">
+      <table aria-describedby="au-h">
+        <thead><tr>
+          <th scope="col">Zaman</th><th scope="col">Olay</th>
+          <th scope="col">Sonuç</th><th scope="col">Kaynak</th>
+          <th scope="col">Sayfa</th><th scope="col">İstemci (maskeli)</th>
+          <th scope="col">Önem</th><th scope="col">Güvenli Açıklama</th>
+        </tr></thead>
+        <tbody id="au-body"><tr><td colspan="8" class="skeleton">Yükleniyor…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="toolbar" aria-label="Sayfalama">
+      <button type="button" id="pg-prev">← Önceki</button>
+      <span id="pg-info" aria-live="polite">—</span>
+      <button type="button" id="pg-next">Sonraki →</button>
+    </div>
+  </section>
+{% endblock %}
+{% block page_script %}
+<script>
+"use strict";
+(function () {
+  var offset = 0, limit = 50;
+  function qs() {
+    var p = new URLSearchParams();
+    var s = document.getElementById("f-search").value.trim(); if (s) p.set("search", s);
+    var rv = document.getElementById("f-result").value; if (rv) p.set("result", rv);
+    var sv = document.getElementById("f-sev").value; if (sv) p.set("severity", sv);
+    var df = document.getElementById("f-from").value; if (df) p.set("date_from", df);
+    var dt = document.getElementById("f-to").value; if (dt) p.set("date_to", dt);
+    p.set("order", document.getElementById("f-order").value);
+    p.set("limit", String(limit)); p.set("offset", String(offset));
+    return p.toString();
+  }
+  async function loadSummary() {
+    try {
+      var d = await (await fetch("/api/v1/audit/summary")).json();
+      document.getElementById("c-total").textContent = d.total_event_count ?? "—";
+      document.getElementById("c-ok").textContent = d.login_success_count ?? "—";
+      document.getElementById("c-fail").textContent = d.login_failure_count ?? "—";
+      document.getElementById("c-deny").textContent = d.authorization_denial_count ?? "—";
+      document.getElementById("c-csrf").textContent = d.csrf_rejection_count ?? "—";
+      document.getElementById("c-export").textContent = d.export_count ?? "—";
+      var st = document.getElementById("c-store");
+      st.textContent = d.storage_status || "—";
+      st.className = "val " + (d.storage_status === "GÜNCEL" ? "st-ok" : "st-warn");
+      if (d.latest_event)
+        document.getElementById("au-fresh").textContent =
+          "Salt okunur · son olay: " + new Date(d.latest_event).toLocaleString("tr-TR");
+      showWarnings(d.warnings || []);
+    } catch (_) {}
+  }
+  async function loadEvents() {
+    var body = document.getElementById("au-body");
+    try {
+      var r = await fetch("/api/v1/audit/events?" + qs());
+      if (!r.ok) { body.innerHTML = '<tr><td colspan="8" class="empty-box">Geçersiz filtre.</td></tr>'; return; }
+      var d = await r.json();
+      if (!d.ok) { body.innerHTML = '<tr><td colspan="8" class="empty-box">Denetim günlüğü kullanılamıyor.</td></tr>'; return; }
+      if (!d.events.length) {
+        body.innerHTML = '<tr><td colspan="8" class="empty-box">Gösterilecek denetim olayı bulunamadı.</td></tr>';
+      } else {
+        body.innerHTML = d.events.map(function (e) {
+          return "<tr><td data-l='Zaman'>" + esc(e.timestamp.replace("T", " ").replace("Z", "")) + "</td>" +
+            "<td data-l='Olay'>" + esc(e.event_type) + "</td>" +
+            "<td data-l='Sonuç'><span class='" + (e.result === "OK" ? "st-ok" : "st-err") + "'>" +
+            (e.result === "OK" ? "Başarılı" : "Başarısız") + "</span></td>" +
+            "<td data-l='Kaynak'>" + esc(e.source) + "</td>" +
+            "<td data-l='Sayfa'>" + esc(e.page || "—") + "</td>" +
+            "<td data-l='İstemci'>" + esc(e.client_metadata_masked || "—") + "</td>" +
+            "<td data-l='Önem'><span class='" +
+            (e.severity === "ERROR" ? "st-err" : e.severity === "WARN" ? "st-warn" : "st-neutral") +
+            "'>" + esc(e.severity) + "</span></td>" +
+            "<td data-l='Açıklama' style='white-space:normal;overflow-wrap:anywhere'>" +
+            esc(e.message_code || "—") + "</td></tr>";
+        }).join("");
+      }
+      var pg = d.pagination;
+      document.getElementById("pg-info").textContent =
+        (pg.total ? pg.offset + 1 : 0) + "–" + Math.min(pg.offset + pg.limit, pg.total) + " / " + pg.total;
+      document.getElementById("pg-prev").disabled = pg.offset === 0;
+      document.getElementById("pg-next").disabled = !pg.has_more;
+      document.getElementById("export-link").href = "/api/v1/audit/export.csv?" + qs();
+      markRefreshed();
+    } catch (_) {
+      body.innerHTML = '<tr><td colspan="8" class="empty-box">Veri alınamadı.</td></tr>';
+    }
+  }
+  function reloadAll() { return Promise.all([loadSummary(), loadEvents()]); }
+  ["f-result", "f-sev", "f-from", "f-to", "f-order"].forEach(function (id) {
+    document.getElementById(id).addEventListener("change", function () { offset = 0; loadEvents(); });
+  });
+  document.getElementById("f-search").addEventListener("input", function () {
+    clearTimeout(window.__at); window.__at = setTimeout(function () { offset = 0; loadEvents(); }, 350);
+  });
+  document.getElementById("pg-prev").addEventListener("click", function () {
+    offset = Math.max(0, offset - limit); loadEvents(); });
+  document.getElementById("pg-next").addEventListener("click", function () {
+    offset += limit; loadEvents(); });
+  wireRefresh(reloadAll);
+  reloadAll();
+})();
+</script>
+{% endblock %}
