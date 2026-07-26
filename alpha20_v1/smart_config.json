@@ -12,8 +12,7 @@
   "manual_list": [
     "BTCUSDT",
     "ETHUSDT",
-    "SOLUSDT",
-    "XRPUSDT"
+    "SOLUSDT"
   ],
   "last_analysis_time": "2026-07-26T05:56:42.168403+00:00",
   "analysis_running": false,
