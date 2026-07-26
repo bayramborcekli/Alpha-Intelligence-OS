@@ -11,9 +11,10 @@ import pytest
 
 import intelligence_models as im
 from intelligence_models import (
-    ALLOWED_EVIDENCE_FIELDS, ConfidenceLevel, DataFreshness,
-    IntelligenceEvidence, IntelligenceInsight, IntelligenceStatus,
-    IntelligenceSummary, to_json,
+    ALLOWED_EVIDENCE_FIELDS, UNKNOWN_TEXT, ConfidenceLevel, DataFreshness,
+    IntelligenceEvidence, IntelligenceImpact, IntelligenceInsight,
+    IntelligenceObservation, IntelligenceReason, IntelligenceRecommendation,
+    IntelligenceStatus, IntelligenceSummary, to_json,
 )
 
 UTC_NOW = datetime(2026, 7, 26, 12, 0, 0, tzinfo=timezone.utc)
@@ -191,6 +192,33 @@ class TestDeterminism:
         j = to_json(_insight(title="Düşüş ve marj — ölçüldü ğüşiöçİ"))
         assert "ğüşiöçİ" in j          # ensure_ascii=False
         assert json.loads(j)["title"].endswith("ğüşiöçİ")
+
+
+class TestTextComponents:
+    def test_typed_components_accepted_and_normalized(self):
+        i = _insight(
+            observation=IntelligenceObservation("Marj %75."),
+            reason=IntelligenceReason("Bakiye düşük."),
+            impact=IntelligenceImpact("Tampon daralır."),
+            recommendation=IntelligenceRecommendation("İzlemeniz önerilir."))
+        d = i.to_dict()
+        assert d["observation"] == "Marj %75."
+        assert d["recommendation"] == "İzlemeniz önerilir."
+        assert isinstance(i.observation, str)   # düz metne normalize
+
+    def test_empty_or_unknown_becomes_dash(self):
+        assert IntelligenceObservation("").text == UNKNOWN_TEXT
+        assert IntelligenceReason(None).text == UNKNOWN_TEXT
+        assert IntelligenceRecommendation("   ").text == UNKNOWN_TEXT
+        d = _insight(observation="", impact="  ").to_dict()
+        assert d["observation"] == UNKNOWN_TEXT
+        assert d["impact"] == UNKNOWN_TEXT
+
+    def test_wrong_type_rejected(self):
+        with pytest.raises(TypeError):
+            _insight(observation=123)
+        with pytest.raises(TypeError):
+            _insight(recommendation=["liste"])
 
 
 class TestSafety:

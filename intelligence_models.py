@@ -199,6 +199,51 @@ class IntelligenceEvidence:
         }
 
 
+# ── İçgörü metin bileşenleri ────────────────────────────────────────────────
+# Düz metin (Türkçe varsayılan) taşıyan tipli sarmalayıcılar. Bilinmeyen
+# metin "—" ile temsil edilir; boş/None metin otomatik "—" olur.
+
+UNKNOWN_TEXT = "—"
+
+
+@dataclass(frozen=True)
+class _TextComponent:
+    text: str = UNKNOWN_TEXT
+
+    def __post_init__(self):
+        if self.text is None or not isinstance(self.text, str) \
+                or not self.text.strip():
+            object.__setattr__(self, "text", UNKNOWN_TEXT)
+
+    def __str__(self) -> str:
+        return self.text
+
+
+class IntelligenceObservation(_TextComponent):
+    """Gözlem: doğrulanmış veriden ne görüldü."""
+
+
+class IntelligenceReason(_TextComponent):
+    """Neden: gözlemin deterministik gerekçesi."""
+
+
+class IntelligenceImpact(_TextComponent):
+    """Etki: portföy/risk üzerindeki olası sonucu (tavsiye dilinde)."""
+
+
+class IntelligenceRecommendation(_TextComponent):
+    """Öneri METNİ — yalnızca tavsiye; işlem talimatı DEĞİLDİR."""
+
+
+def _text_of(v, cls) -> str:
+    """str veya ilgili bileşen kabul eder; başka tip reddedilir."""
+    if isinstance(v, cls):
+        return v.text
+    if isinstance(v, str):
+        return cls(v).text
+    raise TypeError(f"{cls.__name__} veya düz metin bekleniyor")
+
+
 _INSIGHT_CATEGORIES = frozenset({
     "PORTFOLIO", "RISK", "EXPOSURE", "CONCENTRATION", "MARGIN",
     "DATA_QUALITY", "LEDGER", "GENERAL"})
@@ -226,6 +271,17 @@ class IntelligenceInsight:
             raise ValueError("code: ALFANUMERİK_KOD biçiminde zorunlu")
         if self.category not in _INSIGHT_CATEGORIES:
             raise ValueError(f"bilinmeyen kategori: {self.category}")
+        # Metin bileşenleri: str veya tipli sarmalayıcı kabul edilir,
+        # her zaman düz metne normalize edilir (boş → "—").
+        object.__setattr__(self, "observation",
+                           _text_of(self.observation, IntelligenceObservation))
+        object.__setattr__(self, "reason",
+                           _text_of(self.reason, IntelligenceReason))
+        object.__setattr__(self, "impact",
+                           _text_of(self.impact, IntelligenceImpact))
+        object.__setattr__(self, "recommendation",
+                           _text_of(self.recommendation,
+                                    IntelligenceRecommendation))
         object.__setattr__(self, "confidence",
                            ConfidenceLevel(self.confidence))
         object.__setattr__(self, "evidence", tuple(self.evidence))
