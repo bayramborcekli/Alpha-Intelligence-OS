@@ -62,6 +62,27 @@ yapısal değerler canonical JSON metnine düzleştirilir). Başlıklar:
 Workspace GET API'lerini kullanır; işlem düğmesi yoktur; yanıt
 `no-store, private` taşır. Ayrıntı: `docs/RELEASE_NOTES_1500_2.md`.
 
+## Automation API (Mission 1600, `/api/automation/*`)
+
+Kontrollü otomatik Intelligence çalıştırma katmanı. Kimlik doğrulamalı;
+API yanıtları (status/run/export) `Cache-Control: no-store, private`
+taşır. Her ucun `/api/v1/...` takma adı vardır. Ayrıntılı sözleşme:
+`docs/automation.md`.
+
+| Uç | Notlar |
+|---|---|
+| `GET /api/automation/status` | Sterile durum görünümü: `enabled`, `interval_minutes`, `state`, `running`, `run_id`, `last_run_started_at`, `last_run_finished_at`, `last_run_status`, `last_error_code`, `last_snapshot_recorded`, `next_due`; bilinmeyen → `null` |
+| `POST /api/automation/run` | Manuel tek koşu; CSRF zorunlu; `200 {ran, appended, error_code, final_state, run_id}` · `409 DUPLICATE_RUN` · `503 AUTOMATION_DISABLED` · `500 AUTOMATION_ERROR` (sterile) |
+| `GET /api/automation/export/status` | `format=json\|csv` (varsayılan json; başka değer → `400 INVALID_FORMAT`); status ile birebir alan beyaz listesi; JSON deterministik, CSV formül-enjeksiyon korumalı (UTF-8 BOM, CRLF, `field,value`); `Content-Disposition: attachment` (statik ad), `nosniff`; kaynak okunamazsa `503 STATUS_UNAVAILABLE` |
+
+Enable/disable ve history export uçları YOKTUR (ortam tabanlı
+yapılandırma; çalışma geçmişi modeli yok — `docs/automation.md` §8).
+
+### Automation UI
+`GET /automation` — oturum yönlendirmeli sayfa; yalnız yukarıdaki status
+ve run uçlarını kullanır; 30 sn status polling; yalnız "Şimdi Çalıştır" +
+"Yenile" eylemleri.
+
 ## Diğer salt-okunur yüzeyler (1400 serisi)
 - `GET /api/risk/{summary,exposure,alerts,history,simulator}` — Risk Motoru
   (simülatörün POST varyantı yalnızca YEREL hesap yapar; borsaya istek yok)

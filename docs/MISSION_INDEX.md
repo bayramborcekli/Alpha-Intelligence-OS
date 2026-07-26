@@ -47,3 +47,21 @@ Toplam yeni 1500.1 testi: **212** · Kapanış toplamı: **805 PASS**
 
 Toplam yeni 1500.2 testi: **164** · Kapanış toplamı: **969 PASS / 0 FAIL / 0 SKIP**
 Ayrıntı: `docs/RELEASE_NOTES_1500_2.md`
+
+## Mission 1600 — Agent dökümü
+
+| Agent | Görev | Commit | Test |
+|---|---|---|---|
+| 01 | Keşif/mimari plan | — (plan) | — |
+| 02 | Automation Core (`automation_engine.py`) | `454bff2` | 31 |
+| 03 | Automation Service (`automation_service.py`) | `56d5abc` | 17 |
+| 04 | Automation API + Scheduler lifecycle | `34d9f4e` | 21 |
+| 05 | Automation UI (`/automation`) | `1f04372` | 20 |
+| 06 | Export (`automation_export_api.py`) | `ac81459` | 27 |
+| 07 | Güvenlik doğrulaması | `ccbe21f` | 38 |
+| 08 | Tam regresyon | — (kod değişikliği yok) | — |
+| 09 | Dokümantasyon (`docs/automation.md`) | (bu commit) | — |
+
+Toplam yeni 1600 testi (Agent 09 dahil değil): **154** ·
+Agent 08 kapanışı: **1134 PASS / 0 FAIL / 0 SKIP**
+Ayrıntı: `docs/automation.md`
