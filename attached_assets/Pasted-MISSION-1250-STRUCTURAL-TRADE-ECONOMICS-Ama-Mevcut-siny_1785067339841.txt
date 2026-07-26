@@ -1,0 +1,83 @@
+MISSION 1250 — STRUCTURAL TRADE ECONOMICS
+
+Amaç:
+Mevcut sinyal akışını değiştirmeden, stop mesafesi ile fee yükü arasındaki
+yapısal ilişkiyi kontrollü biçimde ölçmek.
+
+Değişmeyecekler:
+- Gerçek sinyal akışı
+- Score threshold >=65
+- Fee safety factor = 2.0
+- Risk yüzdesi
+- Veri dönemi
+- Başlangıç state'i
+- Paper-only güvenliği
+- Ledger, PnL ve risk oracle'ları
+
+Kontrollü varyantlar:
+A) Mevcut ATR stop çarpanı — baseline
+B) Daha geniş ATR stop çarpanı 1
+C) Daha geniş ATR stop çarpanı 2
+D) Minimum stop-distance / entry-price eşiği
+
+Kesin değerleri mevcut motor konfigürasyonundan türet.
+Geniş bir parametre taraması yapma.
+En fazla 4 önceden belirlenmiş varyant kullan.
+
+Her varyant için raporla:
+- Eligible signals
+- Executed / rejected trades
+- Average stop distance %
+- Average notional
+- Average position quantity
+- Average gross winner
+- Average gross loser
+- Average fee
+- Fee / gross profit
+- Fee / expected risk
+- Win rate
+- Net PnL
+- Average net PnL per trade
+- Profit factor
+- Expectancy in R
+- Max drawdown
+- Ledger mismatches
+- PnL mismatches
+- Risk violations
+- Exceptions
+
+Ek analiz:
+- Stop genişledikçe notional gerçekten düşüyor mu?
+- Fee / expected risk oranı iyileşiyor mu?
+- Daha geniş stop yalnızca kaybı büyütüyor mu, yoksa ekonomik yapıyı düzeltiyor mu?
+- Kazanan işlemlerin MFE'si mevcut stop yapısını destekliyor mu?
+- Kaybeden işlemlerin MAE dağılımı stopların fazla dar olduğunu gösteriyor mu?
+
+Karar ilkesi:
+En yüksek net PnL varyantını otomatik seçme.
+Aşağıdakileri birlikte değerlendir:
+- işlem başına expectancy
+- profit factor
+- drawdown
+- fee / gross profit
+- fee / risk
+- işlem sayısı
+- sonuçların deterministikliği
+
+PASS:
+- Teknik bütünlük tüm varyantlarda korunur.
+- Stop mesafesi ile fee yükü arasındaki ilişki açıkça ölçülür.
+- Veri destekli olarak:
+  KEEP BASELINE
+  veya
+  ADOPT CANDIDATE X
+  veya
+  NO VIABLE CONFIGURATION
+  kararı verilir.
+
+Yasak:
+- Sonuçlara bakarak yeni varyant üretme
+- Score threshold değiştirme
+- Saat/gün/rejim filtresi ekleme
+- Risk artırma
+- Live trading açma
