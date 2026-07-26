@@ -29,7 +29,9 @@ yalnızca gerekli secret ADLARI listelenir (değerler asla gösterilmez).
 Tüm özellik bayrakları kapalıdır: `ALPHA_ENABLE_DRY_RUN`,
 `ALPHA_ENABLE_LIVE_TRADING`, `ALPHA_ENABLE_TRANSFERS`,
 `ALPHA_ENABLE_WITHDRAWALS`, `ALPHA_ENABLE_INTELLIGENCE` = `false`.
-Not: `ALPHA_ENABLE_INTELLIGENCE` tanımsız/geçersizken de KAPALIDIR;
+Not: Intelligence bayrağı (`ALPHA_INTELLIGENCE_ENABLED`; eski ad
+`ALPHA_ENABLE_INTELLIGENCE` de desteklenir) tanımsız/geçersizken de
+KAPALIDIR;
 Intelligence API'lerini kullanmak için `true` yapılmalıdır (salt-okunur,
 tavsiye niteliğinde uçlar: `GET /api/intelligence/*`).
 **Canlı emir yürütme devre dışıdır**

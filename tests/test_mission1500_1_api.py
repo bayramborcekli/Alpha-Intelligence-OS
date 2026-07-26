@@ -187,7 +187,7 @@ class TestFeatureFlag:
                             "read_only": True, "advisory_only": True,
                             "status": "UNAVAILABLE",
                             "message": "Intelligence özelliği kapalı "
-                                       "(ALPHA_ENABLE_INTELLIGENCE)."}, path
+                                       "(ALPHA_INTELLIGENCE_ENABLED)."}, path
 
     def test_missing_flag_defaults_off(self, client, monkeypatch):
         monkeypatch.delenv("ALPHA_ENABLE_INTELLIGENCE", raising=False)

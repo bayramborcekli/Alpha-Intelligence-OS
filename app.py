@@ -1715,8 +1715,8 @@ def _get_intel_service():
 
 
 def _intel_enabled() -> bool:
-    import alpha_platform as ap
-    return ap.feature_flags().get("ALPHA_ENABLE_INTELLIGENCE", False)
+    import intelligence_settings
+    return intelligence_settings.get_settings()["enabled"]
 
 
 def _intel_json(fn):
@@ -1725,7 +1725,7 @@ def _intel_json(fn):
         resp = jsonify({"ok": True, "enabled": False, "read_only": True,
                         "advisory_only": True, "status": "UNAVAILABLE",
                         "message": "Intelligence özelliği kapalı "
-                                   "(ALPHA_ENABLE_INTELLIGENCE)."})
+                                   "(ALPHA_INTELLIGENCE_ENABLED)."})
         resp.headers["Cache-Control"] = "no-store, private"
         return resp
     try:
@@ -1776,6 +1776,23 @@ def api_intelligence_recommendations():
 @app.get("/api/v1/intelligence/status")
 def api_intelligence_status():
     return _intel_json(lambda: _get_intel_service().get_status())
+
+
+@app.get("/api/intelligence/settings")
+@app.get("/api/v1/intelligence/settings")
+def api_intelligence_settings():
+    """Etkili (doğrulanmış) Intelligence yapılandırması — salt-okunur.
+
+    Ham ortam değişkeni değerleri asla döndürülmez; yalnızca türetilmiş
+    etkili değerler ve doğrulama uyarı kodları gösterilir. Bayrak kapalı
+    olsa da operatörün nedenini görebilmesi için bu uç yanıt verir.
+    """
+    import intelligence_settings
+    s = intelligence_settings.get_settings()
+    resp = jsonify({"ok": True, "read_only": True, "advisory_only": True,
+                    "settings": s})
+    resp.headers["Cache-Control"] = "no-store, private"
+    return resp
 
 
 @app.get("/api/v1/executive/summary")
