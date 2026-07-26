@@ -128,6 +128,9 @@ class TestRouteSurface:
         "/coins/preset", "/login", "/settings", "/setup/hash",
         "/smart/analyze", "/smart/apply", "/smart/coin-action",
         "/smart/mode", "/smart/pin", "/smart/restore", "/smart/settings",
+        # Mission 1600 / Agent 04: Automation manuel tetik (CSRF+auth
+        # korumalı; append yalnız Core üzerinden — bilinçli genişletme)
+        "/api/automation/run", "/api/v1/automation/run",
     }
 
     def test_no_new_write_routes(self):

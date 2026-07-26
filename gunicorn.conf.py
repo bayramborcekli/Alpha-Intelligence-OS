@@ -47,6 +47,11 @@ def post_fork(server, worker):
     cfg0 = _app._get_main_config()
     if cfg0.get("adaptive_system", {}).get("enabled", False):
         _app.ac.start_controller_loop()
+    # Mission 1600: Intelligence Automation zamanlayıcısı.
+    # Varsayılan kapalı; yalnız ALPHA_AUTOMATION_ENABLED="true" ise
+    # başlar. Başlatma hatası worker'ı çökertmez; süreçler-arası tek
+    # koşu garantisi Core'daki flock kilidindedir.
+    _app.start_automation_scheduler()
 
 
 def worker_exit(server, worker):

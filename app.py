@@ -1796,6 +1796,108 @@ def api_intelligence_settings():
     return resp
 
 
+# ── Mission 1600 / Agent 04: Automation Management API ──────────────
+# Durum: GET (sterile, read-only). Tetik: POST (CSRFProtect + _security_gate).
+# Route katmanı incedir: iş mantığı automation_service/automation_engine'de
+# kalır; append_snapshot ve IntelligenceService'e doğrudan erişilmez.
+# Enable/disable uçları BİLİNÇLİ olarak yok: yapılandırma ortam tabanlıdır
+# (ALPHA_AUTOMATION_ENABLED), kalıcı runtime config modeli bulunmuyor.
+
+_automation_thread = None
+_automation_thread_lock = threading.Lock()
+
+
+def start_automation_scheduler():
+    """Automation zamanlayıcısını güvenli biçimde başlatır (post_fork).
+
+    - Varsayılan KAPALI: yalnız ALPHA_AUTOMATION_ENABLED literal "true"
+      ise loop başlar.
+    - Aynı process'te ikinci loop başlatılmaz (kilitli tekil guard).
+    - Başlatma hatası uygulamayı asla çökertmez (sterile log).
+    - Süreçler-arası duplicate execution yine Core'daki flock ile önlenir
+      (her worker'da bir loop çalışır; tek koşu garantisi kilittedir).
+    """
+    global _automation_thread
+    try:
+        import automation_engine
+        import automation_service
+        if not automation_engine.load_config()["enabled"]:
+            return None
+        with _automation_thread_lock:
+            if _automation_thread is not None and _automation_thread.is_alive():
+                return _automation_thread
+            _automation_thread = automation_engine.start_loop(
+                automation_service.build_summary_provider())
+            return _automation_thread
+    except Exception:
+        app.logger.exception("automation scheduler başlatılamadı")
+        return None
+
+
+def _automation_json(payload: dict, status: int = 200):
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = "no-store, private"
+    return (resp, status) if status != 200 else resp
+
+
+@app.get("/api/automation/status")
+@app.get("/api/v1/automation/status")
+def api_automation_status():
+    import automation_engine as _ae
+    cfg = _ae.load_config()
+    st = _ae.load_state()
+    next_due = None
+    if cfg["enabled"] and st.get("last_run_finished_at"):
+        epoch = _ae._epoch_of(st["last_run_finished_at"])
+        if epoch is not None:
+            next_due = datetime.fromtimestamp(
+                epoch + cfg["interval_minutes"] * 60,
+                timezone.utc).isoformat()
+    return _automation_json({
+        "ok": True, "read_only": True, "advisory_only": True,
+        "enabled": cfg["enabled"],
+        "interval_minutes": cfg["interval_minutes"],
+        "state": st["state"],
+        "running": st["state"] == "running",
+        "run_id": st["run_id"],
+        "last_run_started_at": st["last_run_started_at"],
+        "last_run_finished_at": st["last_run_finished_at"],
+        "last_run_status": st["last_run_status"],
+        "last_error_code": st["last_error_code"],
+        "last_snapshot_recorded": st["last_snapshot_recorded"],
+        "next_due": next_due})
+
+
+@app.post("/api/automation/run")
+@app.post("/api/v1/automation/run")
+def api_automation_run():
+    import automation_engine as _ae
+    import automation_service as _asv
+    cfg = _ae.load_config()
+    if not cfg["enabled"]:
+        return _automation_json({"ok": False, "error": {
+            "code": "AUTOMATION_DISABLED",
+            "message": "Automation kapalı (ALPHA_AUTOMATION_ENABLED)."}}, 503)
+    try:
+        out = _asv.run_automation(config=cfg)
+    except Exception:
+        app.logger.exception("automation run hatası")
+        return _automation_json({"ok": False, "error": {
+            "code": "AUTOMATION_ERROR",
+            "message": "Automation çalıştırılamadı."}}, 500)
+    if out.get("skip_reason") == "DUPLICATE_RUN":
+        return _automation_json({"ok": False, "error": {
+            "code": "DUPLICATE_RUN",
+            "message": "Automation zaten çalışıyor."}}, 409)
+    return _automation_json({
+        "ok": True, "read_only": True, "advisory_only": True,
+        "ran": bool(out.get("ran")),
+        "appended": bool(out.get("appended")),
+        "error_code": out.get("error_code"),
+        "final_state": out.get("final_state"),
+        "run_id": out.get("run_id")})
+
+
 # ── Mission 1500.2: Workspace Read-Only API ──────────────────────────
 # YALNIZCA GET. Veri tek kaynaktan gelir: intelligence_workspace_service
 # (timeline modülüne doğrudan erişilmez). Kimlik doğrulama _security_gate
