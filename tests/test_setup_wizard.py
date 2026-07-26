@@ -27,6 +27,8 @@ def configured_client(monkeypatch):
     """
     from werkzeug.security import generate_password_hash
 
+    monkeypatch.delenv("ALPHA_OWNER_USERNAME",      raising=False)
+    monkeypatch.delenv("ALPHA_OWNER_PASSWORD_HASH", raising=False)
     monkeypatch.setenv("ADMIN_USERNAME",      "testadmin")
     monkeypatch.setenv("ADMIN_PASSWORD_HASH", generate_password_hash("testpass1234"))
     monkeypatch.setenv("FLASK_SECRET_KEY",    "test-secret-key-setup-aabbccdd11223344")
@@ -49,6 +51,8 @@ def unconfigured_client(monkeypatch):
     TESTING=False → güvenlik kapısı aktif. CSRF devre dışı.
     """
     monkeypatch.delenv("ADMIN_PASSWORD_HASH", raising=False)
+    monkeypatch.delenv("ALPHA_OWNER_USERNAME",      raising=False)
+    monkeypatch.delenv("ALPHA_OWNER_PASSWORD_HASH", raising=False)
     monkeypatch.setenv("FLASK_SECRET_KEY", "test-secret-key-setup-aabbccdd11223344")
 
     import app as flask_app

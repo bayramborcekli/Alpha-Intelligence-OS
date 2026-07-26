@@ -38,6 +38,8 @@ def auth_client(monkeypatch):
     """
     from werkzeug.security import generate_password_hash
 
+    monkeypatch.delenv("ALPHA_OWNER_USERNAME",      raising=False)
+    monkeypatch.delenv("ALPHA_OWNER_PASSWORD_HASH", raising=False)
     monkeypatch.setenv("ADMIN_USERNAME",        "testadmin")
     monkeypatch.setenv("ADMIN_PASSWORD_HASH",   generate_password_hash("testpass1234"))
     monkeypatch.setenv("FLASK_SECRET_KEY",      "test-secret-key-aabbccdd11223344aabbccdd")
@@ -133,6 +135,8 @@ class TestAuthentication:
     def test_no_password_hash_blocks_login(self, auth_client, monkeypatch):
         """ADMIN_PASSWORD_HASH tanımlı değilse /login kurulum sihirbazına yönlendirmeli."""
         monkeypatch.delenv("ADMIN_PASSWORD_HASH", raising=False)
+        monkeypatch.delenv("ALPHA_OWNER_USERNAME",      raising=False)
+        monkeypatch.delenv("ALPHA_OWNER_PASSWORD_HASH", raising=False)
         resp = auth_client.get("/login")
         # Parola yokken /login → /setup yönlendirmesi (302)
         assert resp.status_code == 302
