@@ -1,0 +1,120 @@
+MISSION 1300A.1 — PRODUCTION FUTURES DRY RUN
+
+Amaç:
+Gerçek Binance USDⓈ-M Futures production hesabında,
+emir gönderilmeden önceki tüm hesaplama ve güvenlik adımlarını doğrulamak.
+
+KESİN YASAKLAR:
+- Emir gönderme
+- Emir iptal etme
+- Pozisyon açma veya kapatma
+- Kaldıraç veya margin mode değiştirme
+- Position mode değiştirme
+- Fon transferi
+- Production /order veya /batchOrders uçlarına istek gönderme
+
+ORTAM:
+- Endpoint: https://fapi.binance.com
+- Mevcut read-only API secrets kullanılacak:
+  BINANCE_API_KEY
+  BINANCE_API_SECRET
+- API anahtarında Futures trade yetkisi kapalı olmalı
+- Secret eksikse fail-closed
+- Emir gönderme kod yolu ağ seviyesinden önce bloklanmalı
+
+TEK SEMBOL:
+BTCUSDT
+
+DRY-RUN SENARYOLARI:
+1. Simüle LONG açılışı
+2. Simüle LONG reduce-only kapanışı
+3. Simüle SHORT açılışı
+4. Simüle SHORT reduce-only kapanışı
+
+HER SENARYODA:
+- Canlı BTCUSDT fiyatını al
+- exchangeInfo verisini al
+- PRICE_FILTER doğrula
+- LOT_SIZE / MARKET_LOT_SIZE doğrula
+- stepSize doğrula
+- tickSize doğrula
+- minimum quantity doğrula
+- minimum notional doğrula
+- quantity rounding uygula
+- price rounding uygula
+- hesap bakiyesini oku
+- açık pozisyonları oku
+- açık emirleri oku
+- position mode'u oku
+- margin ihtiyacını hesapla
+- tahmini fee hesapla
+- tahmini maksimum kaybı hesapla
+- risk limitlerini doğrula
+- stale market data kontrolü yap
+- clientOrderId üret
+- oluşturulacak imzalı emir payload'ını hazırla
+- signature ve secret değerlerini rapora yazma
+- son aşamada emri bilinçli olarak blokla
+
+ÖNEMLİ:
+Binance'e test order dahil hiçbir emir isteği gönderme.
+Dry run yalnızca yerel payload doğrulaması ve read-only endpoint kontrollerinden oluşmalı.
+
+POSITION MODE:
+- Mevcut mode'u yalnızca oku
+- ONE-WAY veya HEDGE olarak raporla
+- Değişiklik yapma
+- Planlanan LONG/SHORT payload'larının mevcut mode ile uyumunu doğrula
+
+BAKİYE:
+Hesapta yaklaşık sıfır USDT bulunduğu biliniyor.
+Bu nedenle:
+- Gerçek emre hazır sonucu verme
+- INSUFFICIENT COLLATERAL bekleniyorsa açıkça raporla
+- Testi teknik olarak PASS, işlem hazırlığı açısından BLOCKED olarak ayır
+
+EMİR BOYUTU:
+- Canlı exchangeInfo filtrelerinden mümkün olan en küçük geçerli BTCUSDT miktarını hesapla
+- Keyfi şekilde 1–2 USDT varsayma
+- Minimum geçerli miktar ve tahmini notional'ı raporla
+- Bakiye bu miktarı karşılamıyorsa BLOCKED yaz
+
+GÜVENLİK KANITI:
+- Network request log'u oluştur
+- İzin verilen read-only path'leri listele
+- Yasaklanan path'leri listele
+- /order request count = 0
+- /batchOrders request count = 0
+- leverage change count = 0
+- margin change count = 0
+- position mode change count = 0
+- transfer request count = 0
+
+RAPOR:
+MISSION 1300A.1: PASS / FAIL
+TECHNICAL DRY RUN: PASS / FAIL
+LIVE ORDER READINESS: READY / BLOCKED
+BLOCK REASON:
+ENDPOINT:
+POSITION MODE:
+BTCUSDT PRICE:
+MINIMUM VALID QUANTITY:
+ESTIMATED NOTIONAL:
+AVAILABLE USDT:
+ESTIMATED INITIAL MARGIN:
+ESTIMATED OPEN FEE:
+ESTIMATED CLOSE FEE:
+LONG OPEN PAYLOAD VALID: PASS / FAIL
+LONG CLOSE PAYLOAD VALID: PASS / FAIL
+SHORT OPEN PAYLOAD VALID: PASS / FAIL
+SHORT CLOSE PAYLOAD VALID: PASS / FAIL
+FILTER VALIDATION: PASS / FAIL
+RISK VALIDATION: PASS / FAIL
+STALE DATA CHECK: PASS / FAIL
+ORDER ENDPOINT REQUESTS: 0 / value
+OTHER WRITE REQUESTS: 0 / value
+SECRETS EXPOSED: 0 / value
+TESTS: passed / failed
+RUN_ID:
+COMMIT:
+NEXT ACTION: tek net işlem
