@@ -1,5 +1,42 @@
 # Değişiklik Günlüğü
 
+## [1600] — 2026-07-26 · Intelligence Automation
+
+Kontrollü, varsayılan-kapalı otomatik Intelligence çalıştırma katmanı;
+tamamı salt-okunur mimariye uyar. Ayrıntı: `docs/automation.md`.
+
+### Eklendi
+- `automation_engine.py` — durum makinesi, ortam tabanlı config
+  (`ALPHA_AUTOMATION_*`; yalnız `"true"` etkinleştirir, min 5 dk /
+  10 sn), atomik state dosyası (8 sterile alan), süreçler-arası
+  `flock` tekil-koşu kilidi, `run_once` (yalnız OK/PARTIAL sonuç bir
+  kez `append_snapshot`; retry yok), INTERRUPTED recovery, worker içi
+  daemon scheduler döngüsü
+- `automation_service.py` — IntelligenceService köprüsü: 11 alanlık
+  beyaz-liste normalize, `advisory_only` zorlaması, exception →
+  sterile `FAILED` (snapshot yazamaz — AST-testli)
+- `GET /api/automation/status` · `POST /api/automation/run` ·
+  `GET /api/automation/export/status` (+`/api/v1` takma adları) —
+  kimlik doğrulamalı, no-store; run CSRF korumalı; 409 DUPLICATE_RUN,
+  503 AUTOMATION_DISABLED/STATUS_UNAVAILABLE, sterile 500
+- `/automation` sayfası — salt-izleme UI (yalnız Şimdi Çalıştır +
+  Yenile; 30 sn status polling; textContent XSS koruması)
+- `automation_export_api.py` — deterministik JSON/CSV status export
+  (formül-enjeksiyon korumalı, UTF-8 BOM, statik dosya adları)
+- `gunicorn.conf.py` `post_fork` → `start_automation_scheduler()`
+  (varsayılan kapalı, worker başına tek döngü, çökmeyen startup)
+- Güvenlik doğrulama süiti (statik analiz + 16 penetrasyon senaryosu)
+  ve doküman tutarlılık testleri; toplam 168 yeni test (980 → 1148)
+
+### Güvenlik
+- Exchange yazma isteği 0; `append_snapshot` yalnız Core'da; ledger/
+  audit/exchange modülleri import bile edilmez; tüm hatalar sterile
+  kod; secret hiçbir yanıt/state/export/UI yüzeyinde yok.
+
+### Değişmedi
+- `alpha20_v1/`, `auth.py`, ledger, audit, exchange imzalama,
+  Intelligence Engine ve 1500.2 Workspace sözleşmeleri.
+
 ## [1500.2] — 2026-07-26 · Intelligence Workspace
 
 Salt-okunur, deterministik Intelligence Workspace: geçmiş snapshot
