@@ -1,0 +1,336 @@
+MISSION 1500.2 — AGENT 05
+Workspace User Interface
+
+AMAÇ
+
+Mevcut Workspace Read-Only API uçlarını kullanarak
+salt-okunur Intelligence Workspace kullanıcı arayüzünü oluşturmak.
+
+Bu agent yalnızca UI katmanını geliştirecektir.
+
+Servis, Timeline, API, Export ve Security mimarisi değiştirilmeyecektir.
+
+────────────────────────────────────────
+
+GÖREVLER
+
+1.
+
+Yeni şablonu oluştur.
+
+templates/intelligence_workspace.html
+
+2.
+
+Yeni sayfa rotasını ekle.
+
+GET /workspace
+
+3.
+
+Sayfa mevcut
+
+dash_base.html
+
+şablonunu genişletmelidir.
+
+4.
+
+Navigasyona yalnızca bir Workspace bağlantısı eklenebilir.
+
+Mevcut navigasyon yapısı bozulmayacaktır.
+
+5.
+
+Aşağıdaki bölümleri oluştur.
+
+• Zaman Çizelgesi
+
+• Snapshot Detayı
+
+• İki Snapshot Karşılaştırma
+
+• Tavsiye Geçmişi
+
+• Risk Evrimi
+
+• Arama ve Filtreler
+
+• Export bağlantı alanı
+  - yalnızca pasif/placeholder veya mevcut GET uçlarına bağlantı
+  - yeni export mantığı bu agent kapsamında değildir
+
+6.
+
+Veriler yalnızca mevcut Workspace API uçlarından alınacaktır.
+
+Doğrudan Timeline veya Workspace Service erişimi yasaktır.
+
+7.
+
+Kullanılacak uçlar:
+
+GET /api/workspace/timeline
+
+GET /api/workspace/snapshot/<id>
+
+GET /api/workspace/compare
+
+GET /api/workspace/recommendations
+
+GET /api/workspace/risk-evolution
+
+GET /api/workspace/search
+
+8.
+
+UI salt-okunur olacaktır.
+
+İşlem
+
+Emir
+
+Onay
+
+Silme
+
+Güncelleme
+
+Otomatik karar
+
+butonu eklenmeyecektir.
+
+9.
+
+XSS güvenliği korunacaktır.
+
+intelligence.html içindeki güvenli yardımcı desenler kullanılmalıdır:
+
+esc()
+
+txt()
+
+vy()
+
+failState()
+
+Kullanıcı veya API kaynaklı hiçbir veri doğrudan innerHTML içine
+kaçışsız yazılmayacaktır.
+
+10.
+
+Bilinmeyen değerler:
+
+null
+
+↓
+
+"—"
+
+Eksik karşılaştırma tarafı
+
+↓
+
+"Veri Yok"
+
+olarak gösterilecektir.
+
+Asla 0 türetilmeyecektir.
+
+11.
+
+Risk evrimi görselleştirmesi:
+
+• harici kütüphane yok
+
+• harici CDN yok
+
+• CSP uyumlu
+
+• basit yerel SVG, canvas veya tablo tabanlı gösterim
+
+• tahmin çizgisi yok
+
+• trend tahmini yok
+
+12.
+
+Responsive yapı korunacaktır.
+
+Mobil görünümde mevcut
+
+data-l
+
+deseni kullanılmalıdır.
+
+13.
+
+Hata deneyimi sterile olacaktır.
+
+Ham exception
+
+Stack trace
+
+Credential
+
+Secret
+
+API yanıtı içinde olsa bile ekrana taşınmayacaktır.
+
+14.
+
+Sayfa ve API isteklerinde mevcut authentication davranışı korunacaktır.
+
+────────────────────────────────────────
+
+KISITLAR
+
+Dokunulmayacak:
+
+intelligence_timeline.py
+
+intelligence_workspace_service.py
+
+Risk Engine
+
+Recommendation Engine
+
+1500.1 modelleri
+
+Export mantığı
+
+Settings
+
+Exchange
+
+Ledger
+
+Audit
+
+Auth sözleşmesi
+
+────────────────────────────────────────
+
+YASAKLAR
+
+POST
+
+PUT
+
+PATCH
+
+DELETE
+
+History write
+
+History update
+
+History delete
+
+Exchange request
+
+Exchange write
+
+Harici LLM
+
+Harici JS/CSS kaynağı
+
+Tahmin
+
+Otomatik karar
+
+İşlem düğmesi
+
+────────────────────────────────────────
+
+TESTLER
+
+En az aşağıdakiler doğrulanmalıdır.
+
+• /workspace authentication
+
+• sayfa render
+
+• dash_base.html kullanımı
+
+• navigasyon bağlantısı
+
+• timeline bölümü
+
+• snapshot detayı
+
+• compare bölümü
+
+• recommendation history
+
+• risk evolution
+
+• search ve filtreler
+
+• yalnız GET API çağrıları
+
+• XSS kaçışı
+
+• null → "—"
+
+• eksik değer → "Veri Yok"
+
+• sterile hata görünümü
+
+• harici CDN yokluğu
+
+• işlem düğmesi yokluğu
+
+• POST/PUT/PATCH/DELETE kullanılmaması
+
+• mobil data-l yapısı
+
+• mevcut 1500.1 UI regresyonu olmaması
+
+────────────────────────────────────────
+
+TESLİM RAPORU
+
+── DEĞİŞEN DOSYALAR ──
+
+── WORKSPACE UI ──
+
+── API ENTEGRASYONU ──
+
+── XSS / CSP UYUMU ──
+
+── KURAL UYUMU ──
+
+── TESTLER ──
+
+── TAM TEST SONUCU ──
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+
+── SECRET EXPOSURE ──
+
+── COMMIT / HEAD ──
+
+── BİLİNEN SINIRLAMALAR ──
+
+────────────────────────────────────────
+
+PASS KRİTERİ
+
+• /workspace hazır.
+
+• Workspace API üzerinden çalışıyor.
+
+• Salt-okunur.
+
+• XSS ve CSP güvenli.
+
+• Harici kaynak yok.
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Regresyon yok.
+
+• 1500.1 ve 1500.2 API davranışları korunuyor.
