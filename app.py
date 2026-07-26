@@ -1945,6 +1945,138 @@ def api_workspace_search():
     ))
 
 
+# ── Mission 1500.2: Workspace Export (Agent 06) ──────────────────────
+# YALNIZCA GET. Veri tek kaynaktan gelir: workspace_export_api →
+# intelligence_workspace_service. Salt-okunur; hiçbir kayıt yazılmaz.
+
+def _wsx_format():
+    raw = (request.args.get("format") or "json").strip().lower()
+    import workspace_export_api as wsx
+    if raw not in wsx.FORMATS:
+        raise ValueError("format")
+    return raw
+
+
+def _wsx_response(result):
+    env, body, mime, filename = result
+    if body is None:  # sterile servis zarfı — 404 yalnız SNAPSHOT_NOT_FOUND
+        code = (env.get("error") or {}).get("code")
+        status = 404 if code == "SNAPSHOT_NOT_FOUND" else 200
+        return _ws_json(env, status)
+    resp = app.response_class(body, mimetype=mime)
+    resp.headers["Cache-Control"] = "no-store, private"
+    resp.headers["Content-Disposition"] = \
+        f'attachment; filename="{filename}"'
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+@app.get("/api/workspace/export/timeline")
+@app.get("/api/v1/workspace/export/timeline")
+def api_workspace_export_timeline():
+    import workspace_export_api as wsx
+    try:
+        fmt = _wsx_format()
+        limit = _ws_int("limit")
+        offset = _ws_int("offset", default=0)
+    except ValueError as e:
+        return _ws_bad_request(str(e))
+    return _wsx_response(wsx.export_timeline(fmt, limit=limit,
+                                             offset=offset))
+
+
+@app.get("/api/workspace/export/snapshot/<snapshot_id>")
+@app.get("/api/v1/workspace/export/snapshot/<snapshot_id>")
+def api_workspace_export_snapshot(snapshot_id: str):
+    import workspace_export_api as wsx
+    try:
+        fmt = _wsx_format()
+    except ValueError as e:
+        return _ws_bad_request(str(e))
+    try:
+        sid = int(snapshot_id)
+    except (TypeError, ValueError):
+        return _ws_bad_request("snapshot_id")
+    if sid < 1:
+        return _ws_bad_request("snapshot_id")
+    return _wsx_response(wsx.export_snapshot(fmt, sid))
+
+
+@app.get("/api/workspace/export/compare")
+@app.get("/api/v1/workspace/export/compare")
+def api_workspace_export_compare():
+    import workspace_export_api as wsx
+    try:
+        fmt = _wsx_format()
+        a = _ws_int("a", required=True)
+        b = _ws_int("b", required=True)
+    except ValueError as e:
+        return _ws_bad_request(str(e))
+    if a < 1 or b < 1:
+        return _ws_bad_request("a" if a < 1 else "b")
+    return _wsx_response(wsx.export_compare(fmt, a, b))
+
+
+@app.get("/api/workspace/export/recommendations")
+@app.get("/api/v1/workspace/export/recommendations")
+def api_workspace_export_recommendations():
+    import workspace_export_api as wsx
+    try:
+        fmt = _wsx_format()
+    except ValueError as e:
+        return _ws_bad_request(str(e))
+    return _wsx_response(wsx.export_recommendations(fmt))
+
+
+@app.get("/api/workspace/export/risk-evolution")
+@app.get("/api/v1/workspace/export/risk-evolution")
+def api_workspace_export_risk_evolution():
+    import workspace_export_api as wsx
+    try:
+        fmt = _wsx_format()
+    except ValueError as e:
+        return _ws_bad_request(str(e))
+    return _wsx_response(wsx.export_risk_evolution(fmt))
+
+
+@app.get("/api/workspace/export/search")
+@app.get("/api/v1/workspace/export/search")
+def api_workspace_export_search():
+    import workspace_export_api as wsx
+    from datetime import datetime as _dt
+
+    def _iso(name, *alts):
+        for key in (name, *alts):
+            raw = request.args.get(key)
+            if raw:
+                try:
+                    _dt.fromisoformat(raw.replace("Z", "+00:00"))
+                except ValueError:
+                    raise ValueError(key)
+                return raw
+        return None
+
+    try:
+        fmt = _wsx_format()
+        partial = _ws_bool("partial")
+        advisory = _ws_bool("advisory_only")
+        start = _iso("start", "date")
+        end = _iso("end", "date_end")
+    except ValueError as e:
+        return _ws_bad_request(str(e))
+    return _wsx_response(wsx.export_search(
+        fmt,
+        start=start,
+        end=end,
+        status=request.args.get("status") or None,
+        confidence=request.args.get("confidence") or None,
+        recommendation_code=request.args.get("recommendation") or None,
+        insight_code=request.args.get("insight") or None,
+        partial=partial,
+        advisory_only=advisory,
+    ))
+
+
 @app.get("/api/v1/executive/summary")
 def api_executive_summary():
     """Mission 1400.5 — yönetici üst çubuğu özeti (salt-okunur)."""
