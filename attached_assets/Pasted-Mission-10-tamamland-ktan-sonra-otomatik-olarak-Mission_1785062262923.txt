@@ -1,0 +1,139 @@
+Mission 10 tamamlandıktan sonra otomatik olarak Mission 100 hazırlığına geç.
+
+Önce Mission 10 sonucunu değerlendir:
+
+PASS koşulları:
+- 10 kapanmış paper trade
+- 0 ledger uyuşmazlığı
+- 0 PnL uyuşmazlığı
+- 0 risk ihlali
+- 0 beklenmeyen exception
+- Mevcut testlerin tamamı geçiyor
+
+Mission 10 FAIL ise:
+1. Yeni görev başlatma.
+2. Hatanın kök nedenini belirle.
+3. Hata için regression test yaz.
+4. Düzeltmeyi uygula.
+5. Tüm testleri tekrar çalıştır.
+6. Mission 10'u sıfırdan yeniden başlat.
+7. Sonucu açıkça FAIL → FIXED → RETESTED şeklinde raporla.
+
+Mission 10 PASS ise:
+Mission 100 için gerekli altyapıyı hazırla.
+
+Mission 100 hedefi:
+- 100 kapanmış paper trade
+- PAPER-only kilidi korunacak
+- Gerçek emir gönderilmeyecek
+- Her işlem ledger, fee, cash, position ve PnL açısından doğrulanacak
+- Sistem çalışma sırasında health ve incident metrikleri üretecek
+- Çalışma yarıda kesilirse güvenli şekilde devam edebilecek veya açıkça sıfırdan başlatılacak
+- Hiçbir veri veya metrik uydurulmayacak
+
+Mission 100 öncesi yapılacaklar:
+1. Tüm testleri çalıştır.
+2. Test başlangıç durumunu kaydet.
+3. Çalışma için benzersiz run_id oluştur.
+4. Başlangıç bakiyesini kaydet.
+5. Başlangıç ledger durumunu kaydet.
+6. Çıktı klasörü oluştur.
+7. Ara checkpoint mekanizmasını doğrula.
+8. PAPER-only kilidini test et.
+9. Risk motorunun bypass edilemediğini test et.
+10. Son rapor şemasını hazırla.
+
+Her 10 kapanmış işlemde checkpoint üret:
+
+- run_id
+- zaman
+- toplam kapanmış işlem
+- kazanan işlem
+- kaybeden işlem
+- breakeven işlem
+- brüt kâr
+- brüt zarar
+- toplam fee
+- net PnL
+- mevcut bakiye
+- açık pozisyon sayısı
+- max drawdown
+- ledger mismatch
+- PnL mismatch
+- risk violation
+- warning
+- exception
+
+Mission 100 sonunda şu dosyaları üret:
+
+1. mission_100_summary.json
+2. mission_100_summary.md
+3. mission_100_trades.csv
+4. mission_100_incidents.jsonl
+5. mission_100_checkpoints.jsonl
+
+Final raporda şu alanlar zorunlu:
+
+- sürüm veya commit hash
+- run_id
+- başlangıç ve bitiş zamanı
+- çalışma süresi
+- test sonucu
+- toplam açılan işlem
+- toplam kapanan işlem
+- kazanan / kaybeden / breakeven
+- win rate
+- gross profit
+- gross loss
+- total fees
+- net PnL
+- profit factor
+- max drawdown
+- başlangıç bakiyesi
+- bitiş bakiyesi
+- bakiye değişimi
+- ledger validation count
+- ledger mismatch count
+- PnL mismatch count
+- risk violation count
+- warning count
+- exception count
+- recovery count
+- açık pozisyon sayısı
+- PASS / FAIL kararı
+- başarısızsa açık neden listesi
+
+Mission 100 PASS koşulları:
+- Tam olarak en az 100 kapanmış paper trade
+- 0 ledger mismatch
+- 0 PnL mismatch
+- 0 risk violation
+- 0 beklenmeyen exception
+- Finalde 0 açık pozisyon
+- Bakiye değişimi ile net PnL arasında tutarlılık
+- Tüm testlerin geçmesi
+- Rapor dosyalarının eksiksiz oluşması
+
+Önemli:
+Stratejinin zarar etmesi tek başına teknik FAIL sebebi değildir.
+Teknik doğruluk ile strateji performansını ayrı değerlendir.
+
+Sonunda sadece şu formatta yönetici özeti ver:
+
+MISSION 10: PASS / FAIL
+TESTS: x passed, y failed
+MISSION 100 PREPARATION: READY / BLOCKED
+MISSION 100: PASS / FAIL / NOT STARTED
+CLOSED TRADES: x
+NET PNL: x
+MAX DRAWDOWN: x
+LEDGER MISMATCHES: x
+PNL MISMATCHES: x
+RISK VIOLATIONS: x
+EXCEPTIONS: x
+OPEN POSITIONS: x
+ARTIFACTS: liste
+NEXT ACTION: tek ve net işlem
+
+Kod veya sistem gerçek durumu desteklemiyorsa bunu açıkça belirt.
+Yeni özellik eklemek yerine önce ölçülebilir ve tekrar üretilebilir bir test koşusu oluştur.
