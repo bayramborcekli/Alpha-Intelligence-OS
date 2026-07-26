@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Alpha Intelligence OS — İlk Kurulum</title>
   <style>
     :root {
@@ -321,18 +322,37 @@
     btn.innerHTML = '<span class="spinner"></span>Oluşturuluyor…';
 
     try {
+      const csrf = document.querySelector('meta[name="csrf-token"]');
       const resp = await fetch('/setup/hash', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrf ? csrf.content : '',
+        },
         body: JSON.stringify({ password: pw }),
       });
-      const data = await resp.json();
-      if (!resp.ok || data.error) {
-        errBox.textContent = data.error || 'Sunucu hatası.';
+      // Yanıtı körlemesine JSON'a çevirme: önce içerik türünü doğrula.
+      const ctype = resp.headers.get('Content-Type') || '';
+      let data = null;
+      if (ctype.includes('application/json')) {
+        try { data = await resp.json(); } catch (_) { data = null; }
+      }
+      if (!resp.ok || !data || data.ok === false || data.error) {
+        let msg = 'Sunucu beklenmeyen bir yanıt döndürdü. Sayfayı yenileyip tekrar deneyin.';
+        if (data && data.error) {
+          msg = (typeof data.error === 'string') ? data.error : (data.error.message || msg);
+        } else if (resp.status === 429) {
+          msg = 'Çok fazla deneme yapıldı. Lütfen kısa süre sonra tekrar deneyin.';
+        }
+        errBox.textContent = msg;
         errBox.style.display = 'block';
         return;
       }
       document.getElementById('hash-val').textContent = data.hash;
+      // Parola alanlarını bellekten temizle (başarı sonrası)
+      document.getElementById('pw1').value = '';
+      const pw2El = document.getElementById('pw2');
+      if (pw2El) pw2El.value = '';
       document.getElementById('hash-box').classList.add('visible');
       document.getElementById('step1-next').style.display = 'flex';
       // Otomatik kopyala

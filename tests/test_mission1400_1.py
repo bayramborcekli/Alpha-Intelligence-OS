@@ -298,6 +298,95 @@ class TestSecurity:
             flask_app.app.config["TESTING"] = True
             auth._ATTEMPTS.clear()
 
+    def test_setup_hash_success_is_structured_json(self, monkeypatch):
+        for k in ("ADMIN_PASSWORD_HASH", "ALPHA_OWNER_USERNAME",
+                  "ALPHA_OWNER_PASSWORD_HASH"):
+            monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv("LOGIN_ATTEMPTS_DB", "/tmp/test_m14001hf1.db")
+        auth._ATTEMPTS.clear()
+        flask_app.app.config["WTF_CSRF_ENABLED"] = False
+        pw = "hotfix-parola-42"
+        with flask_app.app.test_client() as c:
+            r = c.post("/setup/hash", json={"password": pw})
+        assert r.status_code == 200
+        assert r.content_type.startswith("application/json")
+        d = r.get_json()
+        assert d["ok"] is True and d["password_hash"] == d["hash"]
+        assert pw not in r.get_data(as_text=True)  # düz metin parola yok
+
+    def test_setup_hash_invalid_password_structured_json(self, monkeypatch):
+        for k in ("ADMIN_PASSWORD_HASH", "ALPHA_OWNER_USERNAME",
+                  "ALPHA_OWNER_PASSWORD_HASH"):
+            monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv("LOGIN_ATTEMPTS_DB", "/tmp/test_m14001hf2.db")
+        auth._ATTEMPTS.clear()
+        flask_app.app.config["WTF_CSRF_ENABLED"] = False
+        with flask_app.app.test_client() as c:
+            r = c.post("/setup/hash", json={"password": "abc"})
+        assert r.status_code == 400
+        d = r.get_json()
+        assert d["ok"] is False
+        assert d["error"]["code"] == "INVALID_PASSWORD"
+
+    def test_setup_hash_csrf_failure_returns_json(self, monkeypatch):
+        """CSRF etkinken token'sız POST → 403 yapılandırılmış JSON (HTML/302 değil)."""
+        for k in ("ADMIN_PASSWORD_HASH", "ALPHA_OWNER_USERNAME",
+                  "ALPHA_OWNER_PASSWORD_HASH"):
+            monkeypatch.delenv(k, raising=False)
+        flask_app.app.config["TESTING"] = False
+        flask_app.app.config["WTF_CSRF_ENABLED"] = True
+        try:
+            with flask_app.app.test_client() as c:
+                r = c.post("/setup/hash", json={"password": "abcdef123"})
+            assert r.status_code == 403
+            assert r.content_type.startswith("application/json")
+            d = r.get_json()
+            assert d["ok"] is False and d["error"]["code"] == "CSRF_FAILED"
+        finally:
+            flask_app.app.config["TESTING"] = True
+            flask_app.app.config["WTF_CSRF_ENABLED"] = False
+
+    def test_setup_hash_rate_limit_structured_json(self, monkeypatch):
+        for k in ("ADMIN_PASSWORD_HASH", "ALPHA_OWNER_USERNAME",
+                  "ALPHA_OWNER_PASSWORD_HASH"):
+            monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv("LOGIN_ATTEMPTS_DB", "/tmp/test_m14001hf3.db")
+        auth._ATTEMPTS.clear()
+        flask_app.app.config["WTF_CSRF_ENABLED"] = False
+        try:
+            with flask_app.app.test_client() as c:
+                for _ in range(auth.MAX_ATTEMPTS):
+                    c.post("/setup/hash", json={"password": "abcdef123"})
+                r = c.post("/setup/hash", json={"password": "abcdef123"})
+            assert r.status_code == 429
+            d = r.get_json()
+            assert d["ok"] is False and d["error"]["code"] == "RATE_LIMITED"
+        finally:
+            auth._ATTEMPTS.clear()
+
+    def test_setup_wizard_frontend_handles_non_json(self):
+        """Frontend körlemesine response.json() çağırmamalı."""
+        from pathlib import Path
+        src = Path("templates/setup.html").read_text()
+        assert "Content-Type" in src and "includes('application/json')" in src
+        assert "X-CSRFToken" in src and 'meta[name="csrf-token"]' in src
+        assert "localStorage" not in src and "sessionStorage" not in src
+
+    def test_password_never_written_to_security_log(self, monkeypatch, tmp_path):
+        for k in ("ADMIN_PASSWORD_HASH", "ALPHA_OWNER_USERNAME",
+                  "ALPHA_OWNER_PASSWORD_HASH"):
+            monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv("LOGIN_ATTEMPTS_DB", "/tmp/test_m14001hf4.db")
+        auth._ATTEMPTS.clear()
+        flask_app.app.config["WTF_CSRF_ENABLED"] = False
+        pw = "cok-gizli-parola-9x"
+        with flask_app.app.test_client() as c:
+            c.post("/setup/hash", json={"password": pw})
+        from pathlib import Path
+        log = Path("security.log")
+        if log.exists():
+            assert pw not in log.read_text(errors="ignore")
+
     def test_owner_config_persists_across_simulated_restart(self, client):
         """Env tabanlı model: sahip kimliği yalnızca ortamdan okunur; süreç
         yeniden başlasa da (yeni istemci) yapılandırma READY kalır."""

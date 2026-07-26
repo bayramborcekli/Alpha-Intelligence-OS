@@ -1,0 +1,165 @@
+MISSION 1400.1-HOTFIX — SETUP HASH JSON RESPONSE
+
+PROBLEM
+
+The first-run setup wizard fails after clicking “Hash Oluştur” with:
+
+JSON.parse: unexpected character at line 1 column 1 of the JSON data
+
+This indicates the frontend expects JSON, but /setup/hash is returning HTML,
+a redirect, an empty body or another non-JSON response.
+
+OBJECTIVE
+
+Fix only the setup hash-generation flow.
+
+Do not change the authentication architecture.
+Do not change session behavior.
+Do not add a second owner system.
+Do not publish.
+Do not touch Binance integrations.
+
+REQUIRED INVESTIGATION
+
+Inspect:
+
+- frontend request sent by the setup wizard
+- request method
+- request Content-Type
+- CSRF token handling
+- /setup/hash route
+- redirect behavior
+- response status code
+- response Content-Type
+- error handlers
+- rate-limit responses
+
+REQUIRED BEHAVIOR
+
+POST /setup/hash must return JSON for every outcome.
+
+Success example:
+
+HTTP 200
+Content-Type: application/json
+
+{
+  "ok": true,
+  "password_hash": "<generated hash>"
+}
+
+Validation failure example:
+
+HTTP 400
+Content-Type: application/json
+
+{
+  "ok": false,
+  "error": {
+    "code": "INVALID_PASSWORD",
+    "message": "Parola gereksinimleri karşılanmadı."
+  }
+}
+
+CSRF failure:
+
+HTTP 403
+Content-Type: application/json
+
+{
+  "ok": false,
+  "error": {
+    "code": "CSRF_FAILED",
+    "message": "Oturum doğrulaması başarısız. Sayfayı yenileyip tekrar deneyin."
+  }
+}
+
+Rate limit:
+
+HTTP 429
+Content-Type: application/json
+
+{
+  "ok": false,
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Çok fazla deneme yapıldı. Lütfen kısa süre sonra tekrar deneyin."
+  }
+}
+
+SETUP COMPLETE
+
+If owner credentials are already configured, /setup/hash must remain unavailable
+according to the existing security model.
+
+Do not reopen setup after configuration.
+
+FRONTEND REQUIREMENTS
+
+- Do not call response.json() blindly.
+- Check response.ok and Content-Type first.
+- Safely handle non-JSON responses.
+- Display a Turkish user-friendly error.
+- Do not display raw HTML, stack traces or internal exceptions.
+- Keep the entered password only in memory.
+- Clear password inputs after successful hash generation.
+- Never log the password.
+- Never send the password anywhere except the local backend setup endpoint.
+- Never store the password in localStorage or sessionStorage.
+
+CSRF
+
+Preserve CSRF protection.
+
+Ensure the setup form sends the expected CSRF token using the mechanism already
+used by the application.
+
+Do not disable CSRF to fix this issue.
+
+TESTS
+
+Add tests for:
+
+- valid setup hash request returns JSON
+- response Content-Type is application/json
+- password hash is returned on success
+- plaintext password is not returned
+- invalid password returns structured JSON
+- CSRF failure returns structured JSON
+- rate limit returns structured JSON
+- frontend handles non-JSON server response safely
+- setup remains closed after owner configuration
+- no password appears in logs
+
+Run the full test suite.
+
+EXPECTED FINAL REPORT
+
+MISSION 1400.1-HOTFIX: PASS / FAIL
+ROOT CAUSE:
+REQUEST METHOD:
+CSRF STATUS:
+SUCCESS RESPONSE STATUS:
+SUCCESS CONTENT TYPE:
+VALIDATION RESPONSE:
+RATE LIMIT RESPONSE:
+FRONTEND ERROR HANDLING:
+PLAINTEXT PASSWORD EXPOSED:
+SECRETS EXPOSED:
+EXISTING TESTS:
+NEW TESTS:
+TOTAL TESTS:
+CODE REVIEW:
+COMMIT:
+GITHUB PUSH:
+APPLICATION PUBLISHED:
+NEXT ACTION:
+
+RESTRICTIONS
+
+- Do not disable CSRF.
+- Do not return HTML from /setup/hash.
+- Do not expose plaintext passwords.
+- Do not modify Binance code.
+- Do not create exchange write routes.
+- Do not publish.

@@ -220,6 +220,12 @@ def _csrf_error(exc: CSRFError):  # type: ignore[misc]
     slog.log_event(slog.CSRF_FAIL, ip=ip, detail=str(exc)[:80])
     if request.path.startswith("/api/"):
         return _api_error("Güvenlik hatası: CSRF doğrulaması başarısız.", 400)
+    if request.path.startswith("/setup"):
+        # Sihirbaz fetch ile JSON bekler — asla HTML/redirect döndürme.
+        return {"ok": False, "error": {
+            "code": "CSRF_FAILED",
+            "message": "Oturum doğrulaması başarısız. Sayfayı yenileyip "
+                       "tekrar deneyin."}}, 403
     # Kimlik doğrulanmamış istekte dashboard içeriği ASLA gönderme.
     # Oturum yoksa veya süresi dolmuşsa login'e yönlendir (302).
     if not session.get("logged_in") or auth._session_expired():
@@ -693,23 +699,28 @@ def setup_generate_hash():
     # aynı pencere/limitle kısıtlanır.
     _key = "setup:" + auth.get_client_ip()
     _allowed, _secs = auth.check_rate_limit(_key)
+    def _err(code: str, message: str, status: int):
+        return {"ok": False, "error": {"code": code, "message": message}}, status
+
     if not _allowed:
-        return {"error": f"Çok fazla istek. {_secs} saniye sonra tekrar "
-                         "deneyin."}, 429
+        return _err("RATE_LIMITED", "Çok fazla deneme yapıldı. Lütfen "
+                    f"{_secs} saniye sonra tekrar deneyin.", 429)
     auth.record_attempt(_key, success=False)
     data = request.get_json(silent=True) or {}
     password = data.get("password", "")
     if not password or not isinstance(password, str):
-        return {"error": "Parola boş olamaz."}, 400
+        return _err("INVALID_PASSWORD", "Parola boş olamaz.", 400)
     if len(password) < 6:
-        return {"error": "Parola en az 6 karakter olmalıdır."}, 400
+        return _err("INVALID_PASSWORD",
+                    "Parola en az 6 karakter olmalıdır.", 400)
     if len(password) > 1024:
-        return {"error": "Parola çok uzun."}, 400
+        return _err("INVALID_PASSWORD", "Parola çok uzun.", 400)
     from werkzeug.security import generate_password_hash
     pw_hash = generate_password_hash(password)
     ip = auth.get_client_ip()
     slog.log_event(slog.STARTUP, detail="setup: hash generated", ip=ip)
-    return {"hash": pw_hash}
+    # "hash" alanı geriye dönük uyumluluk için korunur.
+    return {"ok": True, "password_hash": pw_hash, "hash": pw_hash}
 
 
 @app.get("/setup/check")
