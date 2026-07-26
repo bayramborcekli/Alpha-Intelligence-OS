@@ -1,0 +1,360 @@
+MISSION 1500.2 — AGENT 07
+Workspace Security Verification
+
+AMAÇ
+
+Intelligence Workspace bileşenlerinin güvenlik sınırlarını
+doğrulamak ve ihlal oluşturan noktaları yalnızca gerekli en küçük
+değişikliklerle kapatmak.
+
+Bu agent yeni özellik geliştirmeyecektir.
+
+Timeline, Service, API, UI ve Export davranışları genişletilmeyecektir.
+
+────────────────────────────────────────
+
+GÖREVLER
+
+1.
+
+Aşağıdaki bileşenleri güvenlik açısından incele:
+
+• Intelligence Timeline
+
+• Workspace Service
+
+• Workspace API
+
+• Workspace UI
+
+• Workspace Export
+
+2.
+
+Tüm Workspace sayfa ve API uçlarında mevcut authentication
+mekanizmasının uygulandığını doğrula.
+
+Anonim erişim:
+
+401 veya mevcut güvenli yönlendirme davranışı
+
+üretmelidir.
+
+3.
+
+HTTP metot sınırlarını doğrula.
+
+İzin verilen:
+
+GET
+
+HEAD
+
+OPTIONS
+
+Yasaklanan:
+
+POST
+
+PUT
+
+PATCH
+
+DELETE
+
+4.
+
+CSRF korumasının mevcut uygulama davranışını bozmadığını doğrula.
+
+Salt-okunur Workspace uçları için yeni CSRF istisnası veya bypass
+eklenmeyecektir.
+
+5.
+
+Rate limiting mevcutsa Workspace uçlarının bunu atlamadığını doğrula.
+
+Yeni rate-limit mimarisi oluşturulmayacaktır.
+
+6.
+
+Aşağıdaki güvenlik başlıklarını doğrula:
+
+Cache-Control:
+no-store, private
+
+Content-Type
+
+Content-Disposition
+(export yanıtlarında)
+
+Mevcut uygulama tarafından sağlanan diğer güvenlik başlıkları
+korunmalıdır.
+
+7.
+
+XSS güvenliğini doğrula.
+
+• API verileri kaçışsız innerHTML içine yazılmayacak
+
+• Kullanıcı kontrollü alanlar escape edilecek
+
+• Template autoescape devre dışı bırakılmayacak
+
+• Harici script veya CDN eklenmeyecek
+
+8.
+
+Path traversal ve dosya erişimini doğrula.
+
+Kullanıcı girdisi:
+
+• timeline dosya yolu
+
+• export dosya yolu
+
+• sunucu dosya sistemi yolu
+
+belirleyememelidir.
+
+9.
+
+Parametre doğrulamasını güvenlik açısından doğrula:
+
+• limit
+
+• offset
+
+• snapshot id
+
+• compare a/b
+
+• date/date_end
+
+• status
+
+• confidence
+
+• recommendation
+
+• insight
+
+• partial
+
+• advisory_only
+
+• format
+
+Geçersiz değerler sterile 400 üretmelidir.
+
+10.
+
+Hata yanıtlarında aşağıdakilerin bulunmadığını doğrula:
+
+• exception metni
+
+• stack trace
+
+• dosya yolu
+
+• ortam değişkeni
+
+• credential
+
+• API key
+
+• token
+
+• secret
+
+11.
+
+Exchange ve dış ağ sınırlarını doğrula.
+
+Workspace bileşenleri:
+
+• exchange istemcisi çağırmayacak
+
+• emir oluşturmayacak
+
+• ağ isteği yapmayacak
+
+• harici LLM çağırmayacak
+
+12.
+
+Geçmiş bütünlüğünü doğrula.
+
+Workspace API, UI ve Export:
+
+• append
+
+• overwrite
+
+• update
+
+• delete
+
+işlemi yapmamalıdır.
+
+Timeline append-only sözleşmesi korunmalıdır.
+
+13.
+
+Bir güvenlik ihlali bulunursa yalnızca ilgili ihlali kapatan
+minimum değişiklik yapılabilir.
+
+Yeni özellik eklenmeyecektir.
+
+────────────────────────────────────────
+
+KISITLAR
+
+Değiştirilmeyecek davranışlar:
+
+• Risk Engine otoritesi
+
+• Recommendation Engine
+
+• 1500.1 modelleri
+
+• Ledger
+
+• Audit
+
+• Exchange
+
+• Workspace veri sözleşmesi
+
+• Export veri içeriği
+
+• UI fonksiyon kapsamı
+
+────────────────────────────────────────
+
+YASAKLAR
+
+Yeni endpoint
+
+Yeni UI özelliği
+
+Yeni export formatı
+
+Yeni filtre
+
+Yeni tahmin
+
+Otomatik karar
+
+Exchange request
+
+Exchange write
+
+Harici LLM
+
+Auth bypass
+
+CSRF bypass
+
+Rate-limit bypass
+
+Güvenlik başlığı kaldırma
+
+────────────────────────────────────────
+
+TESTLER
+
+En az aşağıdakiler doğrulanmalıdır:
+
+• tüm Workspace sayfa/API/export uçlarında authentication
+
+• GET-only sözleşmesi
+
+• POST/PUT/PATCH/DELETE → 405
+
+• no-store, private
+
+• XSS payload kaçışı
+
+• template autoescape
+
+• harici CDN yokluğu
+
+• path traversal reddi
+
+• geçersiz parametre → 400
+
+• bulunamayan snapshot → 404
+
+• sterile hata gövdesi
+
+• stack trace yokluğu
+
+• secret/credential/token sızıntısı yokluğu
+
+• exchange import/çağrı/yazma yokluğu
+
+• harici ağ çağrısı yokluğu
+
+• history write/update/delete yokluğu
+
+• Decimal string korunumu
+
+• deterministik yanıt
+
+• mevcut auth/CSRF/rate-limit regresyonu olmaması
+
+────────────────────────────────────────
+
+TESLİM RAPORU
+
+── İNCELENEN DOSYALAR ──
+
+── DEĞİŞEN DOSYALAR ──
+
+── AUTH / METHOD SECURITY ──
+
+── XSS / CSP ──
+
+── PARAMETRE / PATH GÜVENLİĞİ ──
+
+── ERROR STERILIZATION ──
+
+── HISTORY INTEGRITY ──
+
+── EXCHANGE / NETWORK SINIRLARI ──
+
+── TESTLER ──
+
+── TAM TEST SONUCU ──
+
+── EXCHANGE WRITE REQUEST SAYISI ──
+
+── SECRET EXPOSURE ──
+
+── COMMIT / HEAD ──
+
+── BİLİNEN SINIRLAMALAR ──
+
+────────────────────────────────────────
+
+PASS KRİTERİ
+
+• Authentication korunuyor.
+
+• CSRF ve rate-limit bypass yok.
+
+• Yalnız GET tabanlı kullanım mevcut.
+
+• XSS ve path traversal açığı yok.
+
+• Hatalar sterile.
+
+• History bütünlüğü korunuyor.
+
+• Exchange Write = 0
+
+• Secret Exposure = 0
+
+• Yeni özellik eklenmedi.
+
+• Regresyon yok.
