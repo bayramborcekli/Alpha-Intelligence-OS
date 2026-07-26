@@ -1,0 +1,66 @@
+{
+  "mission": "1300A.2 — Trading API Authentication Check",
+  "run_id": "M1300A2-e85fe8d54f",
+  "commit": "9f12bda",
+  "tests": "359 passed in 6.92s",
+  "endpoint": "https://fapi.binance.com",
+  "auth": {
+    "read_only": {
+      "authentication": "PASS",
+      "key_masked": "CYly…6QXO",
+      "canTrade": true
+    },
+    "trading": {
+      "authentication": "PASS",
+      "key_masked": "tSxe…mfLN",
+      "canTrade": true
+    }
+  },
+  "trading_permission": "ENABLED",
+  "position_mode": "ONE-WAY",
+  "available_usdt": "0.00000023",
+  "total_wallet_balance": "0.00000023",
+  "open_positions": 0,
+  "request_log": [
+    {
+      "time": "2026-07-26T13:57:51.661621+00:00",
+      "api": "read_only",
+      "method": "GET",
+      "path": "/fapi/v2/account",
+      "status": 200
+    },
+    {
+      "time": "2026-07-26T13:57:52.181427+00:00",
+      "api": "trading",
+      "method": "GET",
+      "path": "/fapi/v2/account",
+      "status": 200
+    },
+    {
+      "time": "2026-07-26T13:57:52.453471+00:00",
+      "api": "trading",
+      "method": "GET",
+      "path": "/fapi/v2/balance",
+      "status": 200
+    },
+    {
+      "time": "2026-07-26T13:57:52.732265+00:00",
+      "api": "trading",
+      "method": "GET",
+      "path": "/fapi/v2/positionRisk",
+      "status": 200
+    },
+    {
+      "time": "2026-07-26T13:57:52.996543+00:00",
+      "api": "trading",
+      "method": "GET",
+      "path": "/fapi/v1/positionSide/dual",
+      "status": 200
+    }
+  ],
+  "order_endpoint_requests": 0,
+  "other_write_requests": 0,
+  "secrets_exposed": 0,
+  "result": "PASS",
+  "finished_at": "2026-07-26T13:57:52.996587+00:00"
+}
