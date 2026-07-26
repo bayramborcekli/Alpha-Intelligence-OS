@@ -15,7 +15,7 @@ from functools import wraps
 from typing import Any
 
 from flask import current_app, redirect, request, session, url_for
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 MAX_ATTEMPTS     = 5      # Bu sayıda başarısız denemeden sonra kilitle
@@ -108,11 +108,26 @@ _ATTEMPTS = _AttemptStore()   # IP → [timestamp, ...] (SQLite destekli)
 # ── Yardımcılar ───────────────────────────────────────────────────────────────
 
 def _get_admin_username() -> str:
-    return os.environ.get("ADMIN_USERNAME") or "admin"
+    return (os.environ.get("ALPHA_OWNER_USERNAME")
+            or os.environ.get("ADMIN_USERNAME") or "admin")
 
 
 def _get_admin_password_hash() -> str | None:
-    return os.environ.get("ADMIN_PASSWORD_HASH") or None
+    return (os.environ.get("ALPHA_OWNER_PASSWORD_HASH")
+            or os.environ.get("ADMIN_PASSWORD_HASH") or None)
+
+
+# Zamanlama eşitleme için sahte hash: gerçek hash'lerle AYNI algoritma ve
+# maliyet profiliyle (generate_password_hash varsayılanı) bir kez üretilir;
+# hiçbir gerçek parolaya ait değildir.
+_DUMMY_HASH: str | None = None
+
+
+def _dummy_hash() -> str:
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = generate_password_hash(os.urandom(24).hex())
+    return _DUMMY_HASH
 
 
 def _trusted_proxy_networks() -> list[ipaddress._BaseNetwork]:
@@ -229,6 +244,12 @@ def verify_credentials(username: str, password: str) -> bool:
         # Parola hash'i yapılandırılmamış = erişim yok
         return False
     if username != expected_user:
+        # Zamanlama eşitleme: kullanıcı adı yanlışken de hash doğrulaması
+        # çalıştır ki yanıt süresi kullanıcı adının doğruluğunu ele vermesin.
+        try:
+            check_password_hash(_dummy_hash(), password)
+        except Exception:
+            pass
         return False
     try:
         return check_password_hash(expected_hash, password)
@@ -237,8 +258,18 @@ def verify_credentials(username: str, password: str) -> bool:
 
 
 def password_hash_configured() -> bool:
-    """Üretim ortamı için parola hash'i ayarlanmış mı?"""
-    return bool(_get_admin_password_hash())
+    """Sahip girişi yapılandırılmış mı? (KİLİTLİ KURULUM kararı için tek
+    doğruluk kaynağı.)
+
+    - Eski şema: ADMIN_PASSWORD_HASH tek başına yeterlidir.
+    - Yeni şema (ALPHA_OWNER_*): hem KULLANICI ADI hem HASH zorunludur;
+      yalnızca hash varsa uygulama KİLİTLİ kalır (fail closed) —
+      alpha_platform.setup_state() ile aynı ölçüt.
+    """
+    if os.environ.get("ADMIN_PASSWORD_HASH"):
+        return True
+    return bool(os.environ.get("ALPHA_OWNER_PASSWORD_HASH")
+                and os.environ.get("ALPHA_OWNER_USERNAME"))
 
 
 # ── Oturum yönetimi ───────────────────────────────────────────────────────────

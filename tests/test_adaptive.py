@@ -620,7 +620,7 @@ class TestFlaskRoutes:
             yield c
 
     def test_dashboard_200(self, client):
-        resp = client.get("/")
+        resp = client.get("/panel")
         assert resp.status_code == 200
         assert b"Kontrol Paneli" in resp.data
 

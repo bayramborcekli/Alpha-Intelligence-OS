@@ -1,0 +1,34 @@
+# Alpha Intelligence OS
+
+PAPER modunda çalışan, salt-okunur borsa bağlantılı kripto işlem platformu.
+Canlı emir yürütme **devre dışıdır** ve yalnızca sunucu tarafı bayrakla,
+açık talimatla etkinleştirilebilir.
+
+## Bileşenler
+- `app.py` — Flask web uygulaması (kabuk, kimlik doğrulama, v1 API'ler)
+- `alpha20_v1/` — işlem motoru, yapılandırma, görev kanıtları (değiştirilmez)
+- `exchange_gateway.py` — salt-okunur borsa geçidi (yalnızca GET + allowlist)
+- `tools/` — görev (mission) betikleri
+- `tests/` — test paketi (`python -m pytest tests/ -q`)
+
+## Başlatma
+```
+gunicorn -c gunicorn.conf.py app:app
+```
+
+## Gerekli sahip secret'ları
+- `ALPHA_OWNER_USERNAME` — sahip kullanıcı adı
+- `ALPHA_OWNER_PASSWORD_HASH` — parola hash'i (sihirbaz `/setup` ile üretilir;
+  düz metin parola asla saklanmaz)
+- `SESSION_SECRET` — oturum imzalama
+
+Eksiklerse uygulama **Kurulum Kilitli** moduna girer. Ayrıntılar:
+- [docs/live_application.md](docs/live_application.md)
+- [docs/security_model.md](docs/security_model.md)
+- [docs/deployment_replit.md](docs/deployment_replit.md)
+- [docs/operator_guide_tr.md](docs/operator_guide_tr.md)
+
+## Güvenli varsayılanlar
+`ALPHA_ENABLE_DRY_RUN`, `ALPHA_ENABLE_LIVE_TRADING`, `ALPHA_ENABLE_TRANSFERS`,
+`ALPHA_ENABLE_WITHDRAWALS` = `false`. Borsa secret'ları yalnızca backend'de
+kalır; frontend'e hiçbir secret geçmez.

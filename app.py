@@ -22,8 +22,9 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 import secrets
+import uuid
 
-from flask import Flask, Response, jsonify, render_template, request, redirect, session, url_for
+from flask import Flask, Response, g, jsonify, render_template, request, redirect, session, url_for
 from flask_wtf.csrf import CSRFProtect, CSRFError
 
 # ── alpha20_v1/ modülleri sys.path üzerinden import ──────────────────────────
@@ -142,27 +143,55 @@ def fmt_volume_filter(vol: float) -> str:
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.before_request
+def _assign_request_id():
+    """Her isteğe benzersiz istek kimliği ata (Mission 1400.1)."""
+    g.request_id = uuid.uuid4().hex[:16]
+
+
+def _api_error(message: str, status: int):
+    """Güvenli, yapılandırılmış API hata yanıtı (istek kimliği dahil)."""
+    return jsonify({"error": message,
+                    "request_id": getattr(g, "request_id", "")}), status
+
+
+@app.before_request
 def _security_gate():
     """Her istekte kimlik doğrulama kontrolü. TESTING=True ise atlanır."""
     if app.config.get("TESTING"):
         app.config["WTF_CSRF_ENABLED"] = False
         return
-    exempt = {"/login", "/logout", "/setup", "/setup/hash", "/setup/check", "/favicon.ico", "/health"}
+    exempt = {"/login", "/logout", "/setup", "/setup/hash", "/setup/check",
+              "/favicon.ico", "/health", "/api/v1/health",
+              "/api/v1/auth/login"}
     if request.path in exempt or request.path.startswith("/static/"):
         return
-    # Parola yapılandırılmamışsa sihirbaza yönlendir
+    is_api = request.path.startswith("/api/")
+    # Parola yapılandırılmamışsa: KİLİTLİ KURULUM modu
     if not auth.password_hash_configured():
+        if is_api:
+            slog.log_event(slog.APP_LOCKED, ip=auth.get_client_ip(),
+                           detail=f"rid={g.request_id}")
+            return _api_error("Kurulum kilitli — yapılandırma eksik.", 403)
         return redirect(url_for("setup_wizard"))
     if not session.get("logged_in"):
+        if is_api:
+            slog.log_event(slog.UNAUTHORIZED_API, ip=auth.get_client_ip(),
+                           detail=f"rid={g.request_id} path={request.path[:60]}")
+            return _api_error("Yetkisiz erişim. Giriş yapın.", 401)
         return redirect(url_for("login", next=request.path))
     if auth._session_expired():
         session.clear()
+        slog.log_event(slog.SESSION_EXPIRED, ip=auth.get_client_ip(),
+                       detail=f"rid={g.request_id}")
+        if is_api:
+            return _api_error("Oturum süresi doldu. Tekrar deneyin.", 401)
         return redirect(url_for("login"))
 
 
 @app.after_request
 def _security_headers(response: Response) -> Response:
     """Tüm yanıtlara güvenlik HTTP başlıkları ekle."""
+    response.headers["X-Request-ID"] = getattr(g, "request_id", "")
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"]        = "DENY"
     response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
@@ -186,6 +215,8 @@ def _security_headers(response: Response) -> Response:
 def _csrf_error(exc: CSRFError):  # type: ignore[misc]
     ip = auth.get_client_ip()
     slog.log_event(slog.CSRF_FAIL, ip=ip, detail=str(exc)[:80])
+    if request.path.startswith("/api/"):
+        return _api_error("Güvenlik hatası: CSRF doğrulaması başarısız.", 400)
     # Kimlik doğrulanmamış istekte dashboard içeriği ASLA gönderme.
     # Oturum yoksa veya süresi dolmuşsa login'e yönlendir (302).
     if not session.get("logged_in") or auth._session_expired():
@@ -709,6 +740,9 @@ def login():
             password = request.form.get("password", "")
             if auth.verify_credentials(username, password):
                 auth.record_attempt(ip, success=True)
+                # Oturum sabitleme (session fixation) önlemi: girişten önce
+                # mevcut oturum tamamen temizlenir, yeni oturum başlatılır.
+                session.clear()
                 auth.start_session(username)
                 slog.log_event(slog.LOGIN_OK, username=username, ip=ip)
                 return redirect(next_url)
@@ -764,6 +798,24 @@ def render_dashboard(message: str | None = None, message_type: str = "success"):
 
 @app.get("/")
 def index():
+    """Mission 1400.1 — kimlik doğrulamalı uygulama kabuğu (Başlangıç)."""
+    from version import get_version
+    import alpha_platform as ap
+    return render_template(
+        "shell.html",
+        app_version=get_version(),
+        owner=session.get("username", ""),
+        setup_state=ap.setup_state(),
+        app_mode=ap.app_mode(),
+        flags=ap.feature_flags(),
+        server_time=datetime.now(timezone.utc).strftime(
+            "%Y-%m-%d %H:%M:%S UTC"),
+    )
+
+
+@app.get("/panel")
+def panel():
+    """Klasik bot kontrol paneli (Genel Bakış)."""
     return render_dashboard()
 
 
@@ -1247,6 +1299,79 @@ def api_adaptive_status():
         "safety":     safety,
         "panel":      {k: v for k, v in panel.items() if k != "last_decisions"},
     }
+
+
+# ── Mission 1400.1: v1 API uç noktaları ──────────────────────────────────────
+
+@app.get("/api/v1/health")
+def api_v1_health():
+    """Güvenli sağlık yanıtı — kimlik doğrulaması gerektirmez."""
+    from version import get_version
+    import alpha_platform as ap
+    return jsonify(ap.health_payload(get_version()))
+
+
+@app.post("/api/v1/auth/login")
+@csrf.exempt
+def api_v1_login():
+    """JSON tabanlı sahip girişi. Oturum yokken CSRF token'ı olamayacağı
+    için muaftır; hız sınırı ve genel hata mesajı uygulanır."""
+    if not auth.password_hash_configured():
+        slog.log_event(slog.APP_LOCKED, ip=auth.get_client_ip(),
+                       detail=f"rid={g.request_id}")
+        return _api_error("Kurulum kilitli.", 403)
+    ip = auth.get_client_ip()
+    allowed, secs = auth.check_rate_limit(ip)
+    if not allowed:
+        slog.log_event(slog.LOGIN_FAIL, detail=f"rid={g.request_id} rate", ip=ip)
+        return _api_error(f"Çok fazla deneme. {secs} saniye sonra tekrar "
+                          "deneyin.", 429)
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _api_error("Bozuk istek gövdesi.", 400)
+    username = str(data.get("username") or "").strip()
+    password = str(data.get("password") or "")
+    if not username or not password:
+        auth.record_attempt(ip, success=False)
+        return _api_error("Kullanıcı adı veya parola hatalı.", 401)
+    if auth.verify_credentials(username, password):
+        auth.record_attempt(ip, success=True)
+        session.clear()                       # oturum sabitleme önlemi
+        auth.start_session(username)
+        slog.log_event(slog.LOGIN_OK, username=username, ip=ip,
+                       detail=f"rid={g.request_id}")
+        return jsonify({"ok": True, "request_id": g.request_id})
+    auth.record_attempt(ip, success=False)
+    slog.log_event(slog.LOGIN_FAIL, ip=ip,
+                   detail=f"rid={g.request_id} user={username[:20]}")
+    return _api_error("Kullanıcı adı veya parola hatalı.", 401)
+
+
+@app.post("/api/v1/auth/logout")
+def api_v1_logout():
+    username = auth.clear_session()
+    slog.log_event(slog.LOGOUT, username=username, ip=auth.get_client_ip(),
+                   detail=f"rid={g.request_id}")
+    return jsonify({"ok": True})
+
+
+@app.get("/api/v1/auth/session")
+def api_v1_session():
+    return jsonify({
+        "authenticated": bool(session.get("logged_in")),
+        "username": session.get("username", ""),
+        "remaining_seconds": auth.get_session_remaining_seconds(),
+    })
+
+
+@app.get("/api/v1/application/config")
+def api_v1_application_config():
+    from version import get_version
+    import alpha_platform as ap
+    resp = jsonify(ap.application_config(
+        get_version(), session.get("username", "")))
+    resp.headers["Cache-Control"] = "no-store, private"
+    return resp
 
 
 @app.get("/api/exchange/summary")

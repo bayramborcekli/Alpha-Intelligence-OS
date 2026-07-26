@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alpha Intelligence OS — Başlangıç</title>
+  <style>
+    :root { --bg:#0d1117; --panel:#161b22; --soft:#1c2430; --border:#30363d;
+            --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --ok:#3fb950;
+            --warn:#d29922; --danger:#f85149; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text);
+           font-family:-apple-system,"Segoe UI",Roboto,sans-serif; min-height:100vh; }
+    a { color:var(--accent); text-decoration:none; }
+    .layout { display:flex; min-height:100vh; }
+    /* Kenar çubuğu */
+    .sidebar { width:230px; background:var(--panel); border-right:1px solid var(--border);
+               padding:18px 12px; flex-shrink:0; }
+    .brand { font-weight:800; letter-spacing:.06em; font-size:.86rem; color:var(--accent);
+             text-transform:uppercase; padding:4px 10px 16px; }
+    .nav a, .nav span { display:block; padding:9px 12px; border-radius:8px; font-size:.88rem;
+             margin-bottom:2px; }
+    .nav a.active { background:rgba(88,166,255,.16); color:var(--accent); font-weight:600; }
+    .nav a:hover { background:var(--soft); }
+    .nav span.disabled { color:#4d5661; cursor:not-allowed; }
+    .nav span.disabled::after { content:" ·"; color:#333; }
+    /* Üst başlık */
+    .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+    header { display:flex; align-items:center; gap:12px; padding:12px 20px;
+             background:var(--panel); border-bottom:1px solid var(--border); }
+    .mode-badge { background:rgba(63,185,80,.15); color:var(--ok); border:1px solid rgba(63,185,80,.4);
+                  border-radius:14px; padding:3px 12px; font-size:.75rem; font-weight:700; }
+    .spacer { flex:1; }
+    .owner { color:var(--muted); font-size:.84rem; }
+    .logout-btn { background:var(--soft); color:var(--text); border:1px solid var(--border);
+                  border-radius:8px; padding:7px 14px; font-size:.84rem; cursor:pointer; min-height:38px; }
+    .logout-btn:hover { border-color:var(--danger); color:var(--danger); }
+    .menu-btn { display:none; background:none; border:1px solid var(--border); color:var(--text);
+                border-radius:8px; padding:7px 11px; font-size:1rem; cursor:pointer; min-height:38px; }
+    /* İçerik */
+    .content { padding:24px 20px; max-width:960px; width:100%; }
+    h1 { font-size:1.4rem; margin-bottom:4px; }
+    .sub { color:var(--muted); font-size:.86rem; margin-bottom:20px; }
+    .warn-banner { background:rgba(210,153,34,.12); border:1px solid rgba(210,153,34,.5);
+                   color:var(--warn); border-radius:10px; padding:14px 16px; font-weight:700;
+                   margin-bottom:20px; font-size:.95rem; }
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+    .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; }
+    .card h2 { font-size:.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;
+               margin-bottom:10px; }
+    .kv { display:flex; justify-content:space-between; padding:6px 0; font-size:.88rem;
+          border-bottom:1px solid rgba(48,54,61,.5); }
+    .kv:last-child { border-bottom:none; }
+    .kv strong { color:var(--muted); font-weight:500; }
+    .flag-off { color:var(--ok); }   /* kapalı bayrak = güvenli = yeşil */
+    .flag-on  { color:var(--danger); font-weight:700; }
+    .status-ok { color:var(--ok); font-weight:600; }
+    .status-warn { color:var(--warn); font-weight:600; }
+    footer { text-align:center; padding:16px; color:#444; font-size:.72rem; margin-top:auto; }
+    /* Mobil */
+    @media (max-width: 760px) {
+      .sidebar { position:fixed; z-index:30; top:0; left:0; height:100%; transform:translateX(-105%);
+                 transition:transform .2s ease; box-shadow:4px 0 24px rgba(0,0,0,.5); }
+      .sidebar.open { transform:translateX(0); }
+      .menu-btn { display:block; }
+      .content { padding:16px 12px; }
+      .owner { display:none; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <nav class="sidebar" id="sidebar" aria-label="Ana menü">
+    <div class="brand">Alpha Intelligence OS</div>
+    <div class="nav">
+      <a href="/" class="active" aria-current="page">🏠 Başlangıç</a>
+      <a href="/panel">📊 Genel Bakış</a>
+      <span class="disabled" title="Sonraki sprint">Portföy</span>
+      <span class="disabled" title="Sonraki sprint">Pozisyonlar</span>
+      <span class="disabled" title="Sonraki sprint">Emirler</span>
+      <span class="disabled" title="Sonraki sprint">Binance Global</span>
+      <span class="disabled" title="Sonraki sprint">Binance TR</span>
+      <span class="disabled" title="Sonraki sprint">Defter</span>
+      <span class="disabled" title="Sonraki sprint">Risk</span>
+      <span class="disabled" title="Sonraki sprint">Dry Run</span>
+      <span class="disabled" title="Sonraki sprint">Raporlar</span>
+      <span class="disabled" title="Sonraki sprint">Sistem Sağlığı</span>
+      <span class="disabled" title="Sonraki sprint">Ayarlar</span>
+    </div>
+  </nav>
+  <div class="main">
+    <header>
+      <button class="menu-btn" id="menu-btn" aria-label="Menüyü aç/kapat"
+              aria-expanded="false" aria-controls="sidebar">☰</button>
+      <span class="mode-badge">{{ app_mode }}</span>
+      <div class="spacer"></div>
+      <span class="owner">👤 {{ owner or "sahip" }}</span>
+      <form method="get" action="/logout" style="display:inline">
+        <button class="logout-btn" type="submit">Oturumu Kapat</button>
+      </form>
+    </header>
+    <main class="content">
+      <h1>Alpha Intelligence OS</h1>
+      <p class="sub">Sahip oturumu doğrulandı · v{{ app_version }}</p>
+
+      <div class="warn-banner" role="alert">⚠️ Canlı emir yürütme devre dışı</div>
+
+      <div class="cards">
+        <section class="card" aria-labelledby="h-durum">
+          <h2 id="h-durum">Sistem Durumu</h2>
+          <div class="kv"><strong>Kurulum</strong>
+            <span class="{{ 'status-ok' if setup_state == 'READY' else 'status-warn' }}">
+              {{ 'Uygulama Hazır' if setup_state == 'READY' else 'Kurulum Kilitli' }}</span></div>
+          <div class="kv"><strong>Mod</strong><span>{{ app_mode }}</span></div>
+          <div class="kv"><strong>Sunucu saati</strong><span>{{ server_time }}</span></div>
+          <div class="kv"><strong>Oturum</strong><span class="status-ok">Doğrulandı</span></div>
+        </section>
+        <section class="card" aria-labelledby="h-flags">
+          <h2 id="h-flags">Özellik Bayrakları</h2>
+          {% for name, val in flags.items() %}
+          <div class="kv"><strong>{{ name.replace('ALPHA_ENABLE_', '') }}</strong>
+            <span class="{{ 'flag-on' if val else 'flag-off' }}">
+              {{ 'AÇIK' if val else 'KAPALI' }}</span></div>
+          {% endfor %}
+        </section>
+        <section class="card" aria-labelledby="h-next">
+          <h2 id="h-next">Sonraki Sprint</h2>
+          <p style="font-size:.86rem;color:var(--muted)">
+            Borsa panoları, portföy ve defter ekranları bir sonraki sprintte
+            etkinleştirilecek. Bu sürümde canlı emir yürütme
+            <strong style="color:var(--warn)">devre dışıdır</strong>.</p>
+        </section>
+      </div>
+    </main>
+    <footer>Alpha Intelligence OS · <span style="color:var(--ok)">{{ app_mode }}</span> · v{{ app_version }}</footer>
+  </div>
+</div>
+<script>
+  (function () {
+    var btn = document.getElementById("menu-btn");
+    var sb = document.getElementById("sidebar");
+    btn.addEventListener("click", function () {
+      var open = sb.classList.toggle("open");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { sb.classList.remove("open");
+        btn.setAttribute("aria-expanded", "false"); }
+    });
+  })();
+</script>
+</body>
+</html>

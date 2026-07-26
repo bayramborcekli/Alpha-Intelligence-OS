@@ -28,6 +28,9 @@ PAPER_MODE_ACTIVE = "PAPER_MODE_ACTIVE"
 STARTUP           = "STARTUP"
 CONFIG_ERROR      = "CONFIG_ERROR"
 CSRF_FAIL         = "CSRF_FAIL"
+SESSION_EXPIRED   = "SESSION_EXPIRED"
+UNAUTHORIZED_API  = "UNAUTHORIZED_API"
+APP_LOCKED        = "APP_LOCKED"
 
 # ── Hassas kelimeler (paranoia guard) ─────────────────────────────────────────
 _FORBIDDEN_WORDS = ("password", "passwd", "secret", "token", "hash",

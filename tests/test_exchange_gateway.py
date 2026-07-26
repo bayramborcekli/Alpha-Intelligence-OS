@@ -86,7 +86,8 @@ def test_api_exchange_requires_auth():
     try:
         client = flask_app.app.test_client()
         r = client.get("/api/exchange/summary")
-        assert r.status_code in (302, 401)
+        # 401 = oturum yok, 403 = kurulum kilitli, 302 = login yönlendirmesi
+        assert r.status_code in (302, 401, 403)
     finally:
         flask_app.app.config["TESTING"] = True
 

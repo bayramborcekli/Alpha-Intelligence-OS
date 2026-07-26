@@ -517,7 +517,7 @@ class TestInputValidation:
         """XSS payload'ı coin sembolü olarak eklenememeli."""
         _login(auth_client)
         auth_client.post("/coins/add", data={"symbol": "<script>alert(1)</script>"})
-        resp = auth_client.get("/")
+        resp = auth_client.get("/panel")
         assert b"<script>alert(1)</script>" not in resp.data
 
     def test_setting_minimum_score_out_of_range(self, auth_client):
