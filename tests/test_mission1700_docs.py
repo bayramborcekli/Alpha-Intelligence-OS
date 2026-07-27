@@ -158,7 +158,7 @@ def test_documented_test_counts_match_files():
     }
     total = sum(counts.values())
     assert total == 173
-    assert "**173**" in DOC and "**173**" in INDEX
+    assert "**173**" in DOC and "173" in INDEX
     for fname, n in counts.items():
         assert f"| {n} |" in DOC or str(n) in DOC, fname
         assert fname in DOC or f"tests/{fname}" in DOC, fname

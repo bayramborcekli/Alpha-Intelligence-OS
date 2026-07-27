@@ -80,8 +80,10 @@ Intelligence
 | 06 | Export (`portfolio_export.py`) | `65199d2` | 21 |
 | 07 | Güvenlik doğrulaması (+ `persist=False` düzeltmesi) | `7c50f10` | 50 |
 | 08 | Tam regresyon bütünleştirme | `eb9994f` | 15 |
-| 09 | Dokümantasyon (`docs/portfolio_intelligence.md`) | (bu commit) | — |
+| 09 | Dokümantasyon (`docs/portfolio_intelligence.md`) | `331443a` | 14 |
+| 10 | Mission Closure | (bu commit) | — |
 
-Toplam yeni 1700 testi: **173** · Agent 08 regresyonu:
-**1321 PASS / 0 FAIL / 0 SKIP** · Exchange Write 0 · Secret Exposure 0.
+Toplam yeni 1700 testi: **187** (173 + 14 doküman) · Kapanış toplamı:
+**1335 PASS / 0 FAIL / 0 SKIP** · Exchange Write 0 · Secret Exposure 0 —
+MISSION 1700 RESMEN KAPANDI.
 Ayrıntı: `docs/portfolio_intelligence.md`
