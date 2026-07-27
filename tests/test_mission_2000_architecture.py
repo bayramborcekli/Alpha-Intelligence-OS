@@ -236,8 +236,9 @@ class TestSecurityModel:
 class TestNoProductionBehavior:
     def test_planned_modules_not_yet_implemented(self):
         # Yalnız teslim edilen ajanların modülleri mevcut olabilir.
-        # Agent 03 teslim etti: execution_risk_engine.py
-        delivered = {"execution_risk_engine.py"}
+        # Teslim edildi: Agent 03 risk engine, Agent 04 kill switch
+        delivered = {"execution_risk_engine.py",
+                     "execution_kill_switch.py"}
         for module_file in PLANNED_MODULES:
             if module_file in delivered:
                 assert os.path.exists(
