@@ -83,6 +83,25 @@ yapılandırma; çalışma geçmişi modeli yok — `docs/automation.md` §8).
 ve run uçlarını kullanır; 30 sn status polling; yalnız "Şimdi Çalıştır" +
 "Yenile" eylemleri.
 
+## Portfolio Intelligence API (Mission 1700, `/api/portfolio/intelligence*`)
+
+Salt-okunur, tavsiye niteliğinde portföy analizi. Kimlik doğrulamalı;
+yanıtlar `Cache-Control: no-store, private` + `nosniff` taşır; tüm
+uçlar YALNIZ GET ve her birinin `/api/v1/...` takma adı vardır.
+Ayrıntılı sözleşme: `docs/portfolio_intelligence.md`.
+
+| Uç | Notlar |
+|---|---|
+| `GET /api/portfolio/intelligence` | PortfolioAnalysis zarfı (`analysis_version: 1`): `status OK\|PARTIAL\|UNAVAILABLE` (üçü de HTTP 200), `sources` sterile meta, `portfolio{equity, positions, allocation, exposure, concentration, performance, risk_utilization, health}`; tüm sayılar sabit-nokta string, bilinmeyen → `null` (asla 0); `generated_at` yalnız API sınırında üretilir; beklenmedik hata → `500 PORTFOLIO_ANALYSIS_ERROR` (sterile) |
+| `GET /api/portfolio/intelligence/export/json` | Zarfın deterministik JSON baytları; `Content-Disposition: attachment; filename="portfolio_intelligence.json"` |
+| `GET /api/portfolio/intelligence/export/csv` | Düzleştirilmiş rapor: `section,field,value`; bölüm sırası `meta→summary→positions→risk→diversification→sources`; bilinmeyen → boş hücre; UTF-8 BOM + CRLF; formül-enjeksiyon korumalı; `portfolio_intelligence.csv` |
+
+### Portfolio Intelligence UI
+`GET /portfolio-intelligence` — oturum yönlendirmeli salt-okunur sayfa;
+yalnız `/api/v1/portfolio/intelligence` ucunu kullanır; işlem/AL-SAT
+kontrolü yoktur; 5 görsel durum (Yükleniyor/SAĞLIKLI/KISMİ/
+KULLANILAMAZ/HATA); `null → "—"`.
+
 ## Diğer salt-okunur yüzeyler (1400 serisi)
 - `GET /api/risk/{summary,exposure,alerts,history,simulator}` — Risk Motoru
   (simülatörün POST varyantı yalnızca YEREL hesap yapar; borsaya istek yok)

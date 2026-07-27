@@ -67,3 +67,21 @@ Toplam yeni 1600 testi: **168** · Kapanış toplamı:
 **1148 PASS / 0 FAIL / 0 SKIP** — MISSION 1600 RESMEN KAPANDI.
 Ayrıntı: `docs/automation.md` · Sonraki: MISSION 1700 — Portfolio
 Intelligence
+
+## Mission 1700 — Agent dökümü
+
+| Agent | Görev | Commit | Test |
+|---|---|---|---|
+| 01 | Mimari plan | — (plan) | — |
+| 02 | Portfolio Core (`portfolio_intelligence.py`) | `aef28d4` | 27 |
+| 03 | Portfolio Service (`portfolio_service.py`) | `1a2f79c` | 23 |
+| 04 | Read-Only API (`/api/portfolio/intelligence`) | `f8535a6` | 17 |
+| 05 | Portfolio UI (`/portfolio-intelligence`) | `bcc36e3` | 20 |
+| 06 | Export (`portfolio_export.py`) | `65199d2` | 21 |
+| 07 | Güvenlik doğrulaması (+ `persist=False` düzeltmesi) | `7c50f10` | 50 |
+| 08 | Tam regresyon bütünleştirme | `eb9994f` | 15 |
+| 09 | Dokümantasyon (`docs/portfolio_intelligence.md`) | (bu commit) | — |
+
+Toplam yeni 1700 testi: **173** · Agent 08 regresyonu:
+**1321 PASS / 0 FAIL / 0 SKIP** · Exchange Write 0 · Secret Exposure 0.
+Ayrıntı: `docs/portfolio_intelligence.md`
