@@ -1,0 +1,409 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1700 — PORTFOLIO INTELLIGENCE
+
+AGENT 06 — EXPORT
+
+ROLE
+
+You are the Export Agent for Mission 1700.
+
+Implement the Portfolio Intelligence Export layer exactly on top of the
+approved Mission 1700 Architecture, Agent 02 Core, Agent 03 Service Layer,
+Agent 04 API and Agent 05 UI.
+
+Do not redesign previous layers.
+
+Do not introduce execution capability.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1600
+
+OFFICIALLY CLOSED
+
+Mission 1700
+
+Agent 01 — PASS
+Agent 02 — PASS
+Agent 03 — PASS
+Agent 04 — PASS
+Agent 05 — PASS
+
+Baseline Commit
+
+bcc36e3
+
+Regression Baseline
+
+1235 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+This baseline must remain fully compatible.
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement deterministic export support for Portfolio Intelligence.
+
+The Export layer shall:
+
+• export the existing PortfolioAnalysis envelope
+
+• consume only the Agent 04 API or Agent 03 Service
+
+• remain advisory-only
+
+• remain read-only
+
+The Export layer SHALL NOT:
+
+• calculate portfolio intelligence
+
+• modify PortfolioAnalysis
+
+• write Workspace
+
+• write Timeline
+
+• call append_snapshot()
+
+• call Exchange
+
+• submit orders
+
+• modify Risk Engine
+
+────────────────────────────────────────
+3. FILES
+
+Create only the minimum files required by repository conventions.
+
+Examples:
+
+portfolio_export.py
+
+tests/test_mission1700_portfolio_export.py
+
+Modify API registration only if required to expose export endpoints.
+
+Do not modify Core calculations.
+
+────────────────────────────────────────
+4. EXPORT CONTRACT
+
+Supported formats:
+
+• JSON
+• CSV
+
+(Optional adapters may exist internally, but Mission 1700 officially exports
+only JSON and CSV.)
+
+Export must originate from the existing normalized PortfolioAnalysis envelope.
+
+No alternate data path.
+
+────────────────────────────────────────
+5. JSON EXPORT
+
+JSON export must be byte-identical to the normalized PortfolioAnalysis
+returned by the API (except for transport headers where applicable).
+
+Requirements:
+
+• preserve field names
+
+• preserve null
+
+• preserve fixed-point numeric strings
+
+• preserve analysis_version
+
+• preserve generated_at
+
+• preserve read_only
+
+• preserve advisory_only
+
+• preserve source metadata
+
+No restructuring.
+
+────────────────────────────────────────
+6. CSV EXPORT
+
+CSV is a flattened reporting format.
+
+At minimum export:
+
+Summary
+
+• status
+• health
+• nav
+• cash
+• gross exposure
+• net exposure
+
+Positions
+
+• symbol
+• side
+• quantity
+• mark
+• weight
+• unrealized_pnl
+
+Risk
+
+• utilization
+• violations
+
+Diversification
+
+• HHI
+• effective_positions
+• top_position
+• top_weight
+
+Unknown values remain empty fields.
+
+Never convert unknown values to zero.
+
+Column ordering must be deterministic.
+
+────────────────────────────────────────
+7. EXPORT API
+
+Follow existing repository conventions.
+
+Recommended examples:
+
+GET /api/portfolio/intelligence/export/json
+
+GET /api/portfolio/intelligence/export/csv
+
+(or canonical equivalents)
+
+GET only.
+
+No POST.
+
+No mutation.
+
+────────────────────────────────────────
+8. DETERMINISM
+
+Same PortfolioAnalysis
+
+↓
+
+Byte-identical JSON export
+
+↓
+
+Byte-identical CSV export
+
+Requirements:
+
+• deterministic ordering
+
+• UTF-8
+
+• stable newline convention
+
+• stable column ordering
+
+• no locale formatting
+
+• no random
+
+• no timestamps generated inside Export
+
+────────────────────────────────────────
+9. SECURITY
+
+Export must never expose:
+
+provider internals
+
+tracebacks
+
+exception text
+
+filesystem paths
+
+secret values
+
+Risk Engine internals
+
+Exchange internals
+
+No filesystem writes.
+
+No temporary files.
+
+Streaming or in-memory export only.
+
+────────────────────────────────────────
+10. ERROR MODEL
+
+Sterile errors only.
+
+Unsupported export format:
+
+stable error code
+
+No traceback.
+
+No internal implementation leakage.
+
+────────────────────────────────────────
+11. TESTS
+
+Create comprehensive tests covering at least:
+
+• JSON export
+
+• CSV export
+
+• deterministic JSON
+
+• deterministic CSV
+
+• null preservation
+
+• fixed-point preservation
+
+• advisory_only preserved
+
+• read_only preserved
+
+• analysis_version preserved
+
+• generated_at preserved
+
+• column ordering
+
+• UTF-8 encoding
+
+• unsupported format
+
+• API export endpoint
+
+• no calculations
+
+• no Core duplication
+
+• no Service duplication
+
+• no filesystem writes
+
+• no temporary files
+
+• no Exchange dependency
+
+• no append_snapshot usage
+
+• backward compatibility
+
+• full regression
+
+────────────────────────────────────────
+12. DELIVERY REPORT
+
+── CREATED FILES ──
+
+── MODIFIED FILES ──
+
+── EXPORT CONTRACT ──
+
+── JSON EXPORT ──
+
+── CSV EXPORT ──
+
+── API INTEGRATION ──
+
+── DETERMINISM VERIFICATION ──
+
+── SECURITY VERIFICATION ──
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0 hedeflenir
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 07 — Security Verification
+
+────────────────────────────────────────
+13. PASS CRITERIA
+
+PASS requires:
+
+• Deterministic JSON export
+
+• Deterministic CSV export
+
+• Export uses existing PortfolioAnalysis only
+
+• No portfolio calculations
+
+• Null values preserved
+
+• Fixed-point numeric strings preserved
+
+• Stable column ordering
+
+• UTF-8 output
+
+• No filesystem writes
+
+• No temporary files
+
+• No Exchange dependency
+
+• No append_snapshot usage
+
+• All new tests PASS
+
+• Full regression PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+• Commit created and pushed to GitHub
+
+MISSION 1700 continues only after Agent 06 passes.
