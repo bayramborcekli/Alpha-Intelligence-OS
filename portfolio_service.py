@@ -256,15 +256,24 @@ def build_default_providers() -> dict[str, Callable[[], Any]]:
     canlı sisteme dokunmaz. Tazelik: sağlayıcı sonucu anlık görünümdür
     → ``fresh``; hata sterile ``unavailable`` olur (``_collect``).
     """
-    def equity_provider() -> dict[str, Any]:
+    def _readonly_snapshot() -> dict[str, Any]:
+        # Mission 1800 / Agent 07 güvenlik düzeltmesi: varsayılan
+        # IntelligenceService risk sağlayıcısı risk özetini
+        # persist=True ile çağırır ve GET yolunda snapshot YAZARDI.
+        # Salt-okunur zincirde risk özeti persist=False ile okunur.
         import intelligence_service
-        snapshot = intelligence_service.IntelligenceService().get_snapshot()
+        import risk_api
+        svc = intelligence_service.IntelligenceService(
+            risk_provider=lambda: risk_api.summary(persist=False))
+        return svc.get_snapshot()
+
+    def equity_provider() -> dict[str, Any]:
+        snapshot = _readonly_snapshot()
         return {"freshness": "fresh",
                 "data": map_account_to_equity(snapshot.get("account"))}
 
     def positions_provider() -> dict[str, Any]:
-        import intelligence_service
-        snapshot = intelligence_service.IntelligenceService().get_snapshot()
+        snapshot = _readonly_snapshot()
         return {"freshness": "fresh",
                 "data": map_positions(snapshot.get("positions"))}
 
