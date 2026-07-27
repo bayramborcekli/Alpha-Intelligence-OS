@@ -547,7 +547,7 @@ class TestFrontend:
 
     def test_nav_active(self, client):
         _login(client)
-        shell = client.get("/").get_data(as_text=True)
+        shell = client.get("/start").get_data(as_text=True)
         for href in ('href="/ledger"', 'href="/audit"', 'href="/reports"'):
             assert href in shell
         assert 'Sonraki sprint">Defter' not in shell

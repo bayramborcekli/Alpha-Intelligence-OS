@@ -207,7 +207,7 @@ class TestAuthorization:
 
     def test_shell_renders_after_login(self, client):
         _login(client)
-        r = client.get("/")
+        r = client.get("/start")
         assert r.status_code == 200
         body = r.get_data(as_text=True)
         assert "Canlı emir yürütme devre dışı" in body
@@ -413,7 +413,7 @@ class TestSecurity:
 
     def test_shell_has_mobile_and_desktop_navigation(self, client):
         _login(client)
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/start").get_data(as_text=True)
         assert 'id="menu-btn"' in body          # mobil menü düğmesi
         assert 'class="sidebar"' in body        # masaüstü kenar çubuğu
         assert "aria-expanded" in body          # erişilebilirlik

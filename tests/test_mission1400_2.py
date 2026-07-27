@@ -491,5 +491,5 @@ class TestFrontend:
 
     def test_shell_nav_links_overview(self, client):
         _login(client)
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/start").get_data(as_text=True)
         assert 'href="/overview"' in body

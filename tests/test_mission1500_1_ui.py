@@ -63,7 +63,7 @@ class TestLayout:
 
     def test_navigation_home_visible(self, client):
         html = _page(client)
-        assert 'href="/"' in html and "Başlangıç" in html  # Ana Sayfa
+        assert 'href="/start"' in html and "Başlangıç" in html  # Ana Sayfa
         assert 'href="/intelligence"' in html
         assert 'aria-current="page"' in html
 

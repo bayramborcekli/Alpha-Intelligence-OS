@@ -421,7 +421,7 @@ class TestReadOnlySecurity:
 # ── Mission 1700 + önceki yüzey uyumluluğu ──────────────────────────
 
 class TestBackwardCompatibility:
-    PAGES = ("/", "/intelligence", "/workspace", "/automation",
+    PAGES = ("/start", "/intelligence", "/workspace", "/automation",
              "/portfolio-intelligence", "/strategy-intelligence")
     APIS = ("/api/automation/status",
             "/api/v1/automation/export/status?format=json")

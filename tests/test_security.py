@@ -117,10 +117,11 @@ class TestAuthentication:
         assert resp.status_code == 200
 
     def test_dashboard_accessible_after_login(self, auth_client):
-        """Giriş sonrası dashboard 200 dönmeli."""
+        """Giriş sonrası kök rota Trading Home'a iner (200)."""
         _login(auth_client)
-        resp = auth_client.get("/")
+        resp = auth_client.get("/", follow_redirects=True)
         assert resp.status_code == 200
+        assert resp.request.path == "/home"
 
     def test_logout_clears_session(self, auth_client):
         """Çıkış oturumu temizlemeli."""

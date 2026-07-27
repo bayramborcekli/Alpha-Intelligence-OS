@@ -407,7 +407,7 @@ class TestFrontend:
 
     def test_nav_links_active(self, client):
         _login(client)
-        shell = client.get("/").get_data(as_text=True)
+        shell = client.get("/start").get_data(as_text=True)
         for href in ('href="/portfolio"', 'href="/positions"',
                      'href="/orders"'):
             assert href in shell

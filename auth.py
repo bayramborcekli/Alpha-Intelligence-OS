@@ -345,7 +345,8 @@ def login_required(f: Any) -> Any:
             return f(*args, **kwargs)
         # Giriş kontrolü
         if not session.get("logged_in"):
-            return redirect(url_for("login", next=request.path))
+            # Mission 2400 route fix: önceki rota geri yüklenmez.
+            return redirect(url_for("login"))
         # Oturum süresi kontrolü
         if _session_expired():
             session.clear()

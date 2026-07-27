@@ -284,7 +284,7 @@ class TestFrontend:
 
     def test_nav_enabled_everywhere(self, client):
         _login(client)
-        for page in ("/overview", "/ledger", "/"):
+        for page in ("/overview", "/ledger", "/start"):
             html = client.get(page).get_data(as_text=True)
             assert 'href="/risk"' in html, page
 

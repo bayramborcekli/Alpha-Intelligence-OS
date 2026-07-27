@@ -178,7 +178,9 @@ def _security_gate():
             slog.log_event(slog.UNAUTHORIZED_API, ip=auth.get_client_ip(),
                            detail=f"rid={g.request_id} path={request.path[:60]}")
             return _api_error("Yetkisiz erişim. Giriş yapın.", 401)
-        return redirect(url_for("login", next=request.path))
+        # Mission 2400 route fix: önceki rota geri yüklenmez —
+        # giriş sonrası her zaman Trading Home açılır (next yok).
+        return redirect(url_for("login"))
     if auth._session_expired():
         session.clear()
         slog.log_event(slog.SESSION_EXPIRED, ip=auth.get_client_ip(),
@@ -213,6 +215,18 @@ def _security_headers(response: Response) -> Response:
     if os.environ.get("FLASK_ENV") == "production":
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     return response
+
+
+@app.errorhandler(404)
+def _not_found(_err):
+    """Bilinmeyen/geçersiz rota — Mission 2400 route fix.
+
+    HTML istekleri Trading Home'a yönlendirilir; API istekleri
+    sterile 404 zarfı alır (istemci mantığı bozulmaz).
+    """
+    if request.path.startswith("/api/"):
+        return _api_error("Kaynak bulunamadı.", 404)
+    return redirect("/home")
 
 
 @app.errorhandler(CSRFError)
@@ -767,17 +781,13 @@ def login():
     if not auth.password_hash_configured():
         return redirect(url_for("setup_wizard"))
     if session.get("logged_in"):
-        return redirect(url_for("index"))
+        return redirect("/home")
 
     error: str | None = None
     not_configured    = not auth.password_hash_configured()
-    # next_url — yalnızca aynı origin göreceli yollar
-    # Mission 2300: giriş sonrası varsayılan sayfa Trading Home
-    # (sahip odaklı ana sayfa); Operation Center menüde kalır.
-    next_url = (request.args.get("next") or request.form.get("next")
-                or "/home")
-    if not next_url.startswith("/") or next_url.startswith("//"):
-        next_url = "/home"
+    # Mission 2400 route fix: önceki rota ASLA geri yüklenmez;
+    # kimlik doğrulama sonrası her zaman Trading Home açılır.
+    next_url = "/home"
 
     if request.method == "POST":
         ip = auth.get_client_ip()
@@ -857,6 +867,17 @@ def render_dashboard(message: str | None = None, message_type: str = "success"):
 
 @app.get("/")
 def index():
+    """Varsayılan açılış rotası — her zaman Trading Home.
+
+    Mission 2400 route fix: başlangıç, yenileme ve yeniden bağlanma
+    senaryolarının tümü doğrudan Trading Home'a iner. Eski Başlangıç
+    kabuğu /start altında menüden erişilebilir kalır.
+    """
+    return redirect("/home")
+
+
+@app.get("/start")
+def start_page():
     """Mission 1400.1 — kimlik doğrulamalı uygulama kabuğu (Başlangıç)."""
     from version import get_version
     import alpha_platform as ap

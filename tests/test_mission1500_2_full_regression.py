@@ -252,5 +252,5 @@ def test_1500_1_surface_intact(env):
     body = r.get_json()
     assert ("enabled" in body) or (body.get("ok") in (True, False))
     # Ana sayfalar hâlâ render olur
-    for page in ("/", "/risk", "/portfolio"):
+    for page in ("/start", "/risk", "/portfolio"):
         assert c.get(page).status_code == 200, page

@@ -134,7 +134,7 @@ class TestEndToEndChains:
 # ── Uyumluluk: önceki mission yüzeyleri ─────────────────────────────
 
 class TestBackwardCompatibility:
-    PAGES = ("/", "/intelligence", "/workspace", "/automation",
+    PAGES = ("/start", "/intelligence", "/workspace", "/automation",
              "/portfolio-intelligence")
     APIS = ("/api/automation/status",
             "/api/v1/automation/export/status?format=json",
