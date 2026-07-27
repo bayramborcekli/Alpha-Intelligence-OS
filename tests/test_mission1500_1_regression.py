@@ -161,6 +161,11 @@ class TestRouteSurface:
         "/api/portfolio/intelligence", "/api/v1/portfolio/intelligence",
         # Mission 1700 / Agent 05: UI sayfası (GET-only).
         "/portfolio-intelligence",
+        # Mission 1700 / Agent 06: Export uçları (GET-only).
+        "/api/portfolio/intelligence/export/json",
+        "/api/v1/portfolio/intelligence/export/json",
+        "/api/portfolio/intelligence/export/csv",
+        "/api/v1/portfolio/intelligence/export/csv",
     }
 
     def test_intelligence_route_set_exact(self):

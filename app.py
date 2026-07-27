@@ -1960,6 +1960,40 @@ def api_portfolio_intelligence():
     return _automation_json(envelope)
 
 
+# ── Mission 1700 / Agent 06: Portfolio Intelligence Export ──────────
+# YALNIZCA GET. Veri tek kaynaktan gelir: Agent 04 ile AYNI kompozisyon
+# (servis → çekirdek zarfı); alternatif veri yolu yoktur. Export katmanı
+# (portfolio_export) zarfı değiştirmez, dosya yazmaz, bellek içi üretir.
+
+def _portfolio_intelligence_export(fmt: str):
+    import portfolio_service as _psv
+    import portfolio_export as _pex
+    generated_at = datetime.now(timezone.utc).isoformat()
+    try:
+        # Servis + export + yanıt kurulumu tek sterile sınır içinde:
+        # hangi aşama patlarsa patlasın istisna metni dışarı sızmaz.
+        envelope = _psv.get_portfolio_analysis(
+            _psv.build_default_providers(), generated_at)
+        return _aex_response(_pex.export_analysis(envelope, fmt))
+    except Exception:
+        app.logger.exception("portfolio intelligence export hatası")
+        return _automation_json({"ok": False, "error": {
+            "code": "PORTFOLIO_ANALYSIS_ERROR",
+            "message": "Portföy analizi üretilemedi."}}, 500)
+
+
+@app.get("/api/portfolio/intelligence/export/json")
+@app.get("/api/v1/portfolio/intelligence/export/json")
+def api_portfolio_intelligence_export_json():
+    return _portfolio_intelligence_export("json")
+
+
+@app.get("/api/portfolio/intelligence/export/csv")
+@app.get("/api/v1/portfolio/intelligence/export/csv")
+def api_portfolio_intelligence_export_csv():
+    return _portfolio_intelligence_export("csv")
+
+
 # ── Mission 1500.2: Workspace Read-Only API ──────────────────────────
 # YALNIZCA GET. Veri tek kaynaktan gelir: intelligence_workspace_service
 # (timeline modülüne doğrudan erişilmez). Kimlik doğrulama _security_gate
