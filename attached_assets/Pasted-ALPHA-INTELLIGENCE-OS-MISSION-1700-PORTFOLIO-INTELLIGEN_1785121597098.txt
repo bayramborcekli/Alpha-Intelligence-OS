@@ -1,0 +1,502 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1700 — PORTFOLIO INTELLIGENCE
+
+AGENT 03 — SERVICE LAYER
+
+ROLE
+
+You are the Service Layer Agent for Mission 1700.
+
+Implement the Portfolio Intelligence Service exactly on top of the approved
+Mission 1700 Architecture and the completed Agent 02 Core.
+
+Do not redesign the Core.
+
+Do not modify previous missions.
+
+Do not introduce execution capability.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1600
+
+OFFICIALLY CLOSED
+
+Mission 1700
+
+Agent 01 — PASS
+
+Agent 02 — PASS
+
+Baseline Commit
+
+aef28d4
+
+Regression Baseline
+
+1175 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+This baseline must remain fully compatible.
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement the Portfolio Intelligence Service Layer.
+
+The Service shall:
+
+• gather portfolio inputs from existing read-only providers
+
+• normalize provider availability
+
+• translate provider outputs into the Core input contract
+
+• invoke analyze_portfolio(...)
+
+• return the normalized PortfolioAnalysis envelope
+
+The Service SHALL NOT:
+
+• write Workspace
+
+• write Timeline
+
+• call append_snapshot()
+
+• call Exchange
+
+• submit orders
+
+• modify Risk Engine
+
+• calculate market intelligence
+
+• duplicate Core calculations
+
+• create threads
+
+• create schedulers
+
+────────────────────────────────────────
+3. FILES
+
+Create
+
+portfolio_service.py
+
+tests/test_mission1700_portfolio_service.py
+
+Only modify additional files if absolutely required.
+
+Previous mission files should remain unchanged.
+
+────────────────────────────────────────
+4. SERVICE CONTRACT
+
+Implement a clear public service contract.
+
+Suggested interface:
+
+get_portfolio_analysis(...)
+
+or
+
+PortfolioService.get_analysis(...)
+
+The Service must:
+
+• accept injected provider dependencies
+
+• accept generated_at as an injected value
+
+• collect provider data read-only
+
+• map provider results to Core inputs
+
+• delegate all portfolio calculations to analyze_portfolio(...)
+
+• return the Core envelope unchanged except for strictly service-owned source metadata
+
+No Flask dependency.
+
+No request context.
+
+No global mutable state.
+
+────────────────────────────────────────
+5. PROVIDER MODEL
+
+Support injected read-only providers for the data needed by the Core.
+
+At minimum define service boundaries for:
+
+• portfolio positions
+
+• cash / balances
+
+• valuation / marks
+
+• performance / PnL
+
+• Risk Engine limits or risk view
+
+• historical health / drawdown inputs when available
+
+Providers may be:
+
+fresh
+
+stale
+
+unavailable
+
+The Service must preserve provider state in sources.
+
+Missing provider data must remain unknown.
+
+Never convert unavailable data to zero.
+
+────────────────────────────────────────
+6. SOURCE NORMALIZATION
+
+Normalize provider metadata deterministically.
+
+Each source should expose only sterile fields such as:
+
+status
+
+freshness
+
+available
+
+code
+
+No raw exception text.
+
+No secret values.
+
+No provider internals.
+
+Status normalization must be deterministic.
+
+Unknown provider failures must become sterile unavailable states.
+
+────────────────────────────────────────
+7. CORE DELEGATION
+
+The Service must call:
+
+analyze_portfolio(...)
+
+Portfolio math must remain inside portfolio_intelligence.py.
+
+The Service must not independently calculate:
+
+• allocation
+
+• exposure
+
+• PnL
+
+• weights
+
+• drawdown
+
+• health score
+
+• concentration
+
+• risk utilization
+
+The Service may only gather, validate and translate inputs.
+
+────────────────────────────────────────
+8. INTELLIGENCE ENGINE INTEGRATION
+
+Integrate only through existing read-only Intelligence Engine or provider
+contracts where appropriate.
+
+The Service may consume existing snapshots or views.
+
+The Service SHALL NOT:
+
+• change Intelligence Engine behavior
+
+• write Intelligence snapshots
+
+• embed portfolio_analysis into snapshots in this agent
+
+• alter Mission 1600 Automation
+
+Snapshot embedding remains a later additive integration decision and must not
+be introduced by Agent 03.
+
+────────────────────────────────────────
+9. RISK ENGINE BOUNDARY
+
+Risk Engine remains authoritative.
+
+The Service may read:
+
+• configured limits
+
+• current risk view
+
+• exposure thresholds
+
+• drawdown thresholds
+
+• concentration thresholds
+
+The Service SHALL NOT:
+
+• redefine limits
+
+• modify limits
+
+• persist limits
+
+• override risk decisions
+
+• convert advisory portfolio health into a risk approval
+
+────────────────────────────────────────
+10. ERROR MODEL
+
+Provider exceptions must not escape.
+
+Return sterile normalized outcomes.
+
+Rules:
+
+• all required providers unavailable → UNAVAILABLE
+
+• some providers unavailable or stale → PARTIAL
+
+• all required inputs available and fresh → OK
+
+Do not expose:
+
+• exception messages
+
+• tracebacks
+
+• filesystem paths
+
+• credentials
+
+• provider implementation details
+
+────────────────────────────────────────
+11. DETERMINISM
+
+Same provider outputs and same generated_at
+
+↓
+
+byte-identical service output
+
+No wall-clock reads.
+
+No random.
+
+No UUID.
+
+No unordered output.
+
+Provider execution order must not affect the final normalized result.
+
+────────────────────────────────────────
+12. SECURITY
+
+Service must not import or invoke:
+
+requests
+
+websocket
+
+socket
+
+subprocess
+
+pickle
+
+marshal
+
+ctypes
+
+eval
+
+exec
+
+No filesystem writes.
+
+No network calls.
+
+No Exchange dependency.
+
+No order or execution primitive.
+
+No append_snapshot usage.
+
+────────────────────────────────────────
+13. TESTS
+
+Create comprehensive tests covering at least:
+
+• successful provider aggregation
+
+• fresh / stale / unavailable source normalization
+
+• all providers unavailable
+
+• partial provider availability
+
+• provider exception sterilization
+
+• unknown values remain null
+
+• generated_at injection
+
+• deterministic output
+
+• provider order independence
+
+• Core invocation
+
+• no duplicate portfolio calculations in Service
+
+• Risk Engine read-only boundary
+
+• no snapshot embedding
+
+• no append_snapshot import or call
+
+• no Exchange import or call
+
+• no filesystem writes
+
+• no network imports
+
+• no Flask dependency
+
+• no request context
+
+• no mutable global state
+
+• backward compatibility
+
+• full regression
+
+Tests should verify that Service delegates calculations to Core rather than
+reimplementing them.
+
+────────────────────────────────────────
+14. DELIVERY REPORT
+
+── CREATED FILES ──
+
+── MODIFIED FILES ──
+
+── SERVICE CONTRACT ──
+
+── PROVIDER INTEGRATION ──
+
+── SOURCE NORMALIZATION ──
+
+── CORE DELEGATION ──
+
+── RISK ENGINE BOUNDARY ──
+
+── DETERMINISM VERIFICATION ──
+
+── SECURITY VERIFICATION ──
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0 hedeflenir
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 04 — API
+
+────────────────────────────────────────
+15. PASS CRITERIA
+
+PASS requires:
+
+• Portfolio Service implemented
+
+• Provider dependencies injected
+
+• Provider states normalized
+
+• Core used as the sole portfolio calculation authority
+
+• Risk Engine remains read-only and authoritative
+
+• Unknown values remain null
+
+• Provider exceptions are sterile
+
+• Deterministic output
+
+• No Workspace writes
+
+• No Timeline writes
+
+• No snapshot embedding
+
+• No append_snapshot usage
+
+• No Exchange dependency
+
+• No network dependency
+
+• No filesystem writes
+
+• No Flask dependency
+
+• All new tests PASS
+
+• Full regression PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+• Commit created and pushed to GitHub
+
+MISSION 1700 continues only after Agent 03 passes.
