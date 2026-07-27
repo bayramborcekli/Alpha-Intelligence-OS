@@ -1,0 +1,579 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2000 — EXECUTION FOUNDATION
+
+AGENT 03 — RISK ENGINE
+
+ROLE
+
+Design and implement the deterministic Risk Engine.
+
+The Risk Engine SHALL be completely independent from:
+
+• Broker implementations
+
+• Exchange implementations
+
+• REST
+
+• WebSocket
+
+• Execution API
+
+• Execution Service
+
+• Kill Switch
+
+The Risk Engine only evaluates execution safety.
+
+It NEVER executes orders.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 2000
+
+Agent 02
+
+PASS
+
+Current Commit
+
+62163c4
+
+Regression Baseline
+
+2439 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement the canonical Risk Engine.
+
+Freeze:
+
+• Risk policies
+
+• Exposure calculation
+
+• Capital validation
+
+• Position sizing
+
+• Daily loss protection
+
+• Portfolio risk
+
+• Validation contracts
+
+No execution.
+
+No broker communication.
+
+────────────────────────────────────────
+3. FILES
+
+Create
+
+execution_risk_engine.py
+
+execution_risk_models.py
+
+execution_risk_policies.py
+
+tests/test_execution_risk.py
+
+────────────────────────────────────────
+4. ARCHITECTURE
+
+Execution API
+      ↓
+Execution Service
+      ↓
+Risk Engine
+      ↓
+Kill Switch
+      ↓
+Broker Adapter
+
+Risk Engine MUST NOT know anything about BrokerAdapter.
+
+Risk Engine MUST only consume:
+
+ExecutionRequest
+
+Position
+
+Portfolio
+
+Instrument
+
+BrokerProfile
+
+ValidationResult
+
+────────────────────────────────────────
+5. RISK MODELS
+
+Create immutable models.
+
+PortfolioRisk
+
+PositionRisk
+
+RiskLimits
+
+Exposure
+
+CapitalState
+
+RiskDecision
+
+All:
+
+frozen=True
+
+slots=True
+
+Decimal only
+
+Hashable
+
+No mutable defaults
+
+────────────────────────────────────────
+6. BROKER ABSTRACTION
+
+Risk Engine SHALL NEVER inspect:
+
+Binance
+
+IBKR
+
+Midas
+
+Bybit
+
+OKX
+
+Kraken
+
+Instead it SHALL use ONLY:
+
+BrokerProfile
+
+BrokerProfile MAY expose capabilities only.
+
+Example:
+
+supports_margin
+
+supports_short
+
+supports_fractional
+
+supports_options
+
+supports_market_orders
+
+supports_after_hours
+
+supports_modify
+
+supports_cancel
+
+supports_trailing_stop
+
+supports_oco
+
+No broker-specific logic.
+
+No broker if-statements.
+
+────────────────────────────────────────
+7. INSTRUMENT MODEL
+
+Risk Engine SHALL NEVER inspect symbols.
+
+Never:
+
+BTCUSDT
+
+AAPL
+
+THYAO
+
+Instead use ONLY:
+
+Instrument
+
+Instrument SHALL expose:
+
+symbol
+
+asset_type
+
+currency
+
+quote_currency
+
+tick_size
+
+step_size
+
+price_precision
+
+quantity_precision
+
+broker_symbol
+
+Future asset types:
+
+CRYPTO
+
+EQUITY
+
+ETF
+
+FOREX
+
+FUTURES
+
+OPTIONS
+
+No exchange-specific symbols.
+
+────────────────────────────────────────
+8. RISK VALIDATION
+
+Freeze deterministic validation order.
+
+1
+
+Input validation
+
+↓
+
+2
+
+Capital validation
+
+↓
+
+3
+
+Broker capability validation
+
+↓
+
+4
+
+Instrument validation
+
+↓
+
+5
+
+Exposure validation
+
+↓
+
+6
+
+Daily loss validation
+
+↓
+
+7
+
+Position sizing
+
+↓
+
+8
+
+Risk decision
+
+Every step SHALL be deterministic.
+
+────────────────────────────────────────
+9. RISK DECISIONS
+
+Approved decisions only.
+
+ALLOW
+
+REJECT
+
+REDUCE_SIZE
+
+REQUIRE_CONFIRMATION
+
+No additional decisions.
+
+────────────────────────────────────────
+10. VALIDATION RULES
+
+Examples:
+
+Insufficient capital
+
+↓
+
+REJECT
+
+Daily loss exceeded
+
+↓
+
+REJECT
+
+Broker does not support SHORT
+
+↓
+
+REJECT
+
+Broker does not support FRACTIONAL
+
+↓
+
+REJECT
+
+Exposure exceeded
+
+↓
+
+REDUCE_SIZE
+
+Risk inside limits
+
+↓
+
+ALLOW
+
+No hidden rules.
+
+────────────────────────────────────────
+11. PUBLIC API
+
+Approved public surface only.
+
+validate_execution()
+
+calculate_position_size()
+
+calculate_exposure()
+
+evaluate_portfolio_risk()
+
+RiskEngine
+
+No additional public APIs.
+
+────────────────────────────────────────
+12. SECURITY
+
+Risk Engine SHALL NOT:
+
+execute orders
+
+cancel orders
+
+modify orders
+
+access BrokerAdapter
+
+access network
+
+access filesystem
+
+access environment
+
+generate UUID
+
+generate timestamps
+
+use randomness
+
+import broker SDKs
+
+import exchange SDKs
+
+────────────────────────────────────────
+13. TEST REQUIREMENTS
+
+Minimum
+
+140 focused tests.
+
+Verify:
+
+• immutable models
+
+• deterministic decisions
+
+• Decimal only
+
+• exposure calculations
+
+• capital validation
+
+• broker capability validation
+
+• Instrument validation
+
+• daily loss
+
+• position sizing
+
+• portfolio aggregation
+
+• decision consistency
+
+• public API
+
+• forbidden imports
+
+• forbidden capabilities
+
+• no broker-specific code
+
+• no symbol-specific code
+
+• no hidden execution
+
+────────────────────────────────────────
+14. PROHIBITIONS
+
+Do not implement:
+
+Execution Service
+
+Execution API
+
+Broker Adapter
+
+REST
+
+WebSocket
+
+Authentication
+
+Signing
+
+Persistence
+
+Scheduler
+
+Kill Switch
+
+Order execution
+
+────────────────────────────────────────
+15. DELIVERY REPORT
+
+Return:
+
+── CREATED FILES ──
+
+List
+
+── RISK ENGINE ──
+
+Architecture summary
+
+── RISK MODELS ──
+
+Summary
+
+── BROKER ABSTRACTION ──
+
+Summary
+
+── INSTRUMENT MODEL ──
+
+Summary
+
+── VALIDATION PIPELINE ──
+
+Summary
+
+── DECISION ENGINE ──
+
+Summary
+
+── PUBLIC API ──
+
+Approved surface
+
+── PRODUCTION CODE CHANGES ──
+
+Risk Engine only
+
+── TEST RESULTS ──
+
+PASS count
+
+── FAIL / SKIP ──
+
+Counts
+
+── TOTAL REGRESSION ──
+
+Total PASS
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash + GitHub push
+
+── NEXT AGENT ──
+
+AGENT 04 — KILL SWITCH
+
+────────────────────────────────────────
+16. PASS CRITERIA
+
+PASS requires:
+
+• Deterministic Risk Engine complete
+
+• Broker abstraction certified
+
+• Instrument abstraction certified
+
+• Validation pipeline certified
+
+• Immutable models certified
+
+• ≥140 tests PASS
+
+• No execution capability
+
+• No broker-specific logic
+
+• No symbol-specific logic
+
+• Full regression PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
