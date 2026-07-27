@@ -236,13 +236,21 @@ class TestSecurityModel:
 class TestNoProductionBehavior:
     def test_planned_modules_not_yet_implemented(self):
         # Yalnız teslim edilen ajanların modülleri mevcut olabilir.
-        # Teslim edildi: Agent 03 risk engine, Agent 04 kill switch
+        # Teslim edildi: Agent 03 risk engine, Agent 04 kill
+        # switch, Agent 05 broker adapter arayüzü (planlanan
+        # broker_adapter.py, execution_broker_adapter.py adıyla
+        # teslim edildi)
         delivered = {"execution_risk_engine.py",
                      "execution_kill_switch.py"}
+        delivered_as = {
+            "broker_adapter.py": "execution_broker_adapter.py"}
         for module_file in PLANNED_MODULES:
             if module_file in delivered:
                 assert os.path.exists(
                     os.path.join(_ROOT, module_file))
+            elif module_file in delivered_as:
+                assert os.path.exists(os.path.join(
+                    _ROOT, delivered_as[module_file]))
             else:
                 assert not os.path.exists(
                     os.path.join(_ROOT, module_file))

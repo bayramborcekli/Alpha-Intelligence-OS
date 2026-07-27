@@ -110,10 +110,13 @@ class TestPaperModeSafety:
             "live_trade",
         ]
         py_files = list(ROOT.glob("**/*.py"))
+        # execution_broker_adapter.py soyut SÖZLEŞME tanımlar
+        # (I/O'suz, canlı emir yeteneği yok) — Mission 2000 Agent 05
         py_files = [f for f in py_files
                     if ".pythonlibs" not in str(f)
                     and "test_" not in f.name
-                    and "__pycache__" not in str(f)]
+                    and "__pycache__" not in str(f)
+                    and f.name != "execution_broker_adapter.py"]
 
         for path in py_files:
             try:

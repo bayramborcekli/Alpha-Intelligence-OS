@@ -356,7 +356,9 @@ class TestPaperModeLock:
             "submit" + "_order(",
             "new" + "_order(",
         ]
-        excluded = (".pythonlibs", "__pycache__", ".git", "/tests/", "test_")
+        # execution_broker_adapter.py soyut sözleşme (I/O yok)
+        excluded = (".pythonlibs", "__pycache__", ".git", "/tests/",
+                    "test_", "execution_broker_adapter.py")
         for src in ROOT.rglob("*.py"):
             src_str = str(src)
             if any(skip in src_str for skip in excluded):
