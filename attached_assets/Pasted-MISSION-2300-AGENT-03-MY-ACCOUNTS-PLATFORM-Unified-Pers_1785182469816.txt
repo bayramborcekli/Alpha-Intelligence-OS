@@ -1,0 +1,393 @@
+MISSION 2300
+
+AGENT 03
+
+MY ACCOUNTS PLATFORM
+
+Unified Personal Exchange Account Management
+
+ROLE
+
+Create a new Settings module named
+
+"My Accounts"
+
+This page manages ONLY the user's own investment accounts.
+
+The user should configure an account once.
+
+After that, Alpha Intelligence automatically uses it everywhere.
+
+==================================================
+CORE PHILOSOPHY
+==================================================
+
+Alpha Intelligence is NOT an exchange platform.
+
+Alpha Intelligence is NOT a broker.
+
+Alpha Intelligence is NOT an exchange marketplace.
+
+Alpha Intelligence is an autonomous investment operating system.
+
+The exchanges belong to the user.
+
+The AI simply manages the user's connected accounts.
+
+==================================================
+DO NOT
+==================================================
+
+Do NOT change trading logic.
+
+Do NOT change automation engine.
+
+Do NOT change risk engine.
+
+Do NOT change portfolio calculations.
+
+Do NOT change operation center.
+
+Do NOT redesign Trading Home.
+
+Reuse existing backend whenever possible.
+
+==================================================
+MENU
+==================================================
+
+Replace
+
+Exchange Management
+
+API Management
+
+with
+
+Settings
+
+    My Accounts
+
+This becomes the ONLY place where investment accounts are configured.
+
+==================================================
+LAYOUT
+==================================================
+
+Desktop first.
+
+Simple.
+
+Professional.
+
+One card per account.
+
+No technical dashboard.
+
+==================================================
+ACCOUNT CARD
+==================================================
+
+Each connected account displays
+
+Exchange Logo
+
+Exchange Name
+
+Connection Status
+
+Account Nickname
+
+Primary Account badge (optional)
+
+Spot Enabled
+
+Futures Enabled
+
+Last Synchronization
+
+Wallet Count
+
+Portfolio Value
+
+Buttons
+
+Connect
+
+Disconnect
+
+Edit
+
+Synchronize
+
+Test Connection
+
+Refresh Wallets
+
+==================================================
+SUPPORTED ACCOUNTS
+==================================================
+
+Initially support
+
+Binance Global
+
+Binance TR
+
+Bybit
+
+OKX
+
+Paper Account
+
+Architecture must allow future connectors.
+
+Never redesign UI for new exchanges.
+
+==================================================
+API CONFIGURATION
+==================================================
+
+Each account supports
+
+API Key
+
+Secret Key
+
+Passphrase (optional)
+
+Sub Account (optional)
+
+Environment
+
+Mainnet
+
+Testnet
+
+==================================================
+SECURITY
+==================================================
+
+API Key
+
+Display masked.
+
+Example
+
+ABCD**************XY89
+
+Secret Key
+
+Never display after saving.
+
+Allow Replace only.
+
+Never expose stored secrets.
+
+Clipboard copy disabled.
+
+==================================================
+CONNECTION TEST
+==================================================
+
+Simple status.
+
+Connected
+
+Authentication
+
+Wallet Access
+
+Spot Permission
+
+Futures Permission
+
+Trading Permission
+
+Synchronization
+
+Healthy
+
+Show only simple status.
+
+Never expose raw exceptions.
+
+==================================================
+AUTO DISCOVERY
+==================================================
+
+Immediately after successful connection
+
+Automatically discover
+
+Spot Wallets
+
+Futures Wallets
+
+Funding Wallets
+
+Earn Accounts
+
+Margin Accounts
+
+Sub Accounts (if supported)
+
+No manual wallet creation.
+
+No manual mapping.
+
+==================================================
+AUTO SYNCHRONIZATION
+==================================================
+
+Wallet balances refresh automatically.
+
+Account permissions refresh automatically.
+
+Markets refresh automatically.
+
+No manual refresh required for normal usage.
+
+Manual refresh button remains available.
+
+==================================================
+TRADING HOME
+==================================================
+
+Trading Home Wallet panel must read
+
+ONLY
+
+from connected personal accounts.
+
+Never connect directly to Binance pages.
+
+Never depend on exchange-specific UI.
+
+==================================================
+PORTFOLIO
+==================================================
+
+Total Portfolio
+
+equals
+
+sum of every connected account.
+
+Example
+
+Binance Global
+
++
+
+Binance TR
+
++
+
+Bybit
+
++
+
+Paper
+
+=
+
+Total Portfolio
+
+Unknown balances remain UNKNOWN.
+
+Never estimate.
+
+Never fabricate balances.
+
+==================================================
+AUTOMATION
+==================================================
+
+Automation may trade ONLY on
+
+user connected accounts.
+
+Disconnected accounts
+
+must never receive orders.
+
+==================================================
+PRIMARY ACCOUNT
+==================================================
+
+Allow one account to be marked
+
+Primary.
+
+Default execution uses
+
+Primary Account
+
+unless strategy explicitly specifies otherwise.
+
+==================================================
+MULTIPLE ACCOUNTS
+==================================================
+
+Support multiple accounts simultaneously.
+
+Example
+
+Binance Global
+
+Binance TR
+
+Bybit
+
+Paper
+
+all connected together.
+
+==================================================
+USER EXPERIENCE
+==================================================
+
+The user should never think about APIs.
+
+The user thinks only in terms of
+
+"My Accounts."
+
+Once connected,
+
+everything else works automatically.
+
+==================================================
+FUTURE READY
+==================================================
+
+Adding a new exchange requires only
+
+a new connector.
+
+No UI redesign.
+
+No Trading Home redesign.
+
+No Portfolio redesign.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+The user connects an investment account once.
+
+Wallets appear automatically.
+
+Portfolio updates automatically.
+
+Automation immediately recognizes eligible accounts.
+
+Trading Home displays balances without additional configuration.
+
+Business logic remains unchanged.
+
+Frontend-first implementation.
+
+Existing backend reused wherever possible.
