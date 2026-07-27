@@ -2655,6 +2655,12 @@ from operation_control_service import (                    # noqa: E402
     OperationControlService)
 from operation_control_snapshot import (                   # noqa: E402
     build_snapshot as _build_operation_snapshot)
+from operation_control_store import (                       # noqa: E402
+    OperationControlStateStore as _OpStateStore)
+
+# Paylaşımlı durum dosyası: gunicorn worker'ları arasında otomasyon/
+# idempotency/denetim/stop-new-entries durumunu tutarlı tutar.
+OPERATION_STATE_PATH = ROOT / "alpha20_v1" / "operation_control_state.json"
 
 _AUTOMATION_COMMANDS = {
     "start": _AutoCmd.START, "pause": _AutoCmd.PAUSE,
@@ -2716,8 +2722,13 @@ def get_operation_service() -> OperationControlService:
                                   risk_evaluator=risk),
                 MicroLiveAuthorizationService(
                     foundation=foundation)))
+            # Paylaşımlı durum deposu: 2 gunicorn worker'ı aynı
+            # otomasyon/idempotency/denetim durumunu görür; aynı
+            # idempotency anahtarı hiçbir worker'da ikinci kez
+            # kabul edilmez (flock + atomik JSON anlık görüntü).
             _operation_service = OperationControlService(
-                api, clock=lambda: int(time.time()))
+                api, clock=lambda: int(time.time()),
+                state_store=_OpStateStore(OPERATION_STATE_PATH))
         return _operation_service
 
 

@@ -23,12 +23,14 @@ OPERATION_MODULES = (
     "operation_control_errors", "operation_control_models",
     "operation_control_policy", "operation_control_audit",
     "operation_control_mapper", "operation_control_snapshot",
-    "operation_control_service", "operation_control_api")
+    "operation_control_service", "operation_control_api",
+    "operation_control_store")
 
 # Operasyon katmanının izinli import kökleri.
 ALLOWED_STDLIB = frozenset({
-    "__future__", "dataclasses", "decimal", "enum", "types",
-    "typing"})
+    "__future__", "contextlib", "dataclasses", "decimal",
+    "enum", "fcntl", "functools", "json", "os", "pathlib",
+    "threading", "types", "typing"})
 ALLOWED_PROJECT = frozenset(OPERATION_MODULES) | frozenset(
     FROZEN_MODULES) | frozenset({
         # Mission 2100 öncesi sertifikalı çekirdek modeller
@@ -81,7 +83,8 @@ class TestOperationLayerBoundaries:
     @pytest.mark.parametrize("name", [
         "operation_control_errors", "operation_control_models",
         "operation_control_policy", "operation_control_audit",
-        "operation_control_mapper", "operation_control_api"])
+        "operation_control_mapper", "operation_control_api",
+        "operation_control_store"])
     def test_pure_modules_no_certified_execution_import(self, name):
         """Yalnız servis katmanı sertifikalı yürütmeye dokunur."""
         roots = import_roots(name)

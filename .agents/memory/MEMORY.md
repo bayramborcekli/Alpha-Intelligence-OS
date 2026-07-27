@@ -6,4 +6,5 @@
 - [Mission workflow pattern](mission-workflow.md) — per-agent loop, closure-baseline chain (1700:1335→1800:1596→1900:2146), Turkish report conventions; Mission 2000 zinciri: A05 74c157e:2982 → A06 98a9c20:3219 → A07 f1ab9a2:3471 → A08 01aa429:3704 → A09 a45dde3:4375 → A10 Closure 03e181d (Mission 2000 KAPANDI; Execution Core v1.0.0 CERTIFIED; Mission 2100 tabanı: MISSION_2100_BASELINE.md + execution_regression_manifest.py — manifesto 01aa429:3704 ile tam paket a45dde3:4375 bilinçli ayrı).
 - [Runtime config drift](runtime-config-drift.md) — bot mutates alpha20_v1 configs; platform auto-commits can bake unsafe state into HEAD, so revert against last intentional commit.
 - [Read-only summary persist](read-only-summary-persist.md) — risk_api.summary() writes a daily snapshot by default; read-only layers must pass persist=False.
+- [Operation shared state](operation-shared-state.md) — new mutable operation-service fields must join the flock/JSON shared store, or they regress to per-worker state.
 - [Binance TR API quirks](binance-tr-api.md) — `data` may be list or dict; movements API omits trades so reconciliation is PARTIAL by design; transferType=1 = internal.

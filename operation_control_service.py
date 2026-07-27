@@ -17,7 +17,8 @@ Değişmezler:
 
 from __future__ import annotations
 
-from dataclasses import replace
+import functools
+from dataclasses import asdict, replace
 from decimal import Decimal
 from typing import Callable, Mapping, Optional, Tuple
 
@@ -40,6 +41,8 @@ from operation_control_models import (
 from operation_control_policy import (
     DEFAULT_AUTOMATION_STATE, DEFAULT_SYMBOL_STATE,
     resolve_symbol_transition, resolve_transition)
+from operation_control_store import (
+    OperationControlStateError, OperationControlStateStore)
 from paper_execution_models import PaperExecutionReferences
 from paper_models import PaperLedgerSnapshot
 
@@ -59,21 +62,62 @@ def _clock_guard(clock: Optional[Callable[[], int]]
     return clock
 
 
+def _shared_mutation(method):
+    """Paylaşımlı depo varsa: kilit → yükle → çalıştır → kaydet.
+
+    Süreçler-arası tutarlılık garantisi: mutasyon SADECE münhasır
+    ``flock`` altında, en güncel paylaşımlı anlık görüntü üzerinde
+    çalışır ve sonucu atomik olarak geri yazar. Aynı idempotency
+    anahtarı böylece hiçbir worker'da ikinci kez kabul edilemez."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        store = self._store
+        if store is None or store.in_transaction:
+            return method(self, *args, **kwargs)
+        with store.locked():
+            self._load_shared()
+            try:
+                return method(self, *args, **kwargs)
+            finally:
+                self._save_shared()
+    return wrapper
+
+
+def _shared_view(method):
+    """Paylaşımlı depo varsa okuma öncesi en güncel durumu yükle."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        store = self._store
+        if store is None or store.in_transaction:
+            return method(self, *args, **kwargs)
+        with store.locked():
+            self._load_shared()
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
 class OperationControlService:
     """Bellek içi operasyon durum makinesi + sertifikalı köprü."""
 
     __slots__ = ("_api", "_clock", "_automation_state",
                  "_stop_new_entries", "_symbol_states",
                  "_audit", "_idempotency", "_sequence",
-                 "_last_error_code")
+                 "_last_error_code", "_store")
 
     def __init__(self, execution_api: ControlledExecutionAPI,
-                 clock: Optional[Callable[[], int]] = None
+                 clock: Optional[Callable[[], int]] = None,
+                 state_store: Optional[
+                     OperationControlStateStore] = None
                  ) -> None:
         if not isinstance(execution_api,
                           ControlledExecutionAPI):
             raise OperationControlValidationError(
                 "INVALID_OPERATION_FIELD:execution_api")
+        if state_store is not None and not isinstance(
+                state_store, OperationControlStateStore):
+            raise OperationControlValidationError(
+                "INVALID_OPERATION_FIELD:state_store")
+        self._store = state_store
         self._api = execution_api
         self._clock = _clock_guard(clock)
         # Temiz kurulum varsayılanları — fail-closed.
@@ -85,20 +129,129 @@ class OperationControlService:
         self._sequence = 0
         self._last_error_code = "-"
 
+    # ── Paylaşımlı durum (süreçler-arası tutarlılık) ─────────
+
+    def _dump_shared(self) -> dict:
+        """Süreç durumunu JSON-uyumlu anlık görüntüye dök."""
+        return {
+            "sequence": self._sequence,
+            "automation_state": self._automation_state.value,
+            "stop_new_entries": self._stop_new_entries,
+            "last_error_code": self._last_error_code,
+            "symbol_states": {sym: state.value for sym, state
+                              in self._symbol_states.items()},
+            "audit": [asdict(rec)
+                      for rec in self._audit.records()],
+            "idempotency": {
+                key: {"signature": sig,
+                      "result": self._encode_result(res)}
+                for key, (sig, res)
+                in self._idempotency.items()},
+        }
+
+    @staticmethod
+    def _encode_result(result: OperationActionResult) -> dict:
+        payload = asdict(result)
+        payload["status"] = result.status.value
+        payload["idempotency_status"] = \
+            result.idempotency_status.value
+        payload["detail_codes"] = list(result.detail_codes)
+        return payload
+
+    @staticmethod
+    def _decode_result(payload: object
+                       ) -> OperationActionResult:
+        if not isinstance(payload, dict):
+            raise OperationControlStateError(
+                "STATE_STORE_CORRUPT:result")
+        try:
+            data = dict(payload)
+            data["status"] = OperationActionStatus(
+                data["status"])
+            data["idempotency_status"] = IdempotencyStatus(
+                data["idempotency_status"])
+            data["detail_codes"] = tuple(
+                data.get("detail_codes") or ())
+            return OperationActionResult(**data)
+        except (KeyError, TypeError, ValueError,
+                OperationControlValidationError) as exc:
+            raise OperationControlStateError(
+                "STATE_STORE_CORRUPT:result") from exc
+
+    def _load_shared(self) -> None:
+        """Paylaşımlı anlık görüntüyü süreç durumuna yükle.
+
+        Dosya yoksa temiz kurulum varsayılanlarına döner
+        (fail-closed). Bozuk anlık görüntü steril hata ile
+        yükselir — durum ASLA sessizce sıfırlanmaz."""
+        payload = self._store.load()
+        if payload is None:
+            self._automation_state = DEFAULT_AUTOMATION_STATE
+            self._stop_new_entries = False
+            self._symbol_states = {}
+            self._audit = OperationAuditTrail()
+            self._idempotency = {}
+            self._sequence = 0
+            self._last_error_code = "-"
+            return
+        try:
+            audit = OperationAuditTrail()
+            for rec in payload.get("audit") or []:
+                audit.append(OperationAuditRecord(**rec))
+            idempotency = {}
+            for key, entry in (payload.get("idempotency")
+                               or {}).items():
+                idempotency[key] = (
+                    entry["signature"],
+                    self._decode_result(entry["result"]))
+            symbol_states = {
+                sym: SymbolAutomationState(value)
+                for sym, value in (payload.get("symbol_states")
+                                   or {}).items()}
+            automation_state = AutomationState(
+                payload["automation_state"])
+            sequence = payload["sequence"]
+            stop_new_entries = payload["stop_new_entries"]
+            last_error_code = payload["last_error_code"]
+            if not isinstance(sequence, int) or isinstance(
+                    sequence, bool) or sequence < 0 or \
+                    not isinstance(stop_new_entries, bool) or \
+                    not isinstance(last_error_code, str):
+                raise ValueError("invalid scalar")
+        except OperationControlStateError:
+            raise
+        except Exception as exc:
+            raise OperationControlStateError(
+                "STATE_STORE_CORRUPT:state") from exc
+        self._automation_state = automation_state
+        self._stop_new_entries = stop_new_entries
+        self._symbol_states = symbol_states
+        self._audit = audit
+        self._idempotency = idempotency
+        self._sequence = sequence
+        self._last_error_code = last_error_code
+
+    def _save_shared(self) -> None:
+        self._store.save(self._dump_shared())
+
     # ── Salt-okunur durum ────────────────────────────────────
 
     @property
+    @_shared_view
     def automation_state(self) -> AutomationState:
         return self._automation_state
 
     @property
+    @_shared_view
     def stop_new_entries(self) -> bool:
         return self._stop_new_entries
 
     @property
+    @_shared_view
     def last_error_code(self) -> str:
         return self._last_error_code
 
+    @_shared_view
     def symbol_state(self, symbol: str
                      ) -> SymbolAutomationState:
         """Kayıtsız sembol DAİMA DISABLED (fail-closed)."""
@@ -107,11 +260,13 @@ class OperationControlService:
         return self._symbol_states.get(symbol.upper(),
                                        DEFAULT_SYMBOL_STATE)
 
+    @_shared_view
     def symbol_states(self) -> Mapping[str,
                                        SymbolAutomationState]:
         return dict(self._symbol_states)
 
     @property
+    @_shared_view
     def audit(self) -> OperationAuditTrail:
         return self._audit
 
@@ -211,6 +366,7 @@ class OperationControlService:
 
     # ── Otomasyon komutları ──────────────────────────────────
 
+    @_shared_mutation
     def execute_automation_command(
             self, command: AutomationCommand, actor: str,
             idempotency_key: Optional[str] = None
@@ -270,6 +426,7 @@ class OperationControlService:
                                 result)
         return result
 
+    @_shared_mutation
     def mark_blocked(self, actor: str, reason: str) -> None:
         """Kill-switch devrede → otomasyon BLOCKED."""
         actor = self._actor(actor)
@@ -289,6 +446,7 @@ class OperationControlService:
 
     # ── Sembol komutları ─────────────────────────────────────
 
+    @_shared_mutation
     def execute_symbol_command(
             self, symbol: str, command: SymbolCommand,
             actor: str,
@@ -370,6 +528,7 @@ class OperationControlService:
 
     # ── Global: yeni girişleri durdur ────────────────────────
 
+    @_shared_mutation
     def stop_new_entries_action(
             self, actor: str, reason: str,
             confirm_phrase: str, idempotency_key: str
@@ -417,6 +576,7 @@ class OperationControlService:
 
     # ── Kontrollü pozisyon kapatma niyeti ────────────────────
 
+    @_shared_mutation
     def request_position_close(
             self, position: PositionView,
             ledger: Optional[PaperLedgerSnapshot],
@@ -551,6 +711,7 @@ class OperationControlService:
 
     # ── Global: tümünü kapatma isteği ────────────────────────
 
+    @_shared_mutation
     def request_close_all(
             self, positions: Tuple[PositionView, ...],
             ledger: Optional[PaperLedgerSnapshot],
@@ -636,6 +797,7 @@ class OperationControlService:
 
     # ── Kill-switch denetim köprüsü ──────────────────────────
 
+    @_shared_mutation
     def record_kill_switch(
             self, actor: str, engaged: bool, reason: str,
             confirm_phrase: str, idempotency_key: str

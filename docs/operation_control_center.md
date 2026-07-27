@@ -97,12 +97,17 @@ adaptive_system.kill_switch` kaynağındadır (Mission 1500 ile aynı).
    beslenir — bkz. `docs/mission2200_agent02_report.md`.)
 5. Canlı (LIVE) yürütme yok; kapatma niyetleri PAPER simülasyonudur ve
    UI bunu onay diyaloğunda açıkça söyler.
-6. Servis durumu (otomasyon durumu, idempotency kayıtları, denetim
-   zinciri, stop-new-entries bayrağı) SÜREÇ-YERELDİR. Gunicorn 2
-   worker ile çalıştığından aynı idempotency anahtarı farklı
-   worker'larda bağımsız kabul edilebilir ve durum worker'lar arası
-   ayrışabilir. Kill-switch bayrağı ise `alpha20_v1/config.json`
-   üzerinden GLOBALDİR (tüm worker'lar aynı dosyayı okur). Riskin
-   kapsamı PAPER niyetleriyle sınırlıdır; kalıcı çözüm (paylaşımlı
-   durum deposu veya tek-yazar koordinasyonu) sonraki agent'ın
-   giriş noktasıdır.
+6. ~~Servis durumu süreç-yereldi~~ **ÇÖZÜLDÜ:** Servis durumu
+   (otomasyon durumu, sembol durumları, idempotency kayıtları,
+   denetim zinciri, stop-new-entries bayrağı) artık
+   `operation_control_store.py` üzerinden PAYLAŞIMLIDIR:
+   `alpha20_v1/operation_control_state.json` anlık görüntüsü +
+   `flock` kilidi. Her durum değiştiren/okuyan servis çağrısı
+   münhasır kilit altında en güncel durumu yükler ve mutasyonu
+   atomik (tmp + fsync + replace) geri yazar; aynı idempotency
+   anahtarı hiçbir worker'da ikinci kez kabul edilmez
+   (`tests/test_operation_control_shared_state.py` çok-süreçli
+   yarış testi dahil). Bozuk anlık görüntü fail-closed steril
+   `STATE_STORE_CORRUPT` hatası üretir — durum sessizce
+   SIFIRLANMAZ. Kill-switch bayrağı eskisi gibi
+   `alpha20_v1/config.json` üzerinden globaldir.
