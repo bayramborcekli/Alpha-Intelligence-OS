@@ -1,0 +1,309 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1800 — STRATEGY INTELLIGENCE
+
+AGENT 08 — FULL REGRESSION
+
+ROLE
+
+You are the Full Regression Agent for Mission 1800.
+
+Perform the final regression verification for the entire Strategy Intelligence
+mission.
+
+This is a verification-only agent.
+
+No new functionality.
+
+No architecture changes.
+
+No feature additions.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1700
+
+OFFICIALLY CLOSED
+
+Mission 1800
+
+Agent 01 — PASS
+
+Agent 02 — PASS
+
+Agent 03 — PASS
+
+Agent 04 — PASS
+
+Agent 05 — PASS
+
+Agent 06 — PASS
+
+Agent 07 — PASS
+
+Baseline Commit
+
+<Agent 07 HEAD>
+
+Regression Baseline
+
+<Agent 07 final PASS>
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Verify the complete Mission 1800 implementation.
+
+This agent SHALL verify:
+
+Core
+
+Service
+
+API
+
+UI
+
+Export
+
+Security
+
+Mission integration
+
+Regression compatibility
+
+No production behavior changes are permitted unless required to fix a
+confirmed regression.
+
+────────────────────────────────────────
+3. FILES
+
+Create:
+
+tests/test_mission1800_full_regression.py
+
+Production code SHALL remain unchanged unless a verified regression defect
+requires correction.
+
+────────────────────────────────────────
+4. REGRESSION SCOPE
+
+Verify:
+
+• Strategy Core behavior
+
+• Strategy Service delegation
+
+• API transport behavior
+
+• UI rendering
+
+• Export serialization
+
+• Security constraints
+
+• Layer isolation
+
+• Read-only architecture
+
+• Schema compatibility
+
+• Deterministic outputs
+
+• Proposal flow integrity
+
+• Mission 1700 compatibility
+
+• Existing API compatibility
+
+• Existing UI compatibility
+
+────────────────────────────────────────
+5. CROSS-LAYER VALIDATION
+
+Verify complete flow:
+
+Portfolio Intelligence
+        │
+        ▼
+Strategy Service
+        │
+        ▼
+Strategy Core
+        │
+        ▼
+Strategy Export
+        │
+        ▼
+Strategy API
+        │
+        ▼
+Strategy UI
+
+Confirm:
+
+No layer bypass
+
+No circular dependency
+
+No duplicated calculations
+
+No duplicated serialization
+
+No mutation between layers
+
+proposal_id and generated_at only introduced at API
+
+Export consumes API-compatible proposal
+
+UI consumes API JSON only
+
+────────────────────────────────────────
+6. REGRESSION TESTS
+
+Create integration and regression tests covering:
+
+End-to-end proposal generation
+
+Repeated identical requests
+
+Deterministic outputs
+
+Schema validation
+
+Recommendation ordering
+
+Unknown preservation
+
+Null preservation
+
+Read-only behavior
+
+No execution path
+
+No persistence
+
+No Exchange connectivity
+
+No filesystem writes
+
+No provider leakage
+
+Sterile errors
+
+Existing Mission 1700 regression
+
+API compatibility
+
+UI compatibility
+
+Export compatibility
+
+Target:
+
+35+ new tests
+
+100% PASS
+
+────────────────────────────────────────
+7. DELIVERY REPORT
+
+── VERIFIED COMPONENTS ──
+
+Core
+
+Service
+
+API
+
+UI
+
+Export
+
+Security
+
+Mission Integration
+
+── REGRESSION RESULTS ──
+
+── CROSS-LAYER VALIDATION ──
+
+── TESTS ──
+
+── PRODUCTION CODE CHANGES ──
+
+None (unless required)
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0
+
+── TOTAL REGRESSION ──
+
+<Previous PASS + new tests>
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 09 — Documentation
+
+────────────────────────────────────────
+8. PASS CRITERIA
+
+PASS requires:
+
+• Complete end-to-end regression PASS
+
+• Cross-layer validation PASS
+
+• No regressions introduced
+
+• No production changes unless required
+
+• Deterministic behavior preserved
+
+• Read-only architecture preserved
+
+• No execution path
+
+• No persistence
+
+• No Exchange connectivity
+
+• No filesystem/network writes
+
+• 35+ regression tests PASS
+
+• Regression remains 100% PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+Mission 1800 proceeds to Agent 09 only after Agent 08 passes.
