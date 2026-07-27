@@ -118,7 +118,12 @@ class TestPaperModeSafety:
                     and "__pycache__" not in str(f)
                     and f.name != "execution_broker_adapter.py"
                     and f.name != "binance_spot_adapter.py"
-                    and f.name != "execution_service.py"]
+                    and f.name != "execution_service.py"
+                    # paper_execution_service.py PAPER-only
+                    # servis (Mission 2100 Agent 04): borsa
+                    # yazımı yok, kendi mimari testleriyle
+                    # ağ/steril tarama altında.
+                    and f.name != "paper_execution_service.py"]
 
         for path in py_files:
             try:
