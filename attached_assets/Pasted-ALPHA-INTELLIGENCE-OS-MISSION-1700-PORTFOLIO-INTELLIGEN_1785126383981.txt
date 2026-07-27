@@ -1,0 +1,326 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1700 — PORTFOLIO INTELLIGENCE
+
+AGENT 09 — DOCUMENTATION
+
+ROLE
+
+You are the Documentation Agent for Mission 1700.
+
+Document the final Portfolio Intelligence implementation exactly as delivered
+by Agents 01–08.
+
+Do not implement features.
+
+Do not redesign architecture.
+
+Documentation only.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1600
+
+OFFICIALLY CLOSED
+
+Mission 1700
+
+Agent 01 — PASS
+Agent 02 — PASS
+Agent 03 — PASS
+Agent 04 — PASS
+Agent 05 — PASS
+Agent 06 — PASS
+Agent 07 — PASS
+Agent 08 — PASS
+
+Baseline Commit
+
+eb9994f
+
+Regression Baseline
+
+1321 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Produce the complete official documentation for Mission 1700.
+
+Documentation must describe the implemented system exactly.
+
+Do not describe future work as implemented.
+
+Do not change architecture.
+
+────────────────────────────────────────
+3. FILES
+
+Create only documentation files.
+
+Examples (adapt to repository conventions):
+
+docs/mission1700_portfolio_intelligence.md
+
+docs/architecture/portfolio_intelligence.md
+
+docs/api/portfolio_intelligence.md
+
+docs/security/portfolio_intelligence.md
+
+Modify documentation index files only if repository convention requires it.
+
+No production code changes.
+
+────────────────────────────────────────
+4. REQUIRED CONTENT
+
+Document:
+
+• Mission purpose
+
+• Architecture
+
+• Layer responsibilities
+
+• Core
+
+• Service
+
+• API
+
+• UI
+
+• Export
+
+• Security model
+
+• Determinism guarantees
+
+• Read-only guarantees
+
+• Error model
+
+• Data model
+
+• PortfolioAnalysis schema
+
+• Source normalization
+
+• Risk Engine boundary
+
+• Known limitations
+
+• Testing strategy
+
+• Regression results
+
+────────────────────────────────────────
+5. API DOCUMENTATION
+
+Document:
+
+GET /api/portfolio/intelligence
+
+GET /api/v1/portfolio/intelligence
+
+GET /api/portfolio/intelligence/export/json
+
+GET /api/v1/portfolio/intelligence/export/json
+
+GET /api/portfolio/intelligence/export/csv
+
+GET /api/v1/portfolio/intelligence/export/csv
+
+Include:
+
+Purpose
+
+Inputs
+
+Outputs
+
+HTTP status behavior
+
+Error codes
+
+Read-only guarantees
+
+────────────────────────────────────────
+6. SECURITY DOCUMENTATION
+
+Document verified guarantees:
+
+No Exchange
+
+No execution
+
+No orders
+
+No append_snapshot
+
+No Workspace writes
+
+No Timeline writes
+
+No filesystem writes
+
+No temporary files
+
+No network clients
+
+No dynamic execution
+
+Sterile errors
+
+Authentication boundary
+
+────────────────────────────────────────
+7. DETERMINISM DOCUMENTATION
+
+Document:
+
+Decimal usage
+
+Fixed-point strings
+
+Stable ordering
+
+Null preservation
+
+Unknown handling
+
+Generated_at boundary
+
+Byte-identical guarantees
+
+────────────────────────────────────────
+8. OPERATIONAL NOTES
+
+Document:
+
+Provider dependency injection
+
+Provider freshness
+
+PARTIAL semantics
+
+UNAVAILABLE semantics
+
+Export behavior
+
+UI states
+
+Performance characteristics
+
+────────────────────────────────────────
+9. TEST DOCUMENTATION
+
+Summarize:
+
+Agent 02 tests
+
+Agent 03 tests
+
+Agent 04 tests
+
+Agent 05 tests
+
+Agent 06 tests
+
+Agent 07 tests
+
+Agent 08 regression
+
+Final regression totals
+
+────────────────────────────────────────
+10. DELIVERY REPORT
+
+── CREATED FILES ──
+
+── MODIFIED FILES ──
+
+── DOCUMENTATION COVERAGE ──
+
+── API DOCUMENTATION ──
+
+── SECURITY DOCUMENTATION ──
+
+── OPERATIONAL NOTES ──
+
+── TEST DOCUMENTATION ──
+
+── PRODUCTION CODE CHANGES ──
+
+None
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0 hedeflenir
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 10 — Mission Closure
+
+────────────────────────────────────────
+11. PASS CRITERIA
+
+PASS requires:
+
+• Complete Mission 1700 documentation
+
+• API documented
+
+• Security documented
+
+• Determinism documented
+
+• Operational behavior documented
+
+• Regression documented
+
+• No production code changes
+
+• Documentation consistent with implementation
+
+• Full regression remains PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+• Commit created and pushed to GitHub
+
+MISSION 1700 continues only after Agent 09 passes.
