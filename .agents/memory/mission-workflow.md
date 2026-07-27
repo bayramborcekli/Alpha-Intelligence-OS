@@ -18,6 +18,7 @@ implement → tests → architect code-review subagent (fix real findings; re-re
 - Mission 1900 closed at 2207 PASS (closure commit `a79415e`; completion pre-closure 2146 at `08a409b`)
 - Mission 2000 closed at 4375 PASS (closure `03e181d`; Execution Core v1.0.0 CERTIFIED; core manifest baseline `01aa429`:3704 deliberately distinct)
 - Mission 2100 (v1.1.0 "Controlled Execution") A01: Controlled Execution Foundation, commit `4304527`, regression 4619 PASS (244 new tests)
+- Mission 2100 A02: Runtime Domain Models, commit `69bd05c`, regression 5215 PASS (596 new tests)
 
 ## Standing constraints (all missions)
 Read-only architecture (exchange writes forever 0); Decimal-only money math (AST-tested, no float literals); unknown → null; sterile error codes only; no threads/schedulers; wall-clock/UUID only at API boundary; never `pkill gunicorn`; keep `attached_assets/` out of scoped commits; MappingProxyType → plain dict before json.dumps.

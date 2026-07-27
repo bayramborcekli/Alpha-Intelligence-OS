@@ -1,0 +1,325 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2100
+
+AGENT 02
+
+RUNTIME DOMAIN MODELS
+
+ROLE
+
+Create the immutable runtime trading domain used by:
+
+• Paper Trading
+• Shadow Mode
+• Micro Live
+
+This Agent SHALL NOT:
+
+• execute orders
+• simulate fills
+• contact brokers
+• access Execution API
+• access Execution Service
+• perform reconciliation
+• perform portfolio accounting
+
+Mission:
+
+Create ONLY canonical runtime models.
+
+────────────────────────────────────────
+1. BASELINE
+
+Execution Core v1.0.0
+
+Commit:
+03e181d
+
+Mission 2100 Agent 01:
+
+Commit:
+4304527
+
+Regression:
+4619 PASS
+
+Architecture:
+FROZEN
+
+────────────────────────────────────────
+2. CREATE
+
+runtime_models.py
+
+runtime_errors.py
+
+runtime_enums.py
+
+tests/test_runtime_models.py
+
+tests/test_runtime_architecture.py
+
+────────────────────────────────────────
+3. CANONICAL MODELS
+
+Create immutable models only.
+
+RuntimeSession
+
+RuntimeIdentity
+
+RuntimeAccountSnapshot
+
+RuntimeBalance
+
+RuntimePosition
+
+RuntimeOrderIntent
+
+RuntimeOrderRecord
+
+RuntimeExecutionRecord
+
+RuntimeStatistics
+
+RuntimeHeartbeat
+
+RuntimeConfiguration
+
+RuntimeLimits
+
+RuntimeAuthorization
+
+RuntimeAuditRecord
+
+No mutable state.
+
+No inheritance trees.
+
+No ORM.
+
+No persistence.
+
+────────────────────────────────────────
+4. ENUMS
+
+Closed enums only.
+
+RuntimeState
+
+STOPPED
+STARTING
+RUNNING
+PAUSED
+STOPPING
+FAILED
+
+RuntimeEnvironment
+
+PAPER
+SHADOW
+MICRO_LIVE
+
+HeartbeatStatus
+
+OK
+WARNING
+ERROR
+
+AuthorizationState
+
+NONE
+PENDING
+APPROVED
+DENIED
+EXPIRED
+
+AuditSeverity
+
+INFO
+WARNING
+ERROR
+CRITICAL
+
+────────────────────────────────────────
+5. IMMUTABILITY
+
+Every model:
+
+• frozen dataclass
+• slots
+• hashable where applicable
+• Decimal only
+• no float
+• no datetime.now()
+• no UUID
+• no randomness
+• no generated ids
+
+────────────────────────────────────────
+6. VALIDATION
+
+Reject:
+
+negative balances
+
+negative quantities
+
+negative prices
+
+blank identifiers
+
+duplicate logical sequence
+
+NaN
+
+Infinity
+
+bool as integer
+
+empty authorization
+
+────────────────────────────────────────
+7. DOMAIN OWNERSHIP
+
+Runtime models SHALL NOT duplicate:
+
+ExecutionRequest
+
+ExecutionResult
+
+BrokerProfile
+
+RiskDecision
+
+KillSwitch
+
+BrokerAdapter
+
+Portfolio models
+
+Use references only.
+
+────────────────────────────────────────
+8. DEPENDENCY RULES
+
+Allowed:
+
+stdlib
+
+Mission 2000 public exports
+
+Agent 01 public exports
+
+Forbidden:
+
+broker adapters
+
+network
+
+database
+
+filesystem
+
+desktop frameworks
+
+mobile frameworks
+
+REST
+
+WebSocket
+
+AI
+
+────────────────────────────────────────
+9. TESTS
+
+Minimum:
+
+240 tests
+
+Cover:
+
+immutability
+
+validation
+
+serialization
+
+hashability
+
+Decimal
+
+enum closure
+
+error codes
+
+dependency direction
+
+duplicate prevention
+
+architecture rules
+
+public exports
+
+no forbidden imports
+
+────────────────────────────────────────
+10. SECURITY
+
+No secrets
+
+No broker
+
+No network
+
+No persistence
+
+No exchange write
+
+No environment access
+
+────────────────────────────────────────
+11. DELIVERY
+
+Return exactly:
+
+CREATED FILES
+
+RUNTIME MODELS
+
+ENUMS
+
+VALIDATION
+
+SECURITY
+
+TEST RESULTS
+
+TOTAL REGRESSION
+
+COMMIT
+
+────────────────────────────────────────
+12. PASS
+
+PASS requires:
+
+≥240 tests PASS
+
+0 FAIL
+
+Full regression PASS
+
+Mission 2000 frozen
+
+Mission 2100 Agent 01 unchanged
+
+No network
+
+No broker
+
+No secrets
+
+No exchange write
