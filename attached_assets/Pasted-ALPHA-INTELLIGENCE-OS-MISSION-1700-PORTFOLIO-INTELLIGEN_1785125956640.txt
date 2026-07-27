@@ -1,0 +1,385 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1700 — PORTFOLIO INTELLIGENCE
+
+AGENT 08 — FULL REGRESSION
+
+ROLE
+
+You are the Full Regression Agent for Mission 1700.
+
+Perform a complete regression verification of the entire Alpha Intelligence OS
+after completion of Mission 1700 Agents 01–07.
+
+Do not implement features.
+
+Do not redesign architecture.
+
+Do not modify behavior except for verified regression fixes.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1600
+
+OFFICIALLY CLOSED
+
+Mission 1700
+
+Agent 01 — PASS
+Agent 02 — PASS
+Agent 03 — PASS
+Agent 04 — PASS
+Agent 05 — PASS
+Agent 06 — PASS
+Agent 07 — PASS
+
+Baseline Commit
+
+7c50f10
+
+Regression Baseline
+
+1306 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Execute a complete system-wide regression.
+
+Verify that Mission 1700 introduced:
+
+• no functional regressions
+
+• no API regressions
+
+• no UI regressions
+
+• no automation regressions
+
+• no export regressions
+
+• no security regressions
+
+• no determinism regressions
+
+• no performance regressions caused by Mission 1700
+
+Only verified regression fixes are permitted.
+
+────────────────────────────────────────
+3. REGRESSION SCOPE
+
+Verify all previous missions remain fully operational.
+
+Include at minimum:
+
+Mission 1400
+
+Mission 1500.1
+
+Mission 1500.2
+
+Mission 1600
+
+Mission 1700
+
+Verify:
+
+Core
+
+Workspace
+
+Automation
+
+Portfolio
+
+API
+
+UI
+
+Export
+
+Security
+
+────────────────────────────────────────
+4. API REGRESSION
+
+Verify:
+
+All previous endpoints still function.
+
+No route collisions.
+
+No response schema regressions.
+
+No HTTP status regressions.
+
+Authentication unchanged.
+
+Caching behavior unchanged.
+
+No serialization regressions.
+
+────────────────────────────────────────
+5. UI REGRESSION
+
+Verify:
+
+Existing dashboards unchanged.
+
+Workspace unchanged.
+
+Navigation unchanged except approved Portfolio entry.
+
+Rendering unchanged.
+
+No broken templates.
+
+No JS regressions.
+
+No CSS regressions.
+
+────────────────────────────────────────
+6. AUTOMATION REGRESSION
+
+Verify:
+
+Mission 1600 Automation unchanged.
+
+Intelligence Engine unchanged.
+
+No snapshot behavior regression.
+
+No scheduler regression.
+
+No workflow regression.
+
+No Exchange regression.
+
+────────────────────────────────────────
+7. PORTFOLIO REGRESSION
+
+Verify:
+
+Core
+
+Service
+
+API
+
+UI
+
+Export
+
+Security
+
+continue to satisfy all Mission 1700 guarantees.
+
+────────────────────────────────────────
+8. DETERMINISM
+
+Verify identical outputs for identical inputs across:
+
+Core
+
+Service
+
+API
+
+UI
+
+Export
+
+Automation
+
+No random.
+
+No UUID.
+
+No hidden timestamps beyond approved composition boundary.
+
+────────────────────────────────────────
+9. PERFORMANCE
+
+Verify no measurable regression caused by Mission 1700.
+
+At minimum compare:
+
+Core execution
+
+API response
+
+Export generation
+
+UI rendering
+
+No unnecessary repeated provider calls.
+
+No duplicate calculations.
+
+────────────────────────────────────────
+10. SECURITY REGRESSION
+
+Reconfirm:
+
+No Exchange writes
+
+No append_snapshot
+
+No filesystem writes
+
+No temporary files
+
+No network clients
+
+No dynamic execution
+
+No payload mutation
+
+No provider leakage
+
+No secret leakage
+
+────────────────────────────────────────
+11. COMPATIBILITY
+
+Verify:
+
+Existing public contracts preserved.
+
+Existing tests preserved.
+
+Existing configuration preserved.
+
+No accidental runtime mutations committed.
+
+Repository remains deployable.
+
+────────────────────────────────────────
+12. TESTS
+
+Run complete regression.
+
+Include targeted verification for:
+
+• previous mission suites
+
+• Portfolio suite
+
+• API suite
+
+• UI suite
+
+• Export suite
+
+• Security suite
+
+• determinism
+
+• compatibility
+
+• deployment smoke test
+
+────────────────────────────────────────
+13. DELIVERY REPORT
+
+── VERIFIED MISSIONS ──
+
+── API REGRESSION ──
+
+── UI REGRESSION ──
+
+── AUTOMATION REGRESSION ──
+
+── PORTFOLIO REGRESSION ──
+
+── PERFORMANCE AUDIT ──
+
+── SECURITY REGRESSION ──
+
+── COMPATIBILITY AUDIT ──
+
+── REGRESSION FIXES (IF ANY) ──
+
+None
+or
+
+Minimal verified fixes only
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0 hedeflenir
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 09 — Documentation
+
+────────────────────────────────────────
+14. PASS CRITERIA
+
+PASS requires:
+
+• Full regression PASS
+
+• All previous missions PASS
+
+• Mission 1700 PASS
+
+• No functional regressions
+
+• No API regressions
+
+• No UI regressions
+
+• No automation regressions
+
+• No export regressions
+
+• No security regressions
+
+• Determinism preserved
+
+• Performance preserved
+
+• Compatibility preserved
+
+• Repository deployable
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+• Commit created and pushed to GitHub
+
+MISSION 1700 continues only after Agent 08 passes.
