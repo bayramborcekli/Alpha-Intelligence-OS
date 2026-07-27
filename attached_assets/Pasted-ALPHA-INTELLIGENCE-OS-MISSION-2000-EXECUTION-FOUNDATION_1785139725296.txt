@@ -1,0 +1,575 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2000 — EXECUTION FOUNDATION
+
+AGENT 01 — EXECUTION ARCHITECTURE
+
+ROLE
+
+Design and certify the complete Execution architecture.
+
+This agent defines ONLY architecture.
+
+No execution logic.
+
+No exchange connectivity.
+
+No order execution.
+
+No production trading behavior.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1900
+
+OFFICIALLY CLOSED
+
+Current Commit
+
+a79415e
+
+Regression Baseline
+
+2207 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Freeze the complete Execution architecture.
+
+Define:
+
+• execution layers
+
+• ownership boundaries
+
+• dependency graph
+
+• immutable contracts
+
+• public API ownership
+
+• metadata ownership
+
+• exchange isolation
+
+• risk ownership
+
+• kill switch ownership
+
+No production implementation.
+
+────────────────────────────────────────
+3. EXECUTION ARCHITECTURE
+
+The approved stack SHALL be:
+
+Portfolio Intelligence
+
+↓
+
+Strategy Intelligence
+
+↓
+
+Monitoring
+
+↓
+
+Execution API
+
+↓
+
+Execution Service
+
+↓
+
+Risk Engine
+
+↓
+
+Kill Switch
+
+↓
+
+Exchange Adapter
+
+↓
+
+Exchange Implementation
+
+Example:
+
+Binance Spot Adapter
+
+Future:
+
+Bybit Adapter
+
+OKX Adapter
+
+Kraken Adapter
+
+No Strategy layer may communicate directly with an Exchange.
+
+All execution MUST pass through:
+
+Execution Service
+↓
+
+Risk Engine
+↓
+
+Kill Switch
+↓
+
+Exchange Adapter
+
+────────────────────────────────────────
+4. LAYER RESPONSIBILITIES
+
+Execution API
+
+Owns:
+
+• request validation
+
+• metadata generation
+
+• execution_id
+
+• timestamps
+
+• response envelope
+
+Execution Service
+
+Owns:
+
+• order lifecycle orchestration
+
+• routing
+
+• state transitions
+
+Risk Engine
+
+Owns:
+
+• exposure validation
+
+• position sizing
+
+• max loss
+
+• daily limits
+
+• capital validation
+
+Kill Switch
+
+Owns:
+
+• emergency stop
+
+• trading halt
+
+• circuit breaker
+
+• forced rejection
+
+Exchange Adapter
+
+Owns:
+
+• exchange abstraction
+
+• request translation
+
+• response normalization
+
+Exchange Implementation
+
+Owns:
+
+• REST/WebSocket protocol
+
+• authentication
+
+• signing
+
+• endpoint communication
+
+────────────────────────────────────────
+5. OWNERSHIP RULES
+
+Execution API
+
+MUST NOT:
+
+execute orders
+
+Execution Service
+
+MUST NOT:
+
+calculate risk
+
+Risk Engine
+
+MUST NOT:
+
+communicate with exchange
+
+Kill Switch
+
+MUST NOT:
+
+calculate strategies
+
+Exchange Adapter
+
+MUST NOT:
+
+contain business logic
+
+Exchange Implementation
+
+MUST NOT:
+
+contain risk logic
+
+────────────────────────────────────────
+6. DEPENDENCY GRAPH
+
+Execution API
+
+↓
+
+Execution Service
+
+↓
+
+Risk Engine
+
+↓
+
+Kill Switch
+
+↓
+
+Exchange Adapter
+
+↓
+
+Exchange Implementation
+
+Forbidden:
+
+Reverse dependency
+
+Circular dependency
+
+Layer bypass
+
+Cross ownership
+
+────────────────────────────────────────
+7. EXECUTION LIFECYCLE
+
+Document the future lifecycle:
+
+Execution Request
+
+↓
+
+Risk Validation
+
+↓
+
+Kill Switch Validation
+
+↓
+
+Exchange Translation
+
+↓
+
+Exchange Execution
+
+↓
+
+Exchange Response
+
+↓
+
+Normalized Result
+
+↓
+
+Monitoring
+
+Monitoring SHALL remain READ-ONLY.
+
+Monitoring never executes orders.
+
+────────────────────────────────────────
+8. METADATA OWNERSHIP
+
+ONLY Execution API owns:
+
+execution_id
+
+requested_at
+
+processed_at
+
+All lower layers only propagate metadata.
+
+────────────────────────────────────────
+9. PUBLIC API
+
+Freeze only approved public surface.
+
+Execution API
+
+execute_order_api()
+
+Execution Service
+
+execute_order()
+
+ExecutionService
+
+Risk Engine
+
+validate_execution()
+
+Kill Switch
+
+verify_execution()
+
+Exchange Adapter
+
+ExchangeAdapter
+
+Exchange Implementation
+
+BinanceSpotAdapter
+
+No additional public APIs.
+
+────────────────────────────────────────
+10. SECURITY MODEL
+
+Execution Architecture SHALL guarantee:
+
+Exchange isolation
+
+Risk isolation
+
+Kill Switch isolation
+
+Strategy isolation
+
+Monitoring isolation
+
+No hidden execution path.
+
+No direct exchange access.
+
+No background execution.
+
+No automatic retries.
+
+No persistence.
+
+No scheduler.
+
+────────────────────────────────────────
+11. OUT OF SCOPE
+
+NOT allowed in Agent 01:
+
+Exchange connectivity
+
+REST
+
+WebSocket
+
+Authentication
+
+HMAC signing
+
+Orders
+
+Cancel
+
+Replace
+
+Fills
+
+Paper Trading
+
+Shadow Trading
+
+Micro Live
+
+────────────────────────────────────────
+12. TEST REQUIREMENTS
+
+Minimum
+
+60 architecture validation tests.
+
+Verify:
+
+• dependency graph
+
+• ownership
+
+• public APIs
+
+• metadata ownership
+
+• forbidden dependencies
+
+• architecture diagram
+
+• lifecycle
+
+• monitoring isolation
+
+• strategy isolation
+
+• exchange isolation
+
+• no production behavior
+
+────────────────────────────────────────
+13. PROHIBITIONS
+
+Do not:
+
+Modify Mission 1900
+
+Modify Monitoring
+
+Modify Strategy
+
+Modify Portfolio
+
+Implement execution
+
+Implement exchange
+
+Implement risk calculations
+
+Implement kill switch
+
+Implement API logic
+
+Implement adapters
+
+────────────────────────────────────────
+14. DELIVERY REPORT
+
+Return:
+
+── CREATED FILES ──
+
+List
+
+── EXECUTION ARCHITECTURE ──
+
+Architecture summary
+
+── OWNERSHIP ──
+
+Layer ownership summary
+
+── DEPENDENCY GRAPH ──
+
+Verification summary
+
+── EXECUTION LIFECYCLE ──
+
+Summary
+
+── PUBLIC API ──
+
+Approved APIs
+
+── SECURITY MODEL ──
+
+Summary
+
+── PRODUCTION CODE CHANGES ──
+
+None
+
+── TEST RESULTS ──
+
+PASS count
+
+── FAIL / SKIP ──
+
+Counts
+
+── TOTAL REGRESSION ──
+
+Total PASS
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash + GitHub push
+
+── NEXT AGENT ──
+
+AGENT 02 — DOMAIN MODELS
+
+────────────────────────────────────────
+15. PASS CRITERIA
+
+PASS requires:
+
+• Execution architecture frozen
+
+• Dependency graph approved
+
+• Ownership approved
+
+• Metadata ownership approved
+
+• Public APIs approved
+
+• Lifecycle approved
+
+• ≥60 architecture tests PASS
+
+• No production code changes
+
+• Full regression PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
