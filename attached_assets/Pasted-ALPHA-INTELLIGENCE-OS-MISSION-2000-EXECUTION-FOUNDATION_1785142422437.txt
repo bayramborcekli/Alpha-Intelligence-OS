@@ -1,0 +1,472 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2000 — EXECUTION FOUNDATION
+
+AGENT 04 — KILL SWITCH
+
+ROLE
+
+Design and implement the deterministic Kill Switch.
+
+The Kill Switch is the FINAL authority before any order reaches a Broker Adapter.
+
+It SHALL have higher authority than:
+
+• Strategy
+• Portfolio
+• Monitoring
+• Execution Service
+• Risk Engine
+• Broker Adapter
+
+If Kill Switch denies execution,
+NOTHING can bypass it.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 2000
+
+Agent 03
+
+PASS
+
+Commit
+
+624ff8d
+
+Regression Baseline
+
+2600 PASS
+0 FAIL
+0 SKIP
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement the immutable system-wide emergency protection layer.
+
+The Kill Switch SHALL NEVER evaluate trading logic.
+
+The Kill Switch SHALL ONLY determine:
+
+"May the system execute orders?"
+
+Nothing more.
+
+────────────────────────────────────────
+3. FILES
+
+Create
+
+execution_kill_switch.py
+
+execution_kill_switch_models.py
+
+tests/test_execution_kill_switch.py
+
+────────────────────────────────────────
+4. ARCHITECTURE
+
+Execution API
+        │
+Execution Service
+        │
+Risk Engine
+        │
+Kill Switch
+        │
+Broker Adapter
+
+Execution is ONLY allowed when BOTH:
+
+Risk Engine = ALLOW
+
+AND
+
+Kill Switch = ENABLED
+
+Otherwise
+
+Execution MUST STOP.
+
+────────────────────────────────────────
+5. STATE MODEL
+
+Immutable.
+
+Allowed states only.
+
+ENABLED
+
+DISABLED
+
+LOCKED
+
+MAINTENANCE
+
+No additional states.
+
+LOCKED is terminal.
+
+LOCKED cannot transition directly to ENABLED.
+
+Required path:
+
+LOCKED
+
+↓
+
+DISABLED
+
+↓
+
+ENABLED
+
+────────────────────────────────────────
+6. AUTHORITY
+
+Kill Switch has absolute authority.
+
+No caller may override it.
+
+Not:
+
+Execution Service
+
+Not:
+
+Risk Engine
+
+Not:
+
+Broker Adapter
+
+Not:
+
+Future AI agents
+
+No override API.
+
+────────────────────────────────────────
+7. TRANSITIONS
+
+Allowed
+
+ENABLED
+→DISABLED
+
+DISABLED
+→ENABLED
+
+DISABLED
+→LOCKED
+
+ENABLED
+→MAINTENANCE
+
+MAINTENANCE
+→ENABLED
+
+LOCKED
+→DISABLED
+
+Forbidden
+
+LOCKED→ENABLED
+
+LOCKED→MAINTENANCE
+
+MAINTENANCE→LOCKED
+
+No implicit transitions.
+
+Transition table MUST be deterministic.
+
+────────────────────────────────────────
+8. PUBLIC API
+
+Approved only.
+
+KillSwitch
+
+is_execution_allowed()
+
+enable()
+
+disable()
+
+lock()
+
+maintenance()
+
+current_state()
+
+No additional public API.
+
+────────────────────────────────────────
+9. IMMUTABILITY
+
+State history SHALL NOT be mutable.
+
+Every transition creates a new immutable snapshot.
+
+Snapshot contains:
+
+state
+
+reason
+
+timestamp (logical sequence only, no wall-clock)
+
+sequence_id
+
+No datetime.now()
+
+No UUID
+
+No randomness
+
+Sequence SHALL be deterministic.
+
+────────────────────────────────────────
+10. REASONS
+
+Create closed enum.
+
+MANUAL
+
+RISK_LIMIT
+
+SYSTEM_FAILURE
+
+BROKER_FAILURE
+
+NETWORK_FAILURE
+
+DEPLOYMENT
+
+REGULATORY
+
+UNKNOWN
+
+No arbitrary strings.
+
+────────────────────────────────────────
+11. SAFETY
+
+Kill Switch SHALL NEVER:
+
+execute orders
+
+cancel orders
+
+modify orders
+
+talk to Broker
+
+talk to Exchange
+
+talk to REST
+
+talk to WebSocket
+
+talk to filesystem
+
+talk to network
+
+────────────────────────────────────────
+12. DETERMINISM
+
+Same sequence of transitions
+
+↓
+
+Same final state
+
+↓
+
+Always.
+
+No side effects.
+
+────────────────────────────────────────
+13. FUTURE COMPATIBILITY
+
+Design for future integrations.
+
+Mission 2100
+
+Paper Trading
+
+Shadow Trading
+
+Micro Live
+
+Mission 2300
+
+High Availability
+
+Mission 2400
+
+Observability
+
+Mission 2700
+
+Enterprise Audit
+
+WITHOUT changing Kill Switch API.
+
+────────────────────────────────────────
+14. TEST REQUIREMENTS
+
+Minimum
+
+150 focused tests.
+
+Verify
+
+immutable snapshots
+
+transition rules
+
+forbidden transitions
+
+terminal LOCKED behaviour
+
+sequence determinism
+
+public API freeze
+
+no forbidden imports
+
+no datetime.now
+
+no uuid
+
+no randomness
+
+no filesystem
+
+no network
+
+no Broker imports
+
+no Execution imports
+
+no side effects
+
+────────────────────────────────────────
+15. PROHIBITIONS
+
+Do not implement
+
+Execution
+
+Broker
+
+REST
+
+WebSocket
+
+Scheduler
+
+Persistence
+
+Authentication
+
+Risk Engine
+
+Monitoring
+
+Portfolio
+
+Strategy
+
+────────────────────────────────────────
+16. DELIVERY REPORT
+
+Return
+
+── CREATED FILES ──
+
+List
+
+── STATE MACHINE ──
+
+Summary
+
+── IMMUTABLE SNAPSHOTS ──
+
+Summary
+
+── AUTHORITY MODEL ──
+
+Summary
+
+── TRANSITION TABLE ──
+
+Summary
+
+── PUBLIC API ──
+
+Approved surface
+
+── SAFETY CERTIFICATION ──
+
+Summary
+
+── TEST RESULTS ──
+
+PASS count
+
+── FAIL / SKIP ──
+
+Counts
+
+── TOTAL REGRESSION ──
+
+PASS
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash + GitHub push
+
+── NEXT AGENT ──
+
+AGENT 05 — BROKER ADAPTER INTERFACE
+
+────────────────────────────────────────
+17. PASS CRITERIA
+
+PASS requires
+
+• Deterministic Kill Switch
+
+• Immutable snapshots
+
+• Certified transition table
+
+• Absolute authority
+
+• No bypass path
+
+• ≥150 tests PASS
+
+• Public API frozen
+
+• No execution capability
+
+• Full regression PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
