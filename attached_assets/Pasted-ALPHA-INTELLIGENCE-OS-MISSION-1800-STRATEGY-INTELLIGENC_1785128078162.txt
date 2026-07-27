@@ -1,0 +1,354 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1800 — STRATEGY INTELLIGENCE
+
+AGENT 01 — ARCHITECTURE
+
+ROLE
+
+You are the Architecture Agent for Mission 1800.
+
+Mission 1700 is officially closed.
+
+Mission 1800 introduces Strategy Intelligence.
+
+This mission transforms Portfolio Intelligence into actionable, explainable,
+advisory-only strategy recommendations.
+
+No execution.
+
+No order generation.
+
+No exchange interaction.
+
+No workspace writes.
+
+No timeline writes.
+
+Architecture only.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1700
+
+OFFICIALLY CLOSED
+
+Commit
+
+05eb08a
+
+Regression Baseline
+
+1335 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Design the complete Strategy Intelligence architecture.
+
+The output of this mission is an immutable StrategyProposal.
+
+Portfolio Intelligence remains the authoritative source of portfolio state.
+
+Strategy Intelligence consumes PortfolioAnalysis and produces advisory
+recommendations only.
+
+────────────────────────────────────────
+3. ARCHITECTURE
+
+Accepted flow:
+
+Market Data
+        │
+        ▼
+Intelligence Engine
+        │
+        ▼
+Portfolio Intelligence
+        │
+        ▼
+Strategy Intelligence
+        │
+        ▼
+StrategyProposal
+
+No execution path.
+
+No broker adapters.
+
+No order objects.
+
+No exchange clients.
+
+────────────────────────────────────────
+4. STRATEGY PROPOSAL
+
+Define a versioned immutable object.
+
+Required envelope:
+
+strategy_version
+
+proposal_id
+
+generated_at
+
+advisory_only
+
+portfolio_analysis_version
+
+confidence
+
+data_quality
+
+market_regime
+
+overall_risk
+
+recommendations
+
+warnings
+
+limitations
+
+Each recommendation shall contain:
+
+recommendation_id
+
+instrument
+
+action
+
+reason_codes
+
+priority
+
+confidence
+
+current_weight
+
+target_weight
+
+risk_level
+
+expected_effect
+
+invalidation_conditions
+
+No execution fields.
+
+No order type.
+
+No quantity.
+
+No price.
+
+────────────────────────────────────────
+5. RESPONSIBILITIES
+
+Strategy Intelligence SHALL:
+
+Consume PortfolioAnalysis
+
+Evaluate portfolio allocation
+
+Evaluate concentration
+
+Evaluate diversification
+
+Evaluate exposure
+
+Evaluate risk outputs
+
+Generate explainable recommendations
+
+Assign confidence
+
+Assign priority
+
+Preserve unknown values
+
+Remain deterministic
+
+Strategy Intelligence SHALL NOT:
+
+Execute trades
+
+Create orders
+
+Modify portfolio
+
+Persist history
+
+Write snapshots
+
+Write workspace
+
+Write timeline
+
+────────────────────────────────────────
+6. LAYER BOUNDARIES
+
+Portfolio Intelligence
+
+↓
+
+Strategy Core
+
+↓
+
+Strategy Service
+
+↓
+
+Strategy API
+
+↓
+
+Strategy UI
+
+Future Execution shall consume StrategyProposal only.
+
+No layer bypass.
+
+────────────────────────────────────────
+7. DETERMINISM
+
+Architecture shall guarantee:
+
+Decimal arithmetic
+
+Stable ordering
+
+Immutable outputs
+
+Versioned schema
+
+Deterministic serialization
+
+Unknown → null
+
+Generated_at only at API boundary
+
+────────────────────────────────────────
+8. SECURITY
+
+Architecture must guarantee:
+
+No Exchange
+
+No execution
+
+No broker SDK
+
+No filesystem writes
+
+No temporary files
+
+No append_snapshot
+
+No workspace writes
+
+No timeline writes
+
+No network clients
+
+Sterile errors
+
+────────────────────────────────────────
+9. FUTURE COMPATIBILITY
+
+Architecture must explicitly allow future integration with:
+
+Monitoring & Alerting
+
+Execution Control
+
+Execution Engine
+
+Paper Trading
+
+Shadow Mode
+
+without modifying Strategy Core.
+
+────────────────────────────────────────
+10. DELIVERY REPORT
+
+── ARCHITECTURE ──
+
+── STRATEGY PROPOSAL SCHEMA ──
+
+── LAYER RESPONSIBILITIES ──
+
+── SECURITY GUARANTEES ──
+
+── DETERMINISM GUARANTEES ──
+
+── FUTURE COMPATIBILITY ──
+
+── PRODUCTION CODE CHANGES ──
+
+None
+
+── TEST RESULTS ──
+
+Architecture Review PASS
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+────────────────────────────────────────
+11. PASS CRITERIA
+
+PASS requires:
+
+• Complete Strategy Intelligence architecture
+
+• Immutable StrategyProposal schema
+
+• Advisory-only architecture
+
+• No execution path
+
+• No exchange interaction
+
+• No persistence side effects
+
+• Deterministic architecture
+
+• Future Execution compatibility
+
+• Production code unchanged
+
+• Architecture review PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+Mission 1800 continues only after Agent 01 passes.
