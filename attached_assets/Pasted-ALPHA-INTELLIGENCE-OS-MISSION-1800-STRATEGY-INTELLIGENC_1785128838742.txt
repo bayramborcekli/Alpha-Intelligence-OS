@@ -1,0 +1,305 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1800 — STRATEGY INTELLIGENCE
+
+AGENT 03 — STRATEGY SERVICE
+
+ROLE
+
+You are the Service Agent for Mission 1800.
+
+Implement the Strategy Service exactly as defined by Agent 01 architecture
+and Agent 02 Strategy Core.
+
+The Service layer orchestrates data flow only.
+
+No business rules.
+
+No strategy calculations.
+
+No execution.
+
+No persistence.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1700
+
+OFFICIALLY CLOSED
+
+Mission 1800
+
+Agent 01 — PASS
+
+Agent 02 — PASS
+
+Baseline Commit
+
+f5f08b5
+
+Regression Baseline
+
+1380 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement the Strategy Service.
+
+The Service SHALL:
+
+Obtain PortfolioAnalysis
+
+Validate provider responses
+
+Normalize service inputs
+
+Delegate all strategy computation to:
+
+build_strategy(...)
+
+Nothing else.
+
+────────────────────────────────────────
+3. FILES
+
+Create:
+
+strategy_service.py
+
+tests/test_mission1800_strategy_service.py
+
+Modify imports only where required.
+
+No API.
+
+No UI.
+
+No Export.
+
+────────────────────────────────────────
+4. RESPONSIBILITIES
+
+Implement:
+
+build_default_strategy_providers()
+
+analyze_strategy(...)
+
+The Service SHALL:
+
+Inject providers
+
+Call Portfolio Intelligence
+
+Normalize provider output
+
+Handle unavailable providers
+
+Return immutable StrategyProposal
+
+Delegate all calculations to Strategy Core
+
+The Service SHALL NOT:
+
+Perform strategy math
+
+Generate recommendations
+
+Generate proposal_id
+
+Generate generated_at
+
+Persist anything
+
+────────────────────────────────────────
+5. PROVIDER MODEL
+
+Provider contract SHALL match Mission 1700:
+
+{
+    "freshness": "...",
+    "data": ...
+}
+
+Normalize:
+
+OK
+
+PARTIAL
+
+UNAVAILABLE
+
+Preserve unknown values.
+
+Never convert null to zero.
+
+No provider-specific leakage.
+
+────────────────────────────────────────
+6. LAYER BOUNDARIES
+
+Portfolio Service
+        │
+        ▼
+Strategy Service
+        │
+        ▼
+Strategy Core
+
+No reverse dependency.
+
+No Core bypass.
+
+No API logic.
+
+────────────────────────────────────────
+7. SECURITY
+
+Service SHALL NOT:
+
+Import Flask
+
+Import requests
+
+Import broker SDKs
+
+Call Exchange
+
+Write files
+
+Create temp files
+
+append_snapshot
+
+Workspace writes
+
+Timeline writes
+
+Spawn threads
+
+Use subprocess
+
+────────────────────────────────────────
+8. TESTS
+
+Create tests covering:
+
+Provider injection
+
+Provider failure
+
+UNAVAILABLE
+
+PARTIAL
+
+Unknown preservation
+
+Delegation to Core
+
+No calculations in Service
+
+No persistence
+
+No side effects
+
+AST inspection
+
+Regression compatibility
+
+Target:
+
+25+ new tests
+
+100% PASS
+
+────────────────────────────────────────
+9. DELIVERY REPORT
+
+── CREATED FILES ──
+
+── MODIFIED FILES ──
+
+── SERVICE IMPLEMENTATION ──
+
+── PROVIDER MODEL ──
+
+── SECURITY ──
+
+── TESTS ──
+
+── PRODUCTION CODE CHANGES ──
+
+Service only
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 04 — Strategy API
+
+────────────────────────────────────────
+10. PASS CRITERIA
+
+PASS requires:
+
+• strategy_service.py implemented
+
+• Provider injection implemented
+
+• Delegation to Strategy Core only
+
+• No strategy calculations in Service
+
+• No execution logic
+
+• No persistence
+
+• No Exchange
+
+• No Flask
+
+• No filesystem/network writes
+
+• 25+ tests PASS
+
+• Regression remains PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+Mission 1800 continues only after Agent 03 passes.
