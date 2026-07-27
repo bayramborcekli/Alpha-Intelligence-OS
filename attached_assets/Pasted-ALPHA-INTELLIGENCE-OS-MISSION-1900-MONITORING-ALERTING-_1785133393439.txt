@@ -1,0 +1,734 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1900 — MONITORING & ALERTING
+
+AGENT 03 — ALERT ENGINE
+
+ROLE
+
+Implement the deterministic Alert Engine defined by the approved
+Mission 1900 architecture.
+
+The Alert Engine consumes an immutable MonitoringReport produced by
+monitoring_intelligence.py and produces an immutable AlertReport.
+
+It does not collect observations.
+
+It does not calculate monitoring metrics.
+
+It does not persist alerts.
+
+It does not send notifications.
+
+It does not execute trades.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1800
+
+OFFICIALLY CLOSED
+
+Mission 1900
+
+Agent 01 — PASS
+Agent 02 — PASS
+
+Current Commit
+
+e230cfb
+
+Regression Baseline
+
+1662 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Create a pure, deterministic Alert Engine that:
+
+• Accepts a validated MonitoringReport
+
+• Evaluates a closed set of alert rules
+
+• Produces immutable AlertReport output
+
+• Uses only documented MonitoringReport fields
+
+• Preserves unknown values honestly
+
+• Produces stable alert ordering
+
+• Never performs I/O
+
+The Alert Engine SHALL NOT recompute Monitoring Core metrics.
+
+────────────────────────────────────────
+3. FILES
+
+Create:
+
+alert_engine.py
+
+Create tests:
+
+tests/test_alert_engine.py
+
+Do not modify unrelated production files.
+
+────────────────────────────────────────
+4. INPUT CONTRACT
+
+Input SHALL be the MonitoringReport produced by:
+
+monitoring_intelligence.build_monitoring_report(...)
+
+Expected fields include:
+
+• monitoring_version
+• report_id
+• strategy_version
+• analysis_version
+• observed_at
+• observation_window
+• recommendation_count
+• evaluated_count
+• success_rate
+• average_return
+• maximum_drawdown
+• confidence_accuracy
+• market_regime
+• data_quality
+• health_status
+• alerts
+• limitations
+
+Input may be MappingProxyType or another immutable mapping.
+
+The Alert Engine SHALL NOT mutate the input.
+
+The Agent 02 alerts field must be empty.
+
+If a non-empty alerts field is supplied, reject it with a sterile domain
+error rather than merging or duplicating prior alerts.
+
+────────────────────────────────────────
+5. ALERT REPORT
+
+Define an immutable AlertReport containing:
+
+• alert_version
+• monitoring_version
+• report_id
+• generated_at
+• health_status
+• alert_count
+• highest_severity
+• alerts
+• limitations
+
+Ownership rules:
+
+• generated_at SHALL remain null in Alert Engine
+
+• API owns generated_at
+
+• Alert Engine SHALL NOT generate UUIDs
+
+• report_id SHALL be passed through unchanged
+
+• No wall-clock access
+
+• No random identifiers
+
+Unknown values SHALL remain null.
+
+────────────────────────────────────────
+6. ALERT MODEL
+
+Each immutable alert SHALL contain exactly:
+
+• alert_id
+• severity
+• code
+• title
+• description
+• affected_component
+• trigger_reason
+• recommended_action
+
+Allowed severity values:
+
+• INFO
+• WARNING
+• CRITICAL
+
+Allowed recommended_action values:
+
+• REVIEW
+• ACKNOWLEDGE
+• NO_ACTION
+
+No free-form user-provided alert text.
+
+Titles and descriptions SHALL come from closed deterministic templates.
+
+No field may contain:
+
+• Trade instructions
+• Order instructions
+• Position sizes
+• Entry prices
+• Exit prices
+• Broker commands
+• Exchange commands
+
+────────────────────────────────────────
+7. ALERT IDENTIFIERS
+
+Alert IDs SHALL be deterministic counters:
+
+A1
+A2
+A3
+...
+
+IDs are assigned only after final stable alert ordering.
+
+The same MonitoringReport must always produce identical alert IDs and
+identical AlertReport output.
+
+Do not use UUIDs, hashes, timestamps or randomness.
+
+────────────────────────────────────────
+8. CLOSED ALERT CODE SET
+
+Define one authoritative closed code set in alert_engine.py.
+
+Initial alert codes SHALL cover only verified MonitoringReport states.
+
+Required codes:
+
+• MONITORING_CRITICAL
+• MONITORING_DEGRADED
+• DATA_UNAVAILABLE
+• DATA_PARTIAL
+• NO_OBSERVATIONS
+• NO_EVALUATED_OUTCOMES
+• LOW_SUCCESS_RATE
+• HIGH_DRAWDOWN
+• LOW_CONFIDENCE_ACCURACY
+• LOW_EVALUATION_COVERAGE
+• UNKNOWN_MARKET_REGIME
+
+Do not invent additional codes without a demonstrated requirement.
+
+Each code SHALL have a fixed:
+
+• Severity
+• Title
+• Description
+• Affected component
+• Recommended action
+
+────────────────────────────────────────
+9. RULE OWNERSHIP
+
+The Alert Engine owns:
+
+• Mapping MonitoringReport conditions to alert codes
+
+• Severity assignment
+
+• Stable alert ordering
+
+• Deterministic alert IDs
+
+• Highest-severity calculation
+
+• AlertReport construction
+
+The Alert Engine does not own:
+
+• Metric calculation
+
+• Health-status calculation
+
+• Observation validation
+
+• Data collection
+
+• Strategy retrieval
+
+• Portfolio retrieval
+
+• Provider orchestration
+
+• Persistence
+
+• Notification delivery
+
+• API metadata generation
+
+────────────────────────────────────────
+10. ALERT RULES
+
+Rules SHALL be deterministic and execute in a fixed documented order.
+
+Recommended order:
+
+1. Critical health
+2. Degraded health
+3. Data availability
+4. Observation availability
+5. Evaluation availability
+6. Success-rate degradation
+7. Drawdown degradation
+8. Confidence degradation
+9. Evaluation coverage degradation
+10. Market-regime limitation
+
+More severe alerts SHALL appear before less severe alerts.
+
+Within the same severity, use the documented rule order.
+
+Do not sort alphabetically after rule evaluation unless architecture
+explicitly requires it.
+
+────────────────────────────────────────
+11. RULE CONDITIONS
+
+Use MonitoringReport values and Agent 02 limitation codes.
+
+Required mappings:
+
+health_status == "CRITICAL"
+→ MONITORING_CRITICAL
+
+health_status == "DEGRADED"
+→ MONITORING_DEGRADED
+
+data_quality == "UNAVAILABLE"
+→ DATA_UNAVAILABLE
+
+data_quality == "PARTIAL"
+→ DATA_PARTIAL
+
+recommendation_count == 0
+or limitation contains NO_OBSERVATIONS
+→ NO_OBSERVATIONS
+
+evaluated_count == 0
+or limitation contains NO_EVALUATED_OUTCOMES
+→ NO_EVALUATED_OUTCOMES
+
+success_rate below Agent 02 degraded/critical thresholds
+→ LOW_SUCCESS_RATE
+
+maximum_drawdown above Agent 02 degraded/critical thresholds
+→ HIGH_DRAWDOWN
+
+confidence_accuracy below Agent 02 degraded threshold
+→ LOW_CONFIDENCE_ACCURACY
+
+evaluated_count / recommendation_count below Agent 02 coverage threshold
+→ LOW_EVALUATION_COVERAGE
+
+market_regime is null or UNKNOWN
+or limitation contains UNKNOWN_MARKET_REGIME
+→ UNKNOWN_MARKET_REGIME
+
+Reuse threshold constants from Monitoring Core when safely importable.
+
+Do not duplicate numeric constants in multiple modules.
+
+If importing constants would create an architectural cycle, expose a
+safe read-only constants interface from monitoring_intelligence.py.
+
+────────────────────────────────────────
+12. DUPLICATE PREVENTION
+
+Each alert code may appear at most once.
+
+When both a limitation and a metric independently trigger the same alert,
+produce one alert only.
+
+Alerts SHALL be:
+
+• Duplicate-free
+• Immutable
+• Deterministically ordered
+• Deeply isolated from caller input
+
+────────────────────────────────────────
+13. HIGHEST SEVERITY
+
+highest_severity SHALL be:
+
+• CRITICAL if any CRITICAL alert exists
+• WARNING if no CRITICAL alert exists and any WARNING exists
+• INFO if only INFO alerts exist
+• null if alert_count == 0
+
+Use an explicit severity precedence map.
+
+Do not rely on alphabetical ordering.
+
+────────────────────────────────────────
+14. NO-ALERT BEHAVIOR
+
+A healthy complete MonitoringReport may produce:
+
+• alert_count = 0
+• highest_severity = null
+• alerts = empty immutable tuple
+
+Do not generate informational noise merely because monitoring completed.
+
+Only emit alerts for defined conditions.
+
+────────────────────────────────────────
+15. LIMITATIONS
+
+AlertReport limitations SHALL be a closed, immutable collection.
+
+Possible Alert Engine limitations:
+
+• INVALID_MONITORING_REPORT
+• UNSUPPORTED_MONITORING_VERSION
+• UNKNOWN_HEALTH_STATUS
+• INCONSISTENT_MONITORING_REPORT
+
+Do not copy raw exceptions.
+
+Do not include secrets, file paths, stack traces or provider payloads.
+
+MonitoringReport limitations may be inspected for rule triggering but
+must not be mutated.
+
+────────────────────────────────────────
+16. VALIDATION
+
+Reject or safely handle:
+
+• Missing required fields
+• Unknown monitoring version
+• Unknown health status
+• Unknown data quality
+• Non-empty input alerts
+• Mutable or malformed alert structures
+• Negative counts
+• evaluated_count greater than recommendation_count
+• Malformed Decimal strings
+• Unsupported severity values
+• Unsupported recommended actions
+
+Use sterile domain errors.
+
+Never expose raw exception messages.
+
+────────────────────────────────────────
+17. DETERMINISM
+
+The Alert Engine SHALL guarantee:
+
+• No float arithmetic
+
+• No random values
+
+• No UUID generation
+
+• No clock access
+
+• No locale-dependent formatting
+
+• Closed code lists
+
+• Fixed rule order
+
+• Stable alert ordering
+
+• Stable counter IDs
+
+• Identical input produces identical output
+
+• No mutation of MonitoringReport
+
+• Immutable returned structures
+
+Use only Python standard-library modules.
+
+────────────────────────────────────────
+18. SECURITY
+
+The implementation SHALL contain no:
+
+• Exchange imports
+• Broker SDKs
+• Order models
+• Trading functions
+• Execution functions
+• Network clients
+• HTTP calls
+• Socket access
+• Filesystem writes
+• Database access
+• Snapshot append operations
+• Threads
+• Schedulers
+• Background workers
+• subprocess
+• eval
+• exec
+• Environment-secret reads
+• Email
+• SMS
+• Webhooks
+• Push notifications
+
+The module is an in-process deterministic rule engine only.
+
+────────────────────────────────────────
+19. TEST REQUIREMENTS
+
+Add at least 45 focused tests.
+
+Required coverage:
+
+A. Schema
+
+• Exact AlertReport fields
+• Exact alert fields
+• Immutable report
+• Immutable alert objects
+• Empty alert behavior
+
+B. Determinism
+
+• Repeated identical input → identical output
+• Stable alert order
+• Stable A1/A2 identifiers
+• Stable highest severity
+• No UUID or timestamp generation
+
+C. Rule mapping
+
+• Critical health
+• Degraded health
+• Unavailable data
+• Partial data
+• No observations
+• No evaluated outcomes
+• Low success rate
+• High drawdown
+• Low confidence accuracy
+• Low evaluation coverage
+• Unknown market regime
+
+D. Severity
+
+• CRITICAL precedence
+• WARNING precedence
+• INFO-only behavior
+• Null when no alerts
+
+E. Deduplication
+
+• Same condition from metric and limitation produces one alert
+• Each code appears once
+• Stable order after deduplication
+
+F. Validation
+
+• Missing fields rejected
+• Unsupported version rejected
+• Unknown health status rejected
+• Negative counts rejected
+• Invalid count relationship rejected
+• Non-empty input alerts rejected
+• Malformed decimals rejected
+• Sterile errors
+
+G. Boundary integrity
+
+• No metric recomputation
+• No health recomputation
+• Monitoring Core output remains unchanged
+• No mutation of caller input
+• No circular dependency
+
+H. Security
+
+• No filesystem writes
+• No network access
+• No Exchange or broker imports
+• No notification clients
+• No persistence
+• No threads or schedulers
+• No clock/UUID/randomness
+• No secret access
+
+I. Regression
+
+• Entire existing regression suite remains 100% PASS
+
+────────────────────────────────────────
+20. PROHIBITIONS
+
+Do not:
+
+• Modify Monitoring Core metric formulas
+
+• Modify Monitoring Core health rules
+
+• Modify Strategy Intelligence
+
+• Modify Portfolio Intelligence
+
+• Add persistence
+
+• Add alert history
+
+• Add acknowledgement state
+
+• Add notification delivery
+
+• Add email, SMS or webhook integrations
+
+• Add polling or background jobs
+
+• Add API routes
+
+• Add UI
+
+• Add Export
+
+• Add execution logic
+
+• Add trade instructions
+
+• Add broker or Exchange connectivity
+
+• Add AI, ML, LLM or randomness
+
+• Implement Agent 04 Service early
+
+────────────────────────────────────────
+21. DELIVERY REPORT
+
+Return:
+
+── CREATED FILES ──
+
+List
+
+── ALERT ENGINE ──
+
+Implemented behavior
+
+── ALERT CODES ──
+
+Closed list and fixed mappings
+
+── RULE ORDER ──
+
+Exact deterministic precedence
+
+── ALERT REPORT ──
+
+Schema and ownership rules
+
+── DETERMINISM ──
+
+Evidence
+
+── SECURITY ──
+
+Evidence
+
+── PRODUCTION CODE CHANGES ──
+
+Exact list
+
+── TEST RESULTS ──
+
+PASS count
+
+── FAIL / SKIP ──
+
+Counts
+
+── TOTAL REGRESSION ──
+
+Total PASS count
+
+── EXCHANGE WRITE REQUEST ──
+
+Must be 0
+
+── SECRET EXPOSURE ──
+
+Must be 0
+
+── COMMIT ──
+
+Hash and GitHub push status
+
+── NEXT AGENT ──
+
+AGENT 04 — MONITORING SERVICE
+
+────────────────────────────────────────
+22. PASS CRITERIA
+
+PASS requires:
+
+• Deterministic Alert Engine completed
+
+• AlertReport schema preserved
+
+• Exact 8-field alert model preserved
+
+• Closed alert-code list
+
+• Stable rule ordering
+
+• Stable A1/A2 alert identifiers
+
+• Duplicate-free alerts
+
+• Immutable outputs
+
+• generated_at remains null in Alert Engine
+
+• No metric or health recomputation
+
+• At least 45 new focused tests PASS
+
+• Full regression remains 100% PASS
+
+• No production regressions
+
+• No filesystem, network or notification writes
+
+• No persistence or scheduling
+
+• No execution logic
+
+• No Exchange connectivity
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+Mission 1900 continues to Agent 04 only after Agent 03 passes.
