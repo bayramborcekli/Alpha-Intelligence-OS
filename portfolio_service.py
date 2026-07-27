@@ -270,7 +270,9 @@ def build_default_providers() -> dict[str, Callable[[], Any]]:
 
     def risk_provider() -> dict[str, Any]:
         import risk_api
-        summary = risk_api.summary()
+        # persist=False: salt-okunur görünüm — Risk Engine'in günlük
+        # snapshot'ı portföy GET isteğiyle ASLA yazılmaz.
+        summary = risk_api.summary(persist=False)
         return {"freshness": "fresh",
                 "data": map_risk_view(
                     risk_api.thresholds(),

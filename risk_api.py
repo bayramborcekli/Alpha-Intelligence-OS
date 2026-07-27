@@ -499,7 +499,11 @@ def alerts() -> dict:
 
 # ── PAKET 6.1 — Özet panosu ────────────────────────────────────────────────
 
-def summary() -> dict:
+def summary(persist: bool = True) -> dict:
+    """Risk özeti. ``persist=False`` ile SALT-OKUNUR görünüm: günlük
+    ekle-yalnız anlık görüntü YAZILMAZ (Mission 1700 portföy yolu bu
+    modu kullanır; varsayılan davranış mevcut çağıranlar için aynıdır).
+    """
     acc = _account()
     exp = exposure()
     conc = concentration()
@@ -531,8 +535,9 @@ def summary() -> dict:
 
     hs = health_score(exp, conc, acc, open_orders, dd_day)
 
-    # Günlük ekle-yalnız anlık görüntü (varsa dokunulmaz)
-    if hs["score"] is not None and margin is not None:
+    # Günlük ekle-yalnız anlık görüntü (varsa dokunulmaz);
+    # persist=False → hiç yazılmaz (salt-okunur çağıranlar için).
+    if persist and hs["score"] is not None and margin is not None:
         alert_model = alerts()
         _append_snapshot({
             "date": _today(), "recorded_at": _now_iso(),
