@@ -101,8 +101,11 @@ Strategy Intelligence
 | 06 | Export (`strategy_export.py`) | `17f6299` | 29 |
 | 07 | Güvenlik doğrulaması (+ zincir `persist=False` düzeltmesi) | `a0c91d5` | 58 |
 | 08 | Tam regresyon bütünleştirme | `6638c3b` | 39 |
-| 09 | Dokümantasyon (`docs/mission1800_strategy_intelligence.md`) | (bu commit) | — |
+| 09 | Dokümantasyon (`docs/mission1800_strategy_intelligence.md`) | `0108255` | 15 |
+| 10 | Mission Closure | (bu commit) | — |
 
-Toplam yeni 1800 testi (Agent 08 itibarıyla): **246** · Agent 08
-regresyonu: **1581 PASS / 0 FAIL / 0 SKIP** · Exchange Write 0 ·
-Secret Exposure 0. Ayrıntı: `docs/mission1800_strategy_intelligence.md`
+Toplam yeni 1800 testi: **261** (246 + 15 doküman) · Kapanış toplamı:
+**1596 PASS / 0 FAIL / 0 SKIP** · Exchange Write 0 · Secret Exposure 0 —
+MISSION 1800 RESMEN KAPANDI.
+Ayrıntı: `docs/mission1800_strategy_intelligence.md` · Sonraki:
+MISSION 1900 — Monitoring & Alerting
