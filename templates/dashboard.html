@@ -64,6 +64,14 @@
     .empty-box { background: var(--soft); border-radius: 9px; color: var(--muted); padding: 13px; }
     /* buttons */
     .btn-row,.inline-form { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+    .exec-modes { display: flex; flex-direction: column; gap: 6px; }
+    .exec-mode { align-items: center; border: 1px solid var(--border); border-radius: 8px;
+                 cursor: pointer; display: flex; gap: 8px; padding: 8px 12px; }
+    .exec-mode input { accent-color: #58a6ff; }
+    .exec-mode small { margin-left: auto; }
+    .exec-mode-active { border-color: #58a6ff; background: rgba(88,166,255,.08); }
+    .exec-mode-locked { cursor: not-allowed; opacity: .55; }
+    .exec-mode-locked small { color: var(--muted); }
     button,a.btn { border: 0; border-radius: 8px; cursor: pointer;
       font: 700 .88rem/1 inherit; padding: 9px 13px; text-decoration: none; display: inline-block; }
     button:hover,a.btn:hover { filter: brightness(1.1); }
@@ -262,16 +270,60 @@
         <a href="/overview" style="color:#58a6ff">📊 Genel Bakış</a> sayfasına taşındı.</p>
     </section>
 
-    {# ── Bot Kontrolü ── #}
+    {# ── Bot Kontrolü — Yürütme Modu Paneli ── #}
     <section class="card col-4" id="bot-kontrolu">
       <h2>Bot Kontrolü</h2>
-      <p class="muted" style="font-size:.84rem">Bot süreci yalnızca bu panel tarafından başlatıldıysa durdurulabilir.</p>
-      <div class="btn-row" style="margin-bottom:12px">
-        <form method="post" action="/bot/start"><button class="primary" type="submit">▶ Başlat</button></form>
-        <form method="post" action="/bot/stop"><button class="danger" type="submit">■ Durdur</button></form>
+
+      <form method="post" action="/execution/mode" style="margin-bottom:14px">
+        <div class="exec-modes">
+          {% for m in execution_modes %}
+            <label class="exec-mode {{ 'exec-mode-active' if execution_mode == m }}">
+              <input type="radio" name="execution_mode" value="{{ m }}"
+                     {{ 'checked' if execution_mode == m }}
+                     onchange="this.form.submit()">
+              <span>{{ execution_mode_labels[m] }}</span>
+              {% if m == 'MICRO_LIVE' %}<small class="muted">yetkilendirme</small>{% endif %}
+            </label>
+          {% endfor %}
+          <label class="exec-mode exec-mode-locked" title="LIVE modu fail-closed kilitli: sistem sertifikasyonu canlı emir yazımını kapsamaz.">
+            <input type="radio" disabled>
+            <span>LIVE</span>
+            <small>🔒 kilitli</small>
+          </label>
+        </div>
+      </form>
+
+      <div class="btn-row" style="margin-bottom:10px">
+        <form method="post" action="/bot/start"><button class="primary" type="submit">▶ Botu Başlat</button></form>
+        <form method="post" action="/bot/stop"><button class="secondary" type="submit">⏸ Botu Durdur</button></form>
       </div>
+      <div class="btn-row" style="margin-bottom:12px">
+        {% if adaptive.safety.kill_switch %}
+          <form method="post" action="/adaptive/kill-switch" style="width:100%">
+            <input type="hidden" name="activate" value="0">
+            <button class="secondary" type="submit" style="width:100%">Kill Switch'i Kaldır</button>
+          </form>
+        {% else %}
+          <form method="post" action="/adaptive/kill-switch" style="width:100%"
+                onsubmit="return confirm('Kill Switch etkinleştirilsin mi? Yeni işlem açılmaz.')">
+            <input type="hidden" name="activate" value="1">
+            <button class="danger" type="submit" style="width:100%">⛔ Kill Switch</button>
+          </form>
+        {% endif %}
+      </div>
+
+      <div class="dgrid">
+        <div><strong>İşlem Tutarı</strong><span>{{ exec_panel.trade_amount }} USDT</span></div>
+        <div><strong>Maks Pozisyon</strong><span>{{ exec_panel.max_positions }}</span></div>
+        <div><strong>Kaldıraç</strong><span>{{ exec_panel.leverage }}</span></div>
+      </div>
+
+      <p class="muted" style="font-size:.78rem;margin:10px 0 0">
+        PAPER/SHADOW simüledir; MICRO LIVE yalnız yetkilendirme talebi üretir.
+        Hiçbir modda borsaya emir yazılmaz.
+      </p>
       {% if status.running %}
-        <p class="note" style="font-size:.8rem;margin:0">Ayar veya coin listesi değişirse etkili olması için botu yeniden başlatın.</p>
+        <p class="note" style="font-size:.8rem;margin:8px 0 0">Ayar veya mod değişirse etkili olması için botu yeniden başlatın.</p>
       {% endif %}
     </section>
 

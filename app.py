@@ -282,6 +282,28 @@ def enforce_paper_mode_lock() -> None:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Yürütme modu (Mission 2100 Controlled Execution katmanı)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Kapalı küme: LIVE bilinçli olarak YOKTUR (fail-closed).
+# PAPER      → simüle yürütme (defter üzerinden)
+# SHADOW     → gerçek piyasa gözlemi + simüle karşılaştırma (emir yazmaz)
+# MICRO_LIVE → yalnızca yetkilendirme talebi üretir (borsaya emir YAZMAZ)
+EXECUTION_MODES = ("PAPER", "SHADOW", "MICRO_LIVE")
+EXECUTION_MODE_LABELS = {
+    "PAPER": "PAPER",
+    "SHADOW": "SHADOW",
+    "MICRO_LIVE": "MICRO LIVE",
+}
+
+
+def get_execution_mode(config: dict[str, Any] | None) -> str:
+    """Seçili yürütme modunu döndür; geçersiz değer fail-closed PAPER olur."""
+    mode = (config or {}).get("execution_mode", "PAPER")
+    return mode if mode in EXECUTION_MODES else "PAPER"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Config helpers
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -808,6 +830,14 @@ def render_dashboard(message: str | None = None, message_type: str = "success"):
     return render_template(
         "dashboard.html",
         config=safe_config, status=status,
+        execution_mode=get_execution_mode(safe_config),
+        execution_modes=EXECUTION_MODES,
+        execution_mode_labels=EXECUTION_MODE_LABELS,
+        exec_panel={
+            "trade_amount": safe_config.get("trade_amount_usdt", 10),
+            "max_positions": safe_config.get("max_open_positions", 1),
+            "leverage": "1x",
+        },
         setting_fields=setting_fields(config),
         config_error=config_error, state_error=state_error,
         message=message, message_type=message_type,
@@ -1221,6 +1251,41 @@ def kill_switch():
                        ip=auth.get_client_ip(),
                        detail="deactivated")
         return render_dashboard("Acil durdur devre dışı bırakıldı.", "success")
+
+
+@app.post("/execution/mode")
+def set_execution_mode():
+    """Yürütme modu seçimi — LIVE fail-closed reddedilir."""
+    requested = (request.form.get("execution_mode") or "").strip().upper().replace(" ", "_")
+    if requested == "LIVE":
+        slog.log_event(slog.UNAUTHORIZED_API,
+                       username=session.get("username", ""),
+                       ip=auth.get_client_ip(),
+                       detail="LIVE modu talebi reddedildi (fail-closed kilit)")
+        return render_dashboard(
+            "⛔ LIVE modu kilitli (fail-closed). Sistem sertifikasyonu yalnızca "
+            "PAPER / SHADOW / MICRO LIVE (yetkilendirme) kapsar.", "error")
+    if requested not in EXECUTION_MODES:
+        return render_dashboard("Geçersiz yürütme modu.", "error")
+    with CONFIG_LOCK:
+        cfg, err = load_config()
+        if err or cfg is None:
+            return render_dashboard(f"Ayar dosyası okunamadı: {err}", "error")
+        cfg["execution_mode"] = requested
+        # Bot çekirdeği için PAPER kilidi her durumda korunur.
+        cfg["mode"] = "PAPER"
+        try:
+            atomic_write_json(CONFIG_PATH, cfg)
+        except OSError as exc:
+            return render_dashboard(f"Mod kaydedilemedi: {exc}", "error")
+    slog.log_event(slog.SETTINGS_CHANGE,
+                   username=session.get("username", ""),
+                   ip=auth.get_client_ip(),
+                   detail=f"execution_mode={requested}")
+    label = EXECUTION_MODE_LABELS.get(requested, requested)
+    note = " (yalnızca yetkilendirme talebi — borsaya emir yazılmaz)" \
+        if requested == "MICRO_LIVE" else ""
+    return render_dashboard(f"Yürütme modu {label} olarak ayarlandı.{note}", "success")
 
 
 @app.post("/adaptive/unlock")
