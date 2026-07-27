@@ -106,17 +106,26 @@
     return out === "UNKNOWN" ? "UNKNOWN" : out;
   }
 
-  function renderWallets(accounts) {
+  function renderWallets(accounts, allAccounts) {
     var el = document.getElementById("th-wallets");
     if (!el) return;
-    if (!accounts || !accounts.length) {
+    // Bağlı olmayan hesaplar (referans tasarım: 'Bybit — bağlı değil')
+    // şeridin SONUNA eklenir; bakiye uydurulmaz, sade etiket.
+    var connectedIds = {};
+    (accounts || []).forEach(function (a) {
+      connectedIds[a.account_id] = true;
+    });
+    var offline = (allAccounts || []).filter(function (a) {
+      return !a.connected && !connectedIds[a.account_id];
+    });
+    if ((!accounts || !accounts.length) && !offline.length) {
       el.innerHTML = "<span class=\"th-empty\">Bağlı hesap yok. " +
         "Hesapları Yönet bağlantısından hesap ekleyin.</span>";
       var dot0 = document.getElementById("th-wallet-conn");
       if (dot0) dot0.className = "th-dot";
       return;
     }
-    var ordered = accounts.slice().sort(function (a, b) {
+    var ordered = (accounts || []).slice().sort(function (a, b) {
       return (b.status === "OK") - (a.status === "OK");
     });
     el.innerHTML = ordered.map(function (a) {
@@ -131,8 +140,15 @@
         "<span class=\"st\"><span class=\"th-dot" +
         (ok ? " ok" : "") + "\"></span>" +
         esc(ok ? "bağlı" : a.status) + "</span></span>";
+    }).join("") + offline.map(function (a) {
+      return "<span class=\"th-acct th-offline\">" +
+        "<span>" + esc(a.logo) + "</span>" +
+        "<span><span class=\"nm\">" + esc(a.nickname) + "</span><br>" +
+        "<span class=\"bal th-unknown\">—</span></span>" +
+        "<span class=\"st\"><span class=\"th-dot\"></span>" +
+        "bağlı değil</span></span>";
     }).join("");
-    var anyOk = accounts.some(function (a) {
+    var anyOk = (accounts || []).some(function (a) {
       return a.status === "OK";
     });
     var dot = document.getElementById("th-wallet-conn");
@@ -415,7 +431,8 @@
       get("/api/operation-control/signals"),
       get("/api/operation-control/workspace/portfolio"),
       get("/api/operation-control/workspace/journal"),
-      get("/api/accounts/wallets")
+      get("/api/accounts/wallets"),
+      get("/api/accounts")
     ]).then(function (r) {
       function data(i, key) {
         var b = r[i].body;
@@ -427,7 +444,7 @@
       renderQueue(data(3, "products"), data(2, "orders"),
                   data(1, "positions"), data(4, "signals"));
       renderActivity(data(6, "journal"));
-      renderWallets(data(7, "accounts"));
+      renderWallets(data(7, "accounts"), data(8, "accounts"));
       inflight = false;
     }, function () { inflight = false; });
   }

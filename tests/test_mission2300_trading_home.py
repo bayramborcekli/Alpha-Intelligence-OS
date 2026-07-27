@@ -234,6 +234,24 @@ class TestWallets:
         # genel alanlardan (nickname/logo/wallets) üretilir.
         assert "a.nickname" in JS and "a.wallets" in JS
 
+    def test_offline_accounts_shown_honestly(self):
+        # Task 38: bağlı olmayan hesaplar (Bybit/OKX) şeridin sonuna
+        # sade 'bağlı değil' etiketiyle eklenir; bakiye uydurulmaz.
+        assert "/api/accounts\"" in JS or '"/api/accounts"' in JS
+        wallet_fn = JS[JS.index("function renderWallets"):
+                       JS.index("function renderTrades")]
+        assert "bağlı değil" in wallet_fn
+        assert "th-offline" in wallet_fn
+        assert "a.connected" in wallet_fn
+        # Bağlı olmayan karta bakiye yazılmaz: em-dash yer tutucu.
+        assert "—" in wallet_fn
+
+    def test_offline_accounts_appended_after_connected(self):
+        wallet_fn = JS[JS.index("function renderWallets"):
+                       JS.index("function renderTrades")]
+        assert wallet_fn.index("ordered.map") < \
+            wallet_fn.index("offline.map")
+
     def test_no_settings_controls(self):
         # Cüzdan panelinde ayar yok: sol panelde düğme üretilmez.
         wallet_fn = JS[JS.index("function renderWallets"):
