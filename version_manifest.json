@@ -1,0 +1,133 @@
+{
+  "product": "Alpha Intelligence OS",
+  "version": "1.1.0",
+  "release_name": "Controlled Execution",
+  "mission": "2100",
+  "mission_status": "COMPLETE",
+  "agents": {
+    "MISSION_2000": "FROZEN",
+    "01": "PASS",
+    "02": "PASS",
+    "03": "PASS",
+    "04": "PASS",
+    "05": "PASS",
+    "06": "PASS",
+    "07": "PASS",
+    "08": "PASS",
+    "09": "PASS"
+  },
+  "agent_chain": {
+    "CORE_FREEZE": {
+      "commit": "03e181d",
+      "regression": null
+    },
+    "01": {
+      "commit": "4304527",
+      "regression": 4619
+    },
+    "02": {
+      "commit": "69bd05c",
+      "regression": 5215
+    },
+    "03": {
+      "commit": "32f4a3a",
+      "regression": 5585
+    },
+    "04": {
+      "commit": "bf2a21d",
+      "regression": 5994
+    },
+    "05": {
+      "commit": "459ca5a",
+      "regression": 6392
+    },
+    "06": {
+      "commit": "ba896ca",
+      "regression": 6895
+    },
+    "HF-001": {
+      "commit": "ffdf3f9",
+      "regression": 6927
+    },
+    "07": {
+      "commit": "df0fb04",
+      "regression": 7667
+    },
+    "08": {
+      "commit": "30eee0b",
+      "regression": 8137
+    }
+  },
+  "mission_2000_baseline": {
+    "commit": "01aa429",
+    "regression": 3704
+  },
+  "certified_modules": [
+    "controlled_execution_models",
+    "controlled_execution_errors",
+    "controlled_execution_policy",
+    "controlled_execution_foundation",
+    "runtime_enums",
+    "runtime_errors",
+    "runtime_models",
+    "paper_models",
+    "paper_errors",
+    "paper_ledger",
+    "paper_broker",
+    "paper_execution_models",
+    "paper_execution_errors",
+    "paper_execution_mapper",
+    "paper_execution_service",
+    "shadow_models",
+    "shadow_errors",
+    "shadow_comparator",
+    "shadow_mode",
+    "micro_live_models",
+    "micro_live_errors",
+    "micro_live_policy",
+    "micro_live_authorization",
+    "lifecycle_models",
+    "order_lifecycle",
+    "reconciliation_errors",
+    "reconciliation",
+    "controlled_execution_api_models",
+    "controlled_execution_api_errors",
+    "controlled_execution_router",
+    "controlled_execution_api"
+  ],
+  "module_sha256": {
+    "controlled_execution_models": "d53eebd3ff3a8c96305a14500c906ecbab35453a5892be4d6d058dd7bec03238",
+    "controlled_execution_errors": "64dbeb2b1ab6aa81795134017d0c618e9ab46baf91372b9bb37c75586570b10d",
+    "controlled_execution_policy": "b0059562e7b3a4bc812469ee609123538bee2cfd87d419a71e0bfc9991db2ea0",
+    "controlled_execution_foundation": "381a3cbeeac80fc323bb006f15feb72a26c364d3a5696a547f3dc888b8ffaa65",
+    "runtime_enums": "3548c19f3f229762f51c3a7b12df067a7f573402601c83848a65a799bf8ffcf2",
+    "runtime_errors": "d936cdbba7f1dfb03f982d92026e293426036576c6fdbbd318c1c588813a4d85",
+    "runtime_models": "4d3d95c630d758196bdda6342d3a37c5e8d302237f0cbf401c2c14047ffd58e9",
+    "paper_models": "997bc12500a220eb2a662b9ddf00f6323131847d357a9532aa869380e665a7e3",
+    "paper_errors": "151a1492231f330bf2e79638cfe476faec734b83ba418edf2759ecb0d0ce64fe",
+    "paper_ledger": "e6d0a0fb0f708771af3a1e94520d3597db89aa24aad57e68131e6164e52c1f48",
+    "paper_broker": "57435a689c395f2f9da6e39e15f3b943c9ba78c6a11510446b11a8661e4b95be",
+    "paper_execution_models": "55d09cf8fb273a6fe607b35fa44b3df30bc749ebeabadfcf8fb36fab19cea6ec",
+    "paper_execution_errors": "6452b3f0fc120c8350b81cdcceefe41bc08aeb1dad4f6775e92a25ac18d02e02",
+    "paper_execution_mapper": "9b6a3aa87d56cd694fba6dd9f33be03b2e3ad117622de65c3a0b96870ad24ecb",
+    "paper_execution_service": "cce71ce9ec27781ede413185082ba5f88ec40f0249d8fc6195b0a28e3c046812",
+    "shadow_models": "048698220a1d10239eb1e01ef013779404f7f6dbaaf5f7603812d0c1619f0972",
+    "shadow_errors": "adcf339f73bc314387c55ee1b0abf8a0e87afb5c3b5db53716fea5e4f78c1cad",
+    "shadow_comparator": "52ee02617a3d8957784cb9ee19ccae4b5826f4d33b73b9d9a9516ff232eb662a",
+    "shadow_mode": "114c1c74ea38f276add7661019e20e8f5e82421bb2f5e6285fbd5de5af733e56",
+    "micro_live_models": "4e797e131e47d5e452184705761b905716a9c00a365a0f0a8751c8f86536346f",
+    "micro_live_errors": "e4d0bd5325570987f09369948c9a692e630909b7fcbad02a8d3ecfbae841150a",
+    "micro_live_policy": "8825bf4518171a6e86f53ddf3e7cade80cbdcdc00660dc6485bcc1a5ae87caa3",
+    "micro_live_authorization": "3f1bf11b7de92fe2ca8fd2efefebb4a43511434a5cc000372e1ce9594e088853",
+    "lifecycle_models": "7d6878b5ed120cf77d96f563f134c2ee2a74a8ce5df7b512f3b35a6535fa01d0",
+    "order_lifecycle": "ab4cc3b1dad80cb63d7bd6a30892dc5ad0103db43de128a1ac5543dc5904b144",
+    "reconciliation_errors": "9c8f01c3ca7b0201cb8400e07ae762f44e37f7fd4025971b6ff6651a8ee9daa6",
+    "reconciliation": "3c80a35d41b1790e31e90076bf12599f70c0ca9c245d01a8214d110e82bd41a5",
+    "controlled_execution_api_models": "8f9eeb467ae4f1d8626b96e6bca282c44d39994a0a43d6b9fa80ce7a0c7aa355",
+    "controlled_execution_api_errors": "48b467a370c61c48e33d6aa4129c18a09c8e281cad6ea180e7b0d507686e4bfa",
+    "controlled_execution_router": "47a9ee9d6291388e17ca6e83e718c8880672dd762979cc76a26da5138eb47bd2",
+    "controlled_execution_api": "70c617f5fde72245509c834b939639d536f02990cbeb9ad3f461d89dd1d3a9a5"
+  },
+  "total_regression_at_freeze": 11283,
+  "known_skip_count": 1
+}
