@@ -247,9 +247,28 @@ class TestLiveScaleAccuracy:
                 assert got is not None, field
                 assert Decimal(got) == want, field
 
-    def test_equity_curve_full_length(self, client, live_dataset):
+    def test_equity_curve_downsampled(self, client, live_dataset):
+        # Task 35: eğri yanıtta üst sınıra örneklenir; ilk/son
+        # gerçek noktalar korunur, metrikler tam veriden gelir.
+        from operation_workspace_service import (
+            EQUITY_CURVE_MAX_POINTS)
         perf, _ = _get_performance(client)
-        assert len(perf["equity_curve"]) == EQUITY_COUNT
+        curve = perf["equity_curve"]
+        assert len(curve) == EQUITY_CURVE_MAX_POINTS
+        assert EQUITY_CURVE_MAX_POINTS < EQUITY_COUNT
+        equity = live_dataset["equity"]
+
+        def _epoch(row):
+            return int(datetime.fromisoformat(
+                row["timestamp"]).timestamp())
+
+        assert int(curve[0][0]) == _epoch(equity[0])
+        assert int(curve[-1][0]) == _epoch(equity[-1])
+        # Örneklenen her nokta gerçek veride birebir var (uydurma yok).
+        real = {(_epoch(e), Decimal(str(e["equity"])))
+                for e in equity}
+        assert all((int(p[0]), Decimal(str(p[1]))) in real
+                   for p in curve)
 
     def test_latency_under_one_second(self, client, live_dataset):
         # Isınma turu sonrası ölç — görev eşiği: < 1 sn.

@@ -104,6 +104,33 @@ def build_portfolio_view(positions: Sequence[PositionView],
 
 # ── Performans ─────────────────────────────────────────────────────
 
+# Yanıttaki özkaynak eğrisi nokta üst sınırı (Task 35). Metrikler
+# (Sharpe, maks. düşüş vb.) HER ZAMAN tam veriden hesaplanır;
+# örnekleme yalnız yanıtta döndürülen çizim eğrisine uygulanır.
+EQUITY_CURVE_MAX_POINTS = 1000
+
+
+def downsample_equity_curve(points: Sequence[Tuple[int, Decimal]],
+                            max_points: int = EQUITY_CURVE_MAX_POINTS
+                            ) -> Tuple[Tuple[int, Decimal], ...]:
+    """Eğriyi en fazla max_points noktaya örnekler.
+
+    İlk ve son nokta her zaman korunur; aradaki noktalar eşit
+    aralıklı seçilir. Veri uydurulmaz — yalnız gerçek noktalar
+    arasından seçim yapılır."""
+    pts = list(points)
+    if (not isinstance(max_points, int) or isinstance(max_points, bool)
+            or max_points < 2):
+        max_points = EQUITY_CURVE_MAX_POINTS
+    n = len(pts)
+    if n <= max_points:
+        return tuple(pts)
+    step = (n - 1) / (max_points - 1)
+    indices = [round(i * step) for i in range(max_points)]
+    indices[-1] = n - 1
+    return tuple(pts[i] for i in indices)
+
+
 def build_performance_view(trades_raw: object, equity_raw: object,
                            now: int) -> PerformanceView:
     metrics: PerformanceMetrics = compute_metrics(
@@ -124,8 +151,8 @@ def build_performance_view(trades_raw: object, equity_raw: object,
         daily_profit=metrics.daily_profit,
         weekly_profit=metrics.weekly_profit,
         monthly_profit=metrics.monthly_profit,
-        equity_curve=tuple((p.at, p.equity)
-                           for p in metrics.equity_curve),
+        equity_curve=downsample_equity_curve(
+            tuple((p.at, p.equity) for p in metrics.equity_curve)),
     )
 
 
