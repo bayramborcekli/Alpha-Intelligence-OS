@@ -1,0 +1,417 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2100
+
+AGENT 03
+
+PAPER BROKER & LEDGER
+
+ROLE
+
+Implement the deterministic Paper Trading infrastructure.
+
+This Agent SHALL:
+
+• simulate broker behavior
+• own paper balances
+• own paper positions
+• own paper ledger
+
+This Agent SHALL NOT:
+
+• contact real brokers
+• use Binance
+• use Execution API
+• use Execution Service
+• execute live orders
+• simulate slippage
+• simulate latency
+• perform reconciliation
+
+Agent 03 creates only the deterministic paper domain.
+
+────────────────────────────────────────
+1. BASELINE
+
+Execution Core v1.0.0
+Commit:
+03e181d
+
+Agent 01
+4304527
+
+Agent 02
+69bd05c
+
+Regression
+5215 PASS
+
+Architecture
+FROZEN
+
+────────────────────────────────────────
+2. CREATE
+
+paper_broker.py
+
+paper_ledger.py
+
+paper_models.py
+
+paper_errors.py
+
+tests/test_paper_broker.py
+
+tests/test_paper_ledger.py
+
+tests/test_paper_architecture.py
+
+────────────────────────────────────────
+3. PAPER BROKER
+
+Create:
+
+PaperBroker
+
+Responsibilities:
+
+submit()
+
+cancel()
+
+balance()
+
+positions()
+
+orders()
+
+executions()
+
+heartbeat()
+
+PaperBroker SHALL remain
+
+stateless
+
+deterministic
+
+no threads
+
+no async task
+
+no scheduler
+
+────────────────────────────────────────
+4. PAPER LEDGER
+
+Create immutable ledger.
+
+Owns:
+
+cash
+
+reserved cash
+
+positions
+
+realized pnl
+
+unrealized pnl
+
+commission
+
+execution history
+
+order history
+
+Every state transition SHALL produce
+a NEW immutable snapshot.
+
+No mutation.
+
+────────────────────────────────────────
+5. PAPER MODELS
+
+Create
+
+PaperOrder
+
+PaperExecution
+
+PaperPosition
+
+PaperLedgerSnapshot
+
+PaperBalance
+
+PaperCommission
+
+PaperStatistics
+
+PaperFillPolicy
+
+────────────────────────────────────────
+6. FILL POLICY
+
+Only one fill policy.
+
+IMMEDIATE_FULL_FILL
+
+No:
+
+partial fills
+
+iceberg
+
+maker
+
+taker
+
+slippage
+
+latency
+
+queue
+
+auction
+
+future policies deferred.
+
+────────────────────────────────────────
+7. PRICE MODEL
+
+Execution price
+
+exact submitted price
+
+No spread
+
+No market impact
+
+No random
+
+No interpolation
+
+Deterministic only.
+
+────────────────────────────────────────
+8. COMMISSION
+
+Commission model interface.
+
+Default implementation:
+
+ZERO_COMMISSION
+
+Future implementations deferred.
+
+────────────────────────────────────────
+9. ORDER RULES
+
+Reject
+
+negative quantity
+
+zero quantity
+
+negative price
+
+zero price
+
+duplicate order id
+
+unknown symbol
+
+invalid side
+
+invalid state
+
+────────────────────────────────────────
+10. POSITION RULES
+
+Average price deterministic.
+
+Decimal only.
+
+No float.
+
+Closing position updates
+
+realized pnl
+
+Opening updates
+
+average price
+
+No hidden recalculation.
+
+────────────────────────────────────────
+11. LEDGER RULES
+
+Double-entry consistency.
+
+Cash never disappears.
+
+Position value deterministic.
+
+No hidden mutation.
+
+Every operation auditable.
+
+────────────────────────────────────────
+12. SECURITY
+
+Forbidden
+
+network
+
+broker sdk
+
+REST
+
+WebSocket
+
+database
+
+filesystem
+
+environment
+
+thread
+
+process
+
+sleep
+
+retry
+
+UUID
+
+random
+
+datetime.now
+
+────────────────────────────────────────
+13. DOMAIN OWNERSHIP
+
+Do NOT duplicate
+
+ExecutionRequest
+
+ExecutionResult
+
+Runtime models
+
+RiskDecision
+
+KillSwitch
+
+BrokerAdapter
+
+Execution API
+
+Reference only.
+
+────────────────────────────────────────
+14. PERFORMANCE
+
+Constant lookup.
+
+Bounded collections.
+
+No recursion.
+
+No polling.
+
+No caching.
+
+────────────────────────────────────────
+15. TESTS
+
+Minimum
+
+320 PASS
+
+Cover
+
+fill policy
+
+ledger
+
+cash
+
+position
+
+realized pnl
+
+average price
+
+duplicate rejection
+
+immutability
+
+Decimal
+
+audit
+
+history
+
+snapshot
+
+architecture
+
+dependency
+
+public exports
+
+forbidden imports
+
+security
+
+────────────────────────────────────────
+16. DELIVERY
+
+Return exactly
+
+CREATED FILES
+
+PAPER BROKER
+
+LEDGER
+
+FILL POLICY
+
+COMMISSION
+
+SECURITY
+
+TEST RESULTS
+
+TOTAL REGRESSION
+
+COMMIT
+
+────────────────────────────────────────
+17. PASS
+
+PASS requires
+
+≥320 PASS
+
+0 FAIL
+
+Full regression PASS
+
+Exchange Write = 0
+
+Secret Exposure = 0
+
+Production Network Request = 0
+
+Mission 2000 unchanged
+
+Agent 01 unchanged
+
+Agent 02 unchanged
+
+Deterministic ledger certified.
