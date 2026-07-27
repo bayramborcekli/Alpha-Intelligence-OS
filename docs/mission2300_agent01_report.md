@@ -141,3 +141,51 @@ Trading Home değişikliği gerektirmez. Yerleşim değişmedi.
 - Mimari inceleme: **PASS**; iki sağlamlaştırma önerisi (sterile
   depolama hatası + süreçler arası kilit) uygulandı ve testle
   kilitlendi.
+
+---
+
+# Mission 2300 — Agent 04: Trading Home Görsel Göçü
+
+Trading Home, onaylı koyu Binance-stili referansa taşındı. Yalnız
+önyüz değişti: backend, API sözleşmeleri, yükleyiciler ve kontrollü
+kapatma akışı aynen korundu.
+
+## Görsel bölümler
+
+1. **Üst özet çubuğu** (tek sürekli yatay satır, yapışkan): marka,
+   Portföy, Bugünkü Kazanç, Aktif/Sıradaki İşlemler, Otomasyon Modu,
+   Sistem Durumu, Son Güncelleme — ince dikey ayraçlarla.
+2. **Kişisel hesap şeridi** (yatay, tek satır): logo, ad, bakiye,
+   bağlantı noktası + "Hesapları Yönet →" (Ayarlar · Hesaplarım).
+   Dikey cüzdan sütunu kaldırıldı.
+3. **Ana ızgara %75/%25:** büyük Aktif İşlemler tablosu
+   (Varlık/Yön/Giriş/Anlık Fiyat/Kazanç/Süre/Durum/İşlem) + sağda
+   sade AI Durum paneli (mod, tek cümle, İzlenen Piyasalar, Uygun
+   Fırsatlar, Son Güncelleme, "Ayrıntılı Durum →" Operation Center).
+4. **Sıradaki İşlemler** kompakt tablo (Varlık/Yön/Durum; sembol
+   başına tek durum).
+5. **Son Hareketler** tam genişlik tablo (Zaman/Varlık/Olay/Sonuç;
+   en yeni önce, en çok 20 kayıt, sade dil).
+6. **Sadeleşen sol menü:** kullanıcı grubu (Trading Home, Portföy,
+   Pozisyonlar, Emirler, Otomasyon, Ayarlar · Hesaplarım); altta
+   "Sistem" grubu (Operation Center + katlanır Gelişmiş grubu —
+   hiçbir rota silinmedi). Seçili sayfa amber vurgulu.
+
+## Dürüstlük ve biçim
+
+- Merkezî tr-TR biçimlendirme (`fmtMoney/fmtPrice/fmtSigned`):
+  ham float asla gösterilmez (9830.331906875032 → 9.830,33 USDT).
+- UNKNOWN asla 0'a çevrilmez; portföy ucu düşünce üst çubuk
+  UNKNOWN'a döner ve "Son Güncelleme" veri gelmeden yenilenmez
+  (mimari inceleme bulgusu — düzeltildi ve testle kilitlendi).
+- Büyük mod kartı ve karşılama/başlık bloğu kaldırıldı; teknik
+  gösterge/iç durum sızıntısı yok.
+
+## Test ve inceleme
+
+- Trading Home test paketi yeni yerleşime göre güncellendi + A04
+  kilit testleri (120 PASS); menü testi Sistem grubuna uyarlandı.
+- Mimari inceleme: ilk tur kapsam/bayat-değer bulguları → düzeltildi
+  (state dosyası geri alındı; dürüstlük sıkılaştırıldı).
+- Tam regresyon (görev birleşmeleri sonrası): **12.964 PASS + 1
+  skip, 0 FAIL**.
