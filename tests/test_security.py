@@ -362,7 +362,11 @@ class TestPaperModeLock:
         excluded = (".pythonlibs", "__pycache__", ".git", "/tests/",
                     "test_", "execution_broker_adapter.py",
                     "binance_spot_adapter.py",
-                    "execution_service.py")
+                    "execution_service.py",
+                    # Mission 2100 Agent 08: PAPER simülasyon
+                    # servisine delege eden birleşik API —
+                    # borsa yazımı yok.
+                    "controlled_execution_api.py")
         for src in ROOT.rglob("*.py"):
             src_str = str(src)
             if any(skip in src_str for skip in excluded):

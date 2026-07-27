@@ -123,7 +123,12 @@ class TestPaperModeSafety:
                     # servis (Mission 2100 Agent 04): borsa
                     # yazımı yok, kendi mimari testleriyle
                     # ağ/steril tarama altında.
-                    and f.name != "paper_execution_service.py"]
+                    and f.name != "paper_execution_service.py"
+                    # controlled_execution_api.py (Mission 2100
+                    # Agent 08): PAPER simülasyon servisine
+                    # delege eden birleşik API — borsa yazımı
+                    # yok, kendi mimari testleriyle taranır.
+                    and f.name != "controlled_execution_api.py"]
 
         for path in py_files:
             try:
