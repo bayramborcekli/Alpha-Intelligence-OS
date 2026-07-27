@@ -1,0 +1,271 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2100
+
+AGENT 09
+
+SECURITY / SOAK TESTS / REGRESSION
+
+ROLE
+
+Perform complete security validation,
+long-duration stability testing and
+full system regression certification.
+
+This Agent SHALL NOT:
+
+• modify business logic
+• add new features
+• change public APIs
+• change Mission 2000
+• change Agents 01–08
+
+Only verification and certification.
+
+────────────────────────────────────────
+1. CREATE
+
+security_validation.py
+
+soak_runner.py
+
+regression_runner.py
+
+system_certification.py
+
+tests/test_security_validation.py
+
+tests/test_soak.py
+
+tests/test_regression.py
+
+tests/test_certification.py
+
+────────────────────────────────────────
+2. SECURITY
+
+Verify
+
+No Exchange Write
+
+No Secret Exposure
+
+No API Key Leak
+
+No Credential Logging
+
+No Filesystem Write
+
+No Database Write
+
+No Environment Mutation
+
+No Dynamic Import
+
+No eval()
+
+No exec()
+
+No pickle
+
+No subprocess
+
+No thread leaks
+
+No process leaks
+
+────────────────────────────────────────
+3. SOAK TEST
+
+Run
+
+1 hour
+
+6 hours
+
+12 hours
+
+24 hours
+
+Verify
+
+Memory stability
+
+CPU stability
+
+No resource leak
+
+No object leak
+
+No snapshot corruption
+
+No state corruption
+
+Deterministic behavior
+
+────────────────────────────────────────
+4. REGRESSION
+
+Run
+
+Mission 2000
+
+Agent 01
+
+Agent 02
+
+Agent 03
+
+Agent 04
+
+Agent 05
+
+Agent 06
+
+Agent 07
+
+Agent 08
+
+100%
+
+No skipped critical tests.
+
+────────────────────────────────────────
+5. ARCHITECTURE
+
+Verify
+
+Dependency direction
+
+Frozen modules
+
+Public exports
+
+Immutable models
+
+No forbidden imports
+
+No duplicate models
+
+No circular imports
+
+────────────────────────────────────────
+6. PERFORMANCE
+
+Verify
+
+Bounded collections
+
+No polling
+
+No recursion
+
+No scheduler
+
+No hidden retry
+
+No blocking operations
+
+────────────────────────────────────────
+7. CERTIFICATION
+
+Generate
+
+Security Certificate
+
+Architecture Certificate
+
+Regression Certificate
+
+Soak Certificate
+
+Mission 2100 Readiness Report
+
+────────────────────────────────────────
+8. TESTS
+
+Minimum
+
+500 PASS
+
+Cover
+
+Security
+
+Regression
+
+Architecture
+
+Performance
+
+Memory
+
+CPU
+
+Dependencies
+
+Public API
+
+Determinism
+
+────────────────────────────────────────
+9. DELIVERY
+
+Return exactly
+
+CREATED FILES
+
+SECURITY
+
+SOAK
+
+REGRESSION
+
+ARCHITECTURE
+
+CERTIFICATION
+
+TEST RESULTS
+
+TOTAL REGRESSION
+
+EXCHANGE WRITE REQUEST
+
+0
+
+SECRET EXPOSURE
+
+0
+
+PRODUCTION NETWORK REQUEST
+
+0
+
+COMMIT
+
+────────────────────────────────────────
+10. PASS
+
+PASS requires
+
+≥500 PASS
+
+0 FAIL
+
+Full regression PASS
+
+24-hour soak PASS
+
+Security certified
+
+Architecture certified
+
+Mission 2000 unchanged
+
+Agents 01–08 unchanged
+
+Exchange Write = 0
+
+Secret Exposure = 0
+
+Production Network Request = 0
