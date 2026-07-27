@@ -1,0 +1,1230 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2000 — EXECUTION FOUNDATION
+
+AGENT 07 — EXECUTION SERVICE / ORCHESTRATOR
+
+ROLE
+
+Design and implement the canonical Execution Service.
+
+The Execution Service SHALL orchestrate:
+
+ExecutionRequest
+        ↓
+Risk Engine
+        ↓
+Kill Switch
+        ↓
+BrokerAdapter
+        ↓
+Canonical Execution Result
+
+It SHALL NOT duplicate the responsibilities of any dependency.
+
+The Execution Service is orchestration only.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 2000
+
+Agent 06
+
+DELIVERED
+
+Use the exact Agent 06:
+
+• commit hash
+• regression total
+• test counts
+• architecture certification
+
+as the baseline.
+
+Before implementation, verify:
+
+• Agent 06 full regression PASS
+• Exchange Write Request = 0
+• Secret Exposure = 0
+• execution_broker_adapter.py delivered
+• Binance Spot adapter delivered
+
+Do not invent baseline values.
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement the single canonical execution orchestration path.
+
+Freeze:
+
+• Execution Service contract
+• Execution pipeline ordering
+• Risk and Kill Switch enforcement
+• Broker selection boundary
+• Execution permission gate
+• Idempotency propagation
+• Result translation
+• Failure classification
+• Side-effect boundary
+• Public API
+• Audit-ready deterministic trace
+
+No Execution API.
+
+No real network.
+
+No persistence.
+
+No live trading authorization.
+
+────────────────────────────────────────
+3. FILES
+
+Create:
+
+execution_service.py
+
+execution_service_models.py
+
+execution_permission_gate.py
+
+tests/test_execution_service.py
+
+Update only when necessary:
+
+tests/test_mission_2000_architecture.py
+
+The architecture test MUST mark:
+
+execution_service.py
+
+as delivered.
+
+No unrelated production code changes.
+
+────────────────────────────────────────
+4. CANONICAL ARCHITECTURE
+
+Portfolio Intelligence
+        ↓
+Strategy Intelligence
+        ↓
+Monitoring
+        ↓
+Execution API
+        ↓
+Execution Service
+        ↓
+Risk Engine
+        ↓
+Execution Permission Gate
+        ↓
+Kill Switch
+        ↓
+BrokerAdapter
+        ↓
+Broker Implementation
+
+The final order-submission path SHALL be:
+
+1. Validate service input
+2. Resolve canonical broker adapter
+3. Evaluate Risk Engine
+4. Evaluate Execution Permission Gate
+5. Check Kill Switch
+6. Build broker request context
+7. Call BrokerAdapter exactly once
+8. Normalize service result
+9. Return immutable execution outcome
+
+The sequence SHALL be deterministic and test-frozen.
+
+────────────────────────────────────────
+5. RESPONSIBILITY BOUNDARIES
+
+Execution Service SHALL:
+
+• coordinate dependencies
+• enforce pipeline order
+• propagate caller-owned identifiers
+• stop execution after any failed gate
+• invoke BrokerAdapter only after approval
+• return canonical service results
+• produce deterministic execution trace
+
+Execution Service SHALL NOT:
+
+• calculate risk itself
+• mutate Risk Engine
+• enable or disable Kill Switch
+• bypass Kill Switch
+• inspect broker names
+• inspect Binance payloads
+• normalize native broker payloads
+• generate idempotency keys
+• generate UUIDs
+• generate timestamps
+• perform retries
+• persist state
+• access network
+• access filesystem
+• read environment variables
+• contain strategy logic
+• contain portfolio allocation logic
+
+────────────────────────────────────────
+6. EXECUTION PERMISSION GATE
+
+Create:
+
+ExecutionPermissionGate
+
+This is the single authority that combines:
+
+RiskDecision
+
+AND
+
+KillSwitch state
+
+The gate SHALL answer:
+
+“May this execution proceed to BrokerAdapter?”
+
+Permission is granted only when:
+
+RiskDecision = ALLOW
+
+AND
+
+KillSwitch.is_execution_allowed() = True
+
+All other combinations SHALL deny broker submission.
+
+Examples:
+
+ALLOW + ENABLED
+→ PERMIT
+
+ALLOW + DISABLED
+→ DENY
+
+ALLOW + LOCKED
+→ DENY
+
+ALLOW + MAINTENANCE
+→ DENY
+
+REJECT + ENABLED
+→ DENY
+
+REDUCE_SIZE + ENABLED
+→ DENY unless a new explicitly approved request has already been created
+
+REQUIRE_CONFIRMATION + ENABLED
+→ DENY
+
+The gate SHALL NOT:
+
+• change RiskDecision
+• resize an order
+• ask for confirmation
+• change Kill Switch state
+• call BrokerAdapter
+
+────────────────────────────────────────
+7. NO IMPLICIT RESIZING
+
+RiskDecisionType.REDUCE_SIZE SHALL NOT cause the Execution Service to silently
+change quantity.
+
+Required behavior:
+
+• Return a non-submitted service result
+• Include the recommended reduced quantity when available
+• Require the caller to create a new explicit ExecutionRequest
+• Require a new caller-owned idempotency key for the revised operation
+
+This protects:
+
+• auditability
+• user intent
+• strategy intent
+• idempotency integrity
+• deterministic replay
+
+No hidden order mutation.
+
+────────────────────────────────────────
+8. IMMUTABLE SERVICE MODELS
+
+Create immutable models as required.
+
+Approved concepts:
+
+ExecutionServiceRequest
+
+ExecutionServiceResult
+
+ExecutionPermission
+
+ExecutionTrace
+
+ExecutionTraceStep
+
+BrokerRoutingContext
+
+All models SHALL be:
+
+• frozen=True
+• slots=True
+• explicitly typed
+• deterministic
+• free of mutable defaults
+• hashable where semantically valid
+
+Financial values SHALL use Decimal only.
+
+Do not duplicate:
+
+• ExecutionRequest
+• ExecutionResult
+• Order
+• Position
+• Fill
+• ValidationResult
+• RiskDecision
+• BrokerOperationResult
+• BrokerRequestContext
+• BrokerProfile
+• Instrument
+
+Import them from their canonical owner modules.
+
+────────────────────────────────────────
+9. EXECUTION SERVICE REQUEST
+
+ExecutionServiceRequest SHALL wrap canonical caller input without duplicating it.
+
+Suggested fields:
+
+execution_request
+
+broker_id
+
+account_id
+
+portfolio_id
+
+strategy_id
+
+request_id
+
+correlation_id
+
+idempotency_key
+
+execution_mode
+
+logical_sequence
+
+The service SHALL NOT generate any of these values.
+
+Unknown optional values SHALL remain None.
+
+Unknown SHALL never become:
+
+• zero
+• empty string
+• synthetic identifier
+• current timestamp
+
+────────────────────────────────────────
+10. BROKER ROUTING
+
+Execution Service may resolve an adapter through a deterministic injected
+registry or resolver abstraction.
+
+Approved principle:
+
+broker_id
+    ↓
+BrokerAdapterResolver
+    ↓
+BrokerAdapter
+
+The resolver SHALL be injected.
+
+No global registry.
+
+No service locator.
+
+No dynamic import.
+
+No reflection-based broker discovery.
+
+No broker-name logic such as:
+
+if broker_id == "binance"
+
+if broker_id == "ibkr"
+
+if broker_id == "midas"
+
+The service only receives a BrokerAdapter abstraction.
+
+Unknown broker:
+
+→ deterministic non-submitted failure
+
+No fallback to another broker.
+
+────────────────────────────────────────
+11. BROKER ADAPTER RESOLVER
+
+If required, define a minimal abstract resolver contract.
+
+Approved public operation:
+
+resolve(broker_id) -> BrokerAdapter
+
+Properties:
+
+• deterministic
+• read-only
+• injected
+• no network
+• no environment lookup
+• no plugin scanning
+• no mutable global state
+
+Do not implement enterprise plugin discovery in Agent 07.
+
+────────────────────────────────────────
+12. RISK ENGINE INTEGRATION
+
+Execution Service SHALL call the canonical Risk Engine public API.
+
+It SHALL NOT:
+
+• recreate exposure calculations
+• recreate capital validation
+• inspect risk policies
+• infer ALLOW from individual fields
+• convert REJECT into ALLOW
+• bypass REQUIRE_CONFIRMATION
+• silently accept REDUCE_SIZE
+
+RiskDecision is authoritative for risk.
+
+Exactly one risk evaluation per execution attempt.
+
+No hidden re-evaluation after broker submission.
+
+────────────────────────────────────────
+13. KILL SWITCH INTEGRATION
+
+Kill Switch SHALL be checked:
+
+• after Risk Engine approval
+• immediately before BrokerAdapter write invocation
+
+The check and broker invocation SHALL occur within one explicit orchestration
+path.
+
+Execution Service SHALL NOT:
+
+• call enable()
+• call disable()
+• call lock()
+• call maintenance()
+• mutate snapshots
+• cache an old permission indefinitely
+• treat a previous ENABLED result as permanent
+
+For each submission attempt, current Kill Switch permission SHALL be read.
+
+No broker write occurs when Kill Switch denies execution.
+
+────────────────────────────────────────
+14. TIME-OF-CHECK BOUNDARY
+
+Agent 07 is in-process and single-node only.
+
+It SHALL define the exact local ordering:
+
+Risk evaluation
+        ↓
+Kill Switch permission check
+        ↓
+BrokerAdapter call
+
+It SHALL NOT claim distributed atomicity.
+
+Do not implement:
+
+• distributed locks
+• consensus
+• leases
+• fencing tokens
+• transactional outbox
+• HA coordination
+
+These belong to Mission 2300.
+
+Document the local time-of-check/time-of-use limitation honestly.
+
+────────────────────────────────────────
+15. IDEMPOTENCY PROPAGATION
+
+The service SHALL require caller-owned idempotency for state-changing execution.
+
+Rules:
+
+• idempotency_key is mandatory for submission
+• service never generates it
+• service passes it unchanged into BrokerRequestContext
+• broker adapter receives exactly the same key
+• rejected pre-broker attempts do not call the adapter
+• retry is never automatic
+• conflicting request identity is rejected deterministically where detectable
+• no hidden replacement key
+• no key mutation
+• no hashing that changes caller identity
+
+Distributed idempotency storage remains deferred.
+
+────────────────────────────────────────
+16. EXACTLY-ONCE CLAIM PROHIBITION
+
+Agent 07 SHALL NOT claim exactly-once execution.
+
+The correct guarantee is:
+
+• one BrokerAdapter invocation per service method call after successful gates
+• no internal retry
+• no duplicate call within one orchestration attempt
+• caller-owned idempotency propagated unchanged
+
+Cross-process exactly-once behavior requires persistence and broker support and
+is deferred.
+
+Tests SHALL prevent misleading exactly-once claims in documentation.
+
+────────────────────────────────────────
+17. EXECUTION TRACE
+
+Create a deterministic, immutable trace.
+
+Approved trace steps:
+
+INPUT_VALIDATED
+
+BROKER_RESOLVED
+
+RISK_EVALUATED
+
+RISK_ALLOWED
+
+RISK_DENIED
+
+KILL_SWITCH_CHECKED
+
+EXECUTION_PERMITTED
+
+EXECUTION_DENIED
+
+BROKER_SUBMISSION_STARTED
+
+BROKER_SUBMISSION_COMPLETED
+
+BROKER_SUBMISSION_FAILED
+
+RESULT_NORMALIZED
+
+Only steps actually reached SHALL appear.
+
+Trace SHALL contain logical sequence values only.
+
+No wall-clock timestamps.
+
+No UUID generation.
+
+No secrets.
+
+No raw payloads.
+
+No stack traces.
+
+The same dependency responses and same inputs SHALL produce the same trace.
+
+────────────────────────────────────────
+18. SERVICE RESULT
+
+ExecutionServiceResult SHALL clearly distinguish:
+
+• SUBMITTED
+• NOT_SUBMITTED
+• REJECTED_BY_RISK
+• BLOCKED_BY_KILL_SWITCH
+• REQUIRES_CONFIRMATION
+• SIZE_REDUCTION_REQUIRED
+• BROKER_REJECTED
+• BROKER_TEMPORARY_FAILURE
+• BROKER_PERMANENT_FAILURE
+• BROKER_UNAVAILABLE
+• INVALID_REQUEST
+• UNKNOWN_FAILURE
+
+Use a closed enum.
+
+The result MAY include:
+
+• canonical BrokerOperationResult
+• canonical RiskDecision
+• ExecutionPermission
+• immutable trace
+• recommended_quantity
+• normalized error information
+
+It SHALL NOT include:
+
+• native broker exception
+• raw JSON
+• HTTP response
+• SDK object
+• secret
+• authorization information
+
+────────────────────────────────────────
+19. BROKER RESULT TRANSLATION
+
+The service SHALL translate BrokerOperationStatus into service-level outcomes
+without losing the original canonical BrokerOperationResult.
+
+Examples:
+
+SUCCESS
+→ SUBMITTED
+
+REJECTED
+→ BROKER_REJECTED
+
+TEMPORARY_FAILURE
+→ BROKER_TEMPORARY_FAILURE
+
+PERMANENT_FAILURE
+→ BROKER_PERMANENT_FAILURE
+
+UNSUPPORTED
+→ BROKER_PERMANENT_FAILURE or an explicitly defined unsupported result
+
+UNKNOWN
+→ UNKNOWN_FAILURE
+
+No broker-specific status mapping.
+
+No Binance error-code inspection.
+
+────────────────────────────────────────
+20. FAILURE POLICY
+
+Expected operational outcomes SHALL return ExecutionServiceResult.
+
+Examples:
+
+• risk rejection
+• Kill Switch denial
+• unknown broker
+• broker rejection
+• temporary broker failure
+• unsupported operation
+
+Programming and contract violations MAY raise a minimal local service exception.
+
+Suggested hierarchy:
+
+ExecutionServiceError
+
+ExecutionServiceContractError
+
+ExecutionServiceConfigurationError
+
+Do not create one exception per operational result.
+
+No native dependency exception may escape without normalization.
+
+────────────────────────────────────────
+21. DEPENDENCY EXCEPTION BOUNDARY
+
+Execution Service SHALL prevent these from leaking directly:
+
+• broker-native exceptions
+• transport exceptions
+• Risk Engine internal exceptions
+• resolver implementation exceptions
+• Kill Switch implementation errors
+
+Unexpected dependency exceptions SHALL become sterile canonical service failure
+or a canonical service exception according to contract.
+
+Do not expose:
+
+• stack traces
+• class names from vendor SDKs
+• raw exception repr
+• secret-bearing messages
+
+────────────────────────────────────────
+22. ASYNC CONTRACT
+
+BrokerAdapter operations are async.
+
+Therefore the execution submission method SHALL be async.
+
+Approved principal method:
+
+async execute(...)
+
+Risk Engine and Kill Switch may remain synchronous if their canonical APIs are
+synchronous.
+
+Do not introduce:
+
+• nested event loops
+• asyncio.run inside production code
+• background tasks
+• fire-and-forget execution
+• create_task
+• threads
+• process pools
+
+The caller awaits the complete orchestration result.
+
+────────────────────────────────────────
+23. CONCURRENCY
+
+Agent 07 SHALL NOT implement shared mutable execution state.
+
+Execution Service should be stateless apart from immutable injected
+dependencies.
+
+No in-memory order cache.
+
+No mutable request map.
+
+No global locks.
+
+No queues.
+
+No implicit concurrency control.
+
+Concurrency policy and durable coordination are deferred.
+
+Each invocation SHALL use local immutable request context.
+
+────────────────────────────────────────
+24. EXECUTION MODES
+
+Carry canonical ExecutionMode:
+
+PAPER
+
+SHADOW
+
+MICRO_LIVE
+
+LIVE
+
+Execution Service SHALL NOT authorize a mode merely because it exists.
+
+For Mission 2000:
+
+• no real live authorization
+• no mode-specific broker branching
+• no automatic selection of a live broker
+• no simulated fill engine
+
+Mode policy belongs to Mission 2100.
+
+The mode SHALL be propagated unchanged when required by canonical contracts.
+
+────────────────────────────────────────
+25. MONITORING BOUNDARY
+
+Monitoring remains read-only.
+
+Execution Service SHALL NOT:
+
+• import Monitoring Service
+• publish monitoring alerts directly
+• modify monitoring state
+• depend on dashboards
+
+ExecutionTrace and service results SHALL be observability-ready, but actual
+event publication is deferred.
+
+No event bus in Agent 07.
+
+────────────────────────────────────────
+26. SECURITY
+
+Execution Service SHALL NOT:
+
+• access network directly
+• access filesystem
+• read environment variables
+• load credentials
+• sign requests
+• handle API keys
+• construct HTTP clients
+• construct WebSocket clients
+• import broker SDKs
+• use subprocess
+• start threads
+• call sleep
+• use randomness
+• generate UUID
+• generate wall-clock timestamps
+• log secrets
+• expose raw payloads
+• retry broker writes
+
+All broker interaction SHALL pass through BrokerAdapter.
+
+────────────────────────────────────────
+27. PUBLIC API
+
+Freeze the smallest approved public surface.
+
+Approved exports only:
+
+ExecutionService
+
+ExecutionServiceRequest
+
+ExecutionServiceResult
+
+ExecutionServiceStatus
+
+ExecutionPermissionGate
+
+ExecutionPermission
+
+ExecutionTrace
+
+ExecutionTraceStep
+
+BrokerAdapterResolver
+
+ExecutionServiceError
+
+ExecutionServiceContractError
+
+ExecutionServiceConfigurationError
+
+No convenience live-trading API.
+
+No Binance-specific API.
+
+No global singleton.
+
+No default broker.
+
+────────────────────────────────────────
+28. PRINCIPAL SERVICE API
+
+Approved operation:
+
+async execute(
+    request: ExecutionServiceRequest
+) -> ExecutionServiceResult
+
+Optional read-only dependency accessors are forbidden unless architecturally
+required.
+
+Do not expose internal pipeline steps as public methods.
+
+Private methods MAY organize implementation, but callers SHALL have one
+canonical execution entry point.
+
+────────────────────────────────────────
+29. PIPELINE SHORT-CIRCUIT RULES
+
+The pipeline SHALL stop immediately when:
+
+• input validation fails
+• broker resolution fails
+• Risk Engine returns REJECT
+• Risk Engine returns REQUIRE_CONFIRMATION
+• Risk Engine returns REDUCE_SIZE
+• Kill Switch denies execution
+• request context is invalid
+
+After short-circuit:
+
+• BrokerAdapter submit_order is not called
+• no side effects occur
+• trace ends at the correct denial step
+• deterministic service result is returned
+
+Tests SHALL verify adapter invocation count = 0 for every denied path.
+
+────────────────────────────────────────
+30. SINGLE BROKER WRITE RULE
+
+For one successful execute() invocation:
+
+BrokerAdapter.submit_order()
+
+SHALL be invoked exactly once.
+
+Never:
+
+• zero times after a reported SUBMITTED outcome
+• twice
+• inside a retry loop
+• from a finally block
+• from error recovery
+• from trace generation
+
+Tests SHALL use deterministic spy adapters and certify invocation count.
+
+────────────────────────────────────────
+31. CANONICAL OWNERSHIP
+
+Agent 07 SHALL not redefine existing concepts.
+
+AST tests SHALL forbid duplicate definitions of:
+
+• ExecutionRequest
+• ExecutionResult
+• Order
+• Position
+• Fill
+• Instrument
+• BrokerProfile
+• RiskDecision
+• BrokerOperationResult
+• BrokerRequestContext
+• KillSwitch
+• ExecutionMode
+
+Only service-owned orchestration models may be added.
+
+────────────────────────────────────────
+32. TEST REQUIREMENTS
+
+Minimum:
+
+220 focused tests.
+
+Tests SHALL verify:
+
+• exact pipeline order
+• service input validation
+• immutable service models
+• closed service status enum
+• canonical model ownership
+• no duplicate models
+• deterministic broker resolution
+• unknown broker handling
+• Risk Engine called exactly once
+• Kill Switch checked only after risk approval
+• broker not called after risk denial
+• broker not called after REQUIRE_CONFIRMATION
+• broker not called after REDUCE_SIZE
+• broker not called when Kill Switch disabled
+• broker not called when Kill Switch locked
+• broker not called in maintenance
+• broker called exactly once when permitted
+• idempotency key required
+• idempotency key propagated unchanged
+• no generated identifiers
+• no silent quantity modification
+• recommended reduced quantity preserved
+• result-status mapping
+• dependency exception normalization
+• no native exception leakage
+• deterministic trace
+• exact trace ordering
+• no unreachable trace steps
+• no wall-clock timestamp
+• no UUID
+• no randomness
+• no retries
+• no loops around broker submission
+• no sleep
+• no background task
+• no create_task
+• no threads
+• no processes
+• no filesystem
+• no environment access
+• no direct network
+• no HTTP client
+• no WebSocket client
+• no broker SDK import
+• no Binance-specific logic
+• no broker-name branches
+• no Monitoring dependency
+• no Execution API implementation
+• public API freeze
+• architecture test marks execution_service.py delivered
+• full regression
+
+Use behavioral, structural, async and AST/source-level tests.
+
+Test count alone is insufficient.
+
+────────────────────────────────────────
+33. PROHIBITIONS
+
+Do not implement:
+
+• Execution API
+• REST endpoint
+• WebSocket endpoint
+• authentication
+• authorization
+• user management
+• database
+• persistence
+• event store
+• event bus
+• distributed idempotency
+• retry engine
+• scheduler
+• background worker
+• rate-limit scheduler
+• broker transport
+• credential provider
+• signing provider
+• new broker adapter
+• paper fill simulator
+• shadow execution engine
+• live mode authorization
+• portfolio mutation
+• position cache
+• balance cache
+• monitoring publisher
+• kill-switch state changes
+• risk-policy changes
+
+────────────────────────────────────────
+34. ARCHITECTURAL INVARIANTS
+
+Test-freeze these invariants:
+
+1. There is one canonical execution entry point.
+
+2. Risk Engine is evaluated before Kill Switch.
+
+3. Kill Switch is checked immediately before broker submission.
+
+4. No broker submission occurs without RiskDecision.ALLOW.
+
+5. No broker submission occurs unless Kill Switch permits execution.
+
+6. REDUCE_SIZE never silently modifies the request.
+
+7. REQUIRE_CONFIRMATION never reaches BrokerAdapter.
+
+8. Caller owns idempotency identity.
+
+9. BrokerAdapter is invoked at most once per execute() call.
+
+10. No automatic retry exists.
+
+11. Execution Service contains no broker-specific logic.
+
+12. Execution Service contains no risk-calculation logic.
+
+13. Execution Service cannot modify Kill Switch.
+
+14. Native broker objects cannot cross the boundary.
+
+15. Monitoring remains read-only and independent.
+
+16. Execution Service does not claim distributed atomicity.
+
+17. Execution Service does not claim exactly-once execution.
+
+18. Same inputs and dependency outputs produce the same result and trace.
+
+────────────────────────────────────────
+35. ARCHITECT REVIEW CHECKPOINTS
+
+Before delivery, perform three explicit reviews.
+
+REVIEW 1 — PIPELINE SAFETY
+
+Verify:
+
+• exact ordering
+• all denial short-circuits
+• zero broker calls on denied paths
+• exactly one broker call on approved paths
+
+REVIEW 2 — BOUNDARY INTEGRITY
+
+Verify:
+
+• no broker-specific code
+• no duplicated domain logic
+• no raw payload leakage
+• no Kill Switch mutation
+• no risk-policy duplication
+
+REVIEW 3 — FUTURE READINESS
+
+Verify compatibility with:
+
+• Mission 2100 Paper Trading
+• Mission 2100 Shadow Mode
+• Mission 2100 Micro Live
+• Mission 2300 HA
+• Mission 2400 Observability
+• Mission 2700 Enterprise Audit
+
+Do not implement those missions now.
+
+────────────────────────────────────────
+36. DELIVERY REPORT
+
+Return exactly:
+
+── CREATED FILES ──
+
+List
+
+── EXECUTION SERVICE ──
+
+Summary
+
+── ORCHESTRATION PIPELINE ──
+
+Exact frozen sequence
+
+── EXECUTION PERMISSION GATE ──
+
+Summary
+
+── RISK ENGINE INTEGRATION ──
+
+Summary
+
+── KILL SWITCH INTEGRATION ──
+
+Summary
+
+── BROKER ADAPTER INTEGRATION ──
+
+Summary
+
+── BROKER ROUTING ──
+
+Summary
+
+── IDEMPOTENCY PROPAGATION ──
+
+Summary
+
+── IMMUTABLE SERVICE MODELS ──
+
+Summary
+
+── EXECUTION TRACE ──
+
+Summary
+
+── RESULT NORMALIZATION ──
+
+Summary
+
+── FAILURE BOUNDARY ──
+
+Summary
+
+── PUBLIC API ──
+
+Approved surface
+
+── ARCHITECT REVIEW ──
+
+Findings and corrections
+
+── SAFETY CERTIFICATION ──
+
+Summary
+
+── PRODUCTION CODE CHANGES ──
+
+Execution Service only
+
+── TEST RESULTS ──
+
+New PASS count
+
+── FAIL / SKIP ──
+
+Counts
+
+── TOTAL REGRESSION ──
+
+Total PASS count
+
+── BROKER WRITE REQUEST ──
+
+0 real network writes
+
+State deterministic mock invocation counts separately
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash + GitHub push status
+
+── NEXT AGENT ──
+
+AGENT 08 — EXECUTION API
+
+────────────────────────────────────────
+37. PASS CRITERIA
+
+PASS requires:
+
+• Canonical Execution Service complete
+• Single execution entry point certified
+• Exact pipeline order certified
+• Permission Gate complete
+• Risk Engine integration certified
+• Kill Switch enforcement certified
+• BrokerAdapter integration certified
+• No broker call on every denied path
+• Exactly one adapter call on approved path
+• No silent resizing
+• Caller-owned idempotency propagated unchanged
+• Immutable deterministic trace complete
+• Native failures normalized
+• Canonical ownership preserved
+• Public API frozen
+• ≥220 focused tests PASS
+• Architecture delivery test updated
+• No Execution API
+• No direct network
+• No persistence
+• No automatic retry
+• No real broker execution
+• Full regression PASS
+• Exchange Write Request = 0
+• Secret Exposure = 0
