@@ -9,6 +9,8 @@ yoktur. Alanlar DEĞİŞMEDEN taşınır.
 
 from __future__ import annotations
 
+from types import MappingProxyType
+
 from execution_api_models import (
     ExecutionApiRequest,
     ExecutionApiResponse,
@@ -26,7 +28,7 @@ _ERROR_INPUT = "INVALID_MAPPER_INPUT"
 
 # Kapalı, kayıpsız durum çevirisi — servis iç ayrımı korunur,
 # broker ayrıntısı API katmanında yorumlanmaz
-_STATUS_MAP = {
+_STATUS_MAP = MappingProxyType({
     ExecutionServiceStatus.SUBMITTED:
         ExecutionApiStatus.SUBMITTED,
     ExecutionServiceStatus.NOT_SUBMITTED:
@@ -51,7 +53,7 @@ _STATUS_MAP = {
         ExecutionApiStatus.VALIDATION_FAILED,
     ExecutionServiceStatus.UNKNOWN_FAILURE:
         ExecutionApiStatus.UNKNOWN_FAILURE,
-}
+})
 
 
 class ExecutionApiMapper:

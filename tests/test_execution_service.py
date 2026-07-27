@@ -1246,6 +1246,7 @@ class TestSecurity:
     @pytest.mark.parametrize("module", SERVICE_MODULES)
     def test_allowed_imports_only(self, module):
         allowed = {"__future__", "abc", "enum", "dataclasses",
+                   "types",
                    "decimal", "typing",
                    "execution_enums", "execution_models",
                    "execution_risk_models", "execution_risk_engine",

@@ -659,7 +659,7 @@ class TestCanonicalOwnership:
 
     def test_api_layer_imports_only_service_layer(self):
         allowed = {"__future__", "enum", "dataclasses", "decimal",
-                   "typing",
+                   "typing", "types",
                    "execution_models", "execution_risk_models",
                    "execution_broker_models",
                    "execution_service", "execution_service_models",

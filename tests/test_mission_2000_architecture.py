@@ -33,6 +33,10 @@ PLANNED_MODULES = (
     "execution_risk_engine.py", "execution_kill_switch.py",
     "broker_adapter.py", "binance_spot_adapter.py")
 
+# Agent 09: Yürütme Çekirdeği kalıcı olarak donduruldu.
+# Gelecek misyonlar GENİŞLETİR; sessizce değiştirmez.
+MISSION_2000_STATUS = "FROZEN"
+
 LAYER_ORDER = (
     "Execution API", "Execution Service", "Risk Engine",
     "Kill Switch", "Exchange Adapter", "Exchange Implementation")

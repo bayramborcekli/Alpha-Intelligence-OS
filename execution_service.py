@@ -34,6 +34,8 @@ yoktur. Ağ/dosya sistemi/ortam/secret erişimi yoktur.
 
 from __future__ import annotations
 
+from types import MappingProxyType
+
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 
@@ -81,16 +83,16 @@ _STEP = ExecutionTraceStep
 _STATUS = ExecutionServiceStatus
 
 # RiskDecisionType (ALLOW dışı) → servis sonucu
-_RISK_DENIAL_STATUS = {
+_RISK_DENIAL_STATUS = MappingProxyType({
     RiskDecisionType.REJECT: _STATUS.REJECTED_BY_RISK,
     RiskDecisionType.REQUIRE_CONFIRMATION:
         _STATUS.REQUIRES_CONFIRMATION,
     RiskDecisionType.REDUCE_SIZE: _STATUS.SIZE_REDUCTION_REQUIRED,
-}
+})
 
 # BrokerOperationStatus → servis sonucu (kanonik sonuç kayıpsız
 # korunur; broker'a özgü durum eşlemesi veya Binance kodu YOKTUR)
-_BROKER_STATUS_MAP = {
+_BROKER_STATUS_MAP = MappingProxyType({
     BrokerOperationStatus.SUCCESS: _STATUS.SUBMITTED,
     BrokerOperationStatus.REJECTED: _STATUS.BROKER_REJECTED,
     BrokerOperationStatus.NOT_FOUND: _STATUS.UNKNOWN_FAILURE,
@@ -101,7 +103,7 @@ _BROKER_STATUS_MAP = {
     BrokerOperationStatus.PERMANENT_FAILURE:
         _STATUS.BROKER_PERMANENT_FAILURE,
     BrokerOperationStatus.UNKNOWN: _STATUS.UNKNOWN_FAILURE,
-}
+})
 
 
 class ExecutionServiceError(Exception):
