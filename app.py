@@ -3548,7 +3548,7 @@ import operation_workspace_api as _owa
 import operation_workspace_service as _ows
 
 
-def _workspace_trades_raw() -> list[dict[str, Any]]:
+def _workspace_trades_raw() -> list[Any]:
     """Kapalı işlem kayıtları — tek kaynak trade_history.json.
     Dosya yoksa boş liste (UI dürüstçe UNKNOWN gösterir)."""
     path = Path("alpha20_v1/trade_history.json")
@@ -3558,9 +3558,13 @@ def _workspace_trades_raw() -> list[dict[str, Any]]:
         return []
     if not isinstance(rows, list):
         return []
-    out: list[dict[str, Any]] = []
+    out: list[Any] = []
     for row in rows:
         if not isinstance(row, dict):
+            # Bozuk satır (string/null vb.) sessizce atlanmaz —
+            # olduğu gibi iletilir; parse_trades onu Mapping
+            # olmadığı için düşürür ve dropped_records'a sayar.
+            out.append(row)
             continue
         closed = row.get("closed_at")
         closed_epoch = None

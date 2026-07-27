@@ -311,6 +311,19 @@ class TestCorruptionVisibility:
         assert perf["sharpe"] is not None
         assert elapsed < 1.0
 
+    def test_non_dict_rows_counted_as_dropped(self, client,
+                                              live_dataset):
+        # Dosyaya karışan string/null/sayı satırları da sayaçta
+        # görünmeli — sessiz atlama yok.
+        trades = list(live_dataset["trades"])
+        junk = ["garbage-line", None, 42, ["nested"], True]
+        trades = junk + trades
+        (live_dataset["dir"] / "trade_history.json").write_text(
+            json.dumps(trades))
+        perf, _ = _get_performance(client)
+        assert perf["dropped_records"] == len(junk)
+        assert perf["trade_count"] == TRADE_COUNT
+
     def test_dropped_records_rendered_by_ui(self):
         js = (app_module.ROOT / "static" / "js"
               / "operation_workspace.js").read_text(encoding="utf-8")
