@@ -131,6 +131,9 @@ class TestRouteSurface:
         # Mission 1600 / Agent 04: Automation manuel tetik (CSRF+auth
         # korumalı; append yalnız Core üzerinden — bilinçli genişletme)
         "/api/automation/run", "/api/v1/automation/run",
+        # Bot Kontrolü paneli: yürütme modu seçimi (CSRF+auth korumalı;
+        # LIVE fail-closed reddedilir — bilinçli genişletme)
+        "/execution/mode",
     }
 
     def test_no_new_write_routes(self):
