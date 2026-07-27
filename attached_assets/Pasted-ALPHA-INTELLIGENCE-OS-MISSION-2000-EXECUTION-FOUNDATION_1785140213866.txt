@@ -1,0 +1,574 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2000 — EXECUTION FOUNDATION
+
+AGENT 02 — DOMAIN MODELS
+
+ROLE
+
+Design and implement the immutable Execution Domain.
+
+This agent defines the canonical execution models.
+
+All execution layers MUST use these models.
+
+No exchange communication.
+
+No execution logic.
+
+No REST.
+
+No WebSocket.
+
+No trading behavior.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 2000
+
+Agent 01
+
+PASS
+
+Current Commit
+
+125e3bc
+
+Regression Baseline
+
+2293 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Create the immutable execution domain.
+
+Freeze:
+
+• Order models
+
+• Position models
+
+• Execution request
+
+• Execution result
+
+• Fill model
+
+• Enumerations
+
+• Order State Machine
+
+These become the ONLY approved execution contracts.
+
+────────────────────────────────────────
+3. FILES
+
+Create
+
+execution_models.py
+
+execution_enums.py
+
+execution_state_machine.py
+
+No service.
+
+No API.
+
+No exchange.
+
+────────────────────────────────────────
+4. IMMUTABLE MODELS
+
+Create immutable dataclasses only.
+
+ExecutionRequest
+
+ExecutionResult
+
+Order
+
+Position
+
+Fill
+
+ExecutionMetadata
+
+ValidationResult
+
+Every model MUST be:
+
+Frozen
+
+Slots=True
+
+Decimal only
+
+Hashable where applicable
+
+No mutable defaults
+
+────────────────────────────────────────
+5. ENUMERATIONS
+
+Freeze all execution enums.
+
+OrderSide
+
+BUY
+
+SELL
+
+OrderType
+
+MARKET
+
+LIMIT
+
+STOP_LIMIT
+
+STOP_MARKET
+
+TAKE_PROFIT
+
+TimeInForce
+
+GTC
+
+IOC
+
+FOK
+
+OrderState
+
+CREATED
+
+VALIDATED
+
+SUBMITTED
+
+ACKNOWLEDGED
+
+PARTIALLY_FILLED
+
+FILLED
+
+CANCELLED
+
+REJECTED
+
+EXPIRED
+
+PositionSide
+
+LONG
+
+SHORT
+
+FLAT
+
+ExecutionStatus
+
+SUCCESS
+
+FAILED
+
+REJECTED
+
+PARTIAL
+
+────────────────────────────────────────
+6. ORDER STATE MACHINE
+
+Freeze the canonical lifecycle.
+
+Approved transitions
+
+CREATED
+↓
+
+VALIDATED
+
+VALIDATED
+↓
+
+SUBMITTED
+
+VALIDATED
+↓
+
+REJECTED
+
+SUBMITTED
+↓
+
+ACKNOWLEDGED
+
+SUBMITTED
+↓
+
+CANCELLED
+
+SUBMITTED
+↓
+
+EXPIRED
+
+ACKNOWLEDGED
+↓
+
+PARTIALLY_FILLED
+
+ACKNOWLEDGED
+↓
+
+FILLED
+
+PARTIALLY_FILLED
+↓
+
+FILLED
+
+PARTIALLY_FILLED
+↓
+
+CANCELLED
+
+Forbidden transitions
+
+FILLED → CREATED
+
+FILLED → SUBMITTED
+
+FILLED → VALIDATED
+
+CANCELLED → FILLED
+
+REJECTED → SUBMITTED
+
+REJECTED → FILLED
+
+EXPIRED → FILLED
+
+PARTIALLY_FILLED → CREATED
+
+PARTIALLY_FILLED → VALIDATED
+
+The state machine MUST be deterministic.
+
+────────────────────────────────────────
+7. EXCHANGE NORMALIZATION
+
+Document canonical mapping.
+
+Binance NEW
+
+↓
+
+SUBMITTED
+
+Binance PARTIALLY_FILLED
+
+↓
+
+PARTIALLY_FILLED
+
+Binance FILLED
+
+↓
+
+FILLED
+
+Binance CANCELED
+
+↓
+
+CANCELLED
+
+Binance REJECTED
+
+↓
+
+REJECTED
+
+Future exchanges MUST normalize into OrderState.
+
+No exchange-specific states may leak outside adapters.
+
+────────────────────────────────────────
+8. MODEL OWNERSHIP
+
+ExecutionRequest
+
+Input only
+
+ExecutionResult
+
+Output only
+
+Order
+
+Canonical order state
+
+Position
+
+Portfolio position
+
+Fill
+
+Exchange execution event
+
+ExecutionMetadata
+
+Execution API metadata only
+
+ValidationResult
+
+Risk validation result
+
+No ownership overlap.
+
+────────────────────────────────────────
+9. METADATA RULES
+
+ExecutionMetadata MAY contain only:
+
+execution_id
+
+requested_at
+
+processed_at
+
+correlation_id
+
+Execution API owns generation.
+
+Lower layers only propagate.
+
+────────────────────────────────────────
+10. PUBLIC API
+
+Approved public surface only.
+
+ExecutionRequest
+
+ExecutionResult
+
+Order
+
+Position
+
+Fill
+
+ExecutionMetadata
+
+ValidationResult
+
+OrderState
+
+OrderType
+
+OrderSide
+
+TimeInForce
+
+PositionSide
+
+ExecutionStatus
+
+validate_transition()
+
+No additional public APIs.
+
+────────────────────────────────────────
+11. SECURITY RULES
+
+No datetime generation
+
+No UUID generation
+
+No randomness
+
+No I/O
+
+No persistence
+
+No network
+
+No exchange imports
+
+No broker imports
+
+No filesystem
+
+No threading
+
+No asyncio
+
+No environment access
+
+No secrets
+
+────────────────────────────────────────
+12. TEST REQUIREMENTS
+
+Minimum
+
+100 focused tests.
+
+Verify:
+
+• every immutable model
+
+• every enum
+
+• every approved transition
+
+• every forbidden transition
+
+• state machine determinism
+
+• hashability
+
+• Decimal-only policy
+
+• metadata propagation
+
+• exchange normalization table
+
+• equality
+
+• serialization compatibility
+
+• no mutable defaults
+
+• no forbidden imports
+
+────────────────────────────────────────
+13. PROHIBITIONS
+
+Do not implement:
+
+Risk calculations
+
+Kill Switch
+
+Execution Service
+
+Execution API
+
+Exchange Adapter
+
+REST
+
+WebSocket
+
+Authentication
+
+Signing
+
+Order execution
+
+────────────────────────────────────────
+14. DELIVERY REPORT
+
+Return:
+
+── CREATED FILES ──
+
+List
+
+── DOMAIN MODELS ──
+
+Summary
+
+── ENUMERATIONS ──
+
+Summary
+
+── STATE MACHINE ──
+
+Approved transitions
+
+Forbidden transitions
+
+── EXCHANGE NORMALIZATION ──
+
+Summary
+
+── IMMUTABILITY ──
+
+Verification
+
+── PUBLIC API ──
+
+Approved surface
+
+── PRODUCTION CODE CHANGES ──
+
+Domain models only
+
+── TEST RESULTS ──
+
+PASS count
+
+── FAIL / SKIP ──
+
+Counts
+
+── TOTAL REGRESSION ──
+
+Total PASS
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash + GitHub push
+
+── NEXT AGENT ──
+
+AGENT 03 — RISK ENGINE
+
+────────────────────────────────────────
+15. PASS CRITERIA
+
+PASS requires:
+
+• Immutable domain complete
+
+• All enums frozen
+
+• State machine certified
+
+• Exchange normalization certified
+
+• Metadata ownership certified
+
+• ≥100 tests PASS
+
+• No production execution behavior
+
+• Full regression PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
