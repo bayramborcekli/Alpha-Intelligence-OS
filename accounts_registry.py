@@ -15,7 +15,10 @@ yalnız hesap kayıt defterini yönetir:
 from __future__ import annotations
 
 import contextlib
-import fcntl
+try:
+    import fcntl  # POSIX (Linux/Replit) — davranış değişmez
+except ImportError:  # Windows: msvcrt tabanlı uyumluluk katmanı
+    import portable_flock as fcntl  # type: ignore
 import json
 import os
 import tempfile

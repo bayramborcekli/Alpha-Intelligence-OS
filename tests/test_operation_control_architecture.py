@@ -35,7 +35,10 @@ ALLOWED_PROJECT = frozenset(OPERATION_MODULES) | frozenset(
     FROZEN_MODULES) | frozenset({
         # Mission 2100 öncesi sertifikalı çekirdek modeller
         # (manifest kapsamı dışı ama yürütme katmanının parçası).
-        "execution_enums", "execution_models"})
+        "execution_enums", "execution_models",
+        # Mission 2400: fcntl'in Windows uyumluluk katmanı (POSIX'te
+        # kullanılmaz; yalnız fcntl importu başarısızsa devreye girer).
+        "portable_flock"})
 
 
 def source_of(name: str) -> str:

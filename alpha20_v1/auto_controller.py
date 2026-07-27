@@ -4,7 +4,10 @@ Aynı anda yalnızca bir instance çalışır; her döngü adımı hata yönetim
 """
 from __future__ import annotations
 
-import fcntl
+try:
+    import fcntl  # POSIX — davranış değişmez
+except ImportError:  # Windows: proje kökündeki uyumluluk katmanı
+    import portable_flock as fcntl  # type: ignore
 import json
 import logging
 import math

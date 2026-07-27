@@ -17,7 +17,10 @@ Kurallar:
 
 from __future__ import annotations
 
-import fcntl
+try:
+    import fcntl  # POSIX (Linux/Replit) — davranış değişmez
+except ImportError:  # Windows: msvcrt tabanlı uyumluluk katmanı
+    import portable_flock as fcntl  # type: ignore
 import json
 import os
 from datetime import datetime, timezone

@@ -18,7 +18,10 @@ Bu modül REST endpoint, UI veya export içermez (Agent 04-06 kapsamı).
 
 from __future__ import annotations
 
-import fcntl
+try:
+    import fcntl  # POSIX (Linux/Replit) — davranış değişmez
+except ImportError:  # Windows: msvcrt tabanlı uyumluluk katmanı
+    import portable_flock as fcntl  # type: ignore
 import json
 import os
 import threading
