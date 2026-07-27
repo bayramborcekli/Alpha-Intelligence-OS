@@ -1,0 +1,409 @@
+MISSION 2400 — AGENT 01
+
+WINDOWS ONE-CLICK STARTER
+
+ROLE
+
+Create the simplest reliable Windows desktop launch flow for the existing Alpha Intelligence OS project.
+
+The user must be able to start the application from a desktop shortcut with one double-click.
+
+Do not redesign the application.
+Do not add trading features.
+Do not build a complex installer unless strictly necessary.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Create a working Windows desktop shortcut named:
+
+Alpha Intelligence OS
+
+When the user double-clicks the shortcut:
+
+1. The existing Alpha Intelligence OS project starts.
+2. Required local services start in the correct order.
+3. The default browser opens automatically.
+4. Trading Home opens.
+5. No manual terminal commands are required.
+
+The project may continue running from its current local folder.
+
+==================================================
+USER EXPERIENCE
+==================================================
+
+Normal usage must be:
+
+1. Turn on the computer.
+2. Double-click Alpha Intelligence OS on the desktop.
+3. Wait for the application to become ready.
+4. Trading Home opens automatically.
+
+The user must not need to:
+
+- open Command Prompt
+- open PowerShell
+- type Python commands
+- locate the project folder
+- enter localhost manually
+- run multiple files
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Allowed:
+
+- inspect the existing project startup method
+- create a Windows launcher
+- create a desktop shortcut
+- create a safe stop command
+- open the browser automatically
+- add minimal launcher logging
+- add single-instance protection
+- add startup-readiness checks
+- add focused tests or a manual acceptance script
+
+Do NOT modify:
+
+- trading logic
+- AI decision logic
+- automation rules
+- paper-trading rules
+- risk engine
+- execution engine
+- account connections
+- database schema
+- API contracts
+- Trading Home layout
+- Operation Center behavior
+
+==================================================
+FIRST INSPECTION
+==================================================
+
+Before changing anything, determine:
+
+1. Current project root directory
+2. Current supported startup command
+3. Python runtime or virtual environment used
+4. Required environment variables
+5. Required database or local services
+6. Application host and port
+7. Trading Home route
+8. Whether the application already has a startup script
+9. Whether more than one process is required
+10. How the application currently shuts down safely
+
+Do not guess.
+
+Reuse the existing startup mechanism wherever possible.
+
+==================================================
+PREFERRED IMPLEMENTATION
+==================================================
+
+Prefer the simplest reliable structure:
+
+Project folder
+    ├── start_alpha.cmd
+    ├── stop_alpha.cmd
+    ├── runtime\
+    └── existing application files
+
+Desktop shortcut
+    ↓
+start_alpha.cmd
+    ↓
+existing application startup
+    ↓
+browser opens Trading Home
+
+A small PowerShell launcher may be used internally if required.
+
+The desktop shortcut must hide unnecessary technical complexity from the user.
+
+Do not introduce Electron, Tauri or a desktop-shell framework in this mission.
+
+==================================================
+START SCRIPT
+==================================================
+
+Create a launcher that:
+
+1. Resolves the project directory dynamically.
+2. Changes into the correct project directory.
+3. Activates the correct virtual environment if present.
+4. Loads the existing environment configuration.
+5. Checks whether Alpha Intelligence is already running.
+6. If already running:
+   - do not start duplicate workers
+   - open or focus Trading Home
+7. If not running:
+   - start the existing application
+   - wait until the health/readiness endpoint responds
+   - open Trading Home in the default browser
+8. Record a small sanitized startup log.
+
+Do not expose secrets in command-line arguments or logs.
+
+==================================================
+NO DUPLICATE RUNTIME
+==================================================
+
+Prevent duplicate starts.
+
+A second double-click must not create:
+
+- a second web server
+- a second automation worker
+- duplicate schedulers
+- duplicate paper-trading loops
+- duplicate order processing
+
+Use one of the following existing-compatible methods:
+
+- process lock file
+- PID file with validation
+- local port/readiness check
+- existing application lock
+
+Do not rely only on a stale PID file.
+
+==================================================
+STARTUP WINDOW BEHAVIOR
+==================================================
+
+A console window may appear briefly during development.
+
+Preferred final behavior:
+
+- no persistent terminal window
+- launcher starts the application minimized or hidden
+- browser opens only after the application is ready
+
+If reliable hidden startup is not possible without changing architecture:
+
+- keep the console minimized
+- do not compromise runtime stability merely to hide it
+
+Reliability is more important than visual polish.
+
+==================================================
+BROWSER OPENING
+==================================================
+
+Open the existing Trading Home route automatically.
+
+Use the actual route discovered from the project.
+
+Do not hardcode an assumed route without checking.
+
+The browser must not open before the application is ready.
+
+If startup fails:
+
+- do not open a broken page
+- show a simple Turkish error message
+- point to the sanitized launcher log
+
+==================================================
+STOP SCRIPT
+==================================================
+
+Create:
+
+stop_alpha.cmd
+
+It must:
+
+1. Identify only Alpha Intelligence processes started by the launcher.
+2. Request graceful shutdown where supported.
+3. Stop application processes in the correct order.
+4. Avoid killing unrelated Python processes.
+5. Remove runtime lock files only after shutdown.
+6. Record shutdown status.
+
+Do not use broad commands such as terminating every python.exe process.
+
+==================================================
+DESKTOP SHORTCUT
+==================================================
+
+Create or provide an automated shortcut-creation script.
+
+Shortcut properties:
+
+Name:
+Alpha Intelligence OS
+
+Target:
+the launcher
+
+Start in:
+the project root
+
+Icon:
+use an existing project icon if available
+
+Behavior:
+- double-click starts or opens the application
+- no administrator rights required unless the current project genuinely requires them
+
+Also create an optional shortcut:
+
+Alpha Intelligence OS — Durdur
+
+==================================================
+PATH SUPPORT
+==================================================
+
+The launcher must support the project's actual local path.
+
+It must not assume that the project is installed on C:.
+
+It should work from locations such as:
+
+D:\AlphaIntelligenceOS
+
+or another user-selected folder.
+
+Avoid fixed absolute paths when a relative path can be used.
+
+If the project depends on a fixed path, document it clearly.
+
+==================================================
+ENVIRONMENT VALIDATION
+==================================================
+
+Before startup, validate only essential requirements:
+
+- expected Python executable exists
+- virtual environment exists if required
+- required configuration file exists
+- required project entry point exists
+- selected port is available or already belongs to Alpha Intelligence
+- writable runtime/log directory exists
+
+Show a simple message for missing requirements.
+
+Do not display raw stack traces to the user.
+
+==================================================
+SECURITY
+==================================================
+
+The launcher must not:
+
+- print API keys
+- print secret keys
+- copy secrets into the shortcut
+- place secrets in command-line parameters
+- include secrets in logs
+- modify account credentials
+- create new plaintext secret files
+
+Use the existing configuration and secret mechanism unchanged.
+
+==================================================
+LOGGING
+==================================================
+
+Create a small launcher log, for example:
+
+runtime\launcher.log
+
+Include:
+
+- timestamp
+- launch requested
+- already-running result
+- application process started
+- readiness result
+- browser opened
+- shutdown requested
+- shutdown result
+- sanitized error code
+
+Exclude:
+
+- API keys
+- secret values
+- tokens
+- account balances unless already safe and necessary
+- raw environment contents
+
+==================================================
+MANUAL ACCEPTANCE TEST
+==================================================
+
+Perform this exact test on Windows:
+
+1. Application is fully stopped.
+2. Double-click the desktop shortcut.
+3. Confirm no manual command is required.
+4. Confirm the application starts.
+5. Confirm Trading Home opens automatically.
+6. Confirm Paper mode remains active.
+7. Confirm live order remains disabled.
+8. Double-click the shortcut again.
+9. Confirm no duplicate application or worker starts.
+10. Close the browser.
+11. Confirm the application continues running if that is the current architecture.
+12. Use the stop shortcut or stop script.
+13. Confirm Alpha Intelligence processes stop.
+14. Confirm unrelated Python processes remain untouched.
+15. Start again and confirm normal recovery.
+
+==================================================
+TEST REQUIREMENTS
+==================================================
+
+Add or document checks covering:
+
+- launcher resolves the project path
+- missing virtual environment produces a clean error
+- duplicate start is prevented
+- readiness is checked before browser opening
+- Trading Home route opens
+- stop script does not terminate unrelated processes
+- API secrets do not appear in launcher logs
+- existing full regression remains green
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+PASS only if:
+
+- the user can start Alpha Intelligence from the desktop
+- only one double-click is required
+- no terminal command is required
+- Trading Home opens automatically
+- duplicate workers are prevented
+- existing Paper mode remains unchanged
+- live trading remains disabled
+- stop flow is safe
+- no secrets are exposed
+- existing application behavior is unchanged
+- full regression has zero failures
+
+==================================================
+DELIVERY REPORT
+==================================================
+
+Return:
+
+1. Current project path
+2. Existing startup method discovered
+3. Launcher files created
+4. Desktop shortcut created
+5. Stop shortcut or stop script created
+6. Duplicate-start protection used
+7. Trading Home URL used
+8. Manual Windows acceptance-test results
+9. Full regression result
+10. Known limitations
+11. Commit hash
