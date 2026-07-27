@@ -3,7 +3,7 @@
 - [Replay harness resume](replay-harness-resume.md) — resume needs open_time anchors, scheduler state, and history truncation to snapshot, or false ledger mismatches appear.
 - [Real-signal replay sizing](real-signal-replay-sizing.md) — score≥65 fires ~0.06 trades/candle/3sym; size the data window to the trade target or the run OOMs; precompute the signal stream once for cross-variant determinism.
 - [Mission 1500.2 baseline](mission-1500-2-baseline.md) — Workspace scope frozen as reference baseline; immutable contracts + regression rules for all future missions.
-- [Mission workflow pattern](mission-workflow.md) — per-agent loop, closure-baseline chain (1700:1335→1800:1596→1900:2146), Turkish report conventions; Mission 2000 zinciri: A05 74c157e:2982 → A06 98a9c20:3219 → A07 f1ab9a2:3471 → A08 Execution API 01aa429:3704 (tüm 6 planlı modül teslim).
+- [Mission workflow pattern](mission-workflow.md) — per-agent loop, closure-baseline chain (1700:1335→1800:1596→1900:2146), Turkish report conventions; Mission 2000 zinciri: A05 74c157e:2982 → A06 98a9c20:3219 → A07 f1ab9a2:3471 → A08 01aa429:3704 → A09 Freeze/Security a45dde3:4375 (çekirdek FROZEN — 20 modül manifesto-kilitli, Mission 2100 tabanı execution_regression_manifest.py).
 - [Runtime config drift](runtime-config-drift.md) — bot mutates alpha20_v1 configs; platform auto-commits can bake unsafe state into HEAD, so revert against last intentional commit.
 - [Read-only summary persist](read-only-summary-persist.md) — risk_api.summary() writes a daily snapshot by default; read-only layers must pass persist=False.
 - [Binance TR API quirks](binance-tr-api.md) — `data` may be list or dict; movements API omits trades so reconciliation is PARTIAL by design; transferType=1 = internal.
