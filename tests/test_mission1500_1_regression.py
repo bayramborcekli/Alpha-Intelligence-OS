@@ -131,6 +131,15 @@ class TestRouteSurface:
         # Mission 1600 / Agent 04: Automation manuel tetik (CSRF+auth
         # korumalı; append yalnız Core üzerinden — bilinçli genişletme)
         "/api/automation/run", "/api/v1/automation/run",
+        # Mission 2300 / Agent 03: Hesaplarım kayıt defteri (CSRF+auth
+        # korumalı; yalnız sunum meta verisi — sır saklamaz, işlem
+        # mantığına dokunmaz — bilinçli genişletme)
+        "/api/accounts/<account_id>/connect",
+        "/api/accounts/<account_id>/disconnect",
+        "/api/accounts/<account_id>/primary",
+        "/api/accounts/<account_id>/edit",
+        "/api/accounts/<account_id>/test",
+        "/api/accounts/<account_id>/sync",
         # Bot Kontrolü paneli: yürütme modu seçimi (CSRF+auth korumalı;
         # LIVE fail-closed reddedilir — bilinçli genişletme)
         "/execution/mode",

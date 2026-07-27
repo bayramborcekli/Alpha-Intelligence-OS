@@ -142,24 +142,30 @@ class TestNoTechnicalNoise:
 # ── Cüzdanlar (sol panel) ──────────────────────────────────────────
 
 class TestWallets:
-    @pytest.mark.parametrize("field", [
-        "Bakiye", "Kullanılabilir", "Durum", "Son Eşitleme"])
+    @pytest.mark.parametrize("field", ["Durum", "Son Eşitleme"])
     def test_wallet_fields(self, field):
         assert field in JS
 
-    @pytest.mark.parametrize("wallet", [
-        "Binance Global", "Binance TR"])
-    def test_known_wallets_rendered(self, wallet):
-        assert wallet in JS
+    def test_wallet_rows_come_from_account_source(self):
+        # Bakiye satırları sunucu anlık görüntüsünden gelir
+        # (w.name/w.balance); istemcide borsa adı sabitlenmez.
+        assert "w.name" in JS and "w.balance" in JS
 
-    @pytest.mark.parametrize("endpoint", [
-        "/api/v1/global/account", "/api/v1/tr/account"])
-    def test_existing_account_endpoints_used(self, endpoint):
-        assert endpoint in JS
+    def test_single_source_is_connected_accounts(self):
+        # Mission 2300 A03: cüzdan paneli YALNIZ bağlı kişisel
+        # hesaplardan okur; borsa uçlarına doğrudan bağımlılık yok.
+        assert "/api/accounts/wallets" in JS
+        assert "/api/v1/global/account" not in JS
+        assert "/api/v1/tr/account" not in JS
+
+    def test_exchange_agnostic_rendering(self):
+        # Yeni borsa eklemek UI değişikliği gerektirmez: kart
+        # genel alanlardan (nickname/logo/wallets) üretilir.
+        assert "a.nickname" in JS and "a.wallets" in JS
 
     def test_no_settings_controls(self):
         # Cüzdan panelinde ayar yok: sol panelde düğme üretilmez.
-        wallet_fn = JS[JS.index("function walletCard"):
+        wallet_fn = JS[JS.index("function renderWallets"):
                        JS.index("function renderTrades")]
         assert "<button" not in wallet_fn
 

@@ -2908,6 +2908,334 @@ def operation_center_page():
                              "operation_center")
 
 
+# ── Mission 2300 A03: Ayarlar → Hesaplarım ─────────────────────────
+# Hesap kayıt defteri sunum katmanıdır; işlem/otomasyon/risk
+# mantığına dokunmaz. Bakiyeler mevcut dashboard_api ve PAPER
+# defterinden okunur; bilinmeyen değer UNKNOWN kalır, asla tahmin
+# edilmez.
+
+@app.get("/settings/accounts")
+def my_accounts_page():
+    return _render_workspace("my_accounts.html", "my_accounts")
+
+
+def _accounts_json(ok: bool, data=None, error_code=None, message="OK",
+                   status=200):
+    return jsonify({"ok": ok, "data": data, "error_code": error_code,
+                    "message": message}), status
+
+
+def _accounts_load():
+    import accounts_registry as reg
+    return reg, reg.load_registry()
+
+
+def _automation_running() -> bool:
+    try:
+        cfg, _ = load_config()
+        return bool((cfg or {}).get("bot_enabled"))
+    except Exception:
+        return False
+
+
+@app.get("/api/accounts")
+def api_accounts_list():
+    import accounts_registry as reg
+    try:
+        accounts = reg.load_registry()
+    except reg.RegistryError as exc:
+        return _accounts_json(False, None, "REGISTRY_ERROR", str(exc),
+                              500)
+    return _accounts_json(True, {
+        "accounts": [reg.card_view(a) for a in accounts],
+        "execution_eligible": reg.execution_eligible(accounts),
+    })
+
+
+def _account_mutation(account_id: str, op):
+    """Kayıt defteri mutasyonu için ortak sterile sarmalayıcı."""
+    import accounts_registry as reg
+    try:
+        with reg.registry_lock():
+            accounts = reg.load_registry()
+            op(reg, accounts, account_id)
+            reg.save_registry(accounts)
+    except reg.RegistryError as exc:
+        return _accounts_json(False, None, "VALIDATION", str(exc), 400)
+    except OSError:
+        # Depolama hatası: sterile yapılandırılmış yanıt (ham istisna
+        # sızdırılmaz), 500.
+        return _accounts_json(False, None, "STORAGE_ERROR",
+                              "Kayıt defteri yazılamadı.", 500)
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   username=session.get("username", ""),
+                   detail=f"my-accounts {op.__name__} {account_id}")
+    return _accounts_json(True, {"account_id": account_id})
+
+
+@app.post("/api/accounts/<account_id>/connect")
+def api_accounts_connect(account_id: str):
+    def _op(reg, accounts, aid):
+        reg.connect(accounts, aid)
+    _op.__name__ = "connect"
+    return _account_mutation(account_id, _op)
+
+
+@app.post("/api/accounts/<account_id>/disconnect")
+def api_accounts_disconnect(account_id: str):
+    running = _automation_running()
+
+    def _op(reg, accounts, aid):
+        reg.disconnect(accounts, aid, automation_running=running)
+    _op.__name__ = "disconnect"
+    return _account_mutation(account_id, _op)
+
+
+@app.post("/api/accounts/<account_id>/primary")
+def api_accounts_primary(account_id: str):
+    def _op(reg, accounts, aid):
+        reg.set_primary(accounts, aid)
+    _op.__name__ = "set_primary"
+    return _account_mutation(account_id, _op)
+
+
+@app.post("/api/accounts/<account_id>/edit")
+def api_accounts_edit(account_id: str):
+    body = request.get_json(silent=True) or {}
+
+    def _op(reg, accounts, aid):
+        reg.edit(accounts, aid,
+                 nickname=body.get("nickname"),
+                 spot_enabled=body.get("spot_enabled"),
+                 futures_enabled=body.get("futures_enabled"))
+    _op.__name__ = "edit"
+    return _account_mutation(account_id, _op)
+
+
+def _paper_balance() -> str:
+    """PAPER defter bakiyesi (Decimal-str) veya UNKNOWN."""
+    try:
+        state = json.loads(
+            Path("alpha20_v1/state.json").read_text(encoding="utf-8"))
+        bal = state.get("balance")
+        if bal is None:
+            return "UNKNOWN"
+        return str(Decimal(str(bal)))
+    except (OSError, ValueError, ArithmeticError):
+        return "UNKNOWN"
+
+
+def _account_snapshot(exchange: str) -> dict:
+    """Bağlı bir hesabın cüzdanları + USDT değeri. Sır yok; ham
+    istisna yok; bilinmeyen değer UNKNOWN. Tahmin YASAK."""
+    import dashboard_api as dapi
+    if exchange == "PAPER":
+        bal = _paper_balance()
+        return {"status": "OK" if bal != "UNKNOWN" else "UNKNOWN",
+                "value_usdt": bal, "last_sync_at": "-",
+                "wallets": [{"name": "Simülasyon Defteri (USDT)",
+                             "balance": bal, "available": bal,
+                             "currency": "USDT"}]}
+    if exchange == "BINANCE_GLOBAL":
+        acc = dapi.global_account()
+        if not acc.get("ok"):
+            return {"status": (acc.get("meta") or {}).get(
+                        "freshness", "UNKNOWN"),
+                    "value_usdt": "UNKNOWN", "wallets": [],
+                    "last_sync_at": (acc.get("meta") or {}).get(
+                        "retrieved_at") or "UNKNOWN"}
+        return {"status": "OK",
+                "value_usdt": acc.get("usdt_wallet_balance",
+                                      "UNKNOWN"),
+                "last_sync_at": (acc.get("meta") or {}).get(
+                    "retrieved_at") or "UNKNOWN",
+                "wallets": [{"name": "Vadeli Cüzdanı (USDT-M)",
+                             "balance": acc.get("usdt_wallet_balance",
+                                                "UNKNOWN"),
+                             "available": acc.get(
+                                 "usdt_available_balance", "UNKNOWN"),
+                             "currency": "USDT"}]}
+    if exchange == "BINANCE_TR":
+        acc = dapi.tr_account()
+        if not acc.get("ok"):
+            return {"status": (acc.get("meta") or {}).get(
+                        "freshness", "UNKNOWN"),
+                    "value_usdt": "UNKNOWN", "wallets": [],
+                    "last_sync_at": (acc.get("meta") or {}).get(
+                        "retrieved_at") or "UNKNOWN"}
+        try:
+            usdt_total = str(Decimal(acc.get("usdt_free", "0")) +
+                             Decimal(acc.get("usdt_locked", "0")))
+            try_total = str(Decimal(acc.get("try_free", "0")) +
+                            Decimal(acc.get("try_locked", "0")))
+        except ArithmeticError:
+            usdt_total, try_total = "UNKNOWN", "UNKNOWN"
+        # TRY→USDT dönüşümü tahmin gerektirir; tahmin YASAK. TRY
+        # bakiyesi sıfır değilse toplam USDT değeri UNKNOWN kalır.
+        value = (usdt_total if try_total not in ("UNKNOWN",) and
+                 Decimal(try_total) == 0 and usdt_total != "UNKNOWN"
+                 else "UNKNOWN")
+        return {"status": "OK", "value_usdt": value,
+                "last_sync_at": (acc.get("meta") or {}).get(
+                    "retrieved_at") or "UNKNOWN",
+                "wallets": [
+                    {"name": "Spot Cüzdanı (USDT)",
+                     "balance": usdt_total,
+                     "available": acc.get("usdt_free", "UNKNOWN"),
+                     "currency": "USDT"},
+                    {"name": "Spot Cüzdanı (TRY)",
+                     "balance": try_total,
+                     "available": acc.get("try_free", "UNKNOWN"),
+                     "currency": "TRY"}]}
+    return {"status": "UNKNOWN", "value_usdt": "UNKNOWN",
+            "wallets": [], "last_sync_at": "UNKNOWN"}
+
+
+@app.get("/api/accounts/wallets")
+def api_accounts_wallets():
+    """Trading Home cüzdan panelinin TEK veri kaynağı: yalnız BAĞLI
+    kişisel hesaplar. Borsa sayfalarına doğrudan bağımlılık yok."""
+    import accounts_registry as reg
+    try:
+        accounts = reg.load_registry()
+    except reg.RegistryError as exc:
+        return _accounts_json(False, None, "REGISTRY_ERROR", str(exc),
+                              500)
+    out = []
+    for acc in accounts:
+        if not acc["connected"]:
+            continue
+        snap = _account_snapshot(acc["exchange"])
+        card = reg.card_view(acc)
+        out.append({
+            "account_id": acc["account_id"],
+            "nickname": acc["nickname"],
+            "display_name": card["display_name"],
+            "logo": card["logo"],
+            "primary": acc["primary"],
+            "status": snap["status"],
+            "value_usdt": snap["value_usdt"],
+            "wallet_count": len(snap["wallets"]),
+            "wallets": snap["wallets"],
+            "last_sync_at": snap.get("last_sync_at", "UNKNOWN"),
+        })
+    return _accounts_json(True, {"accounts": out})
+
+
+@app.get("/api/accounts/portfolio")
+def api_accounts_portfolio():
+    """Toplam portföy = bağlı hesapların toplamı. Bilinmeyen bileşen
+    varsa toplam UNKNOWN kalır — asla tahmin edilmez."""
+    import accounts_registry as reg
+    try:
+        accounts = reg.load_registry()
+    except reg.RegistryError as exc:
+        return _accounts_json(False, None, "REGISTRY_ERROR", str(exc),
+                              500)
+    components, total, unknown = [], Decimal("0"), False
+    for acc in accounts:
+        if not acc["connected"]:
+            continue
+        snap = _account_snapshot(acc["exchange"])
+        value = snap["value_usdt"]
+        components.append({"account_id": acc["account_id"],
+                           "nickname": acc["nickname"],
+                           "value_usdt": value})
+        if value == "UNKNOWN":
+            unknown = True
+        else:
+            try:
+                total += Decimal(value)
+            except ArithmeticError:
+                unknown = True
+    return _accounts_json(True, {
+        "components": components,
+        "total_usdt": "UNKNOWN" if unknown else str(total),
+        "note": ("Bir veya daha fazla hesap bakiyesi bilinmiyor; "
+                 "toplam tahmin edilmez." if unknown else "OK"),
+    })
+
+
+@app.post("/api/accounts/<account_id>/test")
+def api_accounts_test(account_id: str):
+    """Basit bağlantı testi. Yalnız sade durumlar; ham istisna yok."""
+    import accounts_registry as reg
+    import dashboard_api as dapi
+    try:
+        accounts = reg.load_registry()
+        acc = reg.find(accounts, account_id)
+    except reg.RegistryError as exc:
+        return _accounts_json(False, None, "VALIDATION", str(exc), 400)
+    conn = reg.CONNECTORS[acc["exchange"]]
+    checks = {"connected": "UNKNOWN", "authentication": "UNKNOWN",
+              "wallet_access": "UNKNOWN", "spot_permission": "UNKNOWN",
+              "futures_permission": "UNKNOWN",
+              "trading_permission": "UNKNOWN",
+              "synchronization": "UNKNOWN"}
+    if not conn.supported:
+        return _accounts_json(True, {"account_id": account_id,
+                                     "overall": "NOT_READY",
+                                     "checks": checks})
+    if acc["exchange"] == "PAPER":
+        bal = _paper_balance()
+        ok = bal != "UNKNOWN"
+        for key in checks:
+            checks[key] = "OK" if ok else "UNKNOWN"
+        checks["spot_permission"] = "NOT_SUPPORTED"
+        return _accounts_json(True, {
+            "account_id": account_id,
+            "overall": "HEALTHY" if ok else "UNKNOWN",
+            "checks": checks})
+    if acc["exchange"] == "BINANCE_GLOBAL":
+        res = dapi.global_account()
+        if res.get("ok"):
+            checks.update(connected="OK", authentication="OK",
+                          wallet_access="OK",
+                          futures_permission="OK",
+                          trading_permission=(
+                              "OK" if res.get("trading_key_auth") ==
+                              "OK" else "NOT_CONFIGURED"),
+                          synchronization="OK")
+        overall = "HEALTHY" if res.get("ok") else "FAILED"
+    else:  # BINANCE_TR
+        res = dapi.tr_account()
+        if res.get("ok"):
+            checks.update(connected="OK", authentication="OK",
+                          wallet_access="OK", spot_permission="OK",
+                          futures_permission="NOT_SUPPORTED",
+                          synchronization="OK")
+        overall = "HEALTHY" if res.get("ok") else "FAILED"
+    return _accounts_json(True, {"account_id": account_id,
+                                 "overall": overall,
+                                 "checks": checks})
+
+
+@app.post("/api/accounts/<account_id>/sync")
+def api_accounts_sync(account_id: str):
+    """Elle eşitleme: bakiyeleri tazeler ve eşitleme zamanını yazar.
+    Normal kullanımda otomatik yoklama yeterlidir."""
+    import accounts_registry as reg
+    try:
+        with reg.registry_lock():
+            accounts = reg.load_registry()
+            acc = reg.find(accounts, account_id)
+            if not acc["connected"]:
+                raise reg.RegistryError(
+                    "Bağlı olmayan hesap eşitlenemez.")
+            snap = _account_snapshot(acc["exchange"])
+            reg.touch_sync(accounts, account_id)
+            reg.save_registry(accounts)
+    except reg.RegistryError as exc:
+        return _accounts_json(False, None, "VALIDATION", str(exc), 400)
+    except OSError:
+        return _accounts_json(False, None, "STORAGE_ERROR",
+                              "Kayıt defteri yazılamadı.", 500)
+    return _accounts_json(True, {"account_id": account_id,
+                                 "status": snap["status"],
+                                 "wallet_count": len(snap["wallets"]),
+                                 "value_usdt": snap["value_usdt"]})
+
+
 @app.get("/api/operation-control/status")
 def api_operation_status():
     snapshot = _operation_snapshot()

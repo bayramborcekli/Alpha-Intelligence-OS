@@ -83,3 +83,61 @@ yanıt veren otonom yatırım panosuna dönüştürüldü (yine frontend-only).
 Test: 27 yeni PASS (dosya toplamı 109); tam regresyon
 **12.866 PASS + 1 skip, 0 FAIL**. Mimari inceleme: ilk turda 4 bulgu,
 tümü düzeltilip regresyon testiyle kilitlendi → **PASS**.
+
+---
+
+# Mission 2300 — Agent 03: Hesaplarım (My Accounts)
+
+Ayarlar → Hesaplarım: kullanıcının kendi yatırım hesaplarının
+yapılandırıldığı TEK yer. Alpha Intelligence borsa değildir; bağlı
+hesapları yöneten otonom yatırım işletim sistemidir.
+
+## Mimari
+
+- `accounts_registry.py` (saf modül): bağlayıcı kataloğu + kayıt
+  defteri (`alpha20_v1/accounts.json`, atomik yazma + fcntl süreçler
+  arası kilit). Yeni borsa = katalogda yeni kayıt; UI yeniden
+  tasarımı gerekmez.
+- Bağlayıcılar: PAPER, Binance Global, Binance TR (hazır);
+  Bybit, OKX (bağlayıcı hazır değil — dürüstçe devre dışı, sahte
+  Bağlan düğmesi yok).
+- Sır İLKESİ: kayıt defteri sır SAKLAMAZ. Binance anahtarları ortam
+  sırlarında yaşar; API yalnız maskeli anahtar döndürür
+  (ABCD****XY89), gizli anahtar hiçbir zaman gösterilmez, panoya
+  kopyalama engelli.
+
+## Uçlar (CSRF+auth korumalı)
+
+- GET `/api/accounts`, `/api/accounts/wallets`,
+  `/api/accounts/portfolio`
+- POST `/api/accounts/<id>/{connect,disconnect,primary,edit,test,sync}`
+- Bağlantı testi mevcut dashboard_api sonuçlarını sade durumlara
+  eşler (ham istisna yok). Depolama hatası sterile STORAGE_ERROR.
+
+## Kurallar
+
+- Tam olarak BİR birincil hesap; birincilin bağlantısı kesilemez;
+  otomasyon çalışırken yürütme defteri (PAPER) kesilemez; bağlantısı
+  kesik/hazır olmayan hesap birincil olamaz ve otomasyon uygunluk
+  listesine (`execution_eligible`) asla girmez.
+- Toplam portföy = bağlı hesapların Decimal toplamı; herhangi bir
+  bileşen bilinmiyorsa toplam UNKNOWN — asla tahmin edilmez
+  (TRY→USDT dönüşümü tahmin gerektirdiğinden TRY≠0 iken hesap değeri
+  UNKNOWN kalır).
+
+## Trading Home entegrasyonu
+
+Cüzdan paneli artık YALNIZ `/api/accounts/wallets`'tan okur;
+`/api/v1/global/account` ve `/api/v1/tr/account` doğrudan çağrıları
+kaldırıldı. Kart, borsa-bağımsız alanlardan üretilir — yeni borsa
+Trading Home değişikliği gerektirmez. Yerleşim değişmedi.
+
+## Test ve inceleme
+
+- 81 yeni PASS (`tests/test_mission2300_my_accounts.py` + Trading
+  Home test güncellemeleri); yazma-yüzeyi kilidi bilinçli genişletme
+  yorumuyla güncellendi.
+- Tam regresyon: **12.918 PASS + 1 skip, 0 FAIL**.
+- Mimari inceleme: **PASS**; iki sağlamlaştırma önerisi (sterile
+  depolama hatası + süreçler arası kilit) uygulandı ve testle
+  kilitlendi.

@@ -1,0 +1,91 @@
+{% extends "dash_base.html" %}
+{% block title %}Hesaplarım{% endblock %}
+{% block heading %}⚙️ Hesaplarım{% endblock %}
+{% block subheading %}Yatırım hesaplarınızı bir kez bağlayın; Alpha Intelligence gerisini otomatik yönetir. Burası hesap yapılandırmasının TEK yeridir.{% endblock %}
+
+{% block content %}
+<style>
+  .ma-grid { display:grid; gap:12px;
+      grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); }
+  .ma-card { background:var(--card,#14161c); border:1px solid
+      var(--line,#2a2d36); border-radius:12px; padding:16px; }
+  .ma-card.disconnected { opacity:.75; }
+  .ma-head { display:flex; align-items:center; gap:10px;
+      margin-bottom:10px; }
+  .ma-logo { font-size:1.6rem; }
+  .ma-name { font-weight:800; font-size:1.05rem; }
+  .ma-nick { color:var(--muted,#8b90a0); font-size:.8rem; }
+  .ma-badge { display:inline-block; padding:2px 10px;
+      border-radius:999px; font-size:.7rem; font-weight:700;
+      margin-left:auto; }
+  .ma-badge.ok { background:#153322; color:#3fbf7f; }
+  .ma-badge.off { background:#20232c; color:#9aa0ae; }
+  .ma-badge.warn { background:#33291a; color:#d9a441; }
+  .ma-badge.primary { background:#1b2430; color:#5ab0e0;
+      margin-left:6px; }
+  .ma-rows { font-size:.82rem; }
+  .ma-rows .row { display:flex; justify-content:space-between;
+      gap:8px; padding:3px 0; border-bottom:1px dashed
+      var(--line,#2a2d36); }
+  .ma-rows .row span:first-child { color:var(--muted,#8b90a0); }
+  .ma-key { font-family:monospace; user-select:none; }
+  .ma-actions { display:flex; flex-wrap:wrap; gap:6px;
+      margin-top:12px; }
+  .ma-btn { border:1px solid var(--line,#2a2d36);
+      background:var(--soft,#1b1e26); color:inherit; border-radius:7px;
+      padding:5px 10px; cursor:pointer; font-size:.76rem; }
+  .ma-btn:disabled { opacity:.4; cursor:not-allowed; }
+  .ma-btn.danger { border-color:#7a2e2e; color:#e05656; }
+  .ma-btn.accent { border-color:#2b4a6f; color:#5ab0e0; }
+  .ma-note { color:var(--muted,#8b90a0); font-size:.74rem;
+      margin-top:8px; }
+  .ma-unknown { color:#9aa0ae; }
+  #ma-total { font-size:1.2rem; font-weight:800; }
+  .ma-test { margin-top:8px; font-size:.76rem; }
+  .ma-test span { display:inline-block; margin:2px 6px 2px 0;
+      padding:1px 8px; border-radius:999px; background:#20232c; }
+  .ma-test span.ok { background:#153322; color:#3fbf7f; }
+  dialog.ma-dialog { background:var(--card,#14161c); color:inherit;
+      border:1px solid var(--line,#2a2d36); border-radius:10px;
+      max-width:420px; }
+  dialog.ma-dialog input { width:100%; margin:6px 0;
+      background:var(--soft,#1b1e26); color:inherit; border:1px solid
+      var(--line,#2a2d36); border-radius:6px; padding:6px 8px; }
+</style>
+
+<section class="ma-card" style="margin-bottom:12px" aria-labelledby="ma-h-total">
+  <h2 id="ma-h-total" style="margin:0 0 6px;font-size:.85rem;
+      text-transform:uppercase;color:var(--muted,#8b90a0)">
+    Toplam Portföy (bağlı hesapların toplamı)</h2>
+  <div id="ma-total" class="ma-unknown">UNKNOWN</div>
+  <div class="ma-note" id="ma-total-note">Bilinmeyen bakiye UNKNOWN
+    kalır; asla tahmin edilmez.</div>
+</section>
+
+<div class="ma-grid" id="ma-accounts" aria-live="polite">
+  <div class="ma-card">Yükleniyor…</div>
+</div>
+
+<p class="ma-note">Gizli anahtarlar hiçbir zaman görüntülenmez ve bu
+sayfada saklanmaz; Binance kimlik bilgileri ortam sırlarında yaşar.
+Panoya kopyalama devre dışıdır. Hazır olmayan bağlayıcılar dürüstçe
+devre dışı gösterilir — sahte düğme yoktur.</p>
+
+<dialog class="ma-dialog" id="ma-edit-dialog">
+  <form method="dialog">
+    <h3>Hesabı Düzenle</h3>
+    <label>Takma Ad
+      <input id="ma-edit-nickname" maxlength="40" required></label>
+    <label><input type="checkbox" id="ma-edit-spot"> Spot Etkin</label>
+    <label style="display:block"><input type="checkbox"
+        id="ma-edit-futures"> Vadeli Etkin</label>
+    <p style="text-align:right">
+      <button value="cancel" class="ma-btn">Vazgeç</button>
+      <button value="ok" class="ma-btn accent">Kaydet</button>
+    </p>
+  </form>
+</dialog>
+
+<script>window.MA_CSRF = "{{ csrf_token() }}";</script>
+<script src="{{ url_for('static', filename='js/my_accounts.js') }}"></script>
+{% endblock %}

@@ -57,53 +57,37 @@
     return m + " dk";
   }
 
-  // ── Cüzdanlar (sol) — mevcut hesap uçlarından ──────────────────
+  // ── Cüzdanlar (sol) — TEK kaynak: bağlı kişisel hesaplar ───────
+  // (Mission 2300 A03: /api/accounts/wallets; borsa sayfalarına
+  // doğrudan bağımlılık yok, yeni borsa = UI değişikliği yok.)
 
-  function walletCard(name, fields, status, lastSync) {
-    var rows = fields.map(function (f) {
-      return "<div class=\"row\"><span>" + esc(f[0]) + "</span><span>" +
-        esc(f[1]) + "</span></div>";
-    }).join("");
-    return "<div class=\"th-wallet\"><div class=\"name\">" + esc(name) +
-      "</div>" + rows +
-      "<div class=\"row\"><span>Durum</span><span class=\"" +
-      (status === "OK" ? "th-profit" : "th-unknown") + "\">" +
-      esc(status) + "</span></div>" +
-      "<div class=\"row\"><span>Son Eşitleme</span><span>" +
-      esc(lastSync) + "</span></div></div>";
-  }
-
-  function renderWallets(globalAcc, trAcc) {
+  function renderWallets(accounts) {
     var el = document.getElementById("th-wallets");
     if (!el) return;
-    var cards = "";
-    if (globalAcc && globalAcc.ok) {
-      cards += walletCard("Binance Global (Vadeli)", [
-        ["Bakiye", globalAcc.wallet_balance_usdt ||
-                   globalAcc.total_wallet_balance || null],
-        ["Kullanılabilir", globalAcc.available_balance_usdt ||
-                           globalAcc.available_balance || null]
-      ], "OK", (globalAcc.meta || {}).retrieved_at);
-    } else {
-      cards += walletCard("Binance Global (Vadeli)",
-        [["Bakiye", null], ["Kullanılabilir", null]],
-        ((globalAcc || {}).meta || {}).freshness || "UNKNOWN",
-        ((globalAcc || {}).meta || {}).retrieved_at);
+    if (!accounts || !accounts.length) {
+      el.innerHTML = "<div class=\"th-empty\">Bağlı hesap yok. " +
+        "Ayarlar · Hesaplarım'dan hesap bağlayın.</div>";
+      setText("th-wallet-conn", null);
+      return;
     }
-    if (trAcc && trAcc.ok) {
-      cards += walletCard("Binance TR", [
-        ["Bakiye (TRY)", trAcc.try_total || trAcc.try_free || null],
-        ["Kullanılabilir (TRY)", trAcc.try_free || null]
-      ], trAcc.auth_status === "OK" ? "OK" : esc(trAcc.auth_status),
-        (trAcc.meta || {}).retrieved_at);
-    } else {
-      cards += walletCard("Binance TR",
-        [["Bakiye (TRY)", null], ["Kullanılabilir (TRY)", null]],
-        ((trAcc || {}).meta || {}).freshness || "UNKNOWN",
-        ((trAcc || {}).meta || {}).retrieved_at);
-    }
-    el.innerHTML = cards;
-    var anyOk = (globalAcc && globalAcc.ok) || (trAcc && trAcc.ok);
+    el.innerHTML = accounts.map(function (a) {
+      var rows = (a.wallets || []).map(function (w) {
+        return "<div class=\"row\"><span>" + esc(w.name) +
+          "</span><span>" + esc(w.balance) + "</span></div>";
+      }).join("");
+      return "<div class=\"th-wallet\"><div class=\"name\">" +
+        esc(a.logo) + " " + esc(a.nickname) +
+        (a.primary ? " ★" : "") + "</div>" + rows +
+        "<div class=\"row\"><span>Durum</span><span class=\"" +
+        (a.status === "OK" ? "th-profit" : "th-unknown") + "\">" +
+        esc(a.status === "OK" ? "Bağlı" : a.status) +
+        "</span></div>" +
+        "<div class=\"row\"><span>Son Eşitleme</span><span>" +
+        esc(a.last_sync_at) + "</span></div></div>";
+    }).join("");
+    var anyOk = accounts.some(function (a) {
+      return a.status === "OK";
+    });
     setText("th-wallet-conn", anyOk ? "BAĞLI" : "UNKNOWN",
             anyOk ? "th-profit" : "th-unknown");
   }
@@ -326,8 +310,7 @@
       get("/api/operation-control/signals"),
       get("/api/operation-control/workspace/portfolio"),
       get("/api/operation-control/workspace/journal"),
-      get("/api/v1/global/account"),
-      get("/api/v1/tr/account")
+      get("/api/accounts/wallets")
     ]).then(function (r) {
       function data(i, key) {
         var b = r[i].body;
@@ -339,7 +322,7 @@
       renderQueue(data(3, "products"), data(2, "orders"),
                   data(1, "positions"), data(4, "signals"));
       renderActivity(data(6, "journal"));
-      renderWallets(r[7].body, r[8].body);
+      renderWallets(data(7, "accounts"));
       inflight = false;
     }, function () { inflight = false; });
   }
