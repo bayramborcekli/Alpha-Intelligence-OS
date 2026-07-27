@@ -111,8 +111,8 @@
       kv("Nakit", p.cash) +
       kv("Özkaynak", p.equity) +
       kv("Günlük PnL", p.daily_pnl, pnlClass(p.daily_pnl)) +
-      kv("Haftalık PnL", p.weekly_pnl, pnlClass(p.weekly_pnl)) +
-      kv("Aylık PnL", p.monthly_pnl, pnlClass(p.monthly_pnl)) +
+      kv("Son 7 Gün PnL", p.weekly_pnl, pnlClass(p.weekly_pnl)) +
+      kv("Son 30 Gün PnL", p.monthly_pnl, pnlClass(p.monthly_pnl)) +
       kv("Açık Risk", p.open_risk) +
       kv("Maruziyet", p.exposure) +
       kv("Düşüş %", p.drawdown_pct, pnlClass(p.drawdown_pct === null ? null : -parseFloat(p.drawdown_pct))) +
@@ -142,8 +142,8 @@
       kv("Maks. Düşüş %", p.max_drawdown_pct) +
       kv("Ort. Tutma", holdText(p.average_hold_seconds)) +
       kv("Günlük Kâr", p.daily_profit, pnlClass(p.daily_profit)) +
-      kv("Haftalık Kâr", p.weekly_profit, pnlClass(p.weekly_profit)) +
-      kv("Aylık Kâr", p.monthly_profit, pnlClass(p.monthly_profit)) +
+      kv("Son 7 Gün Kâr", p.weekly_profit, pnlClass(p.weekly_profit)) +
+      kv("Son 30 Gün Kâr", p.monthly_profit, pnlClass(p.monthly_profit)) +
       kv("Düşen Kayıt", p.dropped_records,
          p.dropped_records > 0 ? "ows-pending" : "");
   }

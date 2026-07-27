@@ -106,7 +106,7 @@ class TestLayoutPanels:
 
     @pytest.mark.parametrize("label", [
         "Portföy Değeri", "Nakit", "Özkaynak", "Günlük PnL",
-        "Haftalık PnL", "Aylık PnL", "Açık Risk", "Maruziyet",
+        "Son 7 Gün PnL", "Son 30 Gün PnL", "Açık Risk", "Maruziyet",
         "Düşüş %", "En Büyük Kazanan", "En Büyük Kaybeden"])
     def test_portfolio_labels_rendered_by_client(self, label):
         assert label in WS_JS
@@ -114,7 +114,7 @@ class TestLayoutPanels:
     @pytest.mark.parametrize("label", [
         "İşlem Sayısı", "Kazanma Oranı %", "Ort. Kazanç",
         "Ort. Kayıp", "Kâr Faktörü", "Sharpe", "Maks. Düşüş %",
-        "Ort. Tutma", "Günlük Kâr", "Haftalık Kâr", "Aylık Kâr"])
+        "Ort. Tutma", "Günlük Kâr", "Son 7 Gün Kâr", "Son 30 Gün Kâr"])
     def test_performance_labels_rendered_by_client(self, label):
         assert label in WS_JS
 
