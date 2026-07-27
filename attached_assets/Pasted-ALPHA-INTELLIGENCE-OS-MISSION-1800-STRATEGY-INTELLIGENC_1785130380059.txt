@@ -1,0 +1,306 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1800 — STRATEGY INTELLIGENCE
+
+AGENT 07 — SECURITY VERIFICATION
+
+ROLE
+
+You are the Security Verification Agent for Mission 1800.
+
+Perform a full security verification of the completed Strategy Intelligence
+stack.
+
+This agent SHALL NOT introduce new functionality.
+
+This is a verification-only mission.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1700
+
+OFFICIALLY CLOSED
+
+Mission 1800
+
+Agent 01 — PASS
+
+Agent 02 — PASS
+
+Agent 03 — PASS
+
+Agent 04 — PASS
+
+Agent 05 — PASS
+
+Agent 06 — PASS
+
+Baseline Commit
+
+<Agent 06 HEAD>
+
+Regression Baseline
+
+<Agent 06 final PASS>
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Verify the complete Strategy Intelligence stack:
+
+Core
+
+Service
+
+API
+
+UI
+
+Export
+
+No production behavior changes unless required to fix a verified security issue.
+
+────────────────────────────────────────
+3. FILES
+
+Create:
+
+tests/test_mission1800_strategy_security.py
+
+Production files SHALL remain unchanged unless a verified security defect
+requires remediation.
+
+────────────────────────────────────────
+4. VERIFICATION SCOPE
+
+Verify:
+
+• Layer isolation
+
+• Dependency direction
+
+• Read-only architecture
+
+• No execution surface
+
+• No persistence
+
+• No Exchange connectivity
+
+• No broker SDK usage
+
+• No filesystem writes
+
+• No temporary files
+
+• No network clients
+
+• No subprocess usage
+
+• No thread creation
+
+• No provider leakage
+
+• Sterile error model
+
+• Immutable proposal flow
+
+• Deterministic behavior preserved
+
+────────────────────────────────────────
+5. STATIC ANALYSIS
+
+Verify through AST/source inspection:
+
+Forbidden imports:
+
+flask (outside API)
+
+requests
+
+socket
+
+subprocess
+
+threading
+
+multiprocessing
+
+tempfile
+
+os.system
+
+broker SDKs
+
+exchange SDKs
+
+Forbidden calls:
+
+open(..., "w")
+
+open(..., "a")
+
+eval
+
+exec
+
+compile
+
+__import__
+
+append_snapshot
+
+workspace writes
+
+timeline writes
+
+HTTP clients
+
+UUID generation outside API
+
+datetime generation outside API
+
+Randomness
+
+Math in Service/UI/API
+
+────────────────────────────────────────
+6. DYNAMIC VERIFICATION
+
+Verify runtime:
+
+Repeated identical inputs produce identical outputs.
+
+No hidden mutable state.
+
+No file creation.
+
+No network traffic.
+
+No execution attempts.
+
+No persistence.
+
+Read-only API/UI behavior.
+
+proposal_id and generated_at exist only at API boundary.
+
+────────────────────────────────────────
+7. SECURITY TESTS
+
+Create tests covering:
+
+AST verification
+
+Import whitelist
+
+Forbidden imports
+
+Forbidden calls
+
+No Exchange
+
+No broker adapters
+
+No persistence
+
+No temp files
+
+No sockets
+
+No subprocess
+
+No threads
+
+Sterile errors
+
+No provider leakage
+
+Read-only API
+
+Immutable proposal path
+
+Determinism
+
+Target:
+
+30+ new tests
+
+100% PASS
+
+────────────────────────────────────────
+8. DELIVERY REPORT
+
+── VERIFIED FILES ──
+
+── SECURITY RESULTS ──
+
+── STATIC ANALYSIS ──
+
+── DYNAMIC VERIFICATION ──
+
+── TESTS ──
+
+── PRODUCTION CODE CHANGES ──
+
+None (unless required)
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+────────────────────────────────────────
+9. PASS CRITERIA
+
+PASS requires:
+
+• All Strategy layers verified
+
+• No execution path discovered
+
+• No persistence discovered
+
+• No Exchange connectivity
+
+• No filesystem/network writes
+
+• proposal_id and generated_at only at API
+
+• Determinism preserved
+
+• 30+ security tests PASS
+
+• Regression remains PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+Mission 1800 proceeds to Agent 08 only after Agent 07 passes.
