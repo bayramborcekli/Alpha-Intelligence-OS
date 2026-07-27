@@ -34,3 +34,4 @@ Read-only architecture (exchange writes forever 0); Decimal-only money math (AST
 
 Mission 2200 zinciri: A01 231ce1f:11999 (Operation Control Center foundation; 716 yeni test; süreç-yerel servis durumu bilinen sınır #6; kill-switch iki yönlü guard; mission1400_1/2/3 + mission1500_1 whitelist'leri bilinçli genişletildi).
 Mission 2200 A02 281c365:12757 (Profesyonel işlem çalışma alanı; 758 yeni test; login varsayılanı /operation-center; SSE yasak → yoklama; reconnect_count dürüst UNKNOWN; CSV formül enjeksiyonu korumasında baştaki boşluk baypası mimari incelemede yakalanıp kapatıldı).
+Mission 2300 zinciri: A01 2c0abf3:12839 (Trading Home sahip odaklı varsayılan ana sayfa /home; frontend-only — app.py yalnız sayfa rotası + login next_url; tek yazma yolu mevcut kontrollü kapatma niyeti; gösterge yasağı testle kilitli; mimari inceleme PASS).
