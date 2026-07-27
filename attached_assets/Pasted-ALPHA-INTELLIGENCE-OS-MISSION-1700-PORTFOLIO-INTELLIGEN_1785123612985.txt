@@ -1,0 +1,395 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1700 — PORTFOLIO INTELLIGENCE
+
+AGENT 05 — UI
+
+ROLE
+
+You are the UI Agent for Mission 1700.
+
+Implement the Portfolio Intelligence user interface exactly on top of the
+approved Mission 1700 Architecture, Agent 02 Core, Agent 03 Service Layer,
+and Agent 04 API.
+
+Do not redesign previous layers.
+
+Do not introduce execution capability.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1600
+
+OFFICIALLY CLOSED
+
+Mission 1700
+
+Agent 01 — PASS
+Agent 02 — PASS
+Agent 03 — PASS
+Agent 04 — PASS
+
+Baseline Commit
+
+f8535a6
+
+Regression Baseline
+
+1215 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+This baseline must remain fully compatible.
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement the Portfolio Intelligence UI.
+
+The UI shall:
+
+• visualize PortfolioAnalysis
+
+• consume only the Agent 04 API
+
+• remain advisory-only
+
+• remain read-only
+
+The UI SHALL NOT:
+
+• perform portfolio calculations
+
+• call Core directly
+
+• call Service directly
+
+• access providers directly
+
+• write Workspace
+
+• write Timeline
+
+• call append_snapshot()
+
+• call Exchange
+
+• submit orders
+
+• modify Risk Engine
+
+────────────────────────────────────────
+3. FILES
+
+Create only the minimum UI components required by the existing repository.
+
+Examples (adapt to repo conventions):
+
+portfolio_intelligence.html
+
+portfolio_intelligence.js
+
+portfolio_intelligence.css
+
+tests/test_mission1700_portfolio_ui.py
+
+Modify existing UI registration only if required.
+
+────────────────────────────────────────
+4. UI CONTRACT
+
+The UI consumes ONLY:
+
+GET /api/portfolio/intelligence
+
+(or the repository's canonical equivalent)
+
+The UI must never consume Core or Service directly.
+
+No business logic duplication.
+
+────────────────────────────────────────
+5. DISPLAY MODEL
+
+Render at minimum:
+
+• Overall Portfolio Health
+
+• NAV
+
+• Cash
+
+• Allocation
+
+• Exposure
+
+• Positions
+
+• Performance
+
+• Risk Summary
+
+• Diversification metrics
+
+• Source status
+
+Display:
+
+analysis_version
+
+generated_at
+
+status
+
+read_only
+
+advisory_only
+
+Unknown values remain visibly unknown.
+
+Do not display unknown values as zero.
+
+────────────────────────────────────────
+6. VISUAL STATES
+
+Support:
+
+Loading
+
+OK
+
+PARTIAL
+
+UNAVAILABLE
+
+API Error
+
+Each state must be deterministic.
+
+UNAVAILABLE must not resemble healthy data.
+
+────────────────────────────────────────
+7. PRESENTATION RULES
+
+Health score:
+
+0–100
+
+Use repository styling conventions.
+
+Risk violations are advisory.
+
+No trade recommendation.
+
+No BUY / SELL actions.
+
+No execution buttons.
+
+No order entry.
+
+No editable portfolio fields.
+
+────────────────────────────────────────
+8. SECURITY
+
+UI must never expose:
+
+provider internals
+
+stack traces
+
+secret values
+
+exception text
+
+filesystem paths
+
+Risk Engine internals
+
+Exchange internals
+
+────────────────────────────────────────
+9. DETERMINISM
+
+Same API payload
+
+↓
+
+Identical rendered state.
+
+No random.
+
+No hidden timestamps.
+
+No client-side calculations beyond formatting.
+
+No mutation of API payload.
+
+────────────────────────────────────────
+10. ACCESSIBILITY
+
+Follow existing UI conventions.
+
+Meaningful labels.
+
+Deterministic ordering.
+
+Readable handling of null values.
+
+────────────────────────────────────────
+11. TESTS
+
+Create comprehensive tests covering at least:
+
+• UI loads
+
+• API consumption
+
+• loading state
+
+• OK state
+
+• PARTIAL state
+
+• UNAVAILABLE state
+
+• API error state
+
+• null preservation
+
+• advisory_only displayed
+
+• read_only displayed
+
+• analysis_version displayed
+
+• generated_at displayed
+
+• health displayed
+
+• allocation displayed
+
+• exposure displayed
+
+• positions displayed
+
+• diversification displayed
+
+• source status displayed
+
+• no execution controls
+
+• no BUY/SELL buttons
+
+• no editable controls
+
+• no Core calls
+
+• no Service calls
+
+• deterministic rendering
+
+• no provider internals
+
+• backward compatibility
+
+• full regression
+
+────────────────────────────────────────
+12. DELIVERY REPORT
+
+── CREATED FILES ──
+
+── MODIFIED FILES ──
+
+── UI CONTRACT ──
+
+── API INTEGRATION ──
+
+── VISUAL STATES ──
+
+── RENDER MODEL ──
+
+── DETERMINISM VERIFICATION ──
+
+── SECURITY VERIFICATION ──
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0 hedeflenir
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 06 — Export
+
+────────────────────────────────────────
+13. PASS CRITERIA
+
+PASS requires:
+
+• Portfolio Intelligence UI implemented
+
+• UI consumes only the API
+
+• No Core or Service dependency
+
+• Advisory-only presentation
+
+• Read-only presentation
+
+• All PortfolioAnalysis fields rendered correctly
+
+• Unknown values preserved
+
+• Loading/OK/PARTIAL/UNAVAILABLE/API Error states implemented
+
+• No execution controls
+
+• No editable portfolio controls
+
+• No BUY/SELL functionality
+
+• Deterministic rendering
+
+• No provider internals exposed
+
+• All new tests PASS
+
+• Full regression PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+• Commit created and pushed to GitHub
+
+MISSION 1700 continues only after Agent 05 passes.
