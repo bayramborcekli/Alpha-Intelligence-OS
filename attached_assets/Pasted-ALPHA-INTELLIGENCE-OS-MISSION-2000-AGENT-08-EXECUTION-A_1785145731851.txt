@@ -1,0 +1,521 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2000
+
+AGENT 08
+
+EXECUTION API
+
+ROLE
+
+Implement the canonical Execution API boundary.
+
+Execution API SHALL be the ONLY public write entry point
+into the Execution subsystem.
+
+It SHALL NOT implement HTTP.
+
+It SHALL NOT implement REST.
+
+It SHALL NOT implement WebSocket.
+
+It SHALL expose only the canonical execution contract.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 2000
+
+Agent 07 PASS
+
+Use exactly:
+
+• commit hash
+• regression count
+• test totals
+• architecture certification
+
+from Agent 07.
+
+Do not invent values.
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Freeze the public execution interface.
+
+The Execution API SHALL:
+
+• validate incoming requests
+• translate API request models
+• invoke Execution Service exactly once
+• normalize service responses
+• expose immutable API models
+• hide internal implementation
+
+Execution API SHALL contain
+
+NO business logic.
+
+────────────────────────────────────────
+3. FILES
+
+Create
+
+execution_api.py
+
+execution_api_models.py
+
+execution_api_mapper.py
+
+tests/test_execution_api.py
+
+Update
+
+test_mission_2000_architecture.py
+
+mark
+
+execution_api.py
+
+as delivered.
+
+────────────────────────────────────────
+4. ARCHITECTURE
+
+Strategy
+
+↓
+
+Execution API
+
+↓
+
+Execution Service
+
+↓
+
+Risk Engine
+
+↓
+
+Permission Gate
+
+↓
+
+Kill Switch
+
+↓
+
+BrokerAdapter
+
+↓
+
+Broker
+
+Execution API SHALL know ONLY
+
+Execution Service.
+
+────────────────────────────────────────
+5. RESPONSIBILITY
+
+Execution API SHALL
+
+✓ validate API models
+
+✓ map requests
+
+✓ call Execution Service
+
+✓ map responses
+
+✓ normalize errors
+
+Execution API SHALL NOT
+
+calculate risk
+
+resize orders
+
+enable Kill Switch
+
+inspect Broker
+
+inspect Binance
+
+generate IDs
+
+retry
+
+persist
+
+cache
+
+call network
+
+────────────────────────────────────────
+6. API REQUEST
+
+Create immutable
+
+ExecutionApiRequest
+
+Fields
+
+execution_request
+
+broker_id
+
+account_id
+
+portfolio_id
+
+strategy_id
+
+request_id
+
+correlation_id
+
+idempotency_key
+
+execution_mode
+
+logical_sequence
+
+Import canonical models.
+
+Do not duplicate.
+
+────────────────────────────────────────
+7. API RESPONSE
+
+Create immutable
+
+ExecutionApiResponse
+
+Closed status enum.
+
+Suggested
+
+SUCCESS
+
+VALIDATION_FAILED
+
+REJECTED
+
+NOT_SUBMITTED
+
+SUBMITTED
+
+BROKER_FAILURE
+
+UNKNOWN_FAILURE
+
+Carry
+
+ExecutionServiceResult
+
+without exposing internals.
+
+────────────────────────────────────────
+8. MAPPING
+
+ExecutionApiMapper
+
+ExecutionApiRequest
+
+↓
+
+ExecutionServiceRequest
+
+ExecutionServiceResult
+
+↓
+
+ExecutionApiResponse
+
+No broker payload.
+
+No HTTP object.
+
+No SDK object.
+
+────────────────────────────────────────
+9. VALIDATION
+
+Validate
+
+required identifiers
+
+idempotency
+
+execution mode
+
+logical sequence
+
+Reject before Execution Service.
+
+Execution Service SHALL NOT be called
+
+when API validation fails.
+
+────────────────────────────────────────
+10. EXECUTION CONTRACT
+
+Approved public method
+
+async execute(
+    request: ExecutionApiRequest
+)
+
+↓
+
+ExecutionApiResponse
+
+Exactly one public write method.
+
+────────────────────────────────────────
+11. ERROR BOUNDARY
+
+Normalize
+
+ExecutionServiceError
+
+↓
+
+ExecutionApiResponse
+
+Never expose
+
+stack trace
+
+native exception
+
+broker exception
+
+transport exception
+
+────────────────────────────────────────
+12. DETERMINISM
+
+Same request
+
++
+
+same service response
+
+↓
+
+same API response.
+
+No randomness.
+
+No UUID.
+
+No datetime.now.
+
+────────────────────────────────────────
+13. SECURITY
+
+Forbidden
+
+HTTP
+
+FastAPI
+
+Flask
+
+Django
+
+aiohttp
+
+requests
+
+httpx
+
+WebSocket
+
+filesystem
+
+env
+
+secret
+
+API key
+
+retry
+
+thread
+
+process
+
+sleep
+
+────────────────────────────────────────
+14. PUBLIC API
+
+Freeze exports
+
+ExecutionApi
+
+ExecutionApiRequest
+
+ExecutionApiResponse
+
+ExecutionApiStatus
+
+ExecutionApiMapper
+
+ExecutionApiError
+
+ExecutionApiContractError
+
+ExecutionApiConfigurationError
+
+────────────────────────────────────────
+15. TESTS
+
+Minimum
+
+220 focused tests.
+
+Verify
+
+public API freeze
+
+single execute()
+
+mapping
+
+validation
+
+no duplicate models
+
+Execution Service called once
+
+Execution Service not called after validation failure
+
+immutable models
+
+closed enums
+
+no HTTP
+
+no network
+
+no retries
+
+no UUID
+
+no datetime
+
+no randomness
+
+no broker logic
+
+no Kill Switch logic
+
+no Risk logic
+
+error normalization
+
+AST checks
+
+architecture certification
+
+full regression
+
+────────────────────────────────────────
+16. DELIVERY
+
+Return
+
+── CREATED FILES ──
+
+List
+
+── EXECUTION API ──
+
+Summary
+
+── REQUEST MODEL ──
+
+Summary
+
+── RESPONSE MODEL ──
+
+Summary
+
+── API MAPPER ──
+
+Summary
+
+── VALIDATION ──
+
+Summary
+
+── ERROR BOUNDARY ──
+
+Summary
+
+── PUBLIC API ──
+
+Summary
+
+── SAFETY ──
+
+Summary
+
+── TEST RESULTS ──
+
+PASS
+
+── TOTAL REGRESSION ──
+
+PASS
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+GitHub push
+
+────────────────────────────────────────
+17. PASS
+
+PASS requires
+
+• canonical Execution API complete
+
+• exactly one public execute()
+
+• Execution Service called exactly once
+
+• validation before service
+
+• immutable API models
+
+• no HTTP
+
+• no REST
+
+• no WebSocket
+
+• no broker logic
+
+• ≥220 tests PASS
+
+• regression PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
