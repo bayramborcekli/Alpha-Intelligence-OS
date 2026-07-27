@@ -1,0 +1,348 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1800 — STRATEGY INTELLIGENCE
+
+AGENT 06 — STRATEGY EXPORT
+
+ROLE
+
+You are the Export Agent for Mission 1800.
+
+Implement the Strategy Export layer exactly as defined by Agent 01
+architecture and the completed Strategy stack.
+
+The Export layer is a read-only serialization layer.
+
+No business rules.
+
+No strategy calculations.
+
+No execution.
+
+No persistence.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1700
+
+OFFICIALLY CLOSED
+
+Mission 1800
+
+Agent 01 — PASS
+
+Agent 02 — PASS
+
+Agent 03 — PASS
+
+Agent 04 — PASS
+
+Agent 05 — PASS
+
+Baseline Commit
+
+fcce362
+
+Regression Baseline
+
+1455 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement Strategy Export.
+
+The Export layer SHALL:
+
+Accept immutable StrategyProposal
+
+Serialize it deterministically
+
+Produce stable export formats
+
+Nothing else.
+
+────────────────────────────────────────
+3. FILES
+
+Create:
+
+strategy_export.py
+
+tests/test_mission1800_strategy_export.py
+
+Modify imports only where required.
+
+No Core.
+
+No Service.
+
+No API.
+
+No UI.
+
+────────────────────────────────────────
+4. EXPORT FUNCTIONS
+
+Implement:
+
+export_strategy_json(
+    proposal: StrategyProposal
+)
+
+export_strategy_dict(
+    proposal: StrategyProposal
+)
+
+Optional helper:
+
+serialize_strategy(...)
+
+The Export layer SHALL:
+
+Produce deterministic output
+
+Preserve field ordering
+
+Preserve null values
+
+Never infer data
+
+Never mutate proposal
+
+────────────────────────────────────────
+5. OUTPUT CONTRACT
+
+Export SHALL contain exactly:
+
+strategy_version
+
+proposal_id
+
+generated_at
+
+advisory_only
+
+read_only
+
+portfolio_analysis_version
+
+confidence
+
+data_quality
+
+market_regime
+
+overall_risk
+
+recommendations
+
+warnings
+
+limitations
+
+Recommendation objects SHALL preserve:
+
+recommendation_id
+
+instrument
+
+action
+
+reason_codes
+
+priority
+
+confidence
+
+current_weight
+
+target_weight
+
+risk_level
+
+expected_effect
+
+invalidation_conditions
+
+No additional fields.
+
+No omitted fields.
+
+────────────────────────────────────────
+6. DETERMINISM
+
+Export SHALL:
+
+Use stable key ordering
+
+Preserve Decimal fixed-point strings
+
+Preserve null
+
+Preserve recommendation order
+
+Produce byte-identical JSON for identical input
+
+No timestamps
+
+No UUID generation
+
+No sorting beyond existing order
+
+────────────────────────────────────────
+7. SECURITY
+
+Export SHALL NOT:
+
+Import Flask
+
+Import requests
+
+Import broker SDKs
+
+Call Exchange
+
+Write files
+
+Create temp files
+
+append_snapshot
+
+Workspace writes
+
+Timeline writes
+
+Open sockets
+
+Spawn threads
+
+Use subprocess
+
+────────────────────────────────────────
+8. TESTS
+
+Create tests covering:
+
+JSON export
+
+Dict export
+
+Stable ordering
+
+Byte-identical JSON
+
+Null preservation
+
+Recommendation ordering
+
+Decimal preservation
+
+No mutation
+
+Unknown preservation
+
+No additional fields
+
+Schema compatibility
+
+AST inspection
+
+Regression compatibility
+
+Target:
+
+20+ new tests
+
+100% PASS
+
+────────────────────────────────────────
+9. DELIVERY REPORT
+
+── CREATED FILES ──
+
+── MODIFIED FILES ──
+
+── EXPORT IMPLEMENTATION ──
+
+── DETERMINISM ──
+
+── SECURITY ──
+
+── TESTS ──
+
+── PRODUCTION CODE CHANGES ──
+
+Export only
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 07 — Security Verification
+
+────────────────────────────────────────
+10. PASS CRITERIA
+
+PASS requires:
+
+• strategy_export.py implemented
+
+• Deterministic JSON export
+
+• Deterministic dict export
+
+• No strategy calculations
+
+• No execution logic
+
+• No persistence
+
+• No Exchange
+
+• No filesystem/network writes
+
+• Byte-identical JSON for identical input
+
+• 20+ tests PASS
+
+• Regression remains PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+Mission 1800 continues only after Agent 06 passes.
