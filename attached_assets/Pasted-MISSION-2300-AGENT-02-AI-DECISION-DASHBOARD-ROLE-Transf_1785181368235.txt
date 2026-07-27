@@ -1,0 +1,247 @@
+MISSION 2300
+
+AGENT 02
+
+AI DECISION DASHBOARD
+
+ROLE
+
+Transform Trading Home into an autonomous investment dashboard.
+
+The system makes investment decisions.
+
+The user observes and controls automation.
+
+------------------------------------------------
+
+DO NOT
+
+Do NOT modify backend.
+
+Do NOT modify APIs.
+
+Do NOT modify services.
+
+Do NOT modify automation engine.
+
+Do NOT modify database.
+
+Use existing endpoints only.
+
+------------------------------------------------
+
+OBJECTIVE
+
+The user should never feel responsible for market analysis.
+
+The dashboard must answer only one question:
+
+"What is my AI doing right now?"
+
+------------------------------------------------
+
+REPLACE
+
+Remove every technical trading widget.
+
+Remove strategy internals.
+
+Remove AI reasoning.
+
+Remove confidence percentages.
+
+Remove indicator values.
+
+Remove signal explanations.
+
+Remove market analysis panels.
+
+------------------------------------------------
+
+ACTIVE TRADES
+
+Each row displays only:
+
+Asset
+
+Direction
+
+Entry Price
+
+Current PnL
+
+Running Time
+
+Current Status
+
+Examples
+
+Managing
+
+Scaling
+
+Closing
+
+Waiting Exit
+
+Emergency Exit
+
+Completed
+
+Only one action button:
+
+Close Position
+
+------------------------------------------------
+
+QUEUE
+
+Show only future operations.
+
+Examples
+
+BTCUSDT
+
+Ready
+
+----------------
+
+ETHUSDT
+
+Preparing
+
+----------------
+
+SOLUSDT
+
+Waiting
+
+----------------
+
+ADAUSDT
+
+Executing
+
+No explanation.
+
+------------------------------------------------
+
+RECENT ACTIVITY
+
+Timeline only.
+
+Newest first.
+
+Examples
+
+BTC position opened
+
+ETH position closed
+
+SOL moved to queue
+
+Portfolio updated
+
+Wallet synchronized
+
+Risk limits updated
+
+Keep maximum 20 records.
+
+------------------------------------------------
+
+AUTOMATION MODE
+
+Display one large status card.
+
+AUTONOMOUS
+
+or
+
+ADVISOR
+
+Display current mode clearly.
+
+Do not expose internal automation logic.
+
+------------------------------------------------
+
+STATUS
+
+Only simple badges.
+
+Running
+
+Paused
+
+Busy
+
+Waiting
+
+Offline
+
+Healthy
+
+Error
+
+------------------------------------------------
+
+REMOVE
+
+RSI
+
+EMA
+
+MACD
+
+ATR
+
+ADX
+
+Volume
+
+Confidence %
+
+Strategy Name
+
+Risk Score
+
+AI Explanation
+
+Decision Reason
+
+Debug Information
+
+Internal Metrics
+
+JSON
+
+Technical Logs
+
+------------------------------------------------
+
+DESIGN
+
+Minimal.
+
+Large typography.
+
+Professional.
+
+Fast scanning.
+
+Maximum information in minimum space.
+
+No unnecessary cards.
+
+------------------------------------------------
+
+SUCCESS
+
+The user opens the application and understands everything within five seconds.
+
+The screen feels like supervising an autonomous fund manager, not manually trading on an exchange.
+
+No backend changes.
+
+HTML/CSS/JavaScript only.
