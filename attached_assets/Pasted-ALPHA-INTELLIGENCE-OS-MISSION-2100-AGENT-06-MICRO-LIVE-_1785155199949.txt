@@ -1,0 +1,352 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2100
+
+AGENT 06
+
+MICRO LIVE AUTHORIZATION
+
+ROLE
+
+Implement the authorization boundary for MICRO_LIVE.
+
+This Agent SHALL authorize or deny future live
+execution requests.
+
+This Agent SHALL NEVER:
+
+• place orders
+• contact exchanges
+• contact brokers
+• modify balances
+• modify positions
+• execute trades
+
+────────────────────────────────────────
+1. CREATE
+
+micro_live_authorization.py
+
+micro_live_models.py
+
+micro_live_policy.py
+
+micro_live_errors.py
+
+tests/test_micro_live_authorization.py
+
+tests/test_micro_live_policy.py
+
+tests/test_micro_live_architecture.py
+
+────────────────────────────────────────
+2. MODELS
+
+MicroLiveAuthorization
+
+MicroLiveRequest
+
+MicroLiveApproval
+
+MicroLiveLimits
+
+MicroLiveScope
+
+MicroLiveAudit
+
+MicroLiveHeartbeat
+
+Immutable only.
+
+────────────────────────────────────────
+3. STATES
+
+NONE
+
+PENDING
+
+APPROVED
+
+DENIED
+
+EXPIRED
+
+REVOKED
+
+Closed enums.
+
+────────────────────────────────────────
+4. TRANSITIONS
+
+NONE → PENDING
+
+PENDING → APPROVED
+
+PENDING → DENIED
+
+PENDING → EXPIRED
+
+APPROVED → REVOKED
+
+APPROVED → EXPIRED
+
+All other transitions rejected.
+
+────────────────────────────────────────
+5. AUTHORIZATION
+
+Required:
+
+symbol
+
+side
+
+order type
+
+quantity
+
+maximum notional
+
+execution mode
+
+expiration
+
+logical sequence
+
+authorization id
+
+approval scope
+
+Missing field → DENY
+
+────────────────────────────────────────
+6. LIMITS
+
+Maximum order quantity
+
+Maximum notional
+
+Maximum position size
+
+Maximum open orders
+
+Maximum daily executions
+
+Maximum daily loss
+
+Maximum exposure
+
+Maximum leverage
+
+All limits immutable.
+
+────────────────────────────────────────
+7. POLICY
+
+Approval requires:
+
+Risk Engine PASS
+
+Kill Switch ENABLED
+
+Permission Gate PASS
+
+ControlledExecutionMode = MICRO_LIVE
+
+Explicit approval
+
+Not expired
+
+Not revoked
+
+Within limits
+
+Otherwise DENY.
+
+────────────────────────────────────────
+8. OPERATIONS
+
+request_authorization()
+
+approve()
+
+deny()
+
+expire()
+
+revoke()
+
+evaluate()
+
+heartbeat()
+
+Service remains stateless.
+
+────────────────────────────────────────
+9. SECURITY
+
+Forbidden:
+
+Broker SDK
+
+REST trading
+
+WebSocket trading
+
+Exchange write
+
+Filesystem
+
+Database
+
+Environment
+
+Threads
+
+Processes
+
+Scheduler
+
+Retry
+
+Sleep
+
+UUID generation
+
+Random
+
+datetime.now()
+
+────────────────────────────────────────
+10. DEPENDENCIES
+
+Allowed:
+
+stdlib
+
+Mission 2000 public contracts
+
+Agent 01
+
+Agent 02
+
+Agent 03
+
+Agent 04
+
+Agent 05
+
+Forbidden:
+
+Execution API
+
+BrokerAdapter submit
+
+Live Broker
+
+Desktop
+
+Mobile
+
+AI modules
+
+────────────────────────────────────────
+11. TESTS
+
+Minimum:
+
+340 PASS
+
+Cover:
+
+transition matrix
+
+approval
+
+denial
+
+expiration
+
+revocation
+
+limit validation
+
+scope validation
+
+risk integration
+
+kill switch
+
+permission gate
+
+stateless behavior
+
+immutability
+
+Decimal only
+
+architecture
+
+dependency direction
+
+public exports
+
+forbidden imports
+
+security
+
+────────────────────────────────────────
+12. DELIVERY
+
+Return exactly:
+
+CREATED FILES
+
+AUTHORIZATION
+
+LIMITS
+
+POLICY
+
+SECURITY
+
+TEST RESULTS
+
+TOTAL REGRESSION
+
+EXCHANGE WRITE REQUEST
+
+0
+
+SECRET EXPOSURE
+
+0
+
+PRODUCTION NETWORK REQUEST
+
+0
+
+COMMIT
+
+────────────────────────────────────────
+13. PASS
+
+PASS requires:
+
+≥340 PASS
+
+0 FAIL
+
+Full regression PASS
+
+Exchange Write = 0
+
+Secret Exposure = 0
+
+Production Network Request = 0
+
+Mission 2000 unchanged
+
+Agents 01–05 unchanged
+
+Micro Live authorization certified.
