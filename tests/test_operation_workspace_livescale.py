@@ -33,17 +33,23 @@ def _iso(epoch: int) -> str:
     return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
 
 
-def _safe_offset(rng: random.Random) -> int:
+def _safe_offset(rng: random.Random, guards) -> int:
     while True:
         off = rng.randint(1, SPREAD_SECONDS)
-        if all(abs(off - w) > BOUNDARY_GUARD for w in WINDOWS):
+        if all(abs(off - g) > BOUNDARY_GUARD for g in guards):
             return off
 
 
 def generate_trades(now: int, count: int, rng: random.Random):
+    # UTC gün başlangıcı da bir sınırdır: daily_profit artık kayan
+    # 24 saat değil UTC gün penceresi kullandığından, gün dönümüne
+    # yakın işlem üretme (test sırasında saat ilerlerse sınıf
+    # değiştirmesin).
+    day_offset = now % 86_400
+    guards = tuple(WINDOWS) + (day_offset,)
     rows = []
     for i in range(count):
-        closed = now - _safe_offset(rng)
+        closed = now - _safe_offset(rng, guards)
         hold = rng.randint(HOLD_MIN, HOLD_MAX)
         pnl = round(rng.uniform(-80.0, 100.0), 2)
         fee = round(rng.uniform(0.0, 2.5), 2)
@@ -107,8 +113,12 @@ def independent_metrics(trade_rows, equity_rows, now: int) -> dict:
         if isinstance(opened, str):
             holds.append(closed - int(
                 datetime.fromisoformat(opened).timestamp()))
+        day_start = (now // 86_400) * 86_400
         for w in WINDOWS:
-            if now - w <= closed <= now:
+            # Günlük pencere UTC gün başlangıcından itibaren sayar
+            # (utc_day_profit); hafta/ay kayan pencere kalır.
+            low = day_start if w == 86_400 else now - w
+            if low <= closed <= now:
                 total, n = window_sums[w]
                 window_sums[w] = (total + net, n + 1)
 

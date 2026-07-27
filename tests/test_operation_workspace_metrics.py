@@ -372,6 +372,20 @@ class TestComputeMetrics:
         assert pm.weekly_profit == Decimal("12.00000000")
         assert pm.monthly_profit == Decimal("23.00000000")
 
+    def test_daily_profit_resets_at_utc_midnight(self):
+        # daily_profit UTC gün penceresi kullanır (utc_day_profit):
+        # dün 23:xx kapanan işlem, gün dönümünden hemen sonra
+        # 'bugünkü' kâra sızmaz — kayan 24 saat olsaydı sızardı.
+        day_start = (NOW // m.DAY_SECONDS) * m.DAY_SECONDS
+        pm = m.compute_metrics([
+            trade(pnl="7", fees="0", closed=day_start - 60,
+                  opened=day_start - 120)], [], day_start + 30)
+        assert pm.daily_profit is None
+        pm2 = m.compute_metrics([
+            trade(pnl="7", fees="0", closed=day_start + 10,
+                  opened=day_start - 120)], [], day_start + 30)
+        assert pm2.daily_profit == Decimal("7.00000000")
+
     @pytest.mark.parametrize("trades_raw", [None, "x", 42, {}])
     def test_garbage_trades_tolerated(self, trades_raw):
         pm = m.compute_metrics(trades_raw, [], NOW)
