@@ -1,0 +1,288 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2100
+
+AGENT 07
+
+ORDER LIFECYCLE & RECONCILIATION
+
+ROLE
+
+Implement deterministic order lifecycle
+and reconciliation.
+
+This Agent SHALL reconcile Paper,
+Shadow and future Micro Live results.
+
+This Agent SHALL NEVER:
+
+• submit orders
+• contact exchanges
+• modify broker state
+• execute trades
+
+────────────────────────────────────────
+1. CREATE
+
+order_lifecycle.py
+
+reconciliation.py
+
+lifecycle_models.py
+
+reconciliation_errors.py
+
+tests/test_order_lifecycle.py
+
+tests/test_reconciliation.py
+
+tests/test_reconciliation_architecture.py
+
+────────────────────────────────────────
+2. ORDER STATES
+
+NEW
+
+VALIDATED
+
+ACCEPTED
+
+QUEUED
+
+SUBMITTED
+
+FILLED
+
+CANCELLED
+
+REJECTED
+
+FAILED
+
+CLOSED
+
+Closed enum.
+
+────────────────────────────────────────
+3. LIFECYCLE
+
+validate()
+
+accept()
+
+submit()
+
+fill()
+
+cancel()
+
+reject()
+
+close()
+
+All transitions deterministic.
+
+────────────────────────────────────────
+4. RECONCILIATION
+
+Compare
+
+Execution Request
+
+↓
+
+Paper Result
+
+↓
+
+Shadow Result
+
+↓
+
+Micro Live Result
+
+↓
+
+Final Reconciliation Report
+
+No hidden mutation.
+
+────────────────────────────────────────
+5. MODELS
+
+OrderLifecycle
+
+LifecycleEvent
+
+ReconciliationResult
+
+ReconciliationReport
+
+OrderSnapshot
+
+LifecycleAudit
+
+Immutable only.
+
+────────────────────────────────────────
+6. VALIDATION
+
+Detect
+
+Missing order
+
+Duplicate order
+
+Duplicate execution
+
+Quantity mismatch
+
+Price mismatch
+
+Status mismatch
+
+PnL mismatch
+
+Timestamp sequence violation
+
+Logical sequence violation
+
+────────────────────────────────────────
+7. AUDIT
+
+Every transition logged.
+
+Every mismatch recorded.
+
+Immutable audit.
+
+────────────────────────────────────────
+8. SECURITY
+
+Forbidden
+
+Exchange write
+
+Broker SDK
+
+REST
+
+WebSocket
+
+Filesystem
+
+Database
+
+Environment
+
+Thread
+
+Process
+
+Random
+
+UUID
+
+datetime.now()
+
+────────────────────────────────────────
+9. DEPENDENCIES
+
+Allowed
+
+stdlib
+
+Mission 2000
+
+Agents 01–06
+
+Forbidden
+
+Live Broker
+
+Desktop
+
+Mobile
+
+AI
+
+────────────────────────────────────────
+10. TESTS
+
+Minimum
+
+340 PASS
+
+Cover
+
+Lifecycle transitions
+
+State validation
+
+Reconciliation
+
+Mismatch detection
+
+Duplicate detection
+
+Immutable snapshots
+
+Audit
+
+Architecture
+
+Dependency direction
+
+Security
+
+────────────────────────────────────────
+11. DELIVERY
+
+Return exactly
+
+CREATED FILES
+
+ORDER LIFECYCLE
+
+RECONCILIATION
+
+AUDIT
+
+SECURITY
+
+TEST RESULTS
+
+TOTAL REGRESSION
+
+EXCHANGE WRITE REQUEST
+
+0
+
+SECRET EXPOSURE
+
+0
+
+PRODUCTION NETWORK REQUEST
+
+0
+
+COMMIT
+
+────────────────────────────────────────
+12. PASS
+
+PASS requires
+
+≥340 PASS
+
+0 FAIL
+
+Full regression PASS
+
+Deterministic reconciliation certified
+
+Mission 2000 unchanged
+
+Agents 01–06 unchanged
+
+Exchange Write = 0
