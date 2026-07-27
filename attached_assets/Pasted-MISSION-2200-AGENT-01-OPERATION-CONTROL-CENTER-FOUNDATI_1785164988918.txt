@@ -1,0 +1,951 @@
+MISSION 2200 — AGENT 01
+
+OPERATION CONTROL CENTER FOUNDATION
+LEGACY CONFLICT REMEDIATION & ACTIVE TRADING WORKSPACE
+
+ROLE
+
+You are the implementation agent responsible for opening Mission 2200 on top
+of the certified Alpha Intelligence OS v1.1.0 "Controlled Execution" release.
+
+This is not a design-only, documentation-only, or assessment task.
+
+You must inspect the actual repository, implement the required corrections,
+connect the operator interface to the certified Mission 2100 execution APIs,
+remove or quarantine conflicting legacy artifacts, add comprehensive tests,
+and deliver a working Operation Control Center foundation.
+
+MISSION OBJECTIVE
+
+Transform the current fragmented monitoring-oriented dashboard into a
+controlled trading operations workspace where the operator can:
+
+- See every product currently managed by the system.
+- See entry price, current price, quantity and direction.
+- See realized and unrealized profit/loss.
+- See stop-loss and take-profit status.
+- See the strategy and execution mode responsible for the position.
+- Stop automatic trading safely.
+- Pause individual strategies or symbols.
+- Close an individual position through the controlled execution pipeline.
+- Request close-all through the controlled execution pipeline.
+- Observe order lifecycle and reconciliation status.
+- Allow the system to perform automatic trading only when explicitly
+  authorized by the certified execution controls.
+- Keep PAPER as the mandatory default.
+- Keep all LIVE functionality fail-closed.
+
+THIS AGENT MUST FIX REAL REPOSITORY CONFLICTS
+
+The repository currently contains historical monitoring-only wording and UI
+assumptions that conflict with the new operational objective.
+
+Known examples include:
+
+- templates/automation.html
+  - "yalnız izleme ve manuel tetik"
+  - "SALT İZLEME"
+  - statements implying that no order can ever be created.
+
+- docs/operator_guide_tr.md
+  - statement that order, cancel and position-close controls do not exist and
+    "will not exist".
+
+- docs/automation.md
+  - UI described only as read-only status and manual trigger.
+
+- docs/API_REFERENCE.md
+  - historical automation and intelligence endpoints described as universally
+    read-only.
+
+These historical statements must not be blindly deleted.
+
+Correct them according to domain boundaries:
+
+1. Intelligence and analysis modules remain advisory-only and read-only.
+2. Legacy Mission 1600 Automation remains a scheduler for intelligence runs.
+3. Mission 2100 Controlled Execution is the only permitted execution path.
+4. Mission 2200 Operation Control Center may issue operator commands only by
+   calling Mission 2100 controlled execution interfaces.
+5. No browser route may communicate directly with an exchange adapter.
+6. Documentation must clearly distinguish:
+   - Intelligence Automation
+   - Controlled Trading Automation
+   - Operator Execution Controls
+
+NON-NEGOTIABLE FREEZE RULE
+
+Mission 2000 and Mission 2100 certified core modules are FROZEN.
+
+Do not modify any file whose hash is protected by version_manifest.json unless
+the manifest and release policy explicitly classify it as mutable.
+
+Before implementation:
+
+- Run release_validator.py.
+- Record the initial validation result.
+- Read version_manifest.json.
+- Build a list of frozen and mutable files.
+- Do not alter a frozen module to make the UI easier.
+- Use new Mission 2200 modules, adapters and presentation services.
+- At completion, Mission 2100 release validation must still PASS.
+
+If a required capability is missing from the public controlled execution API,
+create a Mission 2200 adapter over existing certified public interfaces.
+
+Do not bypass or patch private internals.
+
+ARCHITECTURE
+
+Required flow:
+
+Browser
+  ↓
+Mission 2200 Operation Control API
+  ↓
+Operation Control Service
+  ↓
+Mission 2100 Controlled Execution API / Router
+  ↓
+Permission Gate
+  ↓
+Risk Engine
+  ↓
+Kill Switch
+  ↓
+Execution Service
+  ↓
+Paper Broker / authorized broker adapter
+  ↓
+Ledger
+  ↓
+Lifecycle
+  ↓
+Reconciliation
+
+Forbidden flow:
+
+Browser
+  ↓
+Exchange SDK or Exchange REST API
+
+Also forbidden:
+
+Template JavaScript
+  ↓
+paper_broker.py directly
+
+Template JavaScript
+  ↓
+execution_service.py directly
+
+Automation scheduler
+  ↓
+exchange adapter directly
+
+Intelligence proposal
+  ↓
+automatic exchange order without authorization
+
+CREATE NEW MODULES
+
+Create a clean Mission 2200 package or equivalent repository-standard module
+set containing at minimum:
+
+- operation_control_models.py
+- operation_control_errors.py
+- operation_control_service.py
+- operation_control_api.py
+- operation_control_mapper.py
+- operation_control_policy.py
+- operation_control_audit.py
+- operation_control_snapshot.py
+
+Create UI files according to the repository's current template structure:
+
+- templates/operation_control.html
+
+Create a dedicated JavaScript file when the project supports static assets:
+
+- static/js/operation_control.js
+
+Do not embed a large untested application inside a template.
+
+Create documentation:
+
+- docs/operation_control_center.md
+- docs/mission2200_agent01_report.md
+
+Create tests:
+
+- tests/test_operation_control_models.py
+- tests/test_operation_control_service.py
+- tests/test_operation_control_api.py
+- tests/test_operation_control_policy.py
+- tests/test_operation_control_ui.py
+- tests/test_operation_control_security.py
+- tests/test_operation_control_architecture.py
+- tests/test_operation_control_legacy_remediation.py
+
+FILE AND LEGACY HYGIENE
+
+Inspect the repository for inactive, duplicate and misleading artifacts.
+
+Known candidates include:
+
+- app.py.bak2
+- app.py.bak3
+- templates/dashboard.html.bak3
+- pasted or generated temporary assets
+- obsolete state lock files committed into source control
+- duplicate templates that are not reachable through routes
+- endpoints with no caller
+- buttons with no active backend action
+- backend operations with no visible operator route
+
+For every candidate, classify it as:
+
+- ACTIVE
+- FROZEN_HISTORY
+- TEST_FIXTURE
+- GENERATED_RUNTIME
+- OBSOLETE
+- UNKNOWN
+
+Rules:
+
+- Do not delete certified history.
+- Move obsolete human backup files out of runtime/import/template paths.
+- Prefer deletion when Git history already preserves the file.
+- Runtime state and lock files must not be treated as source code.
+- Add or correct .gitignore entries for generated runtime files.
+- Do not remove an item only because its name looks old.
+- Prove non-use through import, route, reference and test searches.
+- Record every removed, retained or quarantined item in the delivery report.
+
+OPERATION CONTROL CENTER UI
+
+Add a primary navigation entry:
+
+Operation Center
+
+The page must be a real active workspace, not a mockup.
+
+SECTION 1 — SYSTEM EXECUTION STATUS
+
+Display:
+
+- Application version
+- Execution mode
+- PAPER / SHADOW / MICRO_LIVE / LIVE
+- Automatic trading state
+- Kill-switch state
+- Permission-gate state
+- Risk-engine state
+- Broker state
+- Ledger state
+- Reconciliation state
+- Last successful synchronization
+- Last error code
+- Data freshness
+
+Unknown values must display as UNKNOWN.
+
+Never show a false healthy state.
+
+SECTION 2 — AUTOMATIC TRADING CONTROL
+
+Provide distinct states:
+
+- STOPPED
+- STARTING
+- RUNNING
+- PAUSING
+- PAUSED
+- STOPPING
+- BLOCKED
+- ERROR
+
+Provide controls:
+
+- Start
+- Pause
+- Resume
+- Stop
+
+Semantics:
+
+START
+- Permits eligible automatic execution.
+- Must not bypass mode, authorization, permission, risk or kill-switch checks.
+
+PAUSE
+- Prevents creation of new positions.
+- Existing positions remain visible and continue to follow their approved
+  protective management policy.
+
+STOP
+- Prevents all new automatic entry orders.
+- Does not silently close existing positions.
+
+Every state-changing action must:
+
+- Require CSRF protection.
+- Require authenticated operator authorization.
+- Be idempotent.
+- Produce an audit record.
+- Return a sterile response.
+- Reject invalid transitions.
+- Fail closed.
+
+SECTION 3 — MANAGED PRODUCTS
+
+Display every symbol currently monitored, queued, ordered or positioned.
+
+Columns:
+
+- Symbol
+- Market
+- Strategy
+- Automation state
+- Signal state
+- Execution mode
+- Direction
+- Entry eligibility
+- Last signal time
+- Last decision
+- Last rejection reason
+
+Controls per symbol:
+
+- Enable automation
+- Pause automation
+- Resume automation
+- Stop new entries
+
+A symbol-level stop must not affect unrelated symbols.
+
+SECTION 4 — OPEN POSITIONS
+
+Required columns:
+
+- Symbol
+- Market
+- Side
+- Position status
+- Strategy
+- Entry price
+- Current price
+- Quantity
+- Notional value
+- Realized PnL
+- Unrealized PnL
+- PnL percentage
+- Fees
+- Stop-loss
+- Take-profit
+- Maximum favorable excursion
+- Maximum adverse excursion
+- Opened at
+- Last reconciled at
+- Reconciliation status
+- Execution mode
+
+All monetary and quantity values must use fixed-point decimal representation.
+
+Do not use binary float for trading-domain values.
+
+Controls per position:
+
+- View details
+- Stop automatic management
+- Update protective stop
+- Update take-profit
+- Request position close
+
+The close action must not be a direct exchange request.
+
+It must create a controlled close intent and pass through:
+
+- authorization
+- permission gate
+- risk validation
+- kill-switch policy
+- lifecycle
+- ledger
+- reconciliation
+
+Use explicit confirmation for a position close.
+
+The confirmation must include:
+
+- Symbol
+- Side
+- Quantity
+- Current execution mode
+- Expected action
+- Whether the request is PAPER or authorized live execution
+
+SECTION 5 — ORDERS
+
+Display:
+
+- Order ID
+- Client order ID
+- Symbol
+- Side
+- Type
+- Quantity
+- Requested price
+- Average fill price
+- Filled quantity
+- Remaining quantity
+- Status
+- Created at
+- Updated at
+- Strategy
+- Correlation ID
+- Execution mode
+- Reconciliation status
+
+Supported lifecycle visibility:
+
+- CREATED
+- AUTHORIZED
+- REJECTED
+- SUBMITTED
+- ACKNOWLEDGED
+- PARTIALLY_FILLED
+- FILLED
+- CANCEL_REQUESTED
+- CANCELLED
+- CLOSE_REQUESTED
+- FAILED
+- RECONCILED
+
+Only expose actions actually supported by the certified execution layer.
+
+Do not render decorative buttons without a real backend implementation.
+
+SECTION 6 — SIGNALS AND DECISIONS
+
+Display:
+
+- Signal time
+- Symbol
+- Strategy
+- Direction
+- Confidence
+- Decision
+- Risk outcome
+- Permission outcome
+- Rejection code
+- Execution result
+- Correlation ID
+
+Important separation:
+
+An intelligence proposal is not an order.
+
+UI labels must clearly distinguish:
+
+- Proposal
+- Candidate
+- Authorized intent
+- Order
+- Position
+
+SECTION 7 — GLOBAL SAFETY CONTROLS
+
+Implement three clearly separate actions:
+
+A. STOP NEW ENTRIES
+
+- Blocks creation of new positions.
+- Does not close current positions.
+- Existing approved exits and protective controls may continue.
+
+B. REQUEST CLOSE ALL
+
+- Creates controlled close intents for eligible open positions.
+- Must not directly call an exchange.
+- Each position must receive its own lifecycle and audit records.
+- Partial failure must be reported per position.
+- Must never report success when only part of the batch succeeded.
+
+C. EMERGENCY KILL SWITCH
+
+- Immediately blocks new execution authorization.
+- Must use the certified kill-switch mechanism.
+- Must not silently claim that all positions are closed.
+- Closing behavior must follow the configured emergency policy.
+- UI must separately display:
+  - Trading blocked
+  - Close intents requested
+  - Positions confirmed closed
+  - Positions still open
+  - Reconciliation pending
+
+Global destructive actions require:
+
+- Re-authentication or strong confirmation according to current project
+  security patterns.
+- Typed confirmation phrase.
+- Reason field.
+- Idempotency key.
+- Audit event.
+- Correlation ID.
+- Result summary.
+
+SECTION 8 — RISK AND LIMITS
+
+Display effective values, not only configuration inputs:
+
+- Maximum order notional
+- Maximum position notional
+- Maximum open positions
+- Maximum daily loss
+- Maximum drawdown
+- Maximum symbol exposure
+- Cooldown
+- Allowed markets
+- Allowed directions
+- Allowed execution modes
+- Micro-live authorization state
+- Authorization expiry
+- Kill-switch status
+
+Do not allow the UI to increase live limits unless an existing certified API
+explicitly supports it.
+
+For Agent 01:
+
+- Risk data may be displayed.
+- Unsupported risk editing must remain disabled and clearly labeled.
+- Do not fabricate a persistence mechanism.
+
+SECTION 9 — RECONCILIATION
+
+Display:
+
+- Last reconciliation time
+- Ledger position
+- Broker position
+- Difference
+- Order mismatch
+- Quantity mismatch
+- Price mismatch
+- Orphan order
+- Orphan position
+- Status
+- Required operator action
+
+Statuses:
+
+- MATCHED
+- PENDING
+- MISMATCH
+- STALE
+- ERROR
+- UNKNOWN
+
+A stale result must not display as healthy.
+
+SECTION 10 — AUDIT TIMELINE
+
+Every operational action must be observable.
+
+Display:
+
+- Timestamp
+- Actor
+- Action
+- Target
+- Previous state
+- Requested state
+- Result
+- Reason
+- Correlation ID
+- Idempotency key reference
+- Error code
+
+Do not expose:
+
+- Secrets
+- API keys
+- Authorization headers
+- Raw credentials
+- Complete sensitive request bodies
+- Internal stack traces
+
+CONTROLLED AUTOMATIC TRADING
+
+The system may perform automatic trading only when all conditions are true:
+
+- Automation state is RUNNING.
+- Execution mode permits the requested operation.
+- An eligible strategy candidate exists.
+- Strategy output has been normalized into a controlled execution intent.
+- Authorization is valid.
+- Permission gate returns PASS.
+- Risk engine returns PASS.
+- Kill switch is inactive.
+- Symbol automation is enabled.
+- Cooldown and exposure limits pass.
+- Idempotency check passes.
+- Ledger and lifecycle services are available.
+- Reconciliation is not in a policy-defined blocking state.
+
+Any unknown, missing or stale safety dependency must deny execution.
+
+No fail-open behavior is allowed.
+
+DEFAULT MODE
+
+On a clean installation or unknown configuration:
+
+- Execution mode = PAPER
+- Automatic trading = STOPPED
+- Live order authorization = DENIED
+- Symbol automation = DISABLED
+- Close-all live action = DENIED
+- Exchange write = 0
+
+The UI must never infer LIVE readiness from exchange connectivity alone.
+
+A connected API key does not mean live authorization exists.
+
+API CONTRACTS
+
+Implement Mission 2200 endpoints under a dedicated namespace, for example:
+
+GET  /api/operation-control/status
+GET  /api/operation-control/products
+GET  /api/operation-control/positions
+GET  /api/operation-control/orders
+GET  /api/operation-control/signals
+GET  /api/operation-control/reconciliation
+GET  /api/operation-control/audit
+
+POST /api/operation-control/automation/start
+POST /api/operation-control/automation/pause
+POST /api/operation-control/automation/resume
+POST /api/operation-control/automation/stop
+
+POST /api/operation-control/symbols/{symbol}/enable
+POST /api/operation-control/symbols/{symbol}/pause
+POST /api/operation-control/symbols/{symbol}/resume
+POST /api/operation-control/symbols/{symbol}/stop
+
+POST /api/operation-control/positions/{position_id}/close
+POST /api/operation-control/positions/{position_id}/stop
+POST /api/operation-control/positions/{position_id}/take-profit
+
+POST /api/operation-control/global/stop-new-entries
+POST /api/operation-control/global/request-close-all
+POST /api/operation-control/global/kill-switch
+
+Adapt route naming to current repository conventions where necessary.
+
+All API responses must use a consistent sterile envelope containing at least:
+
+- ok
+- data
+- error_code
+- message
+- correlation_id
+- generated_at
+- data_freshness
+- execution_mode
+
+State-changing requests must also return:
+
+- action_id
+- idempotency_status
+- audit_recorded
+- lifecycle_status
+
+HTTP AND ERROR RULES
+
+Use suitable status codes:
+
+- 200 successful read or idempotent completed action
+- 202 accepted asynchronous control request
+- 400 malformed request
+- 401 unauthenticated
+- 403 unauthorized or policy denied
+- 404 unknown target
+- 409 invalid state transition or idempotency conflict
+- 422 valid request rejected by execution policy
+- 423 kill switch or operational lock
+- 429 control-rate limit
+- 503 dependency unavailable or stale safety state
+- 500 sterile unexpected error
+
+Never leak raw exception text.
+
+UI STATE RULES
+
+- Buttons must be disabled while a request is pending.
+- Duplicate clicks must not produce duplicate intents.
+- Data polling must not reset operator selections.
+- The page must show the last successful refresh time.
+- The page must show stale-data warnings.
+- Error banners must include a safe error code.
+- Unknown state must not be styled as success.
+- PAPER and LIVE must be visually unmistakable.
+- LIVE-related controls must remain hidden or disabled when authorization is
+  absent.
+- The interface must be responsive and accessible.
+- Every button must have a real endpoint or be visibly disabled as unsupported.
+
+LEGACY AUTOMATION REMEDIATION
+
+Do not repurpose the existing Mission 1600 Automation panel into a trading
+engine.
+
+Instead:
+
+- Rename its visible description to "Intelligence Automation".
+- Preserve its advisory-only behavior.
+- Remove misleading wording that implies the entire Alpha Intelligence OS can
+  never execute controlled orders.
+- Add a clear link to Operation Center.
+- State that Intelligence Automation produces analysis snapshots only.
+- State that trading automation is governed separately by Controlled Execution.
+
+The application must not expose two different controls both labeled simply
+"Automation" without explaining their domain.
+
+Recommended navigation labels:
+
+- Intelligence Automation
+- Operation Center
+
+DOCUMENTATION REMEDIATION
+
+Update current operator-facing documentation so it accurately states:
+
+- Intelligence modules remain read-only.
+- Mission 2100 introduced controlled execution capabilities.
+- Mission 2200 introduces operator controls over those capabilities.
+- All order actions remain policy-controlled and fail-closed.
+- No direct exchange access exists in the UI.
+- PAPER remains default.
+- Live execution requires explicit authorization.
+
+Do not rewrite historical mission certificates.
+
+Historical certificates must remain immutable records of their original scope.
+
+Where historical documentation is retained, add a current-version notice or
+cross-reference rather than falsifying history.
+
+TEST REQUIREMENTS
+
+Minimum new tests: 500 PASS.
+
+Tests must cover at least:
+
+1. Domain models
+2. Decimal validation
+3. State transitions
+4. API authentication
+5. CSRF
+6. Authorization
+7. Idempotency
+8. Duplicate click protection
+9. Invalid transition rejection
+10. Kill-switch blocking
+11. PAPER default
+12. LIVE fail-closed behavior
+13. Missing authorization
+14. Expired authorization
+15. Stale risk data
+16. Stale reconciliation
+17. Partial close-all result
+18. Per-position close intent
+19. Symbol pause isolation
+20. Stop versus close semantic separation
+21. Audit creation
+22. Correlation IDs
+23. Sterile error responses
+24. Secret non-exposure
+25. No direct exchange import from UI/API modules
+26. No direct broker call from templates
+27. No binary float in trading models
+28. Unknown-state rendering
+29. Stale-data rendering
+30. Navigation and route accessibility
+31. All visible action buttons bound to endpoints
+32. Unsupported actions visibly disabled
+33. Legacy automation terminology remediation
+34. Frozen Mission 2100 hashes unchanged
+35. Mission 2100 release validator remains PASS
+36. Full repository regression
+
+Add architecture tests that fail if:
+
+- operation_control_api imports an exchange client
+- templates contain exchange credentials
+- browser JavaScript contains exchange endpoint URLs
+- operation control bypasses controlled_execution_api/router
+- frozen module hashes change
+- LIVE becomes the default
+- unknown safety state allows execution
+- close-all directly mutates a broker
+- intelligence proposals are treated as orders without authorization
+
+SECURITY ACCEPTANCE CRITERIA
+
+At delivery:
+
+Exchange Direct Write from UI/API = 0
+Secret Exposure = 0
+Credential Leak = 0
+Production Network Request in Tests = 0
+Fail-Open Path = 0
+Unaudited State-Changing Action = 0
+Unprotected Destructive Endpoint = 0
+Binary Float Trading Value = 0
+
+REGRESSION REQUIREMENTS
+
+Run:
+
+- Mission 2000 regression
+- Mission 2100 regression
+- Mission 2100 release validator
+- Mission 2200 Agent 01 tests
+- Full repository test suite
+
+Required result:
+
+- 0 FAIL
+- Existing known skips may remain only if documented and unchanged.
+- No frozen manifest mismatch.
+- No public Mission 2100 API break.
+
+DELIVERY REPORT
+
+Produce:
+
+docs/mission2200_agent01_report.md
+
+The report must include:
+
+- Executive summary
+- Files created
+- Files modified
+- Files removed
+- Files quarantined
+- Frozen files verified
+- Legacy conflicts corrected
+- Active UI routes
+- API endpoint inventory
+- Execution control flow
+- Automatic trading state machine
+- Stop/Pause/Close/Kill-switch semantics
+- Security results
+- Test counts
+- Full regression results
+- Exchange write count
+- Secret exposure count
+- Production network request count
+- Known limitations
+- Commit hash
+
+Include a legacy inventory table:
+
+| Path | Previous status | Finding | Action | Evidence |
+|------|-----------------|---------|--------|----------|
+
+Include an action-binding table:
+
+| UI control | Endpoint | Service method | Audit event | Tested |
+|------------|----------|----------------|-------------|--------|
+
+KNOWN LIMITATIONS FOR AGENT 01
+
+This agent establishes the operational foundation.
+
+Do not add unsupported capabilities merely to complete the visual design.
+
+If certified interfaces do not support a requested action:
+
+- Keep the control disabled.
+- Display "Not supported by certified execution API".
+- Document it as the next Agent entry point.
+- Do not create an unsafe shortcut.
+
+DO NOT
+
+- Do not reopen Mission 2100.
+- Do not change certified hashes.
+- Do not enable live trading by default.
+- Do not add direct Binance writes.
+- Do not put exchange keys in the browser.
+- Do not treat connectivity as authorization.
+- Do not merge Intelligence Automation with Trading Automation.
+- Do not let a UI button mutate ledger files directly.
+- Do not fake position, PnL, order or reconciliation data.
+- Do not create decorative controls.
+- Do not silently delete legacy files.
+- Do not suppress failing regression tests.
+- Do not update manifests merely to hide an unauthorized frozen change.
+- Do not report COMPLETE unless the UI is connected to working controlled
+  endpoints and all acceptance tests pass.
+
+FINAL RESPONSE FORMAT
+
+MISSION 2200 — AGENT 01 TESLİM RAPORU
+
+MISSION STATUS
+PASS or FAIL
+
+IMPLEMENTATION
+Summary of working functionality
+
+LEGACY REMEDIATION
+Conflicts corrected and obsolete artifacts handled
+
+OPERATION CENTER
+Active screens and controls
+
+AUTOMATIC TRADING
+State machine and authorization behavior
+
+POSITIONS
+Entry price, current price, PnL, stop, take-profit and close controls
+
+GLOBAL SAFETY
+Stop new entries, request close all and kill-switch behavior
+
+ARCHITECTURE
+Proof that Mission 2100 controlled execution path is preserved
+
+SECURITY
+Exchange Direct Write
+Secret Exposure
+Credential Leak
+Production Network Request
+Fail-Open Path
+
+TEST RESULTS
+New tests
+Mission 2000
+Mission 2100
+Release validator
+Full regression
+
+FROZEN FILE INTEGRITY
+PASS or FAIL
+
+KNOWN LIMITATIONS
+Exact unsupported capabilities
+
+COMMIT
+Commit hash
+
+Do not claim PASS with any failing test, frozen hash mismatch, direct exchange
+path, fake UI action or unresolved fail-open behavior.
