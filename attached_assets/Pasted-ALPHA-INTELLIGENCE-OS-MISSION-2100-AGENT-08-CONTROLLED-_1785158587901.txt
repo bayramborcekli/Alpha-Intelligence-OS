@@ -1,0 +1,286 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2100
+
+AGENT 08
+
+CONTROLLED EXECUTION API
+
+ROLE
+
+Implement the unified Controlled Execution API.
+
+This API SHALL expose a single entry point for:
+
+• PAPER
+• SHADOW
+• MICRO_LIVE
+
+This Agent SHALL NEVER:
+
+• execute orders directly
+• contact exchanges
+• contact brokers
+• bypass Risk Engine
+• bypass Kill Switch
+• bypass Authorization
+
+────────────────────────────────────────
+1. CREATE
+
+controlled_execution_api.py
+
+controlled_execution_router.py
+
+controlled_execution_models.py
+
+controlled_execution_errors.py
+
+tests/test_controlled_execution_api.py
+
+tests/test_controlled_execution_router.py
+
+tests/test_controlled_execution_architecture.py
+
+────────────────────────────────────────
+2. API
+
+Create
+
+ControlledExecutionAPI
+
+Operations
+
+submit()
+
+cancel()
+
+status()
+
+positions()
+
+orders()
+
+executions()
+
+statistics()
+
+heartbeat()
+
+Single public API only.
+
+────────────────────────────────────────
+3. ROUTER
+
+ExecutionMode
+
+↓
+
+PAPER
+→ PaperExecutionService
+
+SHADOW
+→ ShadowModeService
+
+MICRO_LIVE
+→ MicroLiveAuthorization
+
+No direct broker routing.
+
+────────────────────────────────────────
+4. MODELS
+
+ControlledExecutionRequest
+
+ControlledExecutionResponse
+
+ControlledExecutionStatus
+
+ControlledExecutionStatistics
+
+ControlledExecutionAudit
+
+Immutable only.
+
+────────────────────────────────────────
+5. VALIDATION
+
+Validate
+
+mode
+
+request
+
+authorization
+
+risk
+
+kill switch
+
+permission
+
+logical sequence
+
+No implicit defaults.
+
+────────────────────────────────────────
+6. RESULT
+
+Return
+
+decision
+
+decision_code
+
+execution_reference
+
+ledger_reference
+
+audit
+
+statistics
+
+logical_sequence
+
+No mutation.
+
+────────────────────────────────────────
+7. SECURITY
+
+Forbidden
+
+Exchange write
+
+Broker SDK
+
+REST
+
+WebSocket
+
+Filesystem
+
+Database
+
+Environment
+
+Thread
+
+Process
+
+Random
+
+UUID
+
+datetime.now()
+
+────────────────────────────────────────
+8. DEPENDENCIES
+
+Allowed
+
+stdlib
+
+Mission 2000
+
+Agents 01–07
+
+Forbidden
+
+Live Broker
+
+Desktop
+
+Mobile
+
+AI
+
+────────────────────────────────────────
+9. TESTS
+
+Minimum
+
+360 PASS
+
+Cover
+
+API routing
+
+Mode routing
+
+PAPER
+
+SHADOW
+
+MICRO_LIVE
+
+Validation
+
+Authorization
+
+Risk
+
+Kill Switch
+
+Immutable response
+
+Architecture
+
+Dependency direction
+
+Security
+
+────────────────────────────────────────
+10. DELIVERY
+
+Return exactly
+
+CREATED FILES
+
+API
+
+ROUTER
+
+VALIDATION
+
+SECURITY
+
+TEST RESULTS
+
+TOTAL REGRESSION
+
+EXCHANGE WRITE REQUEST
+
+0
+
+SECRET EXPOSURE
+
+0
+
+PRODUCTION NETWORK REQUEST
+
+0
+
+COMMIT
+
+────────────────────────────────────────
+11. PASS
+
+PASS requires
+
+≥360 PASS
+
+0 FAIL
+
+Full regression PASS
+
+Unified Execution API certified
+
+Mission 2000 unchanged
+
+Agents 01–07 unchanged
+
+Exchange Write = 0
+
+Secret Exposure = 0
+
+Production Network Request = 0
