@@ -134,6 +134,15 @@ class TestRouteSurface:
         # Bot Kontrolü paneli: yürütme modu seçimi (CSRF+auth korumalı;
         # LIVE fail-closed reddedilir — bilinçli genişletme)
         "/execution/mode",
+        # Mission 2200 / Agent 01: Operation Control Center yazma uçları
+        # (CSRF+auth korumalı; tamamı Mission 2100 kontrollü yürütme
+        # hattına bağlanır — bilinçli genişletme)
+        "/api/operation-control/automation/<command>",
+        "/api/operation-control/symbols/<symbol>/<command>",
+        "/api/operation-control/positions/<position_id>/close",
+        "/api/operation-control/global/stop-new-entries",
+        "/api/operation-control/global/request-close-all",
+        "/api/operation-control/global/kill-switch",
     }
 
     def test_no_new_write_routes(self):

@@ -2634,6 +2634,545 @@ def _save_adaptive_cfg(adaptive: dict[str, Any]) -> tuple[bool, str]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Mission 2200 — Operation Control Center (Agent 01)
+#
+# Tarayıcı → bu API → OperationControlService → Mission 2100
+# ControlledExecutionAPI → izin kapısı → risk → kill-switch →
+# yürütme servisi → defter. Tarayıcıdan borsa katmanına doğrudan
+# yol YOKTUR; kapatma istekleri PAPER kontrollü kapatma NİYETİDİR.
+# ══════════════════════════════════════════════════════════════════════════════
+
+import operation_control_api as _oca                       # noqa: E402
+from operation_control_errors import (                     # noqa: E402
+    OperationControlValidationError as _OpValidationError)
+from operation_control_models import (                     # noqa: E402
+    AutomationCommand as _AutoCmd, SymbolCommand as _SymCmd)
+from operation_control_service import (                    # noqa: E402
+    CONFIRMATION_PHRASE as OPERATION_CONFIRMATION_PHRASE,
+    OperationControlService)
+from operation_control_snapshot import (                   # noqa: E402
+    build_snapshot as _build_operation_snapshot)
+
+_AUTOMATION_COMMANDS = {
+    "start": _AutoCmd.START, "pause": _AutoCmd.PAUSE,
+    "resume": _AutoCmd.RESUME, "stop": _AutoCmd.STOP,
+}
+_SYMBOL_COMMANDS = {
+    "enable": _SymCmd.ENABLE, "pause": _SymCmd.PAUSE,
+    "resume": _SymCmd.RESUME, "stop": _SymCmd.STOP,
+}
+
+_operation_lock = threading.Lock()
+_operation_service: OperationControlService | None = None
+
+
+def _operation_symbols(cfg: dict[str, Any] | None) -> tuple[str, ...]:
+    symbols = (cfg or {}).get("symbols")
+    if isinstance(symbols, list):
+        cleaned = tuple(s.strip().upper() for s in symbols
+                        if isinstance(s, str) and s.strip())
+        if cleaned:
+            return cleaned
+    return ("BTCUSDT",)
+
+
+def get_operation_service() -> OperationControlService:
+    """Süreç başına tek Operasyon Kontrol Servisi (tembel kuruluş)."""
+    global _operation_service
+    with _operation_lock:
+        if _operation_service is None:
+            from controlled_execution_api import ControlledExecutionAPI
+            from controlled_execution_foundation import (
+                ControlledExecutionFoundation)
+            from controlled_execution_policy import ExtensionRegistry
+            from controlled_execution_router import (
+                ControlledExecutionRouter)
+            from execution_risk_models import (RiskDecision,
+                                               RiskDecisionType)
+            from micro_live_authorization import (
+                MicroLiveAuthorizationService)
+            from paper_broker import PaperBroker
+            from paper_execution_service import (
+                PaperExecutionService, StaticRiskEvaluator)
+            from shadow_mode import ShadowModeService
+            cfg, _ = load_config()
+            foundation = ControlledExecutionFoundation(
+                ExtensionRegistry())
+            broker = PaperBroker(
+                known_symbols=_operation_symbols(cfg))
+            # Operatör kapatma niyetleri poz. azaltıcıdır; risk
+            # kararı sertifikalı boru hattında yine de değerlendirilir.
+            risk = StaticRiskEvaluator(RiskDecision(
+                decision=RiskDecisionType.ALLOW))
+            api = ControlledExecutionAPI(ControlledExecutionRouter(
+                PaperExecutionService(broker=broker,
+                                      foundation=foundation,
+                                      risk_evaluator=risk),
+                ShadowModeService(broker=broker,
+                                  foundation=foundation,
+                                  risk_evaluator=risk),
+                MicroLiveAuthorizationService(
+                    foundation=foundation)))
+            _operation_service = OperationControlService(
+                api, clock=lambda: int(time.time()))
+        return _operation_service
+
+
+def _operation_kill_switch_active(cfg: dict[str, Any] | None) -> bool:
+    """Kill-switch bayrağı adaptive_system altında tutulur
+    (Mission 1500 /adaptive/kill-switch yolu ile aynı kaynak)."""
+    adaptive = (cfg or {}).get("adaptive_system") or {}
+    return bool(adaptive.get("kill_switch", False))
+
+
+def _operation_raw() -> dict[str, Any]:
+    """Operasyon anlık görüntüsü için ham veri topla.
+
+    Erişilemeyen her bölüm UNKNOWN'a düşer — sahte sağlıklı
+    durum üretilmez. Pozisyon/emir verisi mevcut salt-okunur
+    görünümlerden gelir (borsa YAZMA çağrısı yoktur)."""
+    from version import get_version
+    cfg, cfg_err = load_config()
+    ks_active = _operation_kill_switch_active(cfg)
+    now = int(time.time())
+    raw: dict[str, Any] = {
+        "status": {
+            "app_version": get_version(),
+            "execution_mode": get_execution_mode(cfg),
+            "kill_switch_state": "ACTIVE" if ks_active
+            else "INACTIVE",
+            # Saf modüller import edildiyse hazırdır; dış
+            # bağımlılık gerektiren durumlar UNKNOWN kalır.
+            "permission_gate_state": "READY",
+            "risk_engine_state": "READY",
+            "broker_state": "READY",
+            "ledger_state": "READY",
+            "reconciliation_state": "UNKNOWN",
+            "last_sync_at": "UNKNOWN",
+            "last_error_code":
+                get_operation_service().last_error_code,
+            "source_timestamp": None if cfg_err else now,
+        },
+        "positions": [], "orders": [], "products": [],
+        "signals": [], "reconciliation": [],
+        "risk_limits": {
+            "max_open_positions":
+                (cfg or {}).get("max_open_positions")
+                if isinstance((cfg or {}).get(
+                    "max_open_positions"), int) else None,
+            "max_daily_loss": str((cfg or {}).get(
+                "daily_loss_limit_pct"))
+            if (cfg or {}).get("daily_loss_limit_pct")
+            is not None else None,
+            "allowed_markets": ["SPOT", "FUTURES"],
+            "allowed_directions": ["LONG"],
+            "allowed_execution_modes": list(EXECUTION_MODES),
+            "micro_live_authorized": False,
+            "authorization_expiry": "-",
+            "kill_switch_active": ks_active,
+        },
+    }
+    service = get_operation_service()
+    try:
+        import portfolio_api as pf
+        pv = pf.positions_view()
+        if pv.get("ok"):
+            raw["status"]["last_sync_at"] = datetime.now(
+                timezone.utc).isoformat(timespec="seconds")
+            for p in pv.get("positions") or []:
+                if p.get("direction") == "FLAT":
+                    continue
+                raw["positions"].append({
+                    "position_id": p.get("symbol"),
+                    "symbol": p.get("symbol"),
+                    "market": "FUTURES",
+                    "side": p.get("direction"),
+                    "position_status": "OPEN",
+                    "strategy": "alpha20_v1",
+                    "entry_price": p.get("entry_price"),
+                    "current_price": p.get("mark_price"),
+                    "quantity": p.get("abs_quantity"),
+                    "notional_value": p.get("notional"),
+                    "unrealized_pnl": p.get("unrealized_pnl"),
+                    "execution_mode": get_execution_mode(cfg),
+                })
+                raw["reconciliation"].append({
+                    "symbol": p.get("symbol"),
+                    "state": "UNKNOWN",
+                    "operator_action":
+                        "Mutabakat motoru: sonraki agent",
+                })
+        ov = pf.orders_view()
+        if ov.get("ok"):
+            for o in ov.get("orders") or []:
+                raw["orders"].append({
+                    "order_id": str(o.get("order_id") or ""),
+                    "client_order_id":
+                        str(o.get("client_order_id") or ""),
+                    "symbol": o.get("symbol"),
+                    "side": o.get("side"),
+                    "order_type": o.get("type"),
+                    "quantity": o.get("orig_qty"),
+                    "requested_price": o.get("price"),
+                    "filled_quantity": o.get("executed_qty"),
+                    "remaining_quantity": o.get("remaining_qty"),
+                    "status": o.get("status"),
+                    "created_at": str(o.get("time") or ""),
+                    "updated_at": str(o.get("update_time") or ""),
+                    "execution_mode": get_execution_mode(cfg),
+                })
+    except Exception:
+        # Dış okuma başarısız → bölümler boş kalır, tazelik
+        # UNKNOWN'a düşer; hata koduna ham metin sızmaz.
+        raw["status"]["source_timestamp"] = None
+        raw["status"]["last_error_code"] = "DATA_SOURCE_UNAVAILABLE"
+    for symbol in _operation_symbols(cfg):
+        raw["products"].append({
+            "symbol": symbol,
+            "market": "FUTURES",
+            "strategy": "alpha20_v1",
+            "signal_state": "UNKNOWN",
+            "execution_mode": get_execution_mode(cfg),
+            "direction": "UNKNOWN",
+            "entry_eligible": service.symbol_state(
+                symbol).value == "ENABLED" and
+            service.automation_state.value == "RUNNING" and
+            not service.stop_new_entries and not ks_active,
+            "last_signal_at": "UNKNOWN",
+            "last_decision": "UNKNOWN",
+            "last_rejection_reason": "-",
+        })
+    return raw
+
+
+def _operation_snapshot():
+    service = get_operation_service()
+    return _build_operation_snapshot(
+        _operation_raw(), int(time.time()),
+        service.automation_state, service.stop_new_entries,
+        service.symbol_states())
+
+
+def _operation_json(payload: dict[str, Any], status: int):
+    resp = jsonify(payload)
+    resp.status_code = status
+    resp.headers["Cache-Control"] = "no-store, private"
+    return resp
+
+
+def _operation_body() -> dict[str, Any]:
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
+def _operation_actor() -> str:
+    return session.get("username") or "operator"
+
+
+def _operation_error(code: str, message: str, status: int | None = None):
+    payload, http_status = _oca.error_envelope(
+        code, message, g.get("request_id", "-"),
+        int(time.time()), None, status)
+    return _operation_json(payload, http_status)
+
+
+@app.get("/operation-center")
+def operation_center_page():
+    return _render_workspace("operation_control.html",
+                             "operation_center")
+
+
+@app.get("/api/operation-control/status")
+def api_operation_status():
+    snapshot = _operation_snapshot()
+    data = _oca.serialize_view(snapshot.status)
+    data["confirmation_phrase"] = OPERATION_CONFIRMATION_PHRASE
+    payload, status = _oca.read_envelope(
+        data, snapshot, g.get("request_id", "-"),
+        snapshot.generated_at)
+    return _operation_json(payload, status)
+
+
+def _operation_read(section: str):
+    snapshot = _operation_snapshot()
+    rows = [_oca.serialize_view(v)
+            for v in getattr(snapshot, section)]
+    payload, status = _oca.read_envelope(
+        {section: rows, "count": len(rows)}, snapshot,
+        g.get("request_id", "-"), snapshot.generated_at)
+    return _operation_json(payload, status)
+
+
+@app.get("/api/operation-control/products")
+def api_operation_products():
+    return _operation_read("products")
+
+
+@app.get("/api/operation-control/positions")
+def api_operation_positions():
+    return _operation_read("positions")
+
+
+@app.get("/api/operation-control/orders")
+def api_operation_orders():
+    return _operation_read("orders")
+
+
+@app.get("/api/operation-control/signals")
+def api_operation_signals():
+    return _operation_read("signals")
+
+
+@app.get("/api/operation-control/reconciliation")
+def api_operation_reconciliation():
+    return _operation_read("reconciliation")
+
+
+@app.get("/api/operation-control/risk")
+def api_operation_risk():
+    snapshot = _operation_snapshot()
+    data = (_oca.serialize_view(snapshot.risk_limits)
+            if snapshot.risk_limits is not None else None)
+    payload, status = _oca.read_envelope(
+        {"risk_limits": data}, snapshot,
+        g.get("request_id", "-"), snapshot.generated_at)
+    return _operation_json(payload, status)
+
+
+@app.get("/api/operation-control/audit")
+def api_operation_audit():
+    snapshot = _operation_snapshot()
+    service = get_operation_service()
+    payload, status = _oca.read_envelope(
+        {"audit": _oca.serialize_audit(service.audit.tail(200)),
+         "count": len(service.audit)}, snapshot,
+        g.get("request_id", "-"), snapshot.generated_at)
+    return _operation_json(payload, status)
+
+
+_TRADING_ENABLING_COMMANDS = {"start", "resume", "enable"}
+
+
+def _operation_kill_switch_block(command: str):
+    """Kill-switch etkinken ticareti AÇAN komutlar reddedilir
+    (fail-closed; durum makinesi süreç-yerel, bayrak globaldir)."""
+    if command not in _TRADING_ENABLING_COMMANDS:
+        return None
+    cfg, _ = load_config()
+    if not _operation_kill_switch_active(cfg):
+        return None
+    return _operation_error(
+        "KILL_SWITCH_ACTIVE",
+        "Kill-switch etkin — ticareti açan komut reddedildi.", 423)
+
+
+@app.post("/api/operation-control/automation/<command>")
+def api_operation_automation(command: str):
+    cmd = _AUTOMATION_COMMANDS.get(command)
+    if cmd is None:
+        return _operation_error("UNKNOWN_TARGET:command",
+                                "Bilinmeyen otomasyon komutu.")
+    blocked = _operation_kill_switch_block(command)
+    if blocked is not None:
+        return blocked
+    body = _operation_body()
+    try:
+        result = get_operation_service().execute_automation_command(
+            cmd, _operation_actor(),
+            body.get("idempotency_key"))
+    except _OpValidationError as exc:
+        return _operation_error("MALFORMED_REQUEST", str(exc))
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   username=session.get("username", ""),
+                   detail=f"operation automation {command}: "
+                          f"{result.status.value}")
+    payload, status = _oca.action_envelope(
+        result, _operation_snapshot(), int(time.time()))
+    return _operation_json(payload, status)
+
+
+@app.post("/api/operation-control/symbols/<symbol>/<command>")
+def api_operation_symbol(symbol: str, command: str):
+    cmd = _SYMBOL_COMMANDS.get(command)
+    if cmd is None:
+        return _operation_error("UNKNOWN_TARGET:command",
+                                "Bilinmeyen sembol komutu.")
+    blocked = _operation_kill_switch_block(command)
+    if blocked is not None:
+        return blocked
+    body = _operation_body()
+    try:
+        result = get_operation_service().execute_symbol_command(
+            symbol, cmd, _operation_actor(),
+            body.get("idempotency_key"))
+    except _OpValidationError as exc:
+        return _operation_error("MALFORMED_REQUEST", str(exc))
+    payload, status = _oca.action_envelope(
+        result, _operation_snapshot(), int(time.time()))
+    return _operation_json(payload, status)
+
+
+def _operation_close_context(cfg: dict[str, Any] | None,
+                             positions):
+    """Kapatma niyeti için sertifikalı model bağlamı kur.
+
+    PAPER kontrollü kapatma NİYETİ: görünen pozisyondan türetilen
+    defter anlık görüntüsü ile sertifikalı boru hattına girilir.
+    Kill-switch etkinse anlık görüntü yazmayı REDDEDER."""
+    from decimal import Decimal as _D
+
+    from controlled_execution_models import (
+        ControlledExecutionMode, ControlledExecutionPolicy)
+    from execution_kill_switch_models import (
+        KillSwitchReason, KillSwitchSnapshot, KillSwitchState)
+    from paper_models import PaperLedgerSnapshot, PaperPosition
+    ks_active = _operation_kill_switch_active(cfg)
+    now = int(time.time())
+    kill_switch = KillSwitchSnapshot(
+        # Sertifikalı katmanda ENABLED = koruma sağlıklı ve yazma
+        # izinli; acil durdurma etkinse DISABLED ile RED edilir.
+        state=KillSwitchState.DISABLED if ks_active
+        else KillSwitchState.ENABLED,
+        reason=KillSwitchReason.MANUAL,
+        timestamp=now, sequence_id=now)
+    policy = ControlledExecutionPolicy(
+        mode=ControlledExecutionMode.PAPER,
+        simulated_fill_allowed=True)
+    paper_positions = []
+    budget = _D("0")
+    for view in positions:
+        if view.side.upper() in ("BUY", "LONG") and \
+                view.quantity is not None and \
+                view.entry_price is not None and \
+                view.quantity > 0 and view.entry_price > 0:
+            paper_positions.append(PaperPosition(
+                symbol=view.symbol, quantity=view.quantity,
+                cost_basis=view.entry_price * view.quantity))
+        if view.quantity is not None and \
+                view.current_price is not None and \
+                view.quantity > 0 and view.current_price > 0:
+            budget += view.quantity * view.current_price * 2
+    cost_total = sum((p.cost_basis for p in paper_positions),
+                     _D("0"))
+    ledger = PaperLedgerSnapshot(
+        quote_asset="USDT",
+        initial_cash=cost_total + budget,
+        cash=budget, reserved_cash=_D("0"),
+        realized_pnl=_D("0"), commission_paid=_D("0"),
+        positions=tuple(paper_positions))
+    return policy, kill_switch, ledger
+
+
+@app.post("/api/operation-control/positions/<position_id>/close")
+def api_operation_position_close(position_id: str):
+    body = _operation_body()
+    snapshot = _operation_snapshot()
+    target = next((p for p in snapshot.positions
+                   if p.position_id == position_id.upper()),
+                  None)
+    if target is None:
+        return _operation_error("UNKNOWN_TARGET:position",
+                                "Pozisyon bulunamadı.")
+    cfg, _ = load_config()
+    policy, kill_switch, ledger = _operation_close_context(
+        cfg, snapshot.positions)
+    try:
+        result = get_operation_service().request_position_close(
+            target, ledger, policy, kill_switch,
+            _operation_actor(), body.get("reason") or "",
+            body.get("confirm_phrase") or "",
+            body.get("idempotency_key") or "")
+    except _OpValidationError as exc:
+        return _operation_error("MALFORMED_REQUEST", str(exc))
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   username=session.get("username", ""),
+                   detail=f"operation close {position_id}: "
+                          f"{result.status.value}")
+    payload, status = _oca.action_envelope(
+        result, snapshot, int(time.time()),
+        "PAPER kontrollü kapatma niyeti")
+    return _operation_json(payload, status)
+
+
+@app.post("/api/operation-control/global/stop-new-entries")
+def api_operation_stop_new_entries():
+    body = _operation_body()
+    try:
+        result = get_operation_service().stop_new_entries_action(
+            _operation_actor(), body.get("reason") or "",
+            body.get("confirm_phrase") or "",
+            body.get("idempotency_key") or "")
+    except _OpValidationError as exc:
+        return _operation_error("MALFORMED_REQUEST", str(exc))
+    payload, status = _oca.action_envelope(
+        result, _operation_snapshot(), int(time.time()))
+    return _operation_json(payload, status)
+
+
+@app.post("/api/operation-control/global/request-close-all")
+def api_operation_request_close_all():
+    body = _operation_body()
+    snapshot = _operation_snapshot()
+    cfg, _ = load_config()
+    policy, kill_switch, ledger = _operation_close_context(
+        cfg, snapshot.positions)
+    try:
+        result = get_operation_service().request_close_all(
+            snapshot.positions, ledger, policy, kill_switch,
+            _operation_actor(), body.get("reason") or "",
+            body.get("confirm_phrase") or "",
+            body.get("idempotency_key") or "")
+    except _OpValidationError as exc:
+        return _operation_error("MALFORMED_REQUEST", str(exc))
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   username=session.get("username", ""),
+                   detail=f"operation close-all: "
+                          f"{result.status.value}")
+    payload, status = _oca.action_envelope(
+        result, snapshot, int(time.time()),
+        "Pozisyon başına ayrı PAPER kapatma niyeti")
+    return _operation_json(payload, status)
+
+
+@app.post("/api/operation-control/global/kill-switch")
+def api_operation_kill_switch():
+    body = _operation_body()
+    engage = body.get("engage")
+    if not isinstance(engage, bool):
+        return _operation_error("MALFORMED_REQUEST:engage",
+                                "engage boolean olmalıdır.")
+    try:
+        result = get_operation_service().record_kill_switch(
+            _operation_actor(), engage,
+            body.get("reason") or "",
+            body.get("confirm_phrase") or "",
+            body.get("idempotency_key") or "")
+    except _OpValidationError as exc:
+        return _operation_error("MALFORMED_REQUEST", str(exc))
+    if result.status.value == "COMPLETED":
+        # Sertifikalı kill-switch mekanizması (Mission 1500 yolu).
+        cfg = _get_adaptive_cfg()
+        if engage:
+            sg.activate_kill_switch(
+                "Operation Center acil durdurma.")
+            cfg["kill_switch"] = True
+        else:
+            sg.deactivate_kill_switch()
+            cfg["kill_switch"] = False
+        _save_adaptive_cfg(cfg)
+        slog.log_event(slog.KILL_SWITCH,
+                       username=session.get("username", ""),
+                       ip=auth.get_client_ip(),
+                       detail="operation-center "
+                              f"{'activated' if engage else 'deactivated'}")
+    payload, status = _oca.action_envelope(
+        result, _operation_snapshot(), int(time.time()),
+        "Ticaret bloklandı; pozisyonlar KAPATILMADI — ayrı "
+        "kapatma niyeti gerekir." if engage else None)
+    return _operation_json(payload, status)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Başlangıç
 # ══════════════════════════════════════════════════════════════════════════════
 

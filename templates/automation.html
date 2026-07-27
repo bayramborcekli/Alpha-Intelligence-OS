@@ -1,7 +1,7 @@
 {% extends "dash_base.html" %}
 {% block title %}Automation{% endblock %}
 {% block heading %}⚙️ Intelligence Automation{% endblock %}
-{% block subheading %}Kontrollü otomatik Intelligence çalıştırma — yalnız izleme ve manuel tetik{% endblock %}
+{% block subheading %}Kontrollü otomatik Intelligence çalıştırma — bu panel analiz otomasyonunu izler; ticaret emirleri yalnız Operation Center üzerinden, Mission 2100 kontrollü yürütme hattıyla yönetilir{% endblock %}
 
 {% block content %}
 <style>
@@ -42,9 +42,12 @@
 </style>
 
 <p class="au-note" style="margin-bottom:12px">
-  <span class="advisory-tag">SALT İZLEME</span>
-  Bu panel yalnız Automation durumunu gösterir ve manuel tetik gönderir.
-  Hiçbir hesaplama tarayıcıda yapılmaz; hiçbir emir oluşturulmaz.
+  <span class="advisory-tag">ANALİZ OTOMASYONU</span>
+  Bu panel Intelligence ANALİZ otomasyonunu gösterir ve manuel analiz
+  tetiği gönderir; bu sayfadan emir oluşturulmaz. Kontrollü ticaret
+  eylemleri (otomasyon başlat/durdur, kapatma niyeti, kill-switch)
+  <a href="/operation-center">Operation Center</a>'dadır ve Mission 2100
+  kontrollü yürütme hattından geçer.
 </p>
 
 <div class="au-banner" id="au-disabled-banner" role="alert">

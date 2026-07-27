@@ -52,7 +52,10 @@ ve yalnızca sunucu tarafında, açık talimatla etkinleştirilebilir.
 
 ## Portföy, Pozisyonlar ve Emirler (Mission 1400.3)
 - Menüden **💼 Portföy**, **📈 Pozisyonlar**, **🧾 Emirler** açılır; üçü de
-  salt-okunurdur — emir verme/iptal/kapatma düğmesi yoktur ve olmayacaktır.
+  salt-okunur GÖRÜNÜMLERDİR — bu sayfalarda emir verme/iptal düğmesi yoktur.
+  (Güncel sürüm notu — Mission 2200: kontrollü operatör eylemleri artık
+  **🎛️ Operation Center** sayfasındadır; oradaki her eylem Mission 2100
+  kontrollü yürütme hattından geçer, doğrudan borsa çağrısı yapılmaz.)
 - Portföy'de hesaplar ayrıdır; birleşik toplam gösterilmez (TRY ile USDT
   dönüşümsüz toplanamaz). "Sıfır Bakiyeleri Göster" ile tüm varlıklar görünür.
 - Pozisyonlarda yön metinle gösterilir: LONG / SHORT / FLAT. "Toplam

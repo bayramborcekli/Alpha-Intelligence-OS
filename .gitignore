@@ -112,3 +112,10 @@ alpha20_v1/risk_events.jsonl
 # Login rate-limit store (paylasimli SQLite)
 login_attempts.db
 login_attempts.db-*
+
+# ── Mission 2200 legacy hijyeni: yedek/kilit/çalışma-zamanı dosyaları ─
+*.bak
+*.bak[0-9]
+alpha20_v1/.auto_controller.lock
+automation_state.json
+automation_state.json.lock

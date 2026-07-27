@@ -240,7 +240,10 @@ class TestSecurity:
     # Mission 1400.2: açıkça salt-okunur (yalnızca GET) izinli rotalar.
     READ_ONLY_ALLOWED = {"/api/v1/global/orders",
                          "/api/v1/global/orders/export.csv",
-                         "/orders"}
+                         "/orders",
+                         # Mission 2200: operasyon merkezi salt-okunur
+                         # emir görünümü (GET, borsa yazması yok).
+                         "/api/operation-control/orders"}
 
     def test_no_binance_write_route_exists(self):
         for rule in flask_app.app.url_map.iter_rules():

@@ -290,6 +290,12 @@ class TestOrdersBackend:
                    "/orders"}  # /orders sayfası: salt-okunur GET görünümü
         for rule in flask_app.app.url_map.iter_rules():
             p = str(rule).lower()
+            # Mission 2200 bilinçli genişletme: operasyon merkezi
+            # rotaları sertifikalı PAPER kontrollü yürütme katmanından
+            # geçer ve tests/test_operation_control_* ile korunur;
+            # doğrudan borsa yazması içermez.
+            if p.startswith("/api/operation-control/"):
+                continue
             if any(w in p for w in ("order", "cancel", "close", "transfer",
                                     "withdraw", "leverage", "margin")):
                 assert p in allowed, f"yasak rota: {rule}"

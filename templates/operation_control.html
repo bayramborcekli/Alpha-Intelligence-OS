@@ -1,0 +1,194 @@
+{% extends "dash_base.html" %}
+{% block title %}Operation Center{% endblock %}
+{% block heading %}🎛️ Operation Center{% endblock %}
+{% block subheading %}Kontrollü ticaret operasyon çalışma alanı — tüm emir eylemleri Mission 2100 kontrollü yürütme hattından geçer; PAPER varsayılandır, LIVE fail-closed kilitlidir{% endblock %}
+
+{% block content %}
+<style>
+  .oc-grid { display:grid; gap:14px; }
+  .oc-card { background:var(--card, #14161c); border:1px solid var(--line, #2a2d36);
+             border-radius:10px; padding:14px; }
+  .oc-card h2 { margin:0 0 10px; font-size:1rem; }
+  .oc-kv { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:8px; }
+  .oc-kv div { background:var(--soft, #1b1e26); border-radius:8px; padding:8px 10px; }
+  .oc-kv b { display:block; font-size:.72rem; color:var(--muted,#8b90a0);
+             text-transform:uppercase; letter-spacing:.04em; }
+  .oc-state { font-weight:700; }
+  .oc-state.unknown, .oc-badge.unknown { color:#d9a441; }
+  .oc-state.bad, .oc-badge.bad { color:#e05656; }
+  .oc-state.good, .oc-badge.good { color:#3fbf7f; }
+  .oc-mode-paper { background:#153322; color:#3fbf7f; padding:2px 10px;
+                   border-radius:6px; font-weight:800; }
+  .oc-mode-other { background:#33291a; color:#d9a441; padding:2px 10px;
+                   border-radius:6px; font-weight:800; }
+  .oc-mode-live { background:#3a1a1a; color:#e05656; padding:2px 10px;
+                  border-radius:6px; font-weight:800; }
+  .oc-btn { border:1px solid var(--line,#2a2d36); background:var(--soft,#1b1e26);
+            color:inherit; border-radius:8px; padding:6px 12px; cursor:pointer; }
+  .oc-btn:disabled { opacity:.45; cursor:not-allowed; }
+  .oc-btn.danger { border-color:#7a2e2e; color:#e05656; }
+  .oc-btn.primary { border-color:#2e5c7a; color:#5ab0e0; }
+  .oc-table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  .oc-table th, .oc-table td { padding:6px 8px; border-bottom:1px solid var(--line,#2a2d36);
+                               text-align:left; white-space:nowrap; }
+  .oc-table th { color:var(--muted,#8b90a0); font-size:.72rem;
+                 text-transform:uppercase; }
+  .oc-scroll { overflow-x:auto; }
+  .oc-banner { display:none; border-radius:8px; padding:10px 12px; margin-bottom:10px; }
+  .oc-banner.error { display:block; background:#3a1a1a; color:#e08585; }
+  .oc-banner.warn  { display:block; background:#33291a; color:#d9a441; }
+  .oc-meta { color:var(--muted,#8b90a0); font-size:.78rem; margin:4px 0 12px; }
+  .oc-empty { color:var(--muted,#8b90a0); padding:8px 0; }
+  .oc-note { color:var(--muted,#8b90a0); font-size:.78rem; margin-top:8px; }
+  dialog.oc-confirm { background:var(--card,#14161c); color:inherit; border:1px solid
+                      var(--line,#2a2d36); border-radius:10px; max-width:430px; }
+  dialog.oc-confirm input, dialog.oc-confirm textarea { width:100%; margin:6px 0;
+      background:var(--soft,#1b1e26); color:inherit; border:1px solid var(--line,#2a2d36);
+      border-radius:6px; padding:6px 8px; }
+</style>
+
+<div id="oc-error" class="oc-banner" role="alert"></div>
+<div id="oc-stale" class="oc-banner" role="status"></div>
+<p class="oc-meta">Son başarılı yenileme: <span id="oc-refreshed">-</span>
+  · Veri tazeliği: <span id="oc-freshness" class="oc-state unknown">UNKNOWN</span>
+  · Yürütme modu: <span id="oc-mode" class="oc-mode-paper">-</span></p>
+
+<div class="oc-grid">
+
+  <section class="oc-card" aria-labelledby="oc-h-status">
+    <h2 id="oc-h-status">1 · Sistem Yürütme Durumu</h2>
+    <div class="oc-kv" id="oc-status-grid"></div>
+  </section>
+
+  <section class="oc-card" aria-labelledby="oc-h-auto">
+    <h2 id="oc-h-auto">2 · Otomatik Ticaret Kontrolü</h2>
+    <p>Durum: <span id="oc-auto-state" class="oc-state unknown">UNKNOWN</span></p>
+    <p>
+      <button class="oc-btn primary" data-auto="start">▶ Başlat</button>
+      <button class="oc-btn" data-auto="pause">⏸ Duraklat</button>
+      <button class="oc-btn" data-auto="resume">⏵ Sürdür</button>
+      <button class="oc-btn danger" data-auto="stop">⏹ Durdur</button>
+    </p>
+    <p class="oc-note">START mod/yetki/izin/risk/kill-switch denetimlerini
+      BAYPAS ETMEZ. PAUSE yeni pozisyonu engeller, mevcutlar koruma
+      politikasını izler. STOP yeni otomatik girişleri keser; mevcut
+      pozisyonları sessizce KAPATMAZ.</p>
+  </section>
+
+  <section class="oc-card" aria-labelledby="oc-h-products">
+    <h2 id="oc-h-products">3 · Yönetilen Ürünler</h2>
+    <div class="oc-scroll"><table class="oc-table" id="oc-products">
+      <thead><tr><th>Sembol</th><th>Piyasa</th><th>Strateji</th>
+        <th>Otomasyon</th><th>Sinyal</th><th>Mod</th><th>Yön</th>
+        <th>Giriş Uygun</th><th>Son Sinyal</th><th>Son Karar</th>
+        <th>Son Red</th><th>Eylem</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+  <section class="oc-card" aria-labelledby="oc-h-pos">
+    <h2 id="oc-h-pos">4 · Açık Pozisyonlar</h2>
+    <div class="oc-scroll"><table class="oc-table" id="oc-positions">
+      <thead><tr><th>Sembol</th><th>Piyasa</th><th>Yön</th><th>Durum</th>
+        <th>Strateji</th><th>Giriş</th><th>Güncel</th><th>Miktar</th>
+        <th>Notyonel</th><th>Gerç. PnL</th><th>Gerç.meyen PnL</th><th>PnL %</th>
+        <th>Ücret</th><th>Stop</th><th>TP</th><th>MFE</th><th>MAE</th>
+        <th>Açılış</th><th>Mutabakat</th><th>Mod</th><th>Eylem</th></tr></thead>
+      <tbody></tbody></table></div>
+    <p class="oc-note">Kapatma isteği doğrudan borsa çağrısı DEĞİLDİR:
+      kontrollü kapatma niyeti oluşturur (yetki → izin kapısı → risk →
+      kill-switch → yaşam döngüsü → defter). Stop/TP güncelleme:
+      <em>Sertifikalı yürütme API'si desteklemiyor</em> — bir sonraki
+      agent giriş noktasıdır.</p>
+  </section>
+
+  <section class="oc-card" aria-labelledby="oc-h-orders">
+    <h2 id="oc-h-orders">5 · Emirler</h2>
+    <div class="oc-scroll"><table class="oc-table" id="oc-orders">
+      <thead><tr><th>Emir ID</th><th>Client ID</th><th>Sembol</th><th>Yön</th>
+        <th>Tip</th><th>Miktar</th><th>Fiyat</th><th>Ort. Dolum</th>
+        <th>Dolan</th><th>Kalan</th><th>Durum</th><th>Oluşturma</th>
+        <th>Güncelleme</th><th>Strateji</th><th>Korelasyon</th><th>Mod</th>
+        <th>Mutabakat</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+  <section class="oc-card" aria-labelledby="oc-h-signals">
+    <h2 id="oc-h-signals">6 · Sinyaller ve Kararlar</h2>
+    <p class="oc-note">Bir intelligence ÖNERİSİ emir değildir. Etiketler:
+      Öneri → Aday → Yetkili Niyet → Emir → Pozisyon.</p>
+    <div class="oc-scroll"><table class="oc-table" id="oc-signals">
+      <thead><tr><th>Zaman</th><th>Sembol</th><th>Strateji</th><th>Yön</th>
+        <th>Güven</th><th>Tür</th><th>Karar</th><th>Risk</th><th>İzin</th>
+        <th>Red Kodu</th><th>Yürütme</th><th>Korelasyon</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+  <section class="oc-card" aria-labelledby="oc-h-safety">
+    <h2 id="oc-h-safety">7 · Global Güvenlik Kontrolleri</h2>
+    <p>
+      <button class="oc-btn danger" id="oc-stop-entries">🚫 Yeni Girişleri Durdur</button>
+      <button class="oc-btn danger" id="oc-close-all">📕 Tümünü Kapatma İsteği</button>
+      <button class="oc-btn danger" id="oc-kill">⛔ Acil Kill-Switch</button>
+      <button class="oc-btn" id="oc-kill-off">Kill-Switch Kapat</button>
+    </p>
+    <div class="oc-kv" id="oc-safety-grid">
+      <div><b>Ticaret Bloklu</b><span id="oc-sf-blocked" class="oc-state unknown">UNKNOWN</span></div>
+      <div><b>Kapatma Niyeti İstendi</b><span id="oc-sf-intents">0</span></div>
+      <div><b>Kapandığı Onaylı</b><span id="oc-sf-closed">0</span></div>
+      <div><b>Hâlâ Açık</b><span id="oc-sf-open" class="oc-state unknown">UNKNOWN</span></div>
+      <div><b>Mutabakat Bekliyor</b><span id="oc-sf-recon" class="oc-state unknown">UNKNOWN</span></div>
+    </div>
+    <p class="oc-note">Kill-switch yeni yürütme yetkisini derhal bloklar;
+      pozisyonların kapandığını ASLA iddia etmez. Yıkıcı eylemler yazılı
+      onay ifadesi, neden ve idempotency anahtarı gerektirir.</p>
+  </section>
+
+  <section class="oc-card" aria-labelledby="oc-h-risk">
+    <h2 id="oc-h-risk">8 · Risk ve Limitler</h2>
+    <div class="oc-kv" id="oc-risk-grid"></div>
+    <p class="oc-note">Risk limiti düzenleme:
+      <em>Sertifikalı yürütme API'si desteklemiyor</em> — salt gösterim.
+      <button class="oc-btn" disabled aria-disabled="true">Limit Düzenle
+        (desteklenmiyor)</button></p>
+  </section>
+
+  <section class="oc-card" aria-labelledby="oc-h-recon">
+    <h2 id="oc-h-recon">9 · Mutabakat</h2>
+    <div class="oc-scroll"><table class="oc-table" id="oc-recon">
+      <thead><tr><th>Sembol</th><th>Son Mutabakat</th><th>Defter</th>
+        <th>Broker</th><th>Fark</th><th>Emir Uyuşmazlığı</th>
+        <th>Miktar Uyuşmazlığı</th><th>Fiyat Uyuşmazlığı</th>
+        <th>Yetim Emir</th><th>Yetim Pozisyon</th><th>Durum</th>
+        <th>Gereken Eylem</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+  <section class="oc-card" aria-labelledby="oc-h-audit">
+    <h2 id="oc-h-audit">10 · Denetim Zaman Çizelgesi</h2>
+    <div class="oc-scroll"><table class="oc-table" id="oc-audit">
+      <thead><tr><th>Zaman</th><th>Aktör</th><th>Eylem</th><th>Hedef</th>
+        <th>Önceki</th><th>İstenen</th><th>Sonuç</th><th>Neden</th>
+        <th>Korelasyon</th><th>Idempotency</th><th>Hata</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+</div>
+
+<dialog class="oc-confirm" id="oc-dialog">
+  <form method="dialog" id="oc-dialog-form">
+    <h3 id="oc-dialog-title">Onay</h3>
+    <div id="oc-dialog-body" class="oc-note"></div>
+    <label>Neden (zorunlu)
+      <textarea id="oc-dialog-reason" rows="2" required></textarea></label>
+    <label>Onay ifadesi: <b id="oc-dialog-phrase-label">ONAYLIYORUM</b>
+      <input id="oc-dialog-phrase" autocomplete="off" required></label>
+    <p style="text-align:right">
+      <button value="cancel" class="oc-btn">Vazgeç</button>
+      <button value="ok" class="oc-btn danger" id="oc-dialog-ok">Onayla</button>
+    </p>
+  </form>
+</dialog>
+
+<script>window.OC_CSRF = "{{ csrf_token() }}";</script>
+<script src="{{ url_for('static', filename='js/operation_control.js') }}"></script>
+{% endblock %}

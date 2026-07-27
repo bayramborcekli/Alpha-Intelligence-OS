@@ -1,9 +1,17 @@
-# API Referansı (salt-okunur yüzey)
+# API Referansı (veri/intelligence yüzeyi)
 
-Tüm veri API'leri **yalnızca GET** metodu sunar; kimlik doğrulama
-zorunludur (anonim → 401) ve yanıtlar `Cache-Control: no-store, private`
-taşır. Yazma metodu (POST/PUT/PATCH/DELETE) → 405. Hata yanıtları
-sterilizedir: sabit kod + Türkçe mesaj, stack trace/secret asla yok.
+Bu dokümandaki VERİ ve INTELLIGENCE API'leri **yalnızca GET** metodu
+sunar; kimlik doğrulama zorunludur (anonim → 401) ve yanıtlar
+`Cache-Control: no-store, private` taşır. Bu yüzeyde yazma metodu
+(POST/PUT/PATCH/DELETE) → 405. Hata yanıtları sterilizedir: sabit kod +
+Türkçe mesaj, stack trace/secret asla yok.
+
+> Güncel sürüm notu (Mission 2200): uygulama genelinde "salt-okunur"
+> iddiası artık yalnız bu veri yüzeyi için geçerlidir. Kontrollü operatör
+> yazma uçları `/api/operation-control/*` altındadır; tamamı CSRF+auth
+> korumalıdır ve Mission 2100 kontrollü yürütme hattından geçer
+> (doğrudan borsa yazma çağrısı yoktur). Sözleşme:
+> `docs/operation_control_center.md`.
 
 ## Intelligence (Mission 1500.1)
 

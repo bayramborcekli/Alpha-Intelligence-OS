@@ -2,8 +2,14 @@
 
 PAPER-only Alpha Intelligence OS içinde, mevcut Intelligence Engine
 özetinin belirli aralıklarla otomatik üretilip **append-only** Workspace
-zaman çizelgesine kaydedilmesini sağlayan katman. Tamamı salt-okunur
-mimariye uyar: **hiçbir borsa yazma isteği yoktur ve olamaz.**
+zaman çizelgesine kaydedilmesini sağlayan katman. Bu KATMAN salt-okunur
+mimariye uyar: **bu katmanda hiçbir borsa yazma isteği yoktur.**
+
+> Güncel sürüm notu (Mission 2200): "salt-okunur" ifadesi BU Intelligence
+> Automation katmanı içindir; uygulama genelinde kontrollü operatör
+> eylemleri **Operation Center** (`/operation-center`) üzerinden Mission
+> 2100 kontrollü yürütme hattıyla yapılır. Bkz.
+> `docs/operation_control_center.md`.
 
 Bu doküman mevcut davranışı açıklar; sözleşmelerin kanıtı test
 süitleridir (`tests/test_mission1600_*.py`, toplam 154 test).
