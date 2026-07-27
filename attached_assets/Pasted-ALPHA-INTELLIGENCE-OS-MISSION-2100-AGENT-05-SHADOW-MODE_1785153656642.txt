@@ -1,0 +1,417 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2100
+
+AGENT 05
+
+SHADOW MODE
+
+ROLE
+
+Implement deterministic Shadow Mode.
+
+Shadow Mode SHALL observe the real market
+without sending any live orders.
+
+It SHALL compare:
+
+AI decision
+↓
+
+Paper execution
+
+↓
+
+Live market outcome
+
+↓
+
+Performance analysis
+
+This Agent SHALL NEVER:
+
+• place a live order
+• write to an exchange
+• modify broker state
+• bypass Mission 2000
+• bypass Risk Engine
+• bypass Kill Switch
+
+────────────────────────────────────────
+1. BASELINE
+
+Execution Core
+03e181d
+
+Agent 01
+4304527
+
+Agent 02
+69bd05c
+
+Agent 03
+32f4a3a
+
+Agent 04
+Use final Agent 04 commit
+
+Architecture
+FROZEN
+
+────────────────────────────────────────
+2. CREATE
+
+shadow_mode.py
+
+shadow_models.py
+
+shadow_errors.py
+
+shadow_comparator.py
+
+tests/test_shadow_mode.py
+
+tests/test_shadow_comparator.py
+
+tests/test_shadow_architecture.py
+
+────────────────────────────────────────
+3. SHADOW MODE
+
+Create
+
+ShadowModeService
+
+Operations
+
+submit_shadow()
+
+cancel_shadow()
+
+compare_execution()
+
+statistics()
+
+heartbeat()
+
+No execution.
+
+No broker write.
+
+────────────────────────────────────────
+4. SHADOW PIPELINE
+
+ExecutionRequest
+
+↓
+
+Runtime validation
+
+↓
+
+SHADOW validation
+
+↓
+
+Risk Engine
+
+↓
+
+Permission Gate
+
+↓
+
+Kill Switch
+
+↓
+
+Paper simulation
+
+↓
+
+Market observation
+
+↓
+
+Comparison
+
+↓
+
+Immutable report
+
+Pipeline order is fixed.
+
+────────────────────────────────────────
+5. MARKET OBSERVATION
+
+Observe only.
+
+Allowed
+
+price
+
+best bid
+
+best ask
+
+trade price
+
+order book snapshot
+
+Forbidden
+
+order placement
+
+cancel
+
+modify
+
+listen key creation
+
+margin transfer
+
+wallet transfer
+
+position modification
+
+────────────────────────────────────────
+6. COMPARISON
+
+Compare
+
+expected price
+
+observed price
+
+expected fill
+
+market fill possibility
+
+expected pnl
+
+market pnl
+
+decision timing
+
+latency observation
+
+No score manipulation.
+
+No AI optimization.
+
+Observation only.
+
+────────────────────────────────────────
+7. SHADOW MODELS
+
+Create
+
+ShadowOrder
+
+ShadowExecution
+
+ShadowComparison
+
+ShadowStatistics
+
+ShadowSnapshot
+
+ShadowAudit
+
+ShadowHeartbeat
+
+Immutable only.
+
+────────────────────────────────────────
+8. REPORT
+
+Comparison report contains
+
+request reference
+
+paper reference
+
+market reference
+
+price delta
+
+fill delta
+
+pnl delta
+
+latency
+
+decision
+
+audit
+
+logical sequence
+
+No generated identifiers.
+
+────────────────────────────────────────
+9. SECURITY
+
+Forbidden
+
+exchange write
+
+REST trading
+
+WebSocket trading
+
+broker SDK write
+
+API key mutation
+
+database
+
+filesystem
+
+thread
+
+process
+
+retry
+
+sleep
+
+UUID
+
+random
+
+datetime.now
+
+Shadow Mode SHALL be read-only.
+
+────────────────────────────────────────
+10. DEPENDENCIES
+
+Allowed
+
+stdlib
+
+Mission 2000 contracts
+
+Agent 01
+
+Agent 02
+
+Agent 03
+
+Agent 04
+
+Read-only market adapter
+
+Forbidden
+
+Execution API write
+
+BrokerAdapter submit
+
+Live execution
+
+Desktop
+
+Mobile
+
+AI optimization
+
+────────────────────────────────────────
+11. TESTS
+
+Minimum
+
+340 PASS
+
+Cover
+
+shadow validation
+
+pipeline order
+
+market observation
+
+comparison
+
+price delta
+
+fill delta
+
+pnl delta
+
+latency
+
+immutable report
+
+risk rejection
+
+kill switch rejection
+
+zero exchange write
+
+zero broker submit
+
+dependency direction
+
+architecture
+
+public exports
+
+security
+
+────────────────────────────────────────
+12. DELIVERY
+
+Return exactly
+
+CREATED FILES
+
+SHADOW MODE
+
+COMPARISON
+
+MARKET OBSERVATION
+
+SECURITY
+
+TEST RESULTS
+
+TOTAL REGRESSION
+
+EXCHANGE WRITE REQUEST
+
+0
+
+SECRET EXPOSURE
+
+0
+
+PRODUCTION NETWORK REQUEST
+
+READ ONLY
+
+COMMIT
+
+────────────────────────────────────────
+13. PASS
+
+PASS requires
+
+≥340 PASS
+
+0 FAIL
+
+Full regression PASS
+
+Read-only market observation certified
+
+Exchange Write = 0
+
+Secret Exposure = 0
+
+Production Network Write = 0
+
+Mission 2000 unchanged
+
+Agents 01–04 unchanged
