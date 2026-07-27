@@ -1,0 +1,515 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2000 — EXECUTION FOUNDATION
+
+AGENT 06 — BINANCE SPOT ADAPTER
+
+ROLE
+
+Implement the FIRST concrete BrokerAdapter.
+
+This Agent SHALL implement only Binance Spot.
+
+Its primary objective is NOT trading.
+
+Its primary objective is to prove that the BrokerAdapter contract
+is sufficient for real broker implementations.
+
+The implementation SHALL become the REFERENCE implementation
+for every future broker.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 2000
+
+Agent 05
+
+PASS
+
+Regression Baseline
+
+Previous Mission PASS
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement
+
+BinanceSpotAdapter
+
+using the canonical BrokerAdapter interface.
+
+This Agent SHALL prove that:
+
+• BrokerAdapter contract is complete
+• Canonical models are sufficient
+• No broker leaks into the core
+• Result normalization works
+• Error normalization works
+• Capability model works
+• Idempotency contract works
+
+WITHOUT executing any real trades.
+
+────────────────────────────────────────
+3. FILES
+
+Create
+
+binance_spot_adapter.py
+
+binance_normalizer.py
+
+binance_capabilities.py
+
+tests/test_binance_spot_adapter.py
+
+Update architecture delivery test.
+
+No unrelated production code changes.
+
+────────────────────────────────────────
+4. ARCHITECTURE
+
+Execution Service
+        │
+Risk Engine
+        │
+Kill Switch
+        │
+BrokerAdapter
+        │
+BinanceSpotAdapter
+        │
+Binance REST / WebSocket
+        │
+Binance Exchange
+
+Only the adapter may know Binance.
+
+Nothing above BrokerAdapter
+may import Binance.
+
+────────────────────────────────────────
+5. IMPLEMENTATION RULE
+
+BinanceSpotAdapter SHALL inherit ONLY
+
+BrokerAdapter
+
+No additional base classes.
+
+No mixins.
+
+No service locators.
+
+────────────────────────────────────────
+6. NETWORK
+
+This Agent SHALL NOT perform real HTTP.
+
+This Agent SHALL NOT open WebSockets.
+
+Instead
+
+create deterministic transport interfaces.
+
+Example
+
+Transport
+
+↓
+
+RESTTransport
+
+↓
+
+WebSocketTransport
+
+All mocked.
+
+No internet.
+
+────────────────────────────────────────
+7. AUTHENTICATION
+
+No real API Keys.
+
+No secrets.
+
+No HMAC signing.
+
+Instead define
+
+SigningProvider interface
+
+CredentialProvider interface
+
+without implementation.
+
+Future mission only.
+
+────────────────────────────────────────
+8. NORMALIZATION
+
+Convert Binance objects into ONLY canonical models.
+
+Never expose
+
+Binance JSON
+
+Binance SDK
+
+REST Response
+
+Exchange payload
+
+Normalization examples
+
+Binance FILLED
+
+↓
+
+ExecutionStatus.FILLED
+
+Binance NEW
+
+↓
+
+SUBMITTED
+
+Binance PARTIALLY_FILLED
+
+↓
+
+PARTIALLY_FILLED
+
+etc.
+
+────────────────────────────────────────
+9. CAPABILITIES
+
+Expose Binance Spot capabilities
+ONLY through BrokerProfile.
+
+Never
+
+if broker=="Binance"
+
+Capabilities only.
+
+────────────────────────────────────────
+10. ERROR NORMALIZATION
+
+Translate Binance failures into
+
+BrokerErrorCode
+
+Examples
+
+-2010
+
+↓
+
+ORDER_REJECTED
+
+-1013
+
+↓
+
+INVALID_REQUEST
+
+429
+
+↓
+
+RATE_LIMITED
+
+Timeout
+
+↓
+
+TIMEOUT
+
+Network
+
+↓
+
+NETWORK_FAILURE
+
+Unknown
+
+↓
+
+UNKNOWN_BROKER_FAILURE
+
+Never leak Binance codes.
+
+────────────────────────────────────────
+11. RESULT CONTRACT
+
+Every operation returns
+
+BrokerOperationResult
+
+Never
+
+dict
+
+JSON
+
+requests.Response
+
+aiohttp.Response
+
+SDK objects
+
+────────────────────────────────────────
+12. READ/WRITE
+
+Read
+
+profile
+
+health
+
+positions
+
+balances
+
+orders
+
+Write
+
+submit
+
+cancel
+
+Certified by tests.
+
+────────────────────────────────────────
+13. IDEMPOTENCY
+
+submit_order
+
+requires idempotency key.
+
+cancel_order
+
+requires idempotency key.
+
+Missing key
+
+↓
+
+BrokerContractError
+
+No retry.
+
+No duplicate execution.
+
+────────────────────────────────────────
+14. SAFETY
+
+Forbidden
+
+HTTP
+
+WebSocket
+
+real network
+
+API Keys
+
+Secrets
+
+Signing
+
+Environment variables
+
+Filesystem
+
+Retries
+
+Threads
+
+Processes
+
+Sleep
+
+Datetime.now
+
+UUID generation
+
+Randomness
+
+────────────────────────────────────────
+15. TESTS
+
+Minimum
+
+200 focused tests.
+
+Verify
+
+BrokerAdapter contract
+
+Binance inheritance
+
+Normalization
+
+Capability exposure
+
+Error mapping
+
+Status mapping
+
+Read/write separation
+
+No broker leakage
+
+No HTTP
+
+No REST
+
+No websocket
+
+No requests
+
+No aiohttp
+
+No httpx
+
+No secrets
+
+No env
+
+No signing
+
+No retries
+
+No sleep
+
+No randomness
+
+No datetime.now
+
+No UUID
+
+No duplicate models
+
+Public API freeze
+
+Architecture certification
+
+Regression
+
+────────────────────────────────────────
+16. FUTURE COMPATIBILITY
+
+Agent 07
+
+IBKR
+
+must be implementable
+
+WITHOUT modifying
+
+Execution Service
+
+Risk Engine
+
+Kill Switch
+
+BrokerAdapter
+
+Only new adapter files.
+
+────────────────────────────────────────
+17. DELIVERY
+
+Return
+
+── CREATED FILES ──
+
+List
+
+── BINANCE ADAPTER ──
+
+Summary
+
+── NORMALIZATION ──
+
+Summary
+
+── CAPABILITIES ──
+
+Summary
+
+── ERROR MAPPING ──
+
+Summary
+
+── RESULT CONTRACT ──
+
+Summary
+
+── SAFETY ──
+
+Summary
+
+── TEST RESULTS ──
+
+PASS
+
+── TOTAL REGRESSION ──
+
+PASS
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+GitHub push
+
+── NEXT AGENT ──
+
+AGENT 07 — EXECUTION SERVICE
+
+────────────────────────────────────────
+18. PASS
+
+PASS requires
+
+• Reference Broker implementation complete
+
+• No broker leakage
+
+• No network
+
+• No execution
+
+• ≥200 tests PASS
+
+• Regression PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
