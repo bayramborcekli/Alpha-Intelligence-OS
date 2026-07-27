@@ -55,3 +55,31 @@ menüden erişilebilir durumda.
 Bağımsız inceleme: **PASS**, engelleyici bulgu yok. Kapsam
 disiplini, XSS kaçışları, dürüst UNKNOWN davranışı ve tek yazma
 yolunun kontrollü niyet ucu olduğu doğrulandı.
+
+---
+
+# Mission 2300 — Agent 02: AI Karar Panosu
+
+Trading Home, "Yapay zekâm şu an ne yapıyor?" sorusuna 5 saniyede
+yanıt veren otonom yatırım panosuna dönüştürüldü (yine frontend-only).
+
+- **Büyük mod kartı:** OTONOM / DANIŞMAN + basit durum rozeti
+  (Çalışıyor / Duraklatıldı / Hata—Acil Durduruldu / Çevrimdışı);
+  iç otomasyon mantığı sızdırılmaz.
+- **Aktif işlemler:** Varlık, Yön, Giriş Fiyatı, Anlık Kazanç, Süre,
+  Durum (Yönetiliyor / Kademelendiriliyor / Kapatılıyor / Çıkış
+  Bekliyor / Acil Çıkış / Tamamlandı); tek eylem: Kapat. Bilinmeyen
+  iç durum ham haliyle gösterilmez.
+- **Sıra:** Hazır / Bekliyor / Hazırlanıyor / Yürütülüyor / Kapanıyor —
+  açıklamasız; her sembol tek durumla görünür (çelişki yasak).
+- **Son hareketler:** en yeni üstte (istemci tarafında da sıralanır),
+  en fazla 20 kayıt, yalın dil; operatör olayları teknik detay
+  sızdırmaz.
+- **Yasaklar testle kilitli:** RSI/EMA/MACD/ADX, güven yüzdesi,
+  strateji içi bilgiler, karar gerekçeleri, JSON/teknik günlük.
+- Durum ucu düşerse mod kartı ve üst çubuk birlikte UNKNOWN/Çevrimdışı
+  olur — bayat değer kalmaz.
+
+Test: 27 yeni PASS (dosya toplamı 109); tam regresyon
+**12.866 PASS + 1 skip, 0 FAIL**. Mimari inceleme: ilk turda 4 bulgu,
+tümü düzeltilip regresyon testiyle kilitlendi → **PASS**.

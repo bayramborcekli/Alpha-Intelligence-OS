@@ -110,7 +110,8 @@ class TestLayout:
         assert label in TEMPLATE
 
     @pytest.mark.parametrize("column", [
-        "Varlık", "Yön", "Anlık Kazanç", "Süre", "Durum"])
+        "Varlık", "Yön", "Giriş Fiyatı", "Anlık Kazanç", "Süre",
+        "Durum"])
     def test_trade_columns(self, column):
         assert column in TEMPLATE
 
@@ -190,7 +191,8 @@ class TestTrades:
 
 class TestQueue:
     @pytest.mark.parametrize("label", [
-        "Bekliyor", "Hazırlanıyor", "Yürütülüyor", "Kapanıyor"])
+        "Hazır", "Bekliyor", "Hazırlanıyor", "Yürütülüyor",
+        "Kapanıyor"])
     def test_queue_states(self, label):
         assert label in JS
 
@@ -249,3 +251,82 @@ class TestBackendUntouched:
         for element_id in ("oc-positions", "ows-topbar",
                            "oc-kill", "ows-portfolio-bar"):
             assert f'id="{element_id}"' in html
+
+
+# ── Mission 2300 A02: AI Karar Panosu ──────────────────────────────
+
+class TestAgent02ModeCard:
+    def test_large_mode_card_present(self):
+        assert 'id="th-mode-card"' in TEMPLATE
+        assert 'id="th-mode-big"' in TEMPLATE
+        assert 'id="th-status-badge"' in TEMPLATE
+
+    def test_mode_values(self):
+        assert '"OTONOM"' in JS and '"DANIŞMAN"' in JS
+
+    def test_simple_status_badges(self):
+        for label in ("Çalışıyor", "Duraklatıldı", "Çevrimdışı"):
+            assert label in JS, label
+
+    def test_no_internal_automation_logic_exposed(self):
+        # Büyük kartta yalnız mod ve rozet var; iç durum adları yok.
+        assert "kill_switch_state" not in TEMPLATE
+        assert "automation_state" not in TEMPLATE
+
+
+class TestAgent02Trades:
+    def test_entry_price_column(self):
+        assert "entry_price" in JS
+        assert "Giriş Fiyatı" in TEMPLATE
+
+    def test_owner_status_mapping(self):
+        for label in ("Yönetiliyor", "Kapatılıyor", "Çıkış Bekliyor",
+                      "Acil Çıkış", "Tamamlandı"):
+            assert label in JS, label
+
+    def test_single_action_button(self):
+        # Satırda tek eylem: Kapat. Başka data-* eylem düğmesi yok.
+        actions = re.findall(r'data-(\w+)=\\"', JS)
+        assert set(a for a in actions if a not in
+                   ("symbol",)) == {"close"}
+
+
+class TestAgent02Activity:
+    def test_max_20_records(self):
+        assert "slice(0, 20)" in JS
+
+    def test_no_raw_operator_detail_leaked(self):
+        # Operatör olayları teknik detay sızdırmaz.
+        assert "esc(e.detail)" not in JS
+
+
+class TestAgent02BannedTerms:
+    @pytest.mark.parametrize("banned", [
+        "ADX", "Confidence", "Güven %", "risk skoru",
+        "correlation_id", "JSON.stringify(e", "strategy"])
+    def test_no_technical_leak_in_template(self, banned):
+        assert banned not in TEMPLATE, banned
+
+    @pytest.mark.parametrize("banned", [
+        "ADX", "confidence", "last_rejection_reason",
+        "last_decision", "signal_state"])
+    def test_no_technical_leak_in_js(self, banned):
+        assert banned not in JS, banned
+
+
+class TestAgent02ArchitectFixes:
+    def test_topbar_reset_when_status_missing(self):
+        # Durum ucu düşerse üst çubuk bayat değer göstermez.
+        idx = JS.index("if (!status) {")
+        block = JS[idx:idx + 500]
+        assert "th-auto-mode" in block and "th-bot-status" in block
+
+    def test_queue_mutually_exclusive_per_symbol(self):
+        assert "function push(symbol" in JS
+        assert "if (taken[symbol]) return;" in JS
+
+    def test_activity_sorted_newest_first(self):
+        assert ".sort(" in JS and "event_time" in JS
+
+    def test_unknown_position_status_not_leaked(self):
+        assert 'STATUS_TR[p.position_status] || "Yönetiliyor"' in JS

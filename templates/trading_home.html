@@ -1,7 +1,7 @@
 {% extends "dash_base.html" %}
 {% block title %}Trading Home{% endblock %}
 {% block heading %}🏡 Trading Home{% endblock %}
-{% block subheading %}Yapay zekâ sizin adınıza işlem yapar — siz portföy sahibisiniz. Teknik ayrıntılar Operation Center menüsündedir.{% endblock %}
+{% block subheading %}Yapay zekânız şu an ne yapıyor? Bu ekran yalnız bunu anlatır. Teknik ayrıntılar Operation Center menüsündedir.{% endblock %}
 
 {% block content %}
 <style>
@@ -62,6 +62,25 @@
   dialog.th-confirm input, dialog.th-confirm textarea { width:100%; margin:6px 0;
       background:var(--soft,#1b1e26); color:inherit; border:1px solid
       var(--line,#2a2d36); border-radius:6px; padding:6px 8px; }
+  /* ── Mission 2300 A02: büyük mod kartı + büyük tipografi ── */
+  #th-mode-card { display:flex; flex-wrap:wrap; align-items:center;
+      justify-content:space-between; gap:12px; margin-top:12px;
+      background:var(--card,#14161c); border:1px solid var(--line,#2a2d36);
+      border-radius:12px; padding:18px 22px; }
+  #th-mode-card .mode { font-size:2rem; font-weight:900;
+      letter-spacing:.04em; }
+  #th-mode-card .mode.autonomous { color:#3fbf7f; }
+  #th-mode-card .mode.advisor { color:#d9a441; }
+  #th-mode-card .caption { color:var(--muted,#8b90a0); font-size:.8rem; }
+  .th-status-badge { display:inline-block; padding:5px 14px;
+      border-radius:999px; font-size:.85rem; font-weight:800; }
+  .th-status-badge.run { background:#153322; color:#3fbf7f; }
+  .th-status-badge.pause { background:#33291a; color:#d9a441; }
+  .th-status-badge.err { background:#3a1a1a; color:#e05656; }
+  .th-status-badge.off { background:#20232c; color:#9aa0ae; }
+  #th-topbar .cell span:last-child { font-size:1.05rem; font-weight:700; }
+  .th-table td { font-size:.95rem; }
+  .th-table td b { font-size:1.02rem; }
 </style>
 
 <!-- ── YAPIŞKAN ÜST ÇUBUK ─────────────────────────────────────── -->
@@ -74,6 +93,18 @@
   <span class="cell"><b>Bot Durumu</b><span id="th-bot-status" class="th-unknown">UNKNOWN</span></span>
   <span class="cell"><b>Cüzdan Bağlantısı</b><span id="th-wallet-conn" class="th-unknown">UNKNOWN</span></span>
 </header>
+
+<!-- ── OTOMASYON MODU: TEK BÜYÜK DURUM KARTI ─────────────────── -->
+<section id="th-mode-card" aria-labelledby="th-h-mode">
+  <div>
+    <div class="caption" id="th-h-mode">Otomasyon Modu</div>
+    <div class="mode" id="th-mode-big">UNKNOWN</div>
+  </div>
+  <div>
+    <div class="caption">Sistem Durumu</div>
+    <span class="th-status-badge off" id="th-status-badge">UNKNOWN</span>
+  </div>
+</section>
 
 <div class="th-main">
 
@@ -89,9 +120,9 @@
   <section class="th-card" aria-labelledby="th-h-trades">
     <h2 id="th-h-trades">Aktif İşlemler</h2>
     <table class="th-table" id="th-trades">
-      <thead><tr><th>Varlık</th><th>Yön</th><th>Anlık Kazanç</th>
-        <th>Süre</th><th>Durum</th><th></th></tr></thead>
-      <tbody><tr><td colspan="6" class="th-empty">Yükleniyor…</td></tr></tbody>
+      <thead><tr><th>Varlık</th><th>Yön</th><th>Giriş Fiyatı</th>
+        <th>Anlık Kazanç</th><th>Süre</th><th>Durum</th><th></th></tr></thead>
+      <tbody><tr><td colspan="7" class="th-empty">Yükleniyor…</td></tr></tbody>
     </table>
   </section>
 

@@ -117,21 +117,25 @@
             positions ? positions.length : null,
             positions && positions.length ? "th-profit" : "");
     if (!positions || !positions.length) {
-      tbody.innerHTML = "<tr><td colspan=\"6\" class=\"th-empty\">" +
+      tbody.innerHTML = "<tr><td colspan=\"7\" class=\"th-empty\">" +
         "Şu an açık işlem yok. Yapay zekâ fırsat bulduğunda burada " +
         "görünecek.</td></tr>";
       return;
     }
+    // Sahip diline durum eşlemesi (teknik iç durum sızdırılmaz).
+    var STATUS_TR = { OPEN: "Yönetiliyor", SCALING: "Kademelendiriliyor",
+      CLOSE_REQUESTED: "Kapatılıyor", WAITING_EXIT: "Çıkış Bekliyor",
+      EMERGENCY_EXIT: "Acil Çıkış", CLOSED: "Tamamlandı" };
     tbody.innerHTML = positions.map(function (p) {
       return "<tr><td><b>" + esc(p.symbol) + "</b></td><td>" +
         esc(p.side === "LONG" ? "Yükseliş" :
             p.side === "SHORT" ? "Düşüş" : p.side) + "</td>" +
+        "<td>" + esc(p.entry_price) + "</td>" +
         "<td class=\"" + pnlClass(p.unrealized_pnl) + "\">" +
         esc(p.unrealized_pnl) + "</td><td>" +
         esc(duration(p.opened_at)) + "</td><td>" +
-        esc(p.position_status === "OPEN" ? "Açık" :
-            p.position_status === "CLOSE_REQUESTED" ? "Kapanıyor" :
-            p.position_status) + "</td><td>" +
+        esc(STATUS_TR[p.position_status] || "Yönetiliyor") +
+        "</td><td>" +
         "<button class=\"th-btn\" data-close=\"" + esc(p.position_id) +
         "\" data-symbol=\"" + esc(p.symbol) + "\">Kapat</button>" +
         "</td></tr>";
@@ -149,31 +153,38 @@
   function renderQueue(products, orders, positions, signals) {
     var el = document.getElementById("th-queue");
     if (!el) return;
+    // Bir sembol sırada tek durumla görünür (çelişki yasak).
     var items = [];
+    var taken = {};
+    function push(symbol, cls, label) {
+      if (taken[symbol]) return;
+      taken[symbol] = true;
+      items.push(queueItem(symbol, cls, label));
+    }
     var openSymbols = {};
     (positions || []).forEach(function (p) {
-      openSymbols[p.symbol] = p.position_status;
+      openSymbols[p.symbol] = true;
       if (p.position_status === "CLOSE_REQUESTED") {
-        items.push(queueItem(p.symbol, "close", "Kapanıyor"));
+        push(p.symbol, "close", "Kapanıyor");
       }
     });
     (orders || []).forEach(function (o) {
       if (o.status && ["FILLED", "CANCELLED", "REJECTED",
                        "EXPIRED"].indexOf(o.status) === -1) {
-        items.push(queueItem(o.symbol, "exec", "Yürütülüyor"));
+        push(o.symbol, "exec", "Yürütülüyor");
       }
     });
-    var prepared = {};
     (signals || []).forEach(function (s) {
-      if (s.execution_result === "SUBMITTED" && !prepared[s.symbol]) {
-        prepared[s.symbol] = true;
-        items.push(queueItem(s.symbol, "prep", "Hazırlanıyor"));
+      if (s.execution_result === "SUBMITTED") {
+        push(s.symbol, "prep", "Hazırlanıyor");
       }
     });
     (products || []).forEach(function (pr) {
-      if (pr.entry_eligible && !openSymbols[pr.symbol] &&
-          !prepared[pr.symbol]) {
-        items.push(queueItem(pr.symbol, "wait", "Bekliyor"));
+      if (openSymbols[pr.symbol]) return;
+      if (pr.entry_eligible) {
+        push(pr.symbol, "wait", "Hazır");
+      } else if (pr.automation_state === "ENABLED") {
+        push(pr.symbol, "gray", "Bekliyor");
       }
     });
     setText("th-queued-count", items.length);
@@ -184,16 +195,18 @@
   // ── Son hareketler (alt) — denetimli günlükten sade dil ───────
 
   function plainEvent(e) {
-    var map = { FILLED: "işlemi açıldı/dolduruldu",
-                SUBMITTED: "emri gönderildi",
-                REJECTED: "önerisi reddedildi",
+    // Yalın zaman akışı: teknik ayrıntı, gerekçe veya günlük
+    // metni sızdırılmaz — yalnız ne olduğu söylenir.
+    var map = { FILLED: "pozisyonu açıldı",
+                SUBMITTED: "sıraya alındı",
+                REJECTED: "işlemi yapılmadı",
                 CANCELLED: "emri iptal edildi",
-                SIGNAL_GENERATED: "için fırsat değerlendirildi",
-                OPERATOR_ACTION: "operatör işlemi" };
+                SIGNAL_GENERATED: "değerlendirildi",
+                POSITION_CLOSED: "pozisyonu kapatıldı" };
     if (e.kind === "OPERATOR_ACTION") {
-      return "Operatör: " + esc(e.detail);
+      return "Portföy ayarı güncellendi";
     }
-    return esc(e.symbol) + " " + (map[e.kind] || esc(e.kind));
+    return esc(e.symbol) + " " + (map[e.kind] || "güncellendi");
   }
 
   function renderActivity(journal) {
@@ -203,7 +216,11 @@
       el.innerHTML = "<li class=\"th-empty\">Henüz hareket yok.</li>";
       return;
     }
-    el.innerHTML = journal.slice(0, 12).map(function (e) {
+    // En yeni en üstte — uç sıralaması kayarsa bile garanti.
+    var sorted = journal.slice().sort(function (a, b) {
+      return String(b.event_time).localeCompare(String(a.event_time));
+    });
+    el.innerHTML = sorted.slice(0, 20).map(function (e) {
       return "<li><time>" + esc(e.event_time) + "</time>" +
         plainEvent(e) + "</li>";
     }).join("");
@@ -217,19 +234,42 @@
       setText("th-daily-pnl", portfolio.daily_pnl,
               pnlClass(portfolio.daily_pnl));
     }
-    if (status) {
-      var auto = status.automation_state;
-      setText("th-auto-mode",
-              auto === "RUNNING" ? "AÇIK" :
-              auto === "STOPPED" ? "KAPALI" : auto,
-              auto === "RUNNING" ? "th-profit" : "");
-      setText("th-bot-status",
-              status.kill_switch_state === "ACTIVE"
-                ? "ACİL DURDURULDU"
-                : auto === "RUNNING" ? "ÇALIŞIYOR" : "BEKLEMEDE",
-              status.kill_switch_state === "ACTIVE" ? "th-loss" :
-              auto === "RUNNING" ? "th-profit" : "");
+    var modeEl = document.getElementById("th-mode-big");
+    var badgeEl = document.getElementById("th-status-badge");
+    if (!status) {
+      if (modeEl) { modeEl.textContent = "UNKNOWN";
+                    modeEl.className = "mode"; }
+      if (badgeEl) { badgeEl.textContent = "Çevrimdışı";
+                     badgeEl.className = "th-status-badge off"; }
+      // Üst çubuk da bayatlamış değer göstermesin.
+      setText("th-auto-mode", null);
+      setText("th-bot-status", "Çevrimdışı", "th-unknown");
+      return;
     }
+    var auto = status.automation_state;
+    var autonomous = auto === "RUNNING";
+    // Tek büyük mod kartı: OTONOM ya da DANIŞMAN.
+    if (modeEl) {
+      modeEl.textContent = autonomous ? "OTONOM" : "DANIŞMAN";
+      modeEl.className = "mode " +
+        (autonomous ? "autonomous" : "advisor");
+    }
+    setText("th-auto-mode", autonomous ? "OTONOM" : "DANIŞMAN",
+            autonomous ? "th-profit" : "");
+    // Basit durum rozetleri: Çalışıyor / Duraklatıldı / Hata.
+    var badge, cls;
+    if (status.kill_switch_state === "ACTIVE") {
+      badge = "Hata — Acil Durduruldu"; cls = "err";
+    } else if (autonomous) {
+      badge = "Çalışıyor"; cls = "run";
+    } else {
+      badge = "Duraklatıldı"; cls = "pause";
+    }
+    if (badgeEl) { badgeEl.textContent = badge;
+                   badgeEl.className = "th-status-badge " + cls; }
+    setText("th-bot-status", badge,
+            cls === "err" ? "th-loss" :
+            cls === "run" ? "th-profit" : "");
   }
 
   // ── Kapatma niyeti (mevcut kontrollü uç) ───────────────────────
