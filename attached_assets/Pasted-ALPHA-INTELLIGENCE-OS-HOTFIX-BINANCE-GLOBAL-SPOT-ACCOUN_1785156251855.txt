@@ -1,0 +1,248 @@
+ALPHA INTELLIGENCE OS
+
+HOTFIX
+
+BINANCE GLOBAL SPOT ACCOUNT
+
+VERSION
+
+2100-HF-001
+
+ROLE
+
+Fix Binance Global account information.
+
+Current implementation incorrectly reads the
+Global dashboard from Binance Futures.
+
+The Global dashboard SHALL display the
+Spot account.
+
+No architecture changes.
+
+No Mission changes.
+
+Hotfix only.
+
+────────────────────────────────────────
+1. PROBLEM
+
+Current source:
+
+GET /fapi/v2/account
+
+Source label:
+
+BINANCE_GLOBAL_FUTURES
+
+This is incorrect.
+
+Global dashboard SHALL NEVER use
+Futures account endpoints.
+
+────────────────────────────────────────
+2. FIX
+
+Replace
+
+GET /fapi/v2/account
+
+with
+
+GET /api/v3/account
+
+or the project's canonical Spot Account API.
+
+The dashboard SHALL obtain the Spot account.
+
+────────────────────────────────────────
+3. DASHBOARD
+
+BINANCE GLOBAL SHALL display
+
+Connection
+
+Read-only verification
+
+API Key
+
+Synchronization status
+
+Total Spot Asset Value (USDT)
+
+Available USDT
+
+Locked USDT
+
+Number of Assets
+
+Total Assets
+
+Top Holdings
+
+Last Synchronization
+
+API Latency
+
+Data Source
+
+BINANCE_GLOBAL_SPOT
+
+────────────────────────────────────────
+4. FUTURES
+
+Futures panel SHALL remain unchanged.
+
+Display only
+
+Wallet Balance
+
+Available Balance
+
+Margin Balance
+
+Unrealized PnL
+
+Open Positions
+
+Open Orders
+
+Position Mode
+
+Can Trade
+
+Data Source
+
+BINANCE_GLOBAL_FUTURES
+
+────────────────────────────────────────
+5. VALIDATION
+
+Verify
+
+Spot endpoint reachable
+
+Balances received
+
+Balances parsed
+
+Empty balances handled
+
+Zero balances handled
+
+API errors handled
+
+Permission errors handled
+
+Read-only mode handled
+
+────────────────────────────────────────
+6. UI
+
+If Spot account exists
+
+Display balances.
+
+If Spot account is empty
+
+Display
+
+"No Spot Assets"
+
+NOT
+
+0 USDT
+
+unless API explicitly returns zero.
+
+────────────────────────────────────────
+7. LOGGING
+
+Log
+
+Spot Account Request
+
+Spot Account Success
+
+Spot Account Failure
+
+Asset Count
+
+Total Asset Value
+
+Response Time
+
+Never log
+
+Secret
+
+Signature
+
+API Secret
+
+Private Headers
+
+────────────────────────────────────────
+8. SECURITY
+
+Read-only only.
+
+No trading endpoint.
+
+No order endpoint.
+
+No withdraw endpoint.
+
+No transfer endpoint.
+
+No exchange write.
+
+────────────────────────────────────────
+9. TESTS
+
+Verify
+
+/api/v3/account called
+
+/fapi/v2/account NOT called by Global panel
+
+Balances parsed correctly
+
+USDT detected
+
+BTC detected
+
+ETH detected
+
+Multiple assets
+
+Zero assets
+
+API failure
+
+Permission failure
+
+UI binding
+
+Source label
+
+BINANCE_GLOBAL_SPOT
+
+Architecture unchanged
+
+────────────────────────────────────────
+10. PASS
+
+PASS requires
+
+Spot balances visible
+
+Global dashboard uses Spot account
+
+Futures dashboard unchanged
+
+Exchange Write = 0
+
+Secret Exposure = 0
+
+Architecture unchanged
