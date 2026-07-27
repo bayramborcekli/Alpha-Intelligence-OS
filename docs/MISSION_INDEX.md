@@ -86,4 +86,23 @@ Intelligence
 Toplam yeni 1700 testi: **187** (173 + 14 doküman) · Kapanış toplamı:
 **1335 PASS / 0 FAIL / 0 SKIP** · Exchange Write 0 · Secret Exposure 0 —
 MISSION 1700 RESMEN KAPANDI.
-Ayrıntı: `docs/portfolio_intelligence.md`
+Ayrıntı: `docs/portfolio_intelligence.md` · Sonraki: MISSION 1800 —
+Strategy Intelligence
+
+## Mission 1800 — Agent dökümü
+
+| Agent | Görev | Commit | Test |
+|---|---|---|---|
+| 01 | Mimari plan (`docs/architecture/strategy_intelligence.md`) | `474beb0` | — |
+| 02 | Strategy Core (`strategy_intelligence.py`) | `f5f08b5` | 45 |
+| 03 | Strategy Service (`strategy_service.py`) | `0283030` | 28 |
+| 04 | Read-Only API (`/api/strategy/intelligence`) | `5a19bbb` | 23 |
+| 05 | Strategy UI (`/strategy-intelligence`) | `fcce362` | 24 |
+| 06 | Export (`strategy_export.py`) | `17f6299` | 29 |
+| 07 | Güvenlik doğrulaması (+ zincir `persist=False` düzeltmesi) | `a0c91d5` | 58 |
+| 08 | Tam regresyon bütünleştirme | `6638c3b` | 39 |
+| 09 | Dokümantasyon (`docs/mission1800_strategy_intelligence.md`) | (bu commit) | — |
+
+Toplam yeni 1800 testi (Agent 08 itibarıyla): **246** · Agent 08
+regresyonu: **1581 PASS / 0 FAIL / 0 SKIP** · Exchange Write 0 ·
+Secret Exposure 0. Ayrıntı: `docs/mission1800_strategy_intelligence.md`

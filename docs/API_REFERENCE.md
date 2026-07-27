@@ -102,6 +102,22 @@ yalnız `/api/v1/portfolio/intelligence` ucunu kullanır; işlem/AL-SAT
 kontrolü yoktur; 5 görsel durum (Yükleniyor/SAĞLIKLI/KISMİ/
 KULLANILAMAZ/HATA); `null → "—"`.
 
+## Strategy Intelligence API (Mission 1800, `/api/strategy/intelligence`)
+
+Salt-okunur, tavsiye niteliğinde strateji önerisi. Kimlik doğrulamalı;
+yanıtlar `Cache-Control: no-store, private` + `nosniff` taşır; uç
+YALNIZ GET ve `/api/v1/...` takma adı vardır. Ayrıntılı sözleşme:
+`docs/mission1800_strategy_intelligence.md`.
+
+| Uç | Notlar |
+|---|---|
+| `GET /api/strategy/intelligence` | StrategyProposal (`strategy_version: 1`): 13 şema alanı + sterile `sources` meta; `advisory_only/read_only: true`; `data_quality OK\|PARTIAL\|UNAVAILABLE` (üçü de HTTP 200); öneriler kapalı kod listeleriyle açıklanır, emir/miktar/fiyat alanı YOK; tüm sayılar sabit-nokta string, bilinmeyen → `null`; `proposal_id` + `generated_at` yalnız API sınırında üretilir; beklenmedik hata → `500 STRATEGY_ANALYSIS_ERROR` (sterile) |
+
+### Strategy Intelligence UI
+`GET /strategy-intelligence` — oturum yönlendirmeli salt-okunur sayfa;
+yalnız `/api/v1/strategy/intelligence` ucunu kullanır; işlem/yürütme
+kontrolü yoktur; `null → "Unknown"`.
+
 ## Diğer salt-okunur yüzeyler (1400 serisi)
 - `GET /api/risk/{summary,exposure,alerts,history,simulator}` — Risk Motoru
   (simülatörün POST varyantı yalnızca YEREL hesap yapar; borsaya istek yok)
