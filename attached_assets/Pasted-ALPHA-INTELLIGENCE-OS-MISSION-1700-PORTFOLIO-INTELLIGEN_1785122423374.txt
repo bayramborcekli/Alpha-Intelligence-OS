@@ -1,0 +1,581 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1700 — PORTFOLIO INTELLIGENCE
+
+AGENT 04 — API
+
+ROLE
+
+You are the API Agent for Mission 1700.
+
+Implement the Portfolio Intelligence API exactly on top of the approved
+Mission 1700 Architecture, Agent 02 Core and Agent 03 Service Layer.
+
+Do not redesign the Core or Service.
+
+Do not modify previous missions.
+
+Do not introduce execution capability.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1600
+
+OFFICIALLY CLOSED
+
+Mission 1700
+
+Agent 01 — PASS
+Agent 02 — PASS
+Agent 03 — PASS
+
+Baseline Commit
+
+1a2f79c
+
+Regression Baseline
+
+1198 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+This baseline must remain fully compatible.
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement the read-only Portfolio Intelligence API.
+
+The API shall:
+
+• expose PortfolioAnalysis through the existing application API conventions
+
+• call the Agent 03 Service Layer
+
+• return the normalized PortfolioAnalysis envelope
+
+• preserve deterministic serialization
+
+• expose only sterile errors
+
+• remain advisory-only and read-only
+
+The API SHALL NOT:
+
+• calculate portfolio intelligence
+
+• duplicate Service provider aggregation
+
+• write Workspace
+
+• write Timeline
+
+• call append_snapshot()
+
+• call Exchange
+
+• submit or simulate orders
+
+• modify Risk Engine
+
+• create threads
+
+• create schedulers
+
+────────────────────────────────────────
+3. FILES
+
+Create or modify only the minimum API files required by the existing
+repository structure.
+
+Expected new test file:
+
+tests/test_mission1700_portfolio_api.py
+
+Possible API module name, subject to existing repository conventions:
+
+portfolio_api.py
+
+or the existing API registration module required by the application.
+
+Do not rename unrelated modules.
+
+Do not modify previous mission behavior.
+
+────────────────────────────────────────
+4. API CONTRACT
+
+Expose one read-only endpoint using the repository’s established API style.
+
+Recommended route:
+
+GET /api/portfolio/intelligence
+
+Use the exact route prefix and registration pattern already established in
+the repository when a different canonical convention exists.
+
+The endpoint must:
+
+• accept no execution instructions
+
+• accept no order parameters
+
+• accept no mutable portfolio commands
+
+• invoke get_portfolio_analysis(...) or PortfolioService.get_analysis(...)
+
+• return the Service result without reimplementing calculations
+
+• use the application’s existing JSON response mechanism
+
+• preserve null values
+
+• preserve analysis_version
+
+• preserve read_only: true
+
+• preserve advisory_only: true
+
+────────────────────────────────────────
+5. HTTP METHOD AND READ-ONLY BOUNDARY
+
+Portfolio Intelligence is GET-only.
+
+Do not add:
+
+POST
+PUT
+PATCH
+DELETE
+
+No mutation route may be introduced.
+
+Unsupported methods must follow the repository’s existing sterile HTTP
+behavior.
+
+The endpoint must not cause:
+
+• database writes
+
+• filesystem writes
+
+• snapshot writes
+
+• Workspace writes
+
+• Timeline writes
+
+• Exchange writes
+
+────────────────────────────────────────
+6. DEPENDENCY INTEGRATION
+
+The API must depend on the Service Layer, not directly on Core calculations.
+
+Allowed flow:
+
+HTTP API
+↓
+Portfolio Service
+↓
+Portfolio Core
+↓
+PortfolioAnalysis
+
+Disallowed flow:
+
+HTTP API
+↓
+portfolio calculations
+
+The API may construct or receive the approved default read-only providers
+through existing dependency wiring.
+
+Do not embed provider logic in the route.
+
+Do not access Intelligence Engine, Risk Engine or Exchange directly from the
+route when the Service already owns that integration.
+
+────────────────────────────────────────
+7. GENERATED_AT
+
+The Core and Service do not read wall-clock time.
+
+The API must follow the approved application boundary for generated_at.
+
+Use one of these approaches, according to existing repository conventions:
+
+• inject generated_at through an approved request-independent clock dependency
+
+or
+
+• accept a server-generated timestamp at the API composition boundary
+
+Requirements:
+
+• no timestamp calculation inside Core
+
+• no timestamp calculation inside Service
+
+• deterministic tests must inject a fixed generated_at
+
+• generated_at must not be accepted as an untrusted client override unless
+  the existing API architecture explicitly supports and validates it
+
+Do not change the approved Core or Service contracts.
+
+────────────────────────────────────────
+8. RESPONSE MODEL
+
+Success response must contain the normalized PortfolioAnalysis envelope.
+
+Required invariant fields:
+
+ok
+
+read_only: true
+
+advisory_only: true
+
+analysis_version: 1
+
+status: OK | PARTIAL | UNAVAILABLE
+
+generated_at
+
+sources
+
+portfolio
+
+Do not rename fields.
+
+Do not convert null to zero, empty string or omitted values.
+
+Do not add execution-oriented fields.
+
+Do not expose internal provider objects.
+
+────────────────────────────────────────
+9. HTTP STATUS MODEL
+
+Use deterministic, documented status mapping consistent with existing API
+conventions.
+
+Portfolio availability states are domain states and should remain represented
+inside the response envelope.
+
+Preferred behavior unless repository conventions require otherwise:
+
+• OK → HTTP 200
+
+• PARTIAL → HTTP 200
+
+• UNAVAILABLE → HTTP 200 with domain status UNAVAILABLE
+
+Unexpected API composition failures may use a sterile server error response.
+
+Do not expose exception text or traceback.
+
+Do not convert advisory unavailability into a fake successful portfolio.
+
+────────────────────────────────────────
+10. ERROR MODEL
+
+All API errors must be sterile.
+
+Do not expose:
+
+• exception messages
+
+• traceback content
+
+• filesystem paths
+
+• module names
+
+• credentials
+
+• provider internals
+
+• Risk Engine internals
+
+• Exchange internals
+
+Use stable error codes consistent with repository conventions.
+
+Unexpected exceptions must be caught at the appropriate API boundary without
+changing Service or Core semantics.
+
+Do not swallow valid PortfolioAnalysis envelopes.
+
+────────────────────────────────────────
+11. AUTHORIZATION AND SECURITY BOUNDARY
+
+Use the repository’s existing authentication and authorization behavior.
+
+Do not invent a new auth system in Mission 1700.
+
+Mission 2000 remains the dedicated User Management / Auth mission.
+
+If existing endpoints are protected, protect this endpoint identically.
+
+If existing internal intelligence endpoints are unprotected by design, do not
+introduce a standalone incompatible auth mechanism.
+
+The endpoint must remain read-only regardless of caller permissions.
+
+────────────────────────────────────────
+12. DETERMINISM
+
+For the same injected Service result:
+
+↓
+
+the API response payload must be byte-stable under the repository’s
+deterministic serialization rules.
+
+Requirements:
+
+• stable field ordering where the project enforces it
+
+• no random
+
+• no UUID
+
+• no request-dependent mutation
+
+• no unordered source output
+
+• no hidden wall-clock reads in tests
+
+• no locale-dependent numeric formatting
+
+Fixed-point numeric strings from Core must remain unchanged.
+
+────────────────────────────────────────
+13. SECURITY
+
+The API must not import or invoke:
+
+requests
+
+websocket
+
+socket
+
+subprocess
+
+pickle
+
+marshal
+
+ctypes
+
+eval
+
+exec
+
+No filesystem writes.
+
+No network client calls.
+
+No Exchange dependency.
+
+No order or execution primitive.
+
+No append_snapshot usage.
+
+No Workspace or Timeline writes.
+
+Do not log secrets or full provider payloads.
+
+────────────────────────────────────────
+14. TESTS
+
+Create comprehensive tests covering at least:
+
+• endpoint registration
+
+• GET success
+
+• Service invocation
+
+• Core is not called directly by the route
+
+• OK response
+
+• PARTIAL response
+
+• UNAVAILABLE response
+
+• invariant fields preserved
+
+• null values preserved
+
+• analysis_version preserved
+
+• read_only preserved
+
+• advisory_only preserved
+
+• generated_at propagation
+
+• deterministic JSON response
+
+• fixed-point strings unchanged
+
+• unsupported HTTP methods
+
+• provider internals not exposed
+
+• exception sterilization
+
+• traceback not exposed
+
+• secret text not exposed
+
+• no duplicate portfolio calculations in API
+
+• no direct Risk Engine access from route
+
+• no direct Intelligence Engine access from route where Service owns it
+
+• no snapshot embedding
+
+• no append_snapshot import or call
+
+• no Exchange import or call
+
+• no filesystem writes
+
+• no network-client imports
+
+• no thread or scheduler creation
+
+• existing authentication convention preserved
+
+• backward compatibility
+
+• full regression
+
+Tests must prove that the API delegates to Service and does not reimplement
+Core or Service responsibilities.
+
+────────────────────────────────────────
+15. DELIVERY REPORT
+
+── CREATED FILES ──
+
+── MODIFIED FILES ──
+
+── API CONTRACT ──
+
+── ROUTE REGISTRATION ──
+
+── SERVICE DELEGATION ──
+
+── RESPONSE MODEL ──
+
+── HTTP STATUS MODEL ──
+
+── ERROR STERILIZATION ──
+
+── AUTHORIZATION BOUNDARY ──
+
+── DETERMINISM VERIFICATION ──
+
+── SECURITY VERIFICATION ──
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0 hedeflenir
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 05 — UI
+
+────────────────────────────────────────
+16. PASS CRITERIA
+
+PASS requires:
+
+• Portfolio Intelligence API implemented
+
+• Read-only GET endpoint registered
+
+• API delegates to Portfolio Service
+
+• No portfolio calculations in API
+
+• PortfolioAnalysis envelope preserved
+
+• OK / PARTIAL / UNAVAILABLE domain states preserved
+
+• Null values preserved
+
+• Fixed-point numeric strings preserved
+
+• Deterministic response
+
+• Sterile API errors
+
+• Existing auth convention preserved
+
+• No new auth architecture introduced
+
+• No Workspace writes
+
+• No Timeline writes
+
+• No snapshot embedding
+
+• No append_snapshot usage
+
+• No Exchange dependency
+
+• No network-client dependency
+
+• No filesystem writes
+
+• No execution or order primitives
+
+• All new tests PASS
+
+• Full regression PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+• Commit created and pushed to GitHub
+
+MISSION 1700 continues only after Agent 04 passes.
