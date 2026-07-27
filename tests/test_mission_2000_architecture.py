@@ -235,9 +235,16 @@ class TestSecurityModel:
 
 class TestNoProductionBehavior:
     def test_planned_modules_not_yet_implemented(self):
-        # Agent 01 yalnız mimari tanımlar; yürütme modülleri henüz yok
+        # Yalnız teslim edilen ajanların modülleri mevcut olabilir.
+        # Agent 03 teslim etti: execution_risk_engine.py
+        delivered = {"execution_risk_engine.py"}
         for module_file in PLANNED_MODULES:
-            assert not os.path.exists(os.path.join(_ROOT, module_file))
+            if module_file in delivered:
+                assert os.path.exists(
+                    os.path.join(_ROOT, module_file))
+            else:
+                assert not os.path.exists(
+                    os.path.join(_ROOT, module_file))
 
     def test_out_of_scope_documented(self):
         for item in ("HMAC", "WebSocket", "Paper\nTrading",
