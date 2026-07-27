@@ -291,6 +291,60 @@
       });
   }
 
+  // Yaşam döngüsü zinciri önbelleği: rowKey -> olay listesi.
+  // Yenilemede genişletilmiş satır önce önbellekten çizilir,
+  // arka planda taze veri çekilir (seçim sıfırlanmaz).
+  var lifecycleCache = {};
+  var lifecycleInflight = {};
+
+  function lifecycleHtml(events) {
+    if (events === undefined) {
+      return "Yaşam döngüsü zinciri yükleniyor…";
+    }
+    if (events === null) {
+      return "Yaşam döngüsü verisi alınamadı (UNKNOWN)";
+    }
+    if (!events.length) {
+      return "Yaşam döngüsü olayı yok (UNKNOWN)";
+    }
+    return "<div class=\"ows-lifecycle\">" +
+      events.map(function (e) {
+        return "<div class=\"ows-lc-event\">" +
+          "<span>" + esc(e.event_time) + "</span> · " +
+          "<b class=\"" + kindCls(e.state) + "\">" +
+          esc(e.event_type) + "</b> · " +
+          "<span>" + esc(e.state) + "</span> · " +
+          "<span>" + esc(e.detail) + "</span> · " +
+          "<span>Kaynak: " + esc(e.source) + "</span> · " +
+          "<span>Korelasyon: " + esc(e.correlation_id) +
+          "</span></div>";
+      }).join("") + "</div>";
+  }
+
+  function renderDetailRow(row, key) {
+    var next = row.nextElementSibling;
+    if (!next || !next.classList.contains("ows-detail-row")) return;
+    next.innerHTML = "<td colspan=\"" + row.cells.length + "\">" +
+      lifecycleHtml(lifecycleCache[key]) + "</td>";
+  }
+
+  function fetchLifecycle(row, key) {
+    if (lifecycleInflight[key]) return;
+    lifecycleInflight[key] = true;
+    req("/workspace/orders/" + encodeURIComponent(key) +
+        "/lifecycle")
+      .then(function (r) {
+        lifecycleInflight[key] = false;
+        lifecycleCache[key] = (r.body && r.body.ok &&
+          r.body.data && r.body.data.lifecycle) || null;
+        if (expanded[key]) renderDetailRow(row, key);
+      }, function () {
+        lifecycleInflight[key] = false;
+        lifecycleCache[key] = null;
+        if (expanded[key]) renderDetailRow(row, key);
+      });
+  }
+
   function expandRow(row, force) {
     var key = row.dataset.rowKey;
     var next = row.nextElementSibling;
@@ -302,18 +356,13 @@
     }
     if (isOpen) return;
     expanded[key] = true;
-    var cells = row.cells;
     var detail = document.createElement("tr");
     detail.className = "ows-detail-row";
-    detail.innerHTML = "<td colspan=\"" + cells.length + "\">" +
-      "Yaşam döngüsü — Oluşturma: " + esc(cells[11] && cells[11].textContent) +
-      " · Güncelleme: " + esc(cells[12] && cells[12].textContent) +
-      " · Durum: " + esc(cells[10] && cells[10].textContent) +
-      " · Dolan/Kalan: " + esc(cells[8] && cells[8].textContent) + " / " +
-      esc(cells[9] && cells[9].textContent) +
-      " · Mutabakat: " + esc(cells[16] && cells[16].textContent) +
-      " · Korelasyon: " + esc(cells[14] && cells[14].textContent) + "</td>";
     row.parentNode.insertBefore(detail, row.nextSibling);
+    renderDetailRow(row, key);
+    // Gerçek zincir sunucudan salt-okunur çekilir (Task 29);
+    // her açılış/yenilemede tazelenir, sahte zaman çizelgesi yok.
+    fetchLifecycle(row, key);
   }
 
   // ── Olay bağlama ────────────────────────────────────────────────

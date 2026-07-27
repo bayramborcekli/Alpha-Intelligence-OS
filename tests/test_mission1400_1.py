@@ -243,7 +243,11 @@ class TestSecurity:
                          "/orders",
                          # Mission 2200: operasyon merkezi salt-okunur
                          # emir görünümü (GET, borsa yazması yok).
-                         "/api/operation-control/orders"}
+                         "/api/operation-control/orders",
+                         # Task 29: tek emrin salt-okunur yaşam
+                         # döngüsü zinciri (GET, borsa yazması yok).
+                         "/api/operation-control/workspace/orders/"
+                         "<order_id>/lifecycle"}
 
     def test_no_binance_write_route_exists(self):
         for rule in flask_app.app.url_map.iter_rules():

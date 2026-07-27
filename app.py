@@ -3709,6 +3709,29 @@ def api_workspace_journal():
     return _operation_json(payload, 200)
 
 
+@app.get("/api/operation-control/workspace/orders/"
+         "<order_id>/lifecycle")
+def api_workspace_order_lifecycle(order_id: str):
+    """Tek emrin salt-okunur yaşam döngüsü zinciri (Task 29).
+    Yalnız gözlemlenen gerçek veri; emir bulunamazsa dürüst 404."""
+    snapshot = _operation_snapshot()
+    order = next((o for o in snapshot.orders
+                  if o.order_id == order_id), None)
+    if order is None:
+        return _operation_error(
+            "ORDER_NOT_FOUND",
+            "Emir anlık görüntüde bulunamadı.", 404)
+    events = _ows.build_order_lifecycle_events(
+        order, snapshot.signals,
+        get_operation_service().audit.records())
+    payload = _owa.workspace_envelope(
+        {"order_id": order.order_id,
+         "lifecycle": _owa.serialize_rows(events),
+         "count": len(events)},
+        snapshot, g.get("request_id", "-"), int(time.time()))
+    return _operation_json(payload, 200)
+
+
 @app.get("/api/operation-control/workspace/export/<name>.csv")
 def api_workspace_export_csv(name: str):
     if name not in _owa.CSV_EXPORTS:

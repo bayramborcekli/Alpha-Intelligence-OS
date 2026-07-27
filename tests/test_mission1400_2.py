@@ -378,7 +378,11 @@ class TestWriteSafety:
                          "/orders",
                          # Mission 2200: operasyon merkezi salt-okunur
                          # emir görünümü (GET, borsa yazması yok).
-                         "/api/operation-control/orders"}
+                         "/api/operation-control/orders",
+                         # Task 29: tek emrin salt-okunur yaşam
+                         # döngüsü zinciri (GET, borsa yazması yok).
+                         "/api/operation-control/workspace/orders/"
+                         "<order_id>/lifecycle"}
 
     def test_route_map_no_write_routes(self):
         """Hassas kelime içeren rotalar yalnızca açık izinli + GET olabilir."""

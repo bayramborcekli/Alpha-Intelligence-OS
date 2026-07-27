@@ -22,6 +22,7 @@ __all__ = [
     "UNKNOWN", "BROKER_STATES", "JOURNAL_KINDS",
     "PortfolioView", "PerformanceView", "BrokerHealthView",
     "StrategyView", "JournalEventView",
+    "LIFECYCLE_EVENT_TYPES", "OrderLifecycleEventView",
 ]
 
 UNKNOWN = "UNKNOWN"
@@ -41,6 +42,15 @@ JOURNAL_KINDS = frozenset({
     "SIGNAL_GENERATED", "RISK_APPROVED", "RISK_REJECTED",
     "AUTHORIZED", "SUBMITTED", "FILLED", "CANCELLED",
     "REJECTED", "CLOSED", "RECONCILED", "OPERATOR_ACTION",
+})
+
+# Emir yaşam döngüsü olay türleri — yalnız GÖZLEMLENEN gerçekler.
+# Ara durum uydurulmaz: emir kaydından kanıtlanabilen olaylar
+# (oluşturma, dolum ilerlemesi, gözlemlenen durum) ve korelasyonla
+# eşleşen denetimli kaynaklar (sinyal, operatör eylemi).
+LIFECYCLE_EVENT_TYPES = frozenset({
+    "ORDER_CREATED", "FILL_PROGRESS", "STATUS_OBSERVED",
+    "SIGNAL_LINKED", "OPERATOR_ACTION",
 })
 
 
@@ -205,6 +215,26 @@ class StrategyView:
                      "open_position_count")
         if self.open_position_count < 0:
             _fail("open_position_count")
+
+
+@dataclass(frozen=True)
+class OrderLifecycleEventView:
+    """Emir yaşam döngüsü olayı — yalnız gözlemlenen gerçek veri.
+    event_type küme dışıysa kurucu REDDEDER; zaman bilinmiyorsa
+    UNKNOWN yazılır, asla uydurulmaz."""
+    event_time: str
+    event_type: str
+    state: str
+    detail: str
+    source: str
+    correlation_id: str
+
+    def __post_init__(self):
+        for name in ("event_time", "event_type", "state",
+                     "detail", "source", "correlation_id"):
+            _require_str(getattr(self, name), name)
+        if self.event_type not in LIFECYCLE_EVENT_TYPES:
+            _fail("event_type")
 
 
 @dataclass(frozen=True)

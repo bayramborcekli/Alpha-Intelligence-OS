@@ -19,18 +19,20 @@ from typing import Mapping, Optional, Sequence, Tuple
 
 from operation_control_mapper import to_decimal, to_text
 from operation_control_models import (
-    OperationAuditRecord, PositionView, ProductView, SignalView)
+    OperationAuditRecord, OrderView, PositionView, ProductView,
+    SignalView)
 from operation_workspace_metrics import (
     DAY_SECONDS, MONTH_SECONDS, WEEK_SECONDS, PerformanceMetrics,
     compute_metrics, parse_trades, period_profit)
 from operation_workspace_models import (
     BROKER_STATES, UNKNOWN, BrokerHealthView, JournalEventView,
-    PerformanceView, PortfolioView, StrategyView)
+    OrderLifecycleEventView, PerformanceView, PortfolioView,
+    StrategyView)
 
 __all__ = [
     "build_portfolio_view", "build_performance_view",
     "build_broker_health_view", "build_strategy_rows",
-    "build_journal_events",
+    "build_journal_events", "build_order_lifecycle_events",
 ]
 
 
@@ -258,3 +260,105 @@ def build_journal_events(signals: Sequence[SignalView],
             or limit <= 0:
         limit = 200
     return tuple(events[:limit])
+
+
+# ── Emir yaşam döngüsü (Task 29) ───────────────────────────────────
+
+def _epoch_iso(value: object) -> str:
+    """Milisaniyelik epoch metnini ISO-8601 UTC'ye çevirir.
+    Sayısal değilse ham metin döner; boşsa UNKNOWN (uydurma yok)."""
+    text = to_text(value)
+    if not text or text == UNKNOWN:
+        return UNKNOWN
+    if text.isdigit() and len(text) >= 12:
+        from datetime import datetime, timezone
+        try:
+            stamp = datetime.fromtimestamp(
+                int(text) / 1000.0, tz=timezone.utc)
+            return stamp.isoformat(timespec="seconds")
+        except (OverflowError, OSError, ValueError):
+            return text
+    return text
+
+
+def build_order_lifecycle_events(
+        order: OrderView,
+        signals: Sequence[SignalView] = (),
+        audit_records: Sequence[OperationAuditRecord] = (),
+) -> Tuple[OrderLifecycleEventView, ...]:
+    """Tek emrin yaşam döngüsü zincirini YALNIZ gözlemlenen
+    gerçeklerden kurar. Ara durum uydurulmaz:
+    - ORDER_CREATED: emir kaydındaki gerçek oluşturma zamanı.
+    - FILL_PROGRESS: yalnız gerçek dolum miktarı > 0 ise.
+    - STATUS_OBSERVED: borsadan okunan güncel durum + güncelleme
+      zamanı.
+    - SIGNAL_LINKED / OPERATOR_ACTION: korelasyon kimliği emirle
+      birebir eşleşen denetimli kayıtlar.
+    Hiçbir kaynak yoksa boş zincir döner (dürüst UNKNOWN)."""
+    events = []
+    correlation = order.correlation_id or UNKNOWN
+
+    created = _epoch_iso(order.created_at)
+    if created != UNKNOWN:
+        events.append(OrderLifecycleEventView(
+            event_time=created,
+            event_type="ORDER_CREATED",
+            state="NEW",
+            detail=(f"{order.side or UNKNOWN} "
+                    f"{order.order_type or UNKNOWN} "
+                    f"{order.quantity if order.quantity is not None else UNKNOWN}"
+                    f" @ "
+                    f"{order.requested_price if order.requested_price is not None else UNKNOWN}"),
+            source="EXCHANGE_ORDER_RECORD",
+            correlation_id=correlation))
+
+    updated = _epoch_iso(order.updated_at)
+    filled = order.filled_quantity
+    if filled is not None and filled > Decimal("0"):
+        remaining = order.remaining_quantity
+        events.append(OrderLifecycleEventView(
+            event_time=updated,
+            event_type="FILL_PROGRESS",
+            state=order.status or UNKNOWN,
+            detail=(f"Dolan: {filled} / Kalan: "
+                    f"{remaining if remaining is not None else UNKNOWN}"),
+            source="EXCHANGE_ORDER_RECORD",
+            correlation_id=correlation))
+
+    status = (order.status or UNKNOWN).upper()
+    if status != UNKNOWN:
+        events.append(OrderLifecycleEventView(
+            event_time=updated,
+            event_type="STATUS_OBSERVED",
+            state=status,
+            detail=f"Borsadan okunan güncel durum: {status}",
+            source="EXCHANGE_ORDER_RECORD",
+            correlation_id=correlation))
+
+    if correlation != UNKNOWN:
+        for signal in signals:
+            if (signal.correlation_id or "") != correlation:
+                continue
+            events.append(OrderLifecycleEventView(
+                event_time=to_text(signal.signal_time) or UNKNOWN,
+                event_type="SIGNAL_LINKED",
+                state=to_text(signal.decision) or UNKNOWN,
+                detail=(f"Sinyal kararı: "
+                        f"{to_text(signal.decision) or UNKNOWN}; "
+                        f"sonuç: "
+                        f"{to_text(signal.execution_result) or UNKNOWN}"),
+                source="SIGNAL_VIEW",
+                correlation_id=correlation))
+        for record in audit_records:
+            if (record.correlation_id or "") != correlation:
+                continue
+            events.append(OrderLifecycleEventView(
+                event_time=str(record.timestamp),
+                event_type="OPERATOR_ACTION",
+                state=to_text(record.result) or UNKNOWN,
+                detail=(f"{to_text(record.action) or UNKNOWN} → "
+                        f"{to_text(record.target) or UNKNOWN}"),
+                source="OPERATION_AUDIT_TRAIL",
+                correlation_id=correlation))
+
+    return tuple(events)
