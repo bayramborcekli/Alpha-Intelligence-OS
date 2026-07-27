@@ -104,6 +104,7 @@
   <nav class="sidebar" id="sidebar" aria-label="Ana menü">
     <div class="brand">Alpha Intelligence OS</div>
     <div class="nav">
+      <a href="/home" {% if active_page=='trading_home' %}class="active" aria-current="page"{% endif %}>🏡 Trading Home</a>
       <a href="/operation-center" {% if active_page=='operation_center' %}class="active" aria-current="page"{% endif %}>🎛️ Operation Center</a>
       <a href="/">🏠 Başlangıç</a>
       <a href="/overview" {% if active_page=='overview' %}class="active" aria-current="page"{% endif %}>📊 Sistem Genel Bakış</a>

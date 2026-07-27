@@ -772,12 +772,12 @@ def login():
     error: str | None = None
     not_configured    = not auth.password_hash_configured()
     # next_url — yalnızca aynı origin göreceli yollar
-    # Mission 2200: giriş sonrası varsayılan ana çalışma alanı
-    # Operation Center'dır (Genel Bakış ikincil sayfadır).
+    # Mission 2300: giriş sonrası varsayılan sayfa Trading Home
+    # (sahip odaklı ana sayfa); Operation Center menüde kalır.
     next_url = (request.args.get("next") or request.form.get("next")
-                or "/operation-center")
+                or "/home")
     if not next_url.startswith("/") or next_url.startswith("//"):
-        next_url = "/operation-center"
+        next_url = "/home"
 
     if request.method == "POST":
         ip = auth.get_client_ip()
@@ -2893,6 +2893,13 @@ def _operation_error(code: str, message: str, status: int | None = None):
         code, message, g.get("request_id", "-"),
         int(time.time()), None, status)
     return _operation_json(payload, http_status)
+
+
+@app.get("/home")
+def trading_home_page():
+    # Mission 2300: sahip odaklı varsayılan ana sayfa (yalnız
+    # sunum; mevcut uçları okur, iş mantığı değişmedi).
+    return _render_workspace("trading_home.html", "trading_home")
 
 
 @app.get("/operation-center")

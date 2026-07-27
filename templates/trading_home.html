@@ -1,0 +1,131 @@
+{% extends "dash_base.html" %}
+{% block title %}Trading Home{% endblock %}
+{% block heading %}🏡 Trading Home{% endblock %}
+{% block subheading %}Yapay zekâ sizin adınıza işlem yapar — siz portföy sahibisiniz. Teknik ayrıntılar Operation Center menüsündedir.{% endblock %}
+
+{% block content %}
+<style>
+  /* ── Sahip odaklı, sade, masaüstü-öncelikli yerleşim ── */
+  .th-card { background:var(--card,#14161c); border:1px solid var(--line,#2a2d36);
+             border-radius:10px; padding:14px 16px; }
+  .th-card h2 { margin:0 0 10px; font-size:.9rem; letter-spacing:.05em;
+                text-transform:uppercase; color:var(--muted,#8b90a0); }
+  .th-unknown { color:#9aa0ae; }
+  .th-profit { color:#3fbf7f; font-weight:700; }
+  .th-loss { color:#e05656; font-weight:700; }
+  .th-badge { display:inline-block; padding:2px 10px; border-radius:999px;
+              font-size:.72rem; font-weight:700; letter-spacing:.03em; }
+  .th-badge.wait { background:#1b2430; color:#5ab0e0; }
+  .th-badge.prep { background:#33291a; color:#d9a441; }
+  .th-badge.exec { background:#153322; color:#3fbf7f; }
+  .th-badge.close { background:#2c1e33; color:#c58ae0; }
+  .th-badge.gray { background:#20232c; color:#9aa0ae; }
+  /* Üst çubuk: yapışkan */
+  #th-topbar { position:sticky; top:0; z-index:30; display:flex; flex-wrap:wrap;
+      gap:8px 22px; align-items:center; background:var(--card,#14161c);
+      border:1px solid var(--line,#2a2d36); border-radius:10px;
+      padding:10px 16px; font-size:.9rem; }
+  #th-topbar b { display:block; font-size:.62rem; color:var(--muted,#8b90a0);
+                 text-transform:uppercase; letter-spacing:.05em; }
+  #th-topbar .cell { min-width:110px; }
+  /* Üç sütun */
+  .th-main { display:grid; gap:12px; margin-top:12px;
+             grid-template-columns:minmax(240px,1fr) minmax(430px,2.4fr) minmax(240px,1fr);
+             align-items:start; }
+  @media (max-width:1100px) { .th-main { grid-template-columns:1fr; } }
+  .th-wallet { border:1px solid var(--line,#2a2d36); border-radius:8px;
+               background:var(--soft,#1b1e26); padding:10px 12px; margin-bottom:8px; }
+  .th-wallet .name { font-weight:800; margin-bottom:4px; }
+  .th-wallet .row { display:flex; justify-content:space-between; gap:8px;
+                    font-size:.8rem; margin:2px 0; }
+  .th-wallet .row span:first-child { color:var(--muted,#8b90a0); }
+  .th-table { width:100%; border-collapse:collapse; font-size:.86rem; }
+  .th-table th, .th-table td { padding:8px 8px; text-align:left;
+      border-bottom:1px solid var(--line,#2a2d36); white-space:nowrap; }
+  .th-table th { color:var(--muted,#8b90a0); font-size:.66rem;
+                 text-transform:uppercase; }
+  .th-empty { color:var(--muted,#8b90a0); padding:8px 0; }
+  .th-btn { border:1px solid #7a2e2e; background:var(--soft,#1b1e26);
+            color:#e05656; border-radius:7px; padding:5px 12px;
+            cursor:pointer; font-size:.8rem; }
+  .th-btn:disabled { opacity:.45; cursor:not-allowed; }
+  .th-queue-item { display:flex; justify-content:space-between; gap:8px;
+      align-items:center; border-bottom:1px solid var(--line,#2a2d36);
+      padding:7px 2px; font-size:.85rem; }
+  #th-activity li { padding:6px 2px; border-bottom:1px solid var(--line,#2a2d36);
+      font-size:.85rem; list-style:none; }
+  #th-activity { margin:0; padding:0; }
+  #th-activity time { color:var(--muted,#8b90a0); font-size:.72rem;
+      margin-right:8px; }
+  dialog.th-confirm { background:var(--card,#14161c); color:inherit;
+      border:1px solid var(--line,#2a2d36); border-radius:10px; max-width:420px; }
+  dialog.th-confirm input, dialog.th-confirm textarea { width:100%; margin:6px 0;
+      background:var(--soft,#1b1e26); color:inherit; border:1px solid
+      var(--line,#2a2d36); border-radius:6px; padding:6px 8px; }
+</style>
+
+<!-- ── YAPIŞKAN ÜST ÇUBUK ─────────────────────────────────────── -->
+<header id="th-topbar" aria-label="Portföy özeti">
+  <span class="cell"><b>Portföy Değeri</b><span id="th-portfolio-value" class="th-unknown">UNKNOWN</span></span>
+  <span class="cell"><b>Bugünkü Kazanç</b><span id="th-daily-pnl" class="th-unknown">UNKNOWN</span></span>
+  <span class="cell"><b>Aktif İşlemler</b><span id="th-active-count" class="th-unknown">UNKNOWN</span></span>
+  <span class="cell"><b>Sıradaki İşlemler</b><span id="th-queued-count" class="th-unknown">UNKNOWN</span></span>
+  <span class="cell"><b>Otonom Mod</b><span id="th-auto-mode" class="th-unknown">UNKNOWN</span></span>
+  <span class="cell"><b>Bot Durumu</b><span id="th-bot-status" class="th-unknown">UNKNOWN</span></span>
+  <span class="cell"><b>Cüzdan Bağlantısı</b><span id="th-wallet-conn" class="th-unknown">UNKNOWN</span></span>
+</header>
+
+<div class="th-main">
+
+  <!-- ── SOL: CÜZDANLAR ─────────────────────────────────────────── -->
+  <section class="th-card" aria-labelledby="th-h-wallets">
+    <h2 id="th-h-wallets">Cüzdanlar</h2>
+    <div id="th-wallets" aria-live="polite">
+      <div class="th-empty">Yükleniyor…</div>
+    </div>
+  </section>
+
+  <!-- ── ORTA: AKTİF İŞLEMLER ───────────────────────────────────── -->
+  <section class="th-card" aria-labelledby="th-h-trades">
+    <h2 id="th-h-trades">Aktif İşlemler</h2>
+    <table class="th-table" id="th-trades">
+      <thead><tr><th>Varlık</th><th>Yön</th><th>Anlık Kazanç</th>
+        <th>Süre</th><th>Durum</th><th></th></tr></thead>
+      <tbody><tr><td colspan="6" class="th-empty">Yükleniyor…</td></tr></tbody>
+    </table>
+  </section>
+
+  <!-- ── SAĞ: SIRA ──────────────────────────────────────────────── -->
+  <section class="th-card" aria-labelledby="th-h-queue">
+    <h2 id="th-h-queue">Sıra</h2>
+    <div id="th-queue" aria-live="polite">
+      <div class="th-empty">Yükleniyor…</div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ── ALT: SON HAREKETLER ──────────────────────────────────────── -->
+<section class="th-card" style="margin-top:12px" aria-labelledby="th-h-activity">
+  <h2 id="th-h-activity">Son Hareketler</h2>
+  <ul id="th-activity"><li class="th-empty">Yükleniyor…</li></ul>
+</section>
+
+<dialog class="th-confirm" id="th-dialog">
+  <form method="dialog">
+    <h3>İşlemi Kapat</h3>
+    <div id="th-dialog-body" style="font-size:.85rem"></div>
+    <label>Neden (zorunlu)
+      <textarea id="th-dialog-reason" rows="2" required></textarea></label>
+    <label>Onay için yazın: <b>ONAYLIYORUM</b>
+      <input id="th-dialog-phrase" autocomplete="off" required></label>
+    <p style="text-align:right">
+      <button value="cancel" class="th-btn" style="border-color:var(--line,#2a2d36);color:inherit">Vazgeç</button>
+      <button value="ok" class="th-btn" id="th-dialog-ok">Kapat</button>
+    </p>
+  </form>
+</dialog>
+
+<script>window.TH_CSRF = "{{ csrf_token() }}";</script>
+<script src="{{ url_for('static', filename='js/trading_home.js') }}"></script>
+{% endblock %}

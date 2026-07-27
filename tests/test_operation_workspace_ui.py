@@ -308,8 +308,10 @@ class TestNavigation:
                   if path in BASE]
         assert others and all(ops < other for other in others)
 
-    def test_login_defaults_to_operation_center(self):
+    def test_login_default_is_a_workspace_page(self):
+        # Mission 2300: varsayılan açılış Trading Home'a taşındı;
+        # Operation Center menüden erişilebilir kalır.
         app_source = (ROOT / "app.py").read_text(encoding="utf-8")
         matches = re.findall(
             r'next_url[^\n]*=[^\n]*"(/[a-z-]*)"', app_source)
-        assert "/operation-center" in matches
+        assert "/home" in matches
