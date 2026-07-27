@@ -123,3 +123,4 @@ automation_state.json.lock
 # Operation Control paylaşımlı durum (runtime, worker-arası)
 alpha20_v1/operation_control_state.json
 alpha20_v1/operation_control_state.json.lock
+alpha20_v1/accounts.json
