@@ -1,0 +1,610 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1900 — MONITORING & ALERTING
+
+AGENT 05 — MONITORING API
+
+ROLE
+
+Implement the Monitoring API layer defined by the approved
+Mission 1900 architecture.
+
+The API is a transport boundary only.
+
+It owns request validation, metadata generation and response
+construction.
+
+It performs no monitoring calculations.
+
+It performs no alert evaluation.
+
+It performs no provider orchestration.
+
+It performs no persistence.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1800
+
+OFFICIALLY CLOSED
+
+Mission 1900
+
+Agent 01 — PASS
+Agent 02 — PASS
+Agent 03 — PASS
+Agent 04 — PASS
+
+Current Commit
+
+aa522dc
+
+Regression Baseline
+
+1763 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement a deterministic API layer that:
+
+• Validates requests
+
+• Invokes Monitoring Service exactly once
+
+• Generates API-owned metadata
+
+• Returns immutable MonitoringApiResponse
+
+The API SHALL NOT:
+
+• Calculate metrics
+
+• Calculate health
+
+• Evaluate alerts
+
+• Read providers directly
+
+• Serialize exports
+
+• Perform execution
+
+────────────────────────────────────────
+3. FILES
+
+Create
+
+monitoring_api.py
+
+Create
+
+tests/test_monitoring_api.py
+
+Do not modify unrelated production files.
+
+────────────────────────────────────────
+4. API OWNERSHIP
+
+This is the ONLY layer allowed to generate:
+
+• report_id
+
+• observed_at
+
+• generated_at
+
+Monitoring Core
+
+↓
+
+null
+
+Monitoring Service
+
+↓
+
+null
+
+Monitoring API
+
+↓
+
+actual metadata
+
+No other layer may own metadata generation.
+
+────────────────────────────────────────
+5. REQUEST CONTRACT
+
+Expose one deterministic entry point.
+
+Suggested:
+
+analyze_monitoring_api(request)
+
+Input SHALL contain only API parameters.
+
+No provider payloads.
+
+No StrategyProposal injection.
+
+No monitoring metrics.
+
+Validate:
+
+• request type
+
+• supported API version
+
+• supported provider selection
+
+Reject invalid requests using sterile API errors.
+
+────────────────────────────────────────
+6. SERVICE INVOCATION
+
+Monitoring Service SHALL be invoked
+
+exactly once.
+
+No retries.
+
+No loops.
+
+No repeated execution.
+
+No hidden cache.
+
+No background execution.
+
+────────────────────────────────────────
+7. METADATA GENERATION
+
+Generate
+
+report_id
+
+observed_at
+
+generated_at
+
+ONLY here.
+
+Requirements:
+
+• Deterministic formatting
+
+• RFC3339 UTC timestamps
+
+• UUID4 for report_id
+
+Metadata SHALL NOT modify:
+
+MonitoringReport
+
+AlertReport
+
+MonitoringAnalysis
+
+Instead construct API response around them.
+
+────────────────────────────────────────
+8. API RESPONSE
+
+Return immutable structure:
+
+api_version
+
+report_id
+
+observed_at
+
+generated_at
+
+monitoring_analysis
+
+status
+
+limitations
+
+status allowed:
+
+SUCCESS
+
+PARTIAL
+
+FAILED
+
+No extra fields.
+
+────────────────────────────────────────
+9. STATUS RULES
+
+SUCCESS
+
+↓
+
+All providers COMPLETE
+
+No service limitation
+
+PARTIAL
+
+↓
+
+At least one PARTIAL source
+
+or
+
+Service limitation present
+
+FAILED
+
+↓
+
+MonitoringAnalysis unavailable
+
+or
+
+Sterile service failure
+
+Do not infer status from health_status.
+
+Monitoring health and API status are independent.
+
+────────────────────────────────────────
+10. ERROR HANDLING
+
+Convert all failures into sterile API responses.
+
+Allowed API error codes:
+
+INVALID_API_REQUEST
+
+UNSUPPORTED_API_VERSION
+
+UNKNOWN_PROVIDER
+
+MONITORING_ANALYSIS_ERROR
+
+Do not expose:
+
+stack traces
+
+file paths
+
+provider payloads
+
+internal exceptions
+
+────────────────────────────────────────
+11. IMMUTABILITY
+
+Returned API response SHALL be deeply immutable.
+
+Use MappingProxyType
+
+tuple
+
+or equivalent immutable structures.
+
+Mutation attempts shall raise TypeError.
+
+────────────────────────────────────────
+12. DETERMINISM
+
+Guarantee:
+
+• Monitoring Service called once
+
+• Stable response schema
+
+• Stable metadata format
+
+• No mutation
+
+• No float calculations
+
+• No randomness except UUID generation
+
+• UTC timestamps only
+
+• Deterministic ordering
+
+UUID randomness is allowed only for report_id.
+
+────────────────────────────────────────
+13. SECURITY
+
+API SHALL contain no:
+
+Exchange access
+
+Broker SDK
+
+Trading code
+
+Filesystem writes
+
+Database writes
+
+Snapshot persistence
+
+HTTP clients
+
+Socket clients
+
+Thread
+
+Scheduler
+
+subprocess
+
+eval
+
+exec
+
+Secret access
+
+Environment credential reads
+
+────────────────────────────────────────
+14. LAYER OWNERSHIP
+
+API owns:
+
+• Metadata
+
+• Request validation
+
+• Status normalization
+
+• Response envelope
+
+API does NOT own:
+
+• Monitoring calculations
+
+• Alert generation
+
+• Provider orchestration
+
+• Export
+
+• UI
+
+────────────────────────────────────────
+15. TEST REQUIREMENTS
+
+Add at least
+
+40 focused tests.
+
+Required coverage
+
+A.
+
+Request validation
+
+• valid request
+
+• invalid request
+
+• unsupported version
+
+• unknown provider
+
+B.
+
+Service invocation
+
+• exactly one call
+
+• no retries
+
+• no duplicate execution
+
+C.
+
+Metadata
+
+• UUID generated
+
+• RFC3339 UTC timestamps
+
+• report_id uniqueness
+
+• metadata only at API layer
+
+D.
+
+Status
+
+• SUCCESS
+
+• PARTIAL
+
+• FAILED
+
+• independent from monitoring health
+
+E.
+
+Envelope
+
+• exact schema
+
+• immutable response
+
+• monitoring_analysis unchanged
+
+F.
+
+Errors
+
+• sterile errors
+
+• provider failures
+
+• service failures
+
+• unsupported requests
+
+G.
+
+Security
+
+• no Exchange imports
+
+• no filesystem
+
+• no network
+
+• no persistence
+
+• no scheduler
+
+H.
+
+Regression
+
+Entire regression suite remains PASS.
+
+────────────────────────────────────────
+16. PROHIBITIONS
+
+Do not
+
+Modify Monitoring Core
+
+Modify Alert Engine
+
+Modify Monitoring Service
+
+Add persistence
+
+Add exports
+
+Add UI
+
+Add notifications
+
+Add execution
+
+Add broker connectivity
+
+Add Exchange connectivity
+
+Add AI
+
+Add ML
+
+────────────────────────────────────────
+17. DELIVERY REPORT
+
+Return
+
+── CREATED FILES ──
+
+List
+
+── MONITORING API ──
+
+Responsibilities implemented
+
+── REQUEST VALIDATION ──
+
+Validation rules
+
+── METADATA ──
+
+Ownership and generation
+
+── STATUS NORMALIZATION ──
+
+SUCCESS / PARTIAL / FAILED
+
+── DETERMINISM ──
+
+Evidence
+
+── SECURITY ──
+
+Evidence
+
+── PRODUCTION CODE CHANGES ──
+
+Exact list
+
+── TEST RESULTS ──
+
+PASS count
+
+── FAIL / SKIP ──
+
+Counts
+
+── TOTAL REGRESSION ──
+
+Total PASS
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash + GitHub push
+
+── NEXT AGENT ──
+
+AGENT 06 — EXPORT
+
+────────────────────────────────────────
+18. PASS CRITERIA
+
+PASS requires
+
+• Monitoring API completed
+
+• Request validation deterministic
+
+• Monitoring Service called exactly once
+
+• Metadata generated only at API layer
+
+• Immutable API response
+
+• SUCCESS/PARTIAL/FAILED normalization correct
+
+• ≥40 new tests PASS
+
+• Full regression remains 100% PASS
+
+• No production regressions
+
+• No persistence
+
+• No execution
+
+• No Exchange connectivity
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
