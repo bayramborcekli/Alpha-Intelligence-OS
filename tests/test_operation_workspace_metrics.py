@@ -5,6 +5,7 @@ import pytest
 
 import operation_workspace_metrics as m
 
+D = Decimal
 NOW = 1_000_000
 
 
@@ -166,6 +167,65 @@ class TestPeriodProfit:
 
 
 # ── sharpe_ratio ───────────────────────────────────────────────────
+
+class TestUtcDayProfit:
+    """'Bugünkü Kazanç' gün dönümü senaryoları: pencere UTC
+    00:00'da başlar; dünkü işlemler bugüne sızmaz."""
+
+    DAY_START = (NOW // m.DAY_SECONDS) * m.DAY_SECONDS
+
+    def _trades(self, *specs):
+        raw = [trade(pnl=p, fees="0", closed=c) for p, c in specs]
+        return m.parse_trades(raw)[0]
+
+    def test_sums_only_todays_trades(self):
+        trades = self._trades(("10", self.DAY_START + 50),
+                              ("7", NOW - 1))
+        assert m.utc_day_profit(trades, NOW) == D("17")
+
+    def test_yesterday_trade_excluded(self):
+        # Kayan 24 saatlik pencere bunu DAHİL ederdi (NOW -
+        # DAY_SECONDS içinde) — gün penceresi etmez.
+        trades = self._trades(("99", self.DAY_START - 1),
+                              ("10", NOW - 1))
+        assert m.utc_day_profit(trades, NOW) == D("10")
+
+    def test_midnight_boundary_inclusive(self):
+        trades = self._trades(("5", self.DAY_START))
+        assert m.utc_day_profit(trades, NOW) == D("5")
+
+    def test_resets_to_unknown_right_after_midnight(self):
+        # Dün kâr vardı; gün döndü, bugün henüz işlem yok →
+        # sıfırdan sayar: UNKNOWN (sahte 0 değil, dünkü 40 hiç
+        # değil).
+        next_midnight = self.DAY_START + m.DAY_SECONDS
+        trades = self._trades(("40", NOW))
+        assert m.utc_day_profit(trades, next_midnight + 1) is None
+
+    def test_counts_fresh_after_rollover(self):
+        next_midnight = self.DAY_START + m.DAY_SECONDS
+        trades = self._trades(("40", NOW),
+                              ("-3", next_midnight + 10))
+        assert m.utc_day_profit(
+            trades, next_midnight + 60) == D("-3")
+
+    def test_future_trade_excluded(self):
+        trades = self._trades(("5", NOW + 10))
+        assert m.utc_day_profit(trades, NOW) is None
+
+    def test_empty_is_unknown_not_zero(self):
+        assert m.utc_day_profit((), NOW) is None
+
+    @pytest.mark.parametrize("now", [0, -5, "x", None, 1.5, True])
+    def test_bad_now(self, now):
+        trades = self._trades(("5", 100))
+        assert m.utc_day_profit(trades, now) is None
+
+    def test_nets_fees(self):
+        raw = [trade(pnl="10", fees="1", closed=NOW - 1)]
+        trades = m.parse_trades(raw)[0]
+        assert m.utc_day_profit(trades, NOW) == D("9")
+
 
 class TestSharpe:
     def test_insufficient_returns_none(self):

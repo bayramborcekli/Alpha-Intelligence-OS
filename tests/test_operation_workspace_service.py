@@ -133,6 +133,33 @@ class TestPortfolio:
         assert view.weekly_pnl == D("9.00000000")
         assert view.monthly_pnl == D("9.00000000")
 
+    def test_daily_pnl_uses_utc_day_window(self):
+        # Gün dönümü: dün 23:59:59'da kapanan işlem, kayan 24
+        # saatlik pencerede DAHİL olurdu; 'Bugünkü Kazanç' UTC gün
+        # penceresi kullandığından hariçtir.
+        day_start = (NOW // 86400) * 86400
+        trades = [
+            {"realized_pnl": "99", "fees": "0",
+             "closed_at": day_start - 1},
+            {"realized_pnl": "10", "fees": "0",
+             "closed_at": day_start + 5},
+        ]
+        view = ws.build_portfolio_view([], None, trades, NOW)
+        assert view.daily_pnl == D("10.00000000")
+        # Haftalık pencere kayan kalır: her ikisi de dahil.
+        assert view.weekly_pnl == D("109.00000000")
+
+    def test_daily_pnl_resets_after_midnight(self):
+        # Dün kârlıydı; gün döndü, bugün işlem yok → sıfırdan
+        # sayar: UNKNOWN döner, dünkü kâr gösterilmez.
+        day_start = (NOW // 86400) * 86400
+        trades = [{"realized_pnl": "40", "fees": "0",
+                   "closed_at": day_start + 100}]
+        next_day = day_start + 86400 + 1
+        view = ws.build_portfolio_view([], None, trades, next_day)
+        assert view.daily_pnl is None
+        assert view.weekly_pnl == D("40.00000000")
+
     def test_no_trades_pnl_unknown(self):
         view = ws.build_portfolio_view([], None, [], NOW)
         assert view.daily_pnl is None

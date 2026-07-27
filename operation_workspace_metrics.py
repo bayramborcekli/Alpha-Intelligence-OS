@@ -31,6 +31,7 @@ __all__ = [
     "TradeRecord", "EquityPoint", "PerformanceMetrics",
     "parse_trades", "parse_equity_points", "compute_metrics",
     "DAY_SECONDS", "WEEK_SECONDS", "MONTH_SECONDS",
+    "utc_day_profit",
 ]
 
 DAY_SECONDS = 86400
@@ -184,6 +185,25 @@ def period_profit(trades: Sequence[TradeRecord], now: int,
         return None
     inside = [t.net_pnl for t in trades
               if now - window_seconds <= t.closed_at <= now]
+    if not inside:
+        return None
+    return sum(inside, Decimal("0")).quantize(_QUANT_MONEY)
+
+
+def utc_day_profit(trades: Sequence[TradeRecord],
+                   now: int) -> Optional[Decimal]:
+    """'Bugünkü Kazanç': UTC gün başlangıcından (00:00) şu ana
+    kadar kapanan işlemlerin net PnL toplamı. Kayan 24 saatlik
+    pencereden farkı: gün dönümünde sıfırdan saymaya başlar —
+    dünkü işlemler bugünün kazancına sızmaz.
+
+    Bugün kapanan işlem yoksa None (UNKNOWN) döner; 'işlem yok'
+    ile 'kâr 0' aynı şey DEĞİLDİR."""
+    if not isinstance(now, int) or isinstance(now, bool) or now <= 0:
+        return None
+    day_start = (now // DAY_SECONDS) * DAY_SECONDS
+    inside = [t.net_pnl for t in trades
+              if day_start <= t.closed_at <= now]
     if not inside:
         return None
     return sum(inside, Decimal("0")).quantize(_QUANT_MONEY)

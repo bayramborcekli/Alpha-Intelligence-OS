@@ -22,8 +22,8 @@ from operation_control_models import (
     OperationAuditRecord, OrderView, PositionView, ProductView,
     SignalView)
 from operation_workspace_metrics import (
-    DAY_SECONDS, MONTH_SECONDS, WEEK_SECONDS, PerformanceMetrics,
-    compute_metrics, parse_trades, period_profit)
+    MONTH_SECONDS, WEEK_SECONDS, PerformanceMetrics,
+    compute_metrics, parse_trades, period_profit, utc_day_profit)
 from operation_workspace_models import (
     BROKER_STATES, UNKNOWN, BrokerHealthView, JournalEventView,
     OrderLifecycleEventView, PerformanceView, PortfolioView,
@@ -88,7 +88,9 @@ def build_portfolio_view(positions: Sequence[PositionView],
         portfolio_value=to_decimal(account.get("portfolio_value")),
         cash=to_decimal(account.get("cash")),
         equity=to_decimal(account.get("equity")),
-        daily_pnl=period_profit(trades, now, DAY_SECONDS),
+        # 'Bugünkü Kazanç' UTC gün penceresidir (00:00'dan itibaren);
+        # kayan 24 saat DEĞİL — gün dönümünde sıfırdan sayar.
+        daily_pnl=utc_day_profit(trades, now),
         weekly_pnl=period_profit(trades, now, WEEK_SECONDS),
         monthly_pnl=period_profit(trades, now, MONTH_SECONDS),
         open_risk=open_risk,
