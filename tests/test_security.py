@@ -357,8 +357,11 @@ class TestPaperModeLock:
             "new" + "_order(",
         ]
         # execution_broker_adapter.py soyut sözleşme (I/O yok)
+        # binance_spot_adapter.py: sahte taşıma katmanlı referans
+        # adaptör — gerçek ağ/HTTP yok, testlerle sertifikalı
         excluded = (".pythonlibs", "__pycache__", ".git", "/tests/",
-                    "test_", "execution_broker_adapter.py")
+                    "test_", "execution_broker_adapter.py",
+                    "binance_spot_adapter.py")
         for src in ROOT.rglob("*.py"):
             src_str = str(src)
             if any(skip in src_str for skip in excluded):

@@ -240,8 +240,10 @@ class TestNoProductionBehavior:
         # switch, Agent 05 broker adapter arayüzü (planlanan
         # broker_adapter.py, execution_broker_adapter.py adıyla
         # teslim edildi)
+        # Agent 06: binance_spot_adapter.py teslim edildi
         delivered = {"execution_risk_engine.py",
-                     "execution_kill_switch.py"}
+                     "execution_kill_switch.py",
+                     "binance_spot_adapter.py"}
         delivered_as = {
             "broker_adapter.py": "execution_broker_adapter.py"}
         for module_file in PLANNED_MODULES:
