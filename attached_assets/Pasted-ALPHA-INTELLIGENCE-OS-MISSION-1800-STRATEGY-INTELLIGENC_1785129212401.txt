@@ -1,0 +1,328 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1800 — STRATEGY INTELLIGENCE
+
+AGENT 04 — STRATEGY API
+
+ROLE
+
+You are the API Agent for Mission 1800.
+
+Implement the Strategy Intelligence API exactly as defined by Agent 01
+architecture and Agent 03 Service.
+
+The API layer is a thin transport layer.
+
+No business rules.
+
+No strategy calculations.
+
+No execution.
+
+No persistence.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1700
+
+OFFICIALLY CLOSED
+
+Mission 1800
+
+Agent 01 — PASS
+
+Agent 02 — PASS
+
+Agent 03 — PASS
+
+Baseline Commit
+
+<Agent 03 HEAD>
+
+Regression Baseline
+
+<Agent 03 final PASS>
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Expose Strategy Intelligence through read-only HTTP endpoints.
+
+The API SHALL:
+
+Authenticate requests using the existing project convention.
+
+Call Strategy Service.
+
+Generate request-scoped metadata.
+
+Return StrategyProposal.
+
+Nothing else.
+
+────────────────────────────────────────
+3. FILES
+
+Modify only:
+
+app.py
+
+Create:
+
+tests/test_mission1800_strategy_api.py
+
+No Core changes.
+
+No Service changes.
+
+No UI.
+
+No Export.
+
+────────────────────────────────────────
+4. API ENDPOINTS
+
+Implement:
+
+GET /api/strategy/intelligence
+
+GET /api/v1/strategy/intelligence
+
+The API SHALL:
+
+Call analyze_strategy(...)
+
+Generate:
+
+proposal_id
+
+generated_at
+
+Wrap immutable StrategyProposal.
+
+Return JSON only.
+
+No POST.
+
+No PUT.
+
+No DELETE.
+
+────────────────────────────────────────
+5. RESPONSE MODEL
+
+Return:
+
+strategy_version
+
+proposal_id
+
+generated_at
+
+advisory_only
+
+read_only
+
+portfolio_analysis_version
+
+confidence
+
+data_quality
+
+market_regime
+
+overall_risk
+
+recommendations
+
+warnings
+
+limitations
+
+proposal_id SHALL be request scoped.
+
+generated_at SHALL be generated only here.
+
+Core SHALL remain deterministic.
+
+────────────────────────────────────────
+6. ERROR MODEL
+
+Return sterile errors only.
+
+Example codes:
+
+INVALID_INPUT
+
+INVALID_ANALYSIS
+
+PROPOSAL_UNAVAILABLE
+
+STRATEGY_ANALYSIS_ERROR
+
+INVALID_FORMAT
+
+FLOAT_REJECTED
+
+HTTP behavior:
+
+OK → 200
+
+PARTIAL → 200
+
+UNAVAILABLE → 200
+
+Unexpected → 500
+
+No stack traces.
+
+No provider internals.
+
+────────────────────────────────────────
+7. SECURITY
+
+API SHALL NOT:
+
+Execute trades
+
+Generate orders
+
+Call Exchange
+
+Write files
+
+Create temp files
+
+append_snapshot
+
+Modify workspace
+
+Modify timeline
+
+Leak provider implementation
+
+Expose internal exceptions
+
+────────────────────────────────────────
+8. TESTS
+
+Create tests covering:
+
+GET endpoint
+
+v1 endpoint
+
+Authentication behavior
+
+Request metadata generation
+
+proposal_id uniqueness
+
+generated_at presence
+
+UNAVAILABLE
+
+PARTIAL
+
+Sterile errors
+
+No execution fields
+
+No provider leakage
+
+Regression compatibility
+
+Target:
+
+20+ new tests
+
+100% PASS
+
+────────────────────────────────────────
+9. DELIVERY REPORT
+
+── CREATED FILES ──
+
+── MODIFIED FILES ──
+
+── API IMPLEMENTATION ──
+
+── RESPONSE MODEL ──
+
+── SECURITY ──
+
+── TESTS ──
+
+── PRODUCTION CODE CHANGES ──
+
+API only
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 05 — Strategy UI
+
+────────────────────────────────────────
+10. PASS CRITERIA
+
+PASS requires:
+
+• Read-only GET API implemented
+
+• Strategy Service is the only computation source
+
+• proposal_id generated only by API
+
+• generated_at generated only by API
+
+• No strategy calculations in API
+
+• No execution logic
+
+• No persistence
+
+• No Exchange
+
+• Sterile errors
+
+• No provider leakage
+
+• 20+ tests PASS
+
+• Regression remains PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+Mission 1800 continues only after Agent 04 passes.
