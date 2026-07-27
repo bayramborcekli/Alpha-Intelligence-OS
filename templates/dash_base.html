@@ -104,8 +104,9 @@
   <nav class="sidebar" id="sidebar" aria-label="Ana menü">
     <div class="brand">Alpha Intelligence OS</div>
     <div class="nav">
+      <a href="/operation-center" {% if active_page=='operation_center' %}class="active" aria-current="page"{% endif %}>🎛️ Operation Center</a>
       <a href="/">🏠 Başlangıç</a>
-      <a href="/overview" {% if active_page=='overview' %}class="active" aria-current="page"{% endif %}>📊 Genel Bakış</a>
+      <a href="/overview" {% if active_page=='overview' %}class="active" aria-current="page"{% endif %}>📊 Sistem Genel Bakış</a>
       <a href="/panel">🤖 Bot Kontrol</a>
       <a href="/portfolio" {% if active_page=='portfolio' %}class="active" aria-current="page"{% endif %}>💼 Portföy</a>
       <a href="/positions" {% if active_page=='positions' %}class="active" aria-current="page"{% endif %}>📈 Pozisyonlar</a>
@@ -115,7 +116,6 @@
       <a href="/reports" {% if active_page=='reports' %}class="active" aria-current="page"{% endif %}>📄 Raporlar</a>
       <a href="/risk" {% if active_page=='risk' %}class="active" aria-current="page"{% endif %}>⚖️ Risk</a>
       <a href="/intelligence" {% if active_page=='intelligence' %}class="active" aria-current="page"{% endif %}>🧠 Intelligence</a>
-      <a href="/operation-center" {% if active_page=='operation_center' %}class="active" aria-current="page"{% endif %}>🎛️ Operation Center</a>
       <a href="/workspace" {% if active_page=='workspace' %}class="active" aria-current="page"{% endif %}>🗂️ Workspace</a>
       <a href="/automation" {% if active_page=='automation' %}class="active" aria-current="page"{% endif %}>⚙️ Intelligence Automation</a>
       <a href="/portfolio-intelligence" {% if active_page=='portfolio_intelligence' %}class="active" aria-current="page"{% endif %}>🧭 Portfolio Intel</a>

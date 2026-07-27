@@ -91,6 +91,10 @@ adaptive_system.kill_switch` kaynağındadır (Mission 1500 ile aynı).
 3. Mutabakat motoru yok: mutabakat durumu dürüstçe UNKNOWN gösterilir.
 4. Sinyal zaman çizelgesi veri kaynağı henüz bağlı değil (boş liste +
    "öneri emir değildir" etiketi).
+   (Agent 02: sayfa tam ekran çalışma alanına dönüştü; portföy,
+   performans, broker sağlığı, strateji ve günlük panelleri
+   `/api/operation-control/workspace/*` salt-okunur uçlarından
+   beslenir — bkz. `docs/mission2200_agent02_report.md`.)
 5. Canlı (LIVE) yürütme yok; kapatma niyetleri PAPER simülasyonudur ve
    UI bunu onay diyaloğunda açıkça söyler.
 6. Servis durumu (otomasyon durumu, idempotency kayıtları, denetim

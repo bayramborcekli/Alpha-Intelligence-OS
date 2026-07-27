@@ -772,9 +772,12 @@ def login():
     error: str | None = None
     not_configured    = not auth.password_hash_configured()
     # next_url — yalnızca aynı origin göreceli yollar
-    next_url = request.args.get("next") or request.form.get("next") or "/"
+    # Mission 2200: giriş sonrası varsayılan ana çalışma alanı
+    # Operation Center'dır (Genel Bakış ikincil sayfadır).
+    next_url = (request.args.get("next") or request.form.get("next")
+                or "/operation-center")
     if not next_url.startswith("/") or next_url.startswith("//"):
-        next_url = "/"
+        next_url = "/operation-center"
 
     if request.method == "POST":
         ip = auth.get_client_ip()
@@ -2775,7 +2778,23 @@ def _operation_raw() -> dict[str, Any]:
     service = get_operation_service()
     try:
         import portfolio_api as pf
+        _probe_t0 = time.monotonic()
         pv = pf.positions_view()
+        _probe_ms = int((time.monotonic() - _probe_t0) * 1000)
+        # Broker sağlık sondası — yalnız gerçek okuma sonucu;
+        # başarısızlıkta alanlar UNKNOWN'a düşer (sahte sağlık yok).
+        if pv.get("ok"):
+            _workspace_probe.update({
+                "heartbeat_at": now, "latency_ms": _probe_ms,
+                "api_status": "OK", "rate_limit_state": "OK",
+                "synchronization_state": "SYNCED",
+                "authentication_state": "AUTHENTICATED",
+            })
+        else:
+            _workspace_probe.update({
+                "api_status": "DEGRADED",
+                "synchronization_state": "UNKNOWN",
+            })
         if pv.get("ok"):
             raw["status"]["last_sync_at"] = datetime.now(
                 timezone.utc).isoformat(timespec="seconds")
@@ -3170,6 +3189,203 @@ def api_operation_kill_switch():
         "Ticaret bloklandı; pozisyonlar KAPATILMADI — ayrı "
         "kapatma niyeti gerekir." if engage else None)
     return _operation_json(payload, status)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Mission 2200 Agent 02 — İşlem Çalışma Alanı (workspace) uçları
+# Salt-okunur GET uçları: portföy çubuğu, performans, broker
+# sağlığı, strateji paneli, günlük ve CSV dışa aktarım.
+# Doğrudan borsa YAZMA çağrısı yoktur.
+# ══════════════════════════════════════════════════════════════════════════════
+
+import operation_workspace_api as _owa
+import operation_workspace_service as _ows
+
+
+def _workspace_trades_raw() -> list[dict[str, Any]]:
+    """Kapalı işlem kayıtları — tek kaynak trade_history.json.
+    Dosya yoksa boş liste (UI dürüstçe UNKNOWN gösterir)."""
+    path = Path("alpha20_v1/trade_history.json")
+    try:
+        rows = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return []
+    if not isinstance(rows, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        closed = row.get("closed_at")
+        closed_epoch = None
+        if isinstance(closed, str):
+            try:
+                closed_epoch = int(datetime.fromisoformat(
+                    closed.replace("Z", "+00:00")).timestamp())
+            except ValueError:
+                closed_epoch = None
+        opened = row.get("opened_at") or row.get("time")
+        opened_epoch = None
+        if isinstance(opened, str):
+            try:
+                opened_epoch = int(datetime.fromisoformat(
+                    opened.replace("Z", "+00:00")).timestamp())
+            except ValueError:
+                opened_epoch = None
+        elif isinstance(opened, (int,)) and not isinstance(
+                opened, bool):
+            opened_epoch = opened
+        out.append({
+            "realized_pnl": str(row.get("pnl"))
+            if row.get("pnl") is not None else None,
+            "fees": str(row.get("fee_usdt"))
+            if row.get("fee_usdt") is not None else None,
+            "closed_at": closed_epoch,
+            "opened_at": opened_epoch,
+            "symbol": row.get("symbol"),
+        })
+    return out
+
+
+def _workspace_equity_raw() -> list[dict[str, Any]]:
+    path = Path("alpha20_v1/equity_curve.json")
+    try:
+        rows = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return []
+    if not isinstance(rows, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        ts = row.get("timestamp")
+        at = None
+        if isinstance(ts, str):
+            try:
+                at = int(datetime.fromisoformat(
+                    ts.replace("Z", "+00:00")).timestamp())
+            except ValueError:
+                at = None
+        elif isinstance(ts, (int,)) and not isinstance(ts, bool):
+            at = ts
+        equity = row.get("equity")
+        out.append({"at": at, "equity": str(equity)
+                    if equity is not None else None})
+    return out
+
+
+def _workspace_account_raw() -> dict[str, Any]:
+    """Bot muhasebe durumundan (state.json) bakiye — PAPER
+    defteridir; yoksa alanlar UNKNOWN kalır."""
+    path = Path("alpha20_v1/state.json")
+    try:
+        state = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(state, dict):
+        return {}
+    balance = state.get("balance")
+    if balance is None:
+        return {}
+    text = str(balance)
+    return {"portfolio_value": text, "cash": text, "equity": text}
+
+
+# Broker sağlık sondası — _operation_raw'daki başarılı okuma
+# etrafında ölçülür; süreç-yereldir (bilinen sınır #6 ile aynı).
+_workspace_probe: dict[str, Any] = {
+    "heartbeat_at": None, "latency_ms": None,
+    "reconnect_count": None, "api_status": "UNKNOWN",
+    "rate_limit_state": "UNKNOWN",
+    "synchronization_state": "UNKNOWN",
+    "authentication_state": "UNKNOWN",
+    "permission_state": "READ_ONLY",
+}
+
+
+@app.get("/api/operation-control/workspace/portfolio")
+def api_workspace_portfolio():
+    snapshot = _operation_snapshot()
+    view = _ows.build_portfolio_view(
+        snapshot.positions, _workspace_account_raw(),
+        _workspace_trades_raw(), int(time.time()),
+        freshness=snapshot.status.data_freshness.value)
+    payload = _owa.workspace_envelope(
+        {"portfolio": _oca.serialize_view(view)},
+        snapshot, g.get("request_id", "-"), int(time.time()))
+    return _operation_json(payload, 200)
+
+
+@app.get("/api/operation-control/workspace/performance")
+def api_workspace_performance():
+    snapshot = _operation_snapshot()
+    view = _ows.build_performance_view(
+        _workspace_trades_raw(), _workspace_equity_raw(),
+        int(time.time()))
+    payload = _owa.workspace_envelope(
+        {"performance": _oca.serialize_view(view)},
+        snapshot, g.get("request_id", "-"), int(time.time()))
+    return _operation_json(payload, 200)
+
+
+@app.get("/api/operation-control/workspace/broker-health")
+def api_workspace_broker_health():
+    snapshot = _operation_snapshot()  # sondayı da tazeler
+    view = _ows.build_broker_health_view(
+        dict(_workspace_probe), int(time.time()))
+    payload = _owa.workspace_envelope(
+        {"broker_health": _oca.serialize_view(view)},
+        snapshot, g.get("request_id", "-"), int(time.time()))
+    return _operation_json(payload, 200)
+
+
+@app.get("/api/operation-control/workspace/strategies")
+def api_workspace_strategies():
+    snapshot = _operation_snapshot()
+    rows = _ows.build_strategy_rows(
+        snapshot.products, snapshot.positions, snapshot.signals)
+    payload = _owa.workspace_envelope(
+        {"strategies": _owa.serialize_rows(rows)},
+        snapshot, g.get("request_id", "-"), int(time.time()))
+    return _operation_json(payload, 200)
+
+
+@app.get("/api/operation-control/workspace/journal")
+def api_workspace_journal():
+    snapshot = _operation_snapshot()
+    service = get_operation_service()
+    events = _ows.build_journal_events(
+        snapshot.signals, service.audit.records())
+    payload = _owa.workspace_envelope(
+        {"journal": _owa.serialize_rows(events)},
+        snapshot, g.get("request_id", "-"), int(time.time()))
+    return _operation_json(payload, 200)
+
+
+@app.get("/api/operation-control/workspace/export/<name>.csv")
+def api_workspace_export_csv(name: str):
+    if name not in _owa.CSV_EXPORTS:
+        return _operation_error("MALFORMED_REQUEST:export", name
+                                if name in _owa.CSV_EXPORTS
+                                else "unknown export", 404)
+    snapshot = _operation_snapshot()
+    if name == "positions":
+        rows: tuple = snapshot.positions
+    elif name == "orders":
+        rows = snapshot.orders
+    elif name == "signals":
+        rows = snapshot.signals
+    else:
+        rows = _ows.build_journal_events(
+            snapshot.signals,
+            get_operation_service().audit.records())
+    body = _owa.rows_to_csv(rows)
+    resp = app.response_class(body, mimetype="text/csv")
+    resp.headers["Cache-Control"] = "no-store, private"
+    resp.headers["Content-Disposition"] = (
+        f'attachment; filename="operation_{name}.csv"')
+    return resp
 
 
 # ══════════════════════════════════════════════════════════════════════════════

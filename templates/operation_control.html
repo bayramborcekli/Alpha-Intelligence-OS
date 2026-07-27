@@ -1,136 +1,225 @@
 {% extends "dash_base.html" %}
 {% block title %}Operation Center{% endblock %}
 {% block heading %}🎛️ Operation Center{% endblock %}
-{% block subheading %}Kontrollü ticaret operasyon çalışma alanı — tüm emir eylemleri Mission 2100 kontrollü yürütme hattından geçer; PAPER varsayılandır, LIVE fail-closed kilitlidir{% endblock %}
+{% block subheading %}Profesyonel işlem çalışma alanı — tüm emir eylemleri Mission 2100 kontrollü yürütme hattından geçer; PAPER varsayılandır, LIVE fail-closed kilitlidir{% endblock %}
 
 {% block content %}
 <style>
-  .oc-grid { display:grid; gap:14px; }
+  /* ── Terminal yoğunluğu: küçük yazı, sıkı boşluk, tam genişlik ── */
+  .oc-grid { display:grid; gap:10px; }
   .oc-card { background:var(--card, #14161c); border:1px solid var(--line, #2a2d36);
-             border-radius:10px; padding:14px; }
-  .oc-card h2 { margin:0 0 10px; font-size:1rem; }
-  .oc-kv { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:8px; }
-  .oc-kv div { background:var(--soft, #1b1e26); border-radius:8px; padding:8px 10px; }
-  .oc-kv b { display:block; font-size:.72rem; color:var(--muted,#8b90a0);
+             border-radius:8px; padding:10px 12px; }
+  .oc-card h2 { margin:0 0 8px; font-size:.85rem; text-transform:uppercase;
+                letter-spacing:.05em; color:var(--muted,#8b90a0); }
+  .oc-kv { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:6px; }
+  .oc-kv div { background:var(--soft, #1b1e26); border-radius:6px; padding:5px 8px; }
+  .oc-kv b { display:block; font-size:.62rem; color:var(--muted,#8b90a0);
              text-transform:uppercase; letter-spacing:.04em; }
   .oc-state { font-weight:700; }
-  .oc-state.unknown, .oc-badge.unknown { color:#d9a441; }
-  .oc-state.bad, .oc-badge.bad { color:#e05656; }
-  .oc-state.good, .oc-badge.good { color:#3fbf7f; }
-  .oc-mode-paper { background:#153322; color:#3fbf7f; padding:2px 10px;
-                   border-radius:6px; font-weight:800; }
-  .oc-mode-other { background:#33291a; color:#d9a441; padding:2px 10px;
-                   border-radius:6px; font-weight:800; }
-  .oc-mode-live { background:#3a1a1a; color:#e05656; padding:2px 10px;
-                  border-radius:6px; font-weight:800; }
+  .oc-state.unknown, .oc-badge.unknown, .ows-unknown { color:#9aa0ae; }
+  .oc-state.bad, .oc-badge.bad, .ows-loss { color:#e05656; }
+  .oc-state.good, .oc-badge.good, .ows-profit { color:#3fbf7f; }
+  .ows-pending { color:#d9a441; }
+  .ows-info { color:#5ab0e0; }
+  .oc-mode-paper { background:#153322; color:#3fbf7f; padding:2px 8px;
+                   border-radius:5px; font-weight:800; }
+  .oc-mode-other { background:#33291a; color:#d9a441; padding:2px 8px;
+                   border-radius:5px; font-weight:800; }
+  .oc-mode-live { background:#3a1a1a; color:#e05656; padding:2px 8px;
+                  border-radius:5px; font-weight:800; }
   .oc-btn { border:1px solid var(--line,#2a2d36); background:var(--soft,#1b1e26);
-            color:inherit; border-radius:8px; padding:6px 12px; cursor:pointer; }
+            color:inherit; border-radius:6px; padding:4px 10px; cursor:pointer;
+            font-size:.8rem; }
   .oc-btn:disabled { opacity:.45; cursor:not-allowed; }
   .oc-btn.danger { border-color:#7a2e2e; color:#e05656; }
   .oc-btn.primary { border-color:#2e5c7a; color:#5ab0e0; }
-  .oc-table { width:100%; border-collapse:collapse; font-size:.85rem; }
-  .oc-table th, .oc-table td { padding:6px 8px; border-bottom:1px solid var(--line,#2a2d36);
+  .oc-table { width:100%; border-collapse:collapse; font-size:.78rem; }
+  .oc-table th, .oc-table td { padding:4px 6px; border-bottom:1px solid var(--line,#2a2d36);
                                text-align:left; white-space:nowrap; }
-  .oc-table th { color:var(--muted,#8b90a0); font-size:.72rem;
-                 text-transform:uppercase; }
-  .oc-scroll { overflow-x:auto; }
-  .oc-banner { display:none; border-radius:8px; padding:10px 12px; margin-bottom:10px; }
+  .oc-table th { color:var(--muted,#8b90a0); font-size:.65rem;
+                 text-transform:uppercase; cursor:pointer; user-select:none; }
+  .oc-table th:focus { outline:1px solid #5ab0e0; }
+  .oc-table tr.ows-detail-row td { white-space:normal; background:var(--soft,#1b1e26);
+                                   font-size:.72rem; color:var(--muted,#8b90a0); }
+  .oc-table tr[data-expandable] { cursor:pointer; }
+  .oc-scroll { overflow:auto; resize:vertical; max-height:340px; min-height:60px; }
+  .oc-banner { display:none; border-radius:6px; padding:8px 10px; margin-bottom:8px; }
   .oc-banner.error { display:block; background:#3a1a1a; color:#e08585; }
   .oc-banner.warn  { display:block; background:#33291a; color:#d9a441; }
-  .oc-meta { color:var(--muted,#8b90a0); font-size:.78rem; margin:4px 0 12px; }
-  .oc-empty { color:var(--muted,#8b90a0); padding:8px 0; }
-  .oc-note { color:var(--muted,#8b90a0); font-size:.78rem; margin-top:8px; }
+  .oc-meta { color:var(--muted,#8b90a0); font-size:.72rem; margin:2px 0 8px; }
+  .oc-empty { color:var(--muted,#8b90a0); padding:6px 0; }
+  .oc-note { color:var(--muted,#8b90a0); font-size:.7rem; margin-top:6px; }
   dialog.oc-confirm { background:var(--card,#14161c); color:inherit; border:1px solid
                       var(--line,#2a2d36); border-radius:10px; max-width:430px; }
   dialog.oc-confirm input, dialog.oc-confirm textarea { width:100%; margin:6px 0;
       background:var(--soft,#1b1e26); color:inherit; border:1px solid var(--line,#2a2d36);
       border-radius:6px; padding:6px 8px; }
+  /* ── Çalışma alanı yerleşimi ── */
+  #ows-topbar { display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center;
+                background:var(--card,#14161c); border:1px solid var(--line,#2a2d36);
+                border-radius:8px; padding:8px 12px; font-size:.78rem; }
+  #ows-topbar b { color:var(--muted,#8b90a0); font-size:.62rem;
+                  text-transform:uppercase; margin-right:4px; }
+  #ows-portfolio-bar { display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:6px; }
+  .ows-main { display:grid; gap:10px; grid-template-columns:minmax(260px,1fr) minmax(420px,2.2fr) minmax(280px,1.2fr); align-items:start; }
+  @media (max-width:1100px) { .ows-main { grid-template-columns:1fr; } }
+  .ows-toolbar { display:flex; gap:6px; align-items:center; margin-bottom:6px;
+                 flex-wrap:wrap; }
+  .ows-toolbar input[type=search] { background:var(--soft,#1b1e26); color:inherit;
+      border:1px solid var(--line,#2a2d36); border-radius:6px; padding:3px 8px;
+      font-size:.75rem; min-width:130px; }
+  .ows-toolbar a.oc-btn { text-decoration:none; }
+  .ows-strategy { border:1px solid var(--line,#2a2d36); border-radius:6px;
+                  padding:6px 8px; margin-bottom:6px; background:var(--soft,#1b1e26); }
+  .ows-strategy .sym { font-weight:800; }
+  .ows-strategy .row { display:flex; gap:10px; flex-wrap:wrap; font-size:.72rem;
+                       margin:3px 0; }
+  .ows-strategy .actions { display:flex; gap:4px; flex-wrap:wrap; }
 </style>
 
 <div id="oc-error" class="oc-banner" role="alert"></div>
 <div id="oc-stale" class="oc-banner" role="status"></div>
-<p class="oc-meta">Son başarılı yenileme: <span id="oc-refreshed">-</span>
-  · Veri tazeliği: <span id="oc-freshness" class="oc-state unknown">UNKNOWN</span>
-  · Yürütme modu: <span id="oc-mode" class="oc-mode-paper">-</span></p>
 
-<div class="oc-grid">
+<!-- ── ÜST ÇUBUK ─────────────────────────────────────────────── -->
+<header id="ows-topbar" aria-label="Sistem durum çubuğu">
+  <span><b>Sistem</b><span id="ows-tb-system" class="oc-state unknown">UNKNOWN</span></span>
+  <span><b>Yürütme Modu</b><span id="oc-mode" class="oc-mode-paper">-</span></span>
+  <span><b>Bot</b><span id="ows-tb-bot" class="oc-state unknown">UNKNOWN</span></span>
+  <span><b>Son Güncelleme</b><span id="oc-refreshed">-</span></span>
+  <span><b>Tazelik</b><span id="oc-freshness" class="oc-state unknown">UNKNOWN</span></span>
+  <span><b>Broker</b><span id="ows-tb-broker" class="oc-state unknown">UNKNOWN</span></span>
+  <span><b>Gecikme</b><span id="ows-tb-latency" class="ows-unknown">UNKNOWN</span></span>
+  <span><b>Kill-Switch</b><span id="ows-tb-kill" class="oc-state unknown">UNKNOWN</span></span>
+</header>
 
-  <section class="oc-card" aria-labelledby="oc-h-status">
-    <h2 id="oc-h-status">1 · Sistem Yürütme Durumu</h2>
-    <div class="oc-kv" id="oc-status-grid"></div>
+<!-- ── PORTFÖY ÇUBUĞU ────────────────────────────────────────── -->
+<section class="oc-card" aria-labelledby="ows-h-portfolio" style="margin-top:10px">
+  <h2 id="ows-h-portfolio">Portföy</h2>
+  <div class="oc-kv" id="ows-portfolio-bar"></div>
+  <p class="oc-note">PAPER muhasebe defterinden; bilinmeyen alan UNKNOWN gösterilir — sahte 0 üretilmez.</p>
+</section>
+
+<div class="ows-main" style="margin-top:10px">
+
+  <!-- ── SOL PANEL: AKTİF STRATEJİLER ─────────────────────────── -->
+  <section class="oc-card" aria-labelledby="ows-h-strategies">
+    <h2 id="ows-h-strategies">Aktif Stratejiler</h2>
+    <div id="ows-strategies" aria-live="polite"></div>
+    <p class="oc-note">Her strateji bağımsız kontrol edilir. Komutlar
+      sembol durum makinesinden geçer; kill-switch etkinken ticaret
+      açan komutlar reddedilir.</p>
   </section>
 
-  <section class="oc-card" aria-labelledby="oc-h-auto">
-    <h2 id="oc-h-auto">2 · Otomatik Ticaret Kontrolü</h2>
-    <p>Durum: <span id="oc-auto-state" class="oc-state unknown">UNKNOWN</span></p>
-    <p>
-      <button class="oc-btn primary" data-auto="start">▶ Başlat</button>
-      <button class="oc-btn" data-auto="pause">⏸ Duraklat</button>
-      <button class="oc-btn" data-auto="resume">⏵ Sürdür</button>
-      <button class="oc-btn danger" data-auto="stop">⏹ Durdur</button>
-    </p>
-    <p class="oc-note">START mod/yetki/izin/risk/kill-switch denetimlerini
-      BAYPAS ETMEZ. PAUSE yeni pozisyonu engeller, mevcutlar koruma
-      politikasını izler. STOP yeni otomatik girişleri keser; mevcut
-      pozisyonları sessizce KAPATMAZ.</p>
-  </section>
-
-  <section class="oc-card" aria-labelledby="oc-h-products">
-    <h2 id="oc-h-products">3 · Yönetilen Ürünler</h2>
-    <div class="oc-scroll"><table class="oc-table" id="oc-products">
-      <thead><tr><th>Sembol</th><th>Piyasa</th><th>Strateji</th>
-        <th>Otomasyon</th><th>Sinyal</th><th>Mod</th><th>Yön</th>
-        <th>Giriş Uygun</th><th>Son Sinyal</th><th>Son Karar</th>
-        <th>Son Red</th><th>Eylem</th></tr></thead>
-      <tbody></tbody></table></div>
-  </section>
-
+  <!-- ── ORTA PANEL: CANLI POZİSYONLAR ────────────────────────── -->
   <section class="oc-card" aria-labelledby="oc-h-pos">
-    <h2 id="oc-h-pos">4 · Açık Pozisyonlar</h2>
-    <div class="oc-scroll"><table class="oc-table" id="oc-positions">
+    <h2 id="oc-h-pos">Canlı Pozisyonlar</h2>
+    <div class="ows-toolbar">
+      <input type="search" id="ows-search-positions" placeholder="Ara…"
+             aria-label="Pozisyonlarda ara" data-filter-table="oc-positions">
+      <a class="oc-btn" href="/api/operation-control/workspace/export/positions.csv"
+         download>CSV İndir</a>
+    </div>
+    <div class="oc-scroll"><table class="oc-table" id="oc-positions" data-sortable>
       <thead><tr><th>Sembol</th><th>Piyasa</th><th>Yön</th><th>Durum</th>
         <th>Strateji</th><th>Giriş</th><th>Güncel</th><th>Miktar</th>
         <th>Notyonel</th><th>Gerç. PnL</th><th>Gerç.meyen PnL</th><th>PnL %</th>
         <th>Ücret</th><th>Stop</th><th>TP</th><th>MFE</th><th>MAE</th>
-        <th>Açılış</th><th>Mutabakat</th><th>Mod</th><th>Eylem</th></tr></thead>
+        <th>Açılış</th><th>Süre</th><th>Mutabakat</th><th>Mod</th><th>Eylem</th></tr></thead>
       <tbody></tbody></table></div>
     <p class="oc-note">Kapatma isteği doğrudan borsa çağrısı DEĞİLDİR:
       kontrollü kapatma niyeti oluşturur (yetki → izin kapısı → risk →
-      kill-switch → yaşam döngüsü → defter). Stop/TP güncelleme:
-      <em>Sertifikalı yürütme API'si desteklemiyor</em> — bir sonraki
-      agent giriş noktasıdır.</p>
+      kill-switch → yaşam döngüsü → defter). Stop Taşı / TP Güncelle:
+      <em>Sertifikalı yürütme API'si desteklemiyor</em> — dekoratif uç
+      YOK, düğmeler devre dışıdır.
+      <button class="oc-btn" disabled aria-disabled="true">Stop Taşı (desteklenmiyor)</button>
+      <button class="oc-btn" disabled aria-disabled="true">TP Güncelle (desteklenmiyor)</button></p>
   </section>
 
-  <section class="oc-card" aria-labelledby="oc-h-orders">
-    <h2 id="oc-h-orders">5 · Emirler</h2>
-    <div class="oc-scroll"><table class="oc-table" id="oc-orders">
-      <thead><tr><th>Emir ID</th><th>Client ID</th><th>Sembol</th><th>Yön</th>
-        <th>Tip</th><th>Miktar</th><th>Fiyat</th><th>Ort. Dolum</th>
-        <th>Dolan</th><th>Kalan</th><th>Durum</th><th>Oluşturma</th>
-        <th>Güncelleme</th><th>Strateji</th><th>Korelasyon</th><th>Mod</th>
-        <th>Mutabakat</th></tr></thead>
-      <tbody></tbody></table></div>
-  </section>
-
+  <!-- ── SAĞ PANEL: CANLI SİNYALLER ───────────────────────────── -->
   <section class="oc-card" aria-labelledby="oc-h-signals">
-    <h2 id="oc-h-signals">6 · Sinyaller ve Kararlar</h2>
-    <p class="oc-note">Bir intelligence ÖNERİSİ emir değildir. Etiketler:
+    <h2 id="oc-h-signals">Canlı Sinyaller</h2>
+    <p class="oc-note">Yalnız sertifikalı olaylar. Bir öneri emir değildir:
       Öneri → Aday → Yetkili Niyet → Emir → Pozisyon.</p>
-    <div class="oc-scroll"><table class="oc-table" id="oc-signals">
+    <div class="ows-toolbar">
+      <input type="search" id="ows-search-signals" placeholder="Ara…"
+             aria-label="Sinyallerde ara" data-filter-table="oc-signals">
+      <a class="oc-btn" href="/api/operation-control/workspace/export/signals.csv"
+         download>CSV İndir</a>
+    </div>
+    <div class="oc-scroll"><table class="oc-table" id="oc-signals" data-sortable>
       <thead><tr><th>Zaman</th><th>Sembol</th><th>Strateji</th><th>Yön</th>
         <th>Güven</th><th>Tür</th><th>Karar</th><th>Risk</th><th>İzin</th>
         <th>Red Kodu</th><th>Yürütme</th><th>Korelasyon</th></tr></thead>
       <tbody></tbody></table></div>
   </section>
 
-  <section class="oc-card" aria-labelledby="oc-h-safety">
-    <h2 id="oc-h-safety">7 · Global Güvenlik Kontrolleri</h2>
+</div>
+
+<div class="oc-grid" style="margin-top:10px">
+
+  <!-- ── ALT PANEL: EMİRLER (genişletilebilir satırlar) ───────── -->
+  <section class="oc-card" aria-labelledby="oc-h-orders">
+    <h2 id="oc-h-orders">Emirler</h2>
+    <div class="ows-toolbar">
+      <input type="search" id="ows-search-orders" placeholder="Ara…"
+             aria-label="Emirlerde ara" data-filter-table="oc-orders">
+      <a class="oc-btn" href="/api/operation-control/workspace/export/orders.csv"
+         download>CSV İndir</a>
+    </div>
+    <div class="oc-scroll"><table class="oc-table" id="oc-orders" data-sortable>
+      <thead><tr><th>Emir ID</th><th>Client ID</th><th>Sembol</th><th>Yön</th>
+        <th>Tip</th><th>Miktar</th><th>Fiyat</th><th>Ort. Dolum</th>
+        <th>Dolan</th><th>Kalan</th><th>Durum</th><th>Oluşturma</th>
+        <th>Güncelleme</th><th>Strateji</th><th>Korelasyon</th><th>Mod</th>
+        <th>Mutabakat</th></tr></thead>
+      <tbody></tbody></table></div>
+    <p class="oc-note">Satıra tıklayınca (veya Enter) yaşam döngüsü ayrıntısı açılır;
+      genişletilmiş satırlar yenilemede korunur.</p>
+  </section>
+
+  <section class="oc-card" aria-labelledby="ows-h-perf">
+    <h2 id="ows-h-perf">Performans</h2>
+    <div class="oc-kv" id="ows-performance"></div>
+    <p class="oc-note">Kaynak: kapalı işlem geçmişi + özkaynak eğrisi.
+      Yetersiz veri → UNKNOWN; sahte metrik üretilmez.</p>
+  </section>
+
+  <section class="oc-card" aria-labelledby="ows-h-journal">
+    <h2 id="ows-h-journal">İşlem Günlüğü</h2>
+    <div class="ows-toolbar">
+      <input type="search" id="ows-search-journal" placeholder="Ara…"
+             aria-label="Günlükte ara" data-filter-table="ows-journal-table">
+      <a class="oc-btn" href="/api/operation-control/workspace/export/journal.csv"
+         download>CSV İndir</a>
+    </div>
+    <div class="oc-scroll"><table class="oc-table" id="ows-journal-table" data-sortable>
+      <thead><tr><th>Zaman</th><th>Olay</th><th>Sembol/Hedef</th>
+        <th>Ayrıntı</th><th>Sonuç</th><th>Korelasyon</th></tr></thead>
+      <tbody></tbody></table></div>
+    <p class="oc-note">Yalnız denetimli kaynaklar: sertifikalı sinyal olayları
+      ve operasyon denetim zinciri. Satıra tıklayınca korelasyon kimliği
+      panoya kopyalanır.</p>
+  </section>
+
+  <!-- ── OTOMASYON KONTROLÜ ───────────────────────────────────── -->
+  <section class="oc-card" aria-labelledby="oc-h-auto">
+    <h2 id="oc-h-auto">Otomasyon Kontrolü</h2>
+    <p>Durum: <span id="oc-auto-state" class="oc-state unknown">UNKNOWN</span></p>
     <p>
+      <button class="oc-btn primary" data-auto="start">▶ Başlat</button>
+      <button class="oc-btn" data-auto="pause">⏸ Duraklat</button>
+      <button class="oc-btn" data-auto="resume">⏵ Sürdür</button>
+      <button class="oc-btn danger" data-auto="stop">⏹ Durdur</button>
       <button class="oc-btn danger" id="oc-stop-entries">🚫 Yeni Girişleri Durdur</button>
       <button class="oc-btn danger" id="oc-close-all">📕 Tümünü Kapatma İsteği</button>
       <button class="oc-btn danger" id="oc-kill">⛔ Acil Kill-Switch</button>
       <button class="oc-btn" id="oc-kill-off">Kill-Switch Kapat</button>
     </p>
+    <p class="oc-note">START mod/yetki/izin/risk/kill-switch denetimlerini
+      BAYPAS ETMEZ. STOP yeni otomatik girişleri keser; mevcut pozisyonları
+      sessizce KAPATMAZ. Her yıkıcı eylem yazılı onay ifadesi, neden ve
+      idempotency anahtarı gerektirir ve denetim zincirine yazılır.</p>
     <div class="oc-kv" id="oc-safety-grid">
       <div><b>Ticaret Bloklu</b><span id="oc-sf-blocked" class="oc-state unknown">UNKNOWN</span></div>
       <div><b>Kapatma Niyeti İstendi</b><span id="oc-sf-intents">0</span></div>
@@ -138,13 +227,33 @@
       <div><b>Hâlâ Açık</b><span id="oc-sf-open" class="oc-state unknown">UNKNOWN</span></div>
       <div><b>Mutabakat Bekliyor</b><span id="oc-sf-recon" class="oc-state unknown">UNKNOWN</span></div>
     </div>
-    <p class="oc-note">Kill-switch yeni yürütme yetkisini derhal bloklar;
-      pozisyonların kapandığını ASLA iddia etmez. Yıkıcı eylemler yazılı
-      onay ifadesi, neden ve idempotency anahtarı gerektirir.</p>
+  </section>
+
+  <!-- ── BROKER SAĞLIĞI ───────────────────────────────────────── -->
+  <section class="oc-card" aria-labelledby="ows-h-broker">
+    <h2 id="ows-h-broker">Broker Sağlığı</h2>
+    <div class="oc-kv" id="ows-broker"></div>
+    <p class="oc-note">"Bağlı" tek kelimesi yerine alan alan dürüst durum.
+      Ölçülmeyen alan (ör. yeniden bağlanma sayısı) UNKNOWN gösterilir.</p>
+  </section>
+
+  <section class="oc-card" aria-labelledby="oc-h-status">
+    <h2 id="oc-h-status">Sistem Yürütme Durumu</h2>
+    <div class="oc-kv" id="oc-status-grid"></div>
+  </section>
+
+  <section class="oc-card" aria-labelledby="oc-h-products">
+    <h2 id="oc-h-products">Yönetilen Ürünler</h2>
+    <div class="oc-scroll"><table class="oc-table" id="oc-products" data-sortable>
+      <thead><tr><th>Sembol</th><th>Piyasa</th><th>Strateji</th>
+        <th>Otomasyon</th><th>Sinyal</th><th>Mod</th><th>Yön</th>
+        <th>Giriş Uygun</th><th>Son Sinyal</th><th>Son Karar</th>
+        <th>Son Red</th><th>Eylem</th></tr></thead>
+      <tbody></tbody></table></div>
   </section>
 
   <section class="oc-card" aria-labelledby="oc-h-risk">
-    <h2 id="oc-h-risk">8 · Risk ve Limitler</h2>
+    <h2 id="oc-h-risk">Risk ve Limitler</h2>
     <div class="oc-kv" id="oc-risk-grid"></div>
     <p class="oc-note">Risk limiti düzenleme:
       <em>Sertifikalı yürütme API'si desteklemiyor</em> — salt gösterim.
@@ -153,8 +262,8 @@
   </section>
 
   <section class="oc-card" aria-labelledby="oc-h-recon">
-    <h2 id="oc-h-recon">9 · Mutabakat</h2>
-    <div class="oc-scroll"><table class="oc-table" id="oc-recon">
+    <h2 id="oc-h-recon">Mutabakat</h2>
+    <div class="oc-scroll"><table class="oc-table" id="oc-recon" data-sortable>
       <thead><tr><th>Sembol</th><th>Son Mutabakat</th><th>Defter</th>
         <th>Broker</th><th>Fark</th><th>Emir Uyuşmazlığı</th>
         <th>Miktar Uyuşmazlığı</th><th>Fiyat Uyuşmazlığı</th>
@@ -164,8 +273,8 @@
   </section>
 
   <section class="oc-card" aria-labelledby="oc-h-audit">
-    <h2 id="oc-h-audit">10 · Denetim Zaman Çizelgesi</h2>
-    <div class="oc-scroll"><table class="oc-table" id="oc-audit">
+    <h2 id="oc-h-audit">Denetim Zaman Çizelgesi</h2>
+    <div class="oc-scroll"><table class="oc-table" id="oc-audit" data-sortable>
       <thead><tr><th>Zaman</th><th>Aktör</th><th>Eylem</th><th>Hedef</th>
         <th>Önceki</th><th>İstenen</th><th>Sonuç</th><th>Neden</th>
         <th>Korelasyon</th><th>Idempotency</th><th>Hata</th></tr></thead>
@@ -191,4 +300,5 @@
 
 <script>window.OC_CSRF = "{{ csrf_token() }}";</script>
 <script src="{{ url_for('static', filename='js/operation_control.js') }}"></script>
+<script src="{{ url_for('static', filename='js/operation_workspace.js') }}"></script>
 {% endblock %}

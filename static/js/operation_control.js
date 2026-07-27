@@ -199,6 +199,8 @@
         "</td><td>" + esc(p.stop_loss) + "</td><td>" + esc(p.take_profit) +
         "</td><td>" + esc(p.max_favorable_excursion) + "</td><td>" +
         esc(p.max_adverse_excursion) + "</td><td>" + esc(p.opened_at) +
+        "</td><td>" + esc(window.OWS && window.OWS.duration ?
+          window.OWS.duration(p.opened_at) : "UNKNOWN") +
         "</td><td class=\"oc-state " + stateClass(p.reconciliation_state) +
         "\">" + esc(p.reconciliation_state) + "</td><td>" +
         esc(p.execution_mode) + "</td><td>" +
@@ -208,12 +210,13 @@
         "<button class=\"oc-btn\" disabled aria-disabled=\"true\" " +
         "title=\"Sertifikalı yürütme API'si desteklemiyor\">Stop/TP</button>" +
         "</td></tr>";
-    }, "Açık pozisyon yok veya veri kullanılamıyor (UNKNOWN).", 21);
+    }, "Açık pozisyon yok veya veri kullanılamıyor (UNKNOWN).", 22);
   }
 
   function renderOrders(rows) {
     fillTable("oc-orders", rows, function (o) {
-      return "<tr><td>" + esc(o.order_id) + "</td><td>" +
+      return "<tr tabindex=\"0\" data-expandable data-row-key=\"" +
+        esc(o.order_id) + "\"><td>" + esc(o.order_id) + "</td><td>" +
         esc(o.client_order_id) + "</td><td>" + esc(o.symbol) + "</td><td>" +
         esc(o.side) + "</td><td>" + esc(o.order_type) + "</td><td>" +
         esc(o.quantity) + "</td><td>" + esc(o.requested_price) + "</td><td>" +
