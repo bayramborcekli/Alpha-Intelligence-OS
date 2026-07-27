@@ -1,0 +1,531 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1900 — MONITORING & ALERTING
+
+AGENT 04 — MONITORING SERVICE
+
+ROLE
+
+Implement the Monitoring Service defined by the approved
+Mission 1900 architecture.
+
+The Monitoring Service is an orchestration layer only.
+
+It performs no calculations.
+
+It performs no alert evaluation.
+
+It performs no persistence.
+
+It performs no execution.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1800
+
+OFFICIALLY CLOSED
+
+Mission 1900
+
+Agent 01 — PASS
+Agent 02 — PASS
+Agent 03 — PASS
+
+Current Commit
+
+4879ff1
+
+Regression Baseline
+
+1727 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement a thin orchestration service that:
+
+• Retrieves Monitoring observations from providers
+
+• Calls Monitoring Core exactly once
+
+• Calls Alert Engine exactly once
+
+• Returns one immutable MonitoringAnalysis envelope
+
+The Service SHALL own orchestration only.
+
+The Service SHALL NOT own:
+
+• Metric calculations
+
+• Health calculations
+
+• Alert rule evaluation
+
+• Serialization
+
+• API metadata
+
+────────────────────────────────────────
+3. FILES
+
+Create:
+
+monitoring_service.py
+
+Create tests:
+
+tests/test_monitoring_service.py
+
+Do not modify unrelated production files.
+
+────────────────────────────────────────
+4. PROVIDER MODEL
+
+Implement deterministic provider orchestration.
+
+Suggested provider interface:
+
+MonitoringProvider
+
+get_monitoring_input()
+
+returns:
+
+MonitoringObservationInput
+
+The default provider chain SHALL remain read-only.
+
+No provider may:
+
+• Persist observations
+
+• Modify Monitoring Core output
+
+• Generate alerts
+
+• Access Exchange write APIs
+
+────────────────────────────────────────
+5. SERVICE FLOW
+
+Monitoring Provider
+        │
+        ▼
+Monitoring Core
+        │
+        ▼
+Alert Engine
+        │
+        ▼
+MonitoringAnalysis
+
+Exactly one invocation each.
+
+No repeated calculations.
+
+No retries.
+
+No hidden caching.
+
+────────────────────────────────────────
+6. MONITORING ANALYSIS
+
+Return one immutable envelope.
+
+Fields:
+
+monitoring_report
+
+alert_report
+
+sources
+
+limitations
+
+The Service SHALL NOT inject:
+
+report_id
+
+generated_at
+
+observed_at
+
+UUID
+
+Clock values
+
+API owns those fields.
+
+────────────────────────────────────────
+7. SOURCE REPORTING
+
+sources SHALL describe provider execution only.
+
+Allowed values:
+
+COMPLETE
+
+PARTIAL
+
+UNAVAILABLE
+
+Provider exceptions SHALL become:
+
+UNAVAILABLE
+
+or
+
+PARTIAL
+
+Never raw exceptions.
+
+Never stack traces.
+
+Never secrets.
+
+────────────────────────────────────────
+8. PROVIDER FAILURE
+
+Rules:
+
+Provider unavailable
+
+↓
+
+UNAVAILABLE source
+
+↓
+
+Monitoring Core still executes using empty input
+when safely possible.
+
+Provider partial
+
+↓
+
+PARTIAL source
+
+↓
+
+Monitoring proceeds.
+
+Unexpected exception
+
+↓
+
+Sterile provider failure
+
+↓
+
+No traceback leakage.
+
+────────────────────────────────────────
+9. DETERMINISM
+
+Service SHALL guarantee:
+
+• Monitoring Core called once
+
+• Alert Engine called once
+
+• Provider called once
+
+• Stable source ordering
+
+• No mutation
+
+• No float calculations
+
+• No UUID generation
+
+• No clock access
+
+• No randomness
+
+• No caching
+
+────────────────────────────────────────
+10. SECURITY
+
+Service SHALL contain no:
+
+• Exchange writes
+
+• Broker SDKs
+
+• Trading functions
+
+• Order creation
+
+• Filesystem writes
+
+• Snapshot persistence
+
+• Database writes
+
+• HTTP requests
+
+• Socket access
+
+• Threads
+
+• Schedulers
+
+• Background jobs
+
+• subprocess
+
+• eval
+
+• exec
+
+────────────────────────────────────────
+11. ERROR HANDLING
+
+Use sterile domain errors only.
+
+Never expose:
+
+• file paths
+
+• secrets
+
+• stack traces
+
+• provider payloads
+
+Unexpected failures SHALL become:
+
+MONITORING_ANALYSIS_ERROR
+
+────────────────────────────────────────
+12. LAYER OWNERSHIP
+
+Monitoring Service owns:
+
+• Provider orchestration
+
+• Source normalization
+
+• Envelope construction
+
+Monitoring Service does NOT own:
+
+• Metrics
+
+• Health
+
+• Alerts
+
+• Export
+
+• API
+
+• UI
+
+────────────────────────────────────────
+13. TEST REQUIREMENTS
+
+Add at least 35 focused tests.
+
+Required coverage:
+
+A. Provider orchestration
+
+• Provider called once
+
+• Monitoring Core called once
+
+• Alert Engine called once
+
+• No repeated execution
+
+B. Source normalization
+
+• COMPLETE
+
+• PARTIAL
+
+• UNAVAILABLE
+
+• Stable ordering
+
+C. Failure handling
+
+• Provider exception
+
+• Partial provider
+
+• Empty provider
+
+• Sterile failures
+
+D. Envelope
+
+• Exact fields
+
+• Immutable output
+
+• No metadata injection
+
+E. Determinism
+
+• Repeated identical input
+
+• Stable output
+
+• No mutation
+
+F. Security
+
+• No persistence
+
+• No Exchange access
+
+• No broker imports
+
+• No filesystem
+
+• No network
+
+G. Regression
+
+• Full regression remains 100% PASS
+
+────────────────────────────────────────
+14. PROHIBITIONS
+
+Do not:
+
+• Recalculate Monitoring metrics
+
+• Recalculate Health
+
+• Recalculate Alerts
+
+• Add persistence
+
+• Add scheduler
+
+• Add polling
+
+• Add notifications
+
+• Add API
+
+• Add UI
+
+• Add Export
+
+• Add execution
+
+• Add broker connectivity
+
+• Add Exchange connectivity
+
+• Add AI/ML
+
+────────────────────────────────────────
+15. DELIVERY REPORT
+
+Return:
+
+── CREATED FILES ──
+
+List
+
+── MONITORING SERVICE ──
+
+Responsibilities implemented
+
+── PROVIDER ORCHESTRATION ──
+
+Execution flow
+
+── SOURCE NORMALIZATION ──
+
+Rules
+
+── DETERMINISM ──
+
+Evidence
+
+── SECURITY ──
+
+Evidence
+
+── PRODUCTION CODE CHANGES ──
+
+Exact list
+
+── TEST RESULTS ──
+
+PASS count
+
+── FAIL / SKIP ──
+
+Counts
+
+── TOTAL REGRESSION ──
+
+Total PASS
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash + GitHub push
+
+── NEXT AGENT ──
+
+AGENT 05 — MONITORING API
+
+────────────────────────────────────────
+16. PASS CRITERIA
+
+PASS requires:
+
+• Thin orchestration only
+
+• Provider called exactly once
+
+• Monitoring Core called exactly once
+
+• Alert Engine called exactly once
+
+• Immutable MonitoringAnalysis envelope
+
+• No metadata ownership violations
+
+• No persistence
+
+• No execution
+
+• No Exchange connectivity
+
+• ≥35 new tests PASS
+
+• Full regression remains 100% PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+```
