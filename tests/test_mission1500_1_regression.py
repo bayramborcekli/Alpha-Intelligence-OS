@@ -166,6 +166,9 @@ class TestRouteSurface:
         "/api/v1/portfolio/intelligence/export/json",
         "/api/portfolio/intelligence/export/csv",
         "/api/v1/portfolio/intelligence/export/csv",
+        # Mission 1800 / Agent 04: Strategy Intelligence (GET-only,
+        # advisory-only) — yüzey bilinçli olarak genişletildi.
+        "/api/strategy/intelligence", "/api/v1/strategy/intelligence",
     }
 
     def test_intelligence_route_set_exact(self):

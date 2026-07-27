@@ -1994,6 +1994,30 @@ def api_portfolio_intelligence_export_csv():
     return _portfolio_intelligence_export("csv")
 
 
+# ── Mission 1800 / Agent 04: Strategy Intelligence API ──────────────
+# YALNIZCA GET. Rota hesap YAPMAZ: strategy_service → strategy çekirdeği
+# zinciri tek otoridedir. proposal_id + generated_at YALNIZ bu API
+# sınırında üretilir (Core/Service deterministik kalır); istemciden
+# override kabul edilmez. Kimlik doğrulama _security_gate ile zorunlu.
+
+@app.get("/api/strategy/intelligence")
+@app.get("/api/v1/strategy/intelligence")
+def api_strategy_intelligence():
+    import strategy_service as _ssv
+    try:
+        proposal = _ssv.analyze_strategy(
+            _ssv.build_default_strategy_providers())
+        # İstek-kapsamlı meta yalnız burada eklenir (Agent 01 §3):
+        proposal["proposal_id"] = uuid.uuid4().hex
+        proposal["generated_at"] = datetime.now(timezone.utc).isoformat()
+    except Exception:
+        app.logger.exception("strategy intelligence hatası")
+        return _automation_json({"ok": False, "error": {
+            "code": "STRATEGY_ANALYSIS_ERROR",
+            "message": "Strateji önerisi üretilemedi."}}, 500)
+    return _automation_json(proposal)
+
+
 # ── Mission 1500.2: Workspace Read-Only API ──────────────────────────
 # YALNIZCA GET. Veri tek kaynaktan gelir: intelligence_workspace_service
 # (timeline modülüne doğrudan erişilmez). Kimlik doğrulama _security_gate
