@@ -52,6 +52,12 @@ def test_envelope_flags_and_version():
     assert out["generated_at"] == "2026-07-27T00:00:00+00:00"
 
 
+def test_analyze_portfolio_public_alias():
+    a = json.dumps(pi.analyze(base_inputs()), sort_keys=True)
+    b = json.dumps(pi.analyze_portfolio(base_inputs()), sort_keys=True)
+    assert a == b
+
+
 def test_deterministic_byte_identical():
     a = json.dumps(pi.analyze(base_inputs()), sort_keys=True)
     b = json.dumps(pi.analyze(base_inputs()), sort_keys=True)

@@ -265,6 +265,11 @@ def analyze(inputs: Any) -> dict[str, Any]:
         raise ValueError(ERROR_INVALID_INPUT)
 
 
+def analyze_portfolio(inputs: Any) -> dict[str, Any]:
+    """Resmî sözleşme adı (Mission 1700 §4) — ``analyze`` ile özdeş."""
+    return analyze(inputs)
+
+
 def _analyze(inputs: Any) -> dict[str, Any]:
     if not isinstance(inputs, dict):
         raise ValueError(ERROR_INVALID_INPUT)
