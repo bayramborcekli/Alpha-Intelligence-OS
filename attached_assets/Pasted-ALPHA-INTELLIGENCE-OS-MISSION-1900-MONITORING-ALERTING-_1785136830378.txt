@@ -1,0 +1,866 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1900 — MONITORING & ALERTING
+
+AGENT 06 — EXPORT
+
+ROLE
+
+Implement the deterministic Monitoring Export layer defined by the
+approved Mission 1900 architecture.
+
+The Export layer is serialization only.
+
+It converts an already-produced MonitoringApiResponse into a stable
+external representation.
+
+It performs no monitoring analysis.
+
+It performs no alert evaluation.
+
+It performs no provider orchestration.
+
+It performs no metadata generation.
+
+It performs no persistence.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1800
+
+OFFICIALLY CLOSED
+
+Mission 1900
+
+Agent 01 — PASS
+Agent 02 — PASS
+Agent 03 — PASS
+Agent 04 — PASS
+Agent 05 — PASS
+
+Current Commit
+
+808ddb0
+
+Regression Baseline
+
+1804 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement a deterministic export layer that:
+
+• Accepts MonitoringApiResponse
+
+• Validates the export input
+
+• Converts immutable domain objects into a stable JSON-compatible model
+
+• Produces canonical JSON
+
+• Preserves API metadata exactly
+
+• Preserves report, alert, source and limitation ordering
+
+• Exposes no internal objects or implementation details
+
+The Export layer SHALL NOT:
+
+• Invoke Monitoring API
+
+• Invoke Monitoring Service
+
+• Invoke Monitoring Core
+
+• Invoke Alert Engine
+
+• Invoke providers
+
+• Generate report_id
+
+• Generate timestamps
+
+• Recalculate status
+
+• Recalculate health
+
+• Recalculate alerts
+
+• Write files
+
+────────────────────────────────────────
+3. FILES
+
+Create
+
+monitoring_export.py
+
+Create
+
+tests/test_monitoring_export.py
+
+Do not modify unrelated production files.
+
+────────────────────────────────────────
+4. PUBLIC ENTRY POINTS
+
+Expose deterministic entry points.
+
+Required:
+
+build_monitoring_export(api_response)
+
+serialize_monitoring_export(api_response)
+
+Suggested responsibilities:
+
+build_monitoring_export
+
+↓
+
+Validate MonitoringApiResponse
+
+↓
+
+Construct deeply immutable JSON-compatible export model
+
+serialize_monitoring_export
+
+↓
+
+Use build_monitoring_export
+
+↓
+
+Return canonical JSON string
+
+No additional public business entry points.
+
+────────────────────────────────────────
+5. INPUT CONTRACT
+
+Input must be a valid MonitoringApiResponse produced by Agent 05.
+
+Validate:
+
+• Exact response shape
+
+• api_version
+
+• report_id
+
+• observed_at
+
+• generated_at
+
+• monitoring_analysis shape
+
+• status
+
+• limitations
+
+Reject malformed input using sterile errors.
+
+Allowed export error code:
+
+INVALID_MONITORING_EXPORT_INPUT
+
+Do not attempt to repair malformed input.
+
+Do not synthesize missing values.
+
+Do not invoke lower layers to rebuild data.
+
+────────────────────────────────────────
+6. EXPORT SCHEMA
+
+The export root SHALL contain exactly:
+
+api_version
+
+report_id
+
+observed_at
+
+generated_at
+
+status
+
+limitations
+
+monitoring
+
+alerts
+
+sources
+
+No extra root fields.
+
+────────────────────────────────────────
+7. MONITORING SECTION
+
+The monitoring section SHALL be derived only from:
+
+monitoring_analysis.monitoring_report
+
+Preserve approved MonitoringReport fields exactly.
+
+Requirements:
+
+• No metric recomputation
+
+• No health recomputation
+
+• No added metadata
+
+• Decimal values exported as strings
+
+• null preserved as null
+
+• tuples exported as arrays
+
+• mappings exported with deterministic key ordering
+
+• unknown values remain null
+
+────────────────────────────────────────
+8. ALERTS SECTION
+
+The alerts section SHALL be derived only from:
+
+monitoring_analysis.alert_report
+
+Requirements:
+
+• Preserve alert order
+
+• Preserve alert_id
+
+• Preserve alert code
+
+• Preserve severity
+
+• Preserve recommended_action
+
+• Preserve message or explanation fields if present in the approved model
+
+• Do not generate or suppress alerts
+
+• Do not renumber alerts
+
+• Decimal values exported as strings
+
+────────────────────────────────────────
+9. SOURCES SECTION
+
+The sources section SHALL be derived only from:
+
+monitoring_analysis.sources
+
+Requirements:
+
+• Preserve stable source ordering
+
+• Preserve source name
+
+• Preserve source status
+
+• Preserve sterile source code
+
+• Preserve source limitations
+
+• Never include raw provider payload
+
+• Never include raw exception text
+
+• Never include stack traces
+
+────────────────────────────────────────
+10. LIMITATIONS
+
+Root limitations SHALL preserve the API response limitations exactly.
+
+Nested limitations SHALL preserve their existing ownership and ordering.
+
+Do not:
+
+• Merge unrelated limitation lists
+
+• Deduplicate limitations
+
+• Reclassify limitations
+
+• Infer new limitations
+
+────────────────────────────────────────
+11. FAILED RESPONSE EXPORT
+
+If API status is FAILED and monitoring_analysis is null:
+
+Export:
+
+monitoring = null
+
+alerts = []
+
+sources = []
+
+Preserve:
+
+api_version
+
+report_id
+
+observed_at
+
+generated_at
+
+status
+
+limitations
+
+Do not call any lower layer.
+
+Do not manufacture an analysis.
+
+────────────────────────────────────────
+12. JSON RULES
+
+serialize_monitoring_export SHALL return canonical JSON.
+
+Requirements:
+
+• UTF-8-safe text
+
+• ensure_ascii=False
+
+• sort_keys=True
+
+• separators=(",", ":")
+
+• allow_nan=False
+
+• No indentation
+
+• No trailing newline
+
+• No float NaN
+
+• No Infinity
+
+• No custom object repr leakage
+
+• Same logical input → byte-identical JSON
+
+────────────────────────────────────────
+13. DECIMAL POLICY
+
+All Decimal values SHALL be exported as canonical strings.
+
+Examples:
+
+Decimal("0")
+
+↓
+
+"0"
+
+Decimal("12.3400")
+
+↓
+
+"12.3400"
+
+Do not convert Decimal to float.
+
+Do not normalize away approved precision.
+
+Do not use scientific float conversion.
+
+────────────────────────────────────────
+14. IMMUTABILITY
+
+build_monitoring_export SHALL return a deeply immutable structure.
+
+Use:
+
+MappingProxyType
+
+tuple
+
+or equivalent immutable structures.
+
+Mutation attempts SHALL raise TypeError.
+
+Serialization SHALL NOT mutate:
+
+• MonitoringApiResponse
+
+• MonitoringAnalysis
+
+• MonitoringReport
+
+• AlertReport
+
+• sources
+
+• limitations
+
+────────────────────────────────────────
+15. DETERMINISM
+
+Guarantee:
+
+• Stable root schema
+
+• Stable key ordering
+
+• Stable list ordering
+
+• Stable Decimal representation
+
+• Stable null handling
+
+• No clock access
+
+• No UUID generation
+
+• No randomness
+
+• No environment dependence
+
+• No hidden cache
+
+• No locale-dependent number formatting
+
+────────────────────────────────────────
+16. ERROR HANDLING
+
+All malformed export inputs SHALL produce a sterile failure.
+
+Preferred behavior:
+
+raise ValueError("INVALID_MONITORING_EXPORT_INPUT")
+
+Do not expose:
+
+• Internal exception messages
+
+• Object repr values
+
+• File paths
+
+• Stack traces
+
+• Provider payloads
+
+• Secret values
+
+Do not partially serialize malformed data.
+
+────────────────────────────────────────
+17. SECURITY
+
+Export layer SHALL contain no:
+
+Exchange access
+
+Broker SDK
+
+Trading code
+
+Filesystem writes
+
+Database writes
+
+Snapshot persistence
+
+HTTP clients
+
+Socket clients
+
+Threads
+
+Schedulers
+
+Subprocess
+
+eval
+
+exec
+
+Environment access
+
+Secret access
+
+Clock access
+
+UUID access
+
+Random access
+
+────────────────────────────────────────
+18. IMPORT SURFACE
+
+Keep imports minimal.
+
+Expected stdlib candidates:
+
+json
+
+decimal
+
+types
+
+typing
+
+Expected project import:
+
+monitoring_api
+
+Do not import:
+
+monitoring_service
+
+monitoring_intelligence
+
+alert_engine
+
+strategy_service
+
+portfolio services
+
+exchange modules
+
+broker modules
+
+────────────────────────────────────────
+19. LAYER OWNERSHIP
+
+Export owns:
+
+• External export schema
+
+• JSON-compatible conversion
+
+• Canonical JSON serialization
+
+• Export input validation
+
+Export does NOT own:
+
+• Request validation
+
+• API metadata
+
+• API status calculation
+
+• Monitoring calculations
+
+• Alert generation
+
+• Provider orchestration
+
+• Persistence
+
+• UI
+
+• Notification delivery
+
+────────────────────────────────────────
+20. TEST REQUIREMENTS
+
+Add at least
+
+40 focused tests.
+
+Required coverage:
+
+A. Valid export
+
+• SUCCESS response
+
+• PARTIAL response
+
+• FAILED response
+
+• Exact root schema
+
+B. Monitoring conversion
+
+• Monitoring fields preserved
+
+• Decimal converted to string
+
+• null preserved
+
+• tuple converted consistently
+
+• no metric recomputation
+
+• no health recomputation
+
+C. Alert conversion
+
+• Alert order preserved
+
+• alert_id preserved
+
+• alert code preserved
+
+• severity preserved
+
+• recommended_action preserved
+
+• no renumbering
+
+D. Source conversion
+
+• Source order preserved
+
+• COMPLETE preserved
+
+• PARTIAL preserved
+
+• UNAVAILABLE preserved
+
+• sterile codes preserved
+
+• no provider payload leakage
+
+E. Metadata
+
+• report_id preserved exactly
+
+• observed_at preserved exactly
+
+• generated_at preserved exactly
+
+• no UUID generation
+
+• no clock access
+
+F. Canonical JSON
+
+• sort_keys behavior
+
+• compact separators
+
+• ensure_ascii=False
+
+• no newline
+
+• same input → byte-identical output
+
+• allow_nan=False
+
+G. Immutability
+
+• root immutable
+
+• nested mappings immutable
+
+• tuples immutable
+
+• input unchanged after build
+
+• input unchanged after serialize
+
+H. Invalid input
+
+• None
+
+• wrong type
+
+• missing root fields
+
+• extra root fields
+
+• malformed monitoring_analysis
+
+• malformed reports
+
+• malformed source entries
+
+• malformed limitations
+
+• malformed Decimal-bearing fields
+
+• sterile ValueError only
+
+I. Security
+
+• no filesystem write APIs
+
+• no network imports
+
+• no persistence imports
+
+• no scheduler/thread/subprocess
+
+• no environment/secret access
+
+• no Exchange or broker imports
+
+J. Regression
+
+Entire regression suite remains PASS.
+
+────────────────────────────────────────
+21. PROHIBITIONS
+
+Do not:
+
+Modify Monitoring Core
+
+Modify Alert Engine
+
+Modify Monitoring Service
+
+Modify Monitoring API
+
+Add persistence
+
+Add file export
+
+Add CSV
+
+Add PDF
+
+Add database storage
+
+Add HTTP endpoints
+
+Add UI
+
+Add notifications
+
+Add execution
+
+Add broker connectivity
+
+Add Exchange connectivity
+
+Add AI
+
+Add ML
+
+────────────────────────────────────────
+22. DELIVERY REPORT
+
+Return:
+
+── CREATED FILES ──
+
+List
+
+── MONITORING EXPORT ──
+
+Responsibilities implemented
+
+── INPUT VALIDATION ──
+
+Validation rules
+
+── EXPORT SCHEMA ──
+
+Exact root structure
+
+── DECIMAL POLICY ──
+
+Conversion evidence
+
+── CANONICAL JSON ──
+
+Determinism evidence
+
+── IMMUTABILITY ──
+
+Evidence
+
+── SECURITY ──
+
+Evidence
+
+── PRODUCTION CODE CHANGES ──
+
+Exact list
+
+── TEST RESULTS ──
+
+PASS count
+
+── FAIL / SKIP ──
+
+Counts
+
+── TOTAL REGRESSION ──
+
+Total PASS
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash + GitHub push
+
+── NEXT AGENT ──
+
+AGENT 07 — SECURITY VERIFICATION
+
+────────────────────────────────────────
+23. PASS CRITERIA
+
+PASS requires:
+
+• Monitoring Export completed
+
+• Exact export schema implemented
+
+• MonitoringApiResponse preserved without recomputation
+
+• Metadata preserved exactly
+
+• Decimal exported only as strings
+
+• Canonical JSON byte-deterministic
+
+• Deeply immutable export model
+
+• Sterile malformed-input handling
+
+• ≥40 new tests PASS
+
+• Full regression remains 100% PASS
+
+• No production regressions
+
+• No file writes
+
+• No persistence
+
+• No execution
+
+• No Exchange connectivity
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
