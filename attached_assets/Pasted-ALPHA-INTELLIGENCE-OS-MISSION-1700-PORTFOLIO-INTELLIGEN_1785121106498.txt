@@ -1,0 +1,384 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1700 — PORTFOLIO INTELLIGENCE
+
+AGENT 02 — CORE IMPLEMENTATION
+
+ROLE
+
+You are the Core Implementation Agent for Mission 1700.
+
+Implement the Portfolio Intelligence Core exactly as defined by the approved
+Mission 1700 Architecture.
+
+Do not redesign the architecture.
+
+Do not modify previous missions.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1600
+
+OFFICIALLY CLOSED
+
+Baseline Commit
+
+50a886d
+
+Regression Baseline
+
+1148 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+This baseline must remain fully compatible.
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement the Portfolio Intelligence Core.
+
+The Core shall:
+
+• perform deterministic portfolio analysis
+
+• normalize portfolio state
+
+• produce PortfolioAnalysis
+
+The Core SHALL NOT:
+
+• write Workspace
+
+• write Timeline
+
+• call append_snapshot()
+
+• call Exchange
+
+• submit orders
+
+• write Risk Engine
+
+• create threads
+
+• create schedulers
+
+────────────────────────────────────────
+3. FILES
+
+Create
+
+portfolio_intelligence.py
+
+tests/
+
+test_mission1700_portfolio_core.py
+
+Only modify additional files if absolutely required.
+
+────────────────────────────────────────
+4. CORE API
+
+Implement a pure Core.
+
+Suggested public contract:
+
+analyze_portfolio(...)
+
+Returns
+
+PortfolioAnalysis
+
+No Flask dependency.
+
+No request context.
+
+No globals.
+
+No side effects.
+
+────────────────────────────────────────
+5. PORTFOLIO ANALYSIS ENVELOPE
+
+Implement exactly one normalized envelope.
+
+analysis_version = 1
+
+read_only = true
+
+advisory_only = true
+
+status
+
+OK
+
+PARTIAL
+
+UNAVAILABLE
+
+generated_at
+
+(injected parameter only)
+
+sources
+
+portfolio
+
+The envelope must remain deterministic.
+
+────────────────────────────────────────
+6. LOGICAL MODEL
+
+Implement logical normalization for:
+
+Portfolio
+
+Position
+
+Allocation
+
+Exposure
+
+Cash
+
+Equity
+
+Performance
+
+Risk
+
+Health
+
+Unknown values
+
+must remain
+
+null
+
+never fabricated zero.
+
+────────────────────────────────────────
+7. NUMERIC RULES
+
+All monetary calculations
+
+MUST use
+
+Decimal
+
+Never float.
+
+String serialization must be deterministic.
+
+Percentages must be deterministic.
+
+No locale dependence.
+
+────────────────────────────────────────
+8. HEALTH MODEL
+
+Implement advisory Portfolio Health.
+
+Return
+
+0–100
+
+with
+
+components
+
+Each component
+
+code
+
+score
+
+weight
+
+Risk Engine remains authoritative.
+
+Do not redefine risk limits.
+
+────────────────────────────────────────
+9. DETERMINISM
+
+Same input
+
+↓
+
+identical output
+
+No random
+
+No UUID
+
+No timestamps
+
+No wall clock
+
+No unordered structures
+
+Sort all collections where necessary.
+
+────────────────────────────────────────
+10. ERROR MODEL
+
+Never expose exceptions.
+
+Return only:
+
+OK
+
+PARTIAL
+
+UNAVAILABLE
+
+Unknown provider
+
+↓
+
+PARTIAL
+
+No provider
+
+↓
+
+UNAVAILABLE
+
+Sterile outputs only.
+
+────────────────────────────────────────
+11. SECURITY
+
+Core must not import:
+
+requests
+
+websocket
+
+socket
+
+subprocess
+
+pickle
+
+marshal
+
+ctypes
+
+eval
+
+exec
+
+No filesystem writes.
+
+No network.
+
+No Exchange.
+
+────────────────────────────────────────
+12. TESTS
+
+Create comprehensive tests covering at least:
+
+• Deterministic output
+• Decimal arithmetic only
+• Unknown → null
+• Health score range
+• Component weights
+• Status transitions
+• Empty portfolio
+• Multiple positions
+• Allocation
+• Exposure
+• Cash
+• Equity
+• Performance
+• Risk normalization
+• Position ordering
+• Generated timestamp injection
+• Stable serialization
+• No append_snapshot import
+• No Exchange import
+• No filesystem writes
+• No network imports
+• Backward compatibility
+
+Regression must remain green.
+
+────────────────────────────────────────
+13. DELIVERY REPORT
+
+── CREATED FILES ──
+
+── MODIFIED FILES ──
+
+── CORE FEATURES ──
+
+── DATA MODEL ──
+
+── DETERMINISM VERIFICATION ──
+
+── SECURITY VERIFICATION ──
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0 hedeflenir
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 03 — SERVICE LAYER
+
+────────────────────────────────────────
+14. PASS CRITERIA
+
+PASS requires:
+
+• Portfolio Core implemented
+• Pure implementation
+• Deterministic output
+• Decimal-only monetary calculations
+• Unknown values remain null
+• No Workspace writes
+• No Timeline writes
+• No append_snapshot usage
+• No Exchange dependency
+• No network dependency
+• No filesystem writes
+• All new tests PASS
+• Full regression PASS
+• Exchange Write Request = 0
+• Secret Exposure = 0
+• Commit created and pushed to GitHub
+
+MISSION 1700 continues only after Agent 02 passes.
