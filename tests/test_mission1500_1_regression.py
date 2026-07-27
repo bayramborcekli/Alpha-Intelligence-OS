@@ -159,6 +159,8 @@ class TestRouteSurface:
         # Mission 1700 / Agent 04: Portfolio Intelligence (GET-only,
         # salt-okunur) — yüzey bilinçli olarak genişletildi.
         "/api/portfolio/intelligence", "/api/v1/portfolio/intelligence",
+        # Mission 1700 / Agent 05: UI sayfası (GET-only).
+        "/portfolio-intelligence",
     }
 
     def test_intelligence_route_set_exact(self):

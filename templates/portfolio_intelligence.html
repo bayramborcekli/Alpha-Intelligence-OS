@@ -1,0 +1,351 @@
+{% extends "dash_base.html" %}
+{% block title %}Portfolio Intelligence{% endblock %}
+{% block heading %}🧭 Portfolio Intelligence{% endblock %}
+{% block subheading %}Portföy analizi — yalnız görüntüleme, tavsiye niteliğinde{% endblock %}
+
+{% block content %}
+<style>
+  .pi-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+             margin-bottom:18px; }
+  .pi-card { background:var(--panel); border:1px solid var(--border); border-radius:10px;
+             padding:12px 14px; }
+  .pi-card h3 { font-size:.72rem; color:var(--muted); text-transform:uppercase;
+                letter-spacing:.05em; margin-bottom:6px; font-weight:600; }
+  .pi-card .v { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .pi-sec { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+            padding:16px; margin-bottom:18px; }
+  .pi-sec h2 { font-size:.9rem; margin-bottom:12px; }
+  .pi-note { color:var(--muted); font-size:.76rem; margin-top:8px; }
+  .pi-banner { border-left:3px solid var(--warn); background:rgba(210,153,34,.08);
+               padding:10px 14px; border-radius:6px; margin-bottom:14px;
+               font-size:.85rem; display:none; }
+  .pi-banner.err { border-left-color:var(--danger); background:rgba(248,81,73,.08); }
+  .pi-badge { display:inline-block; border-radius:12px; padding:2px 10px;
+              font-size:.74rem; font-weight:700; border:1px solid var(--border); }
+  .st-loading { color:var(--muted); }
+  .st-ok { color:var(--ok); border-color:rgba(63,185,80,.5); }
+  .st-partial { color:var(--warn); border-color:rgba(210,153,34,.5); }
+  .st-unavailable, .st-error { color:var(--danger); border-color:rgba(248,81,73,.5); }
+  table.pi { width:100%; border-collapse:collapse; font-size:.8rem; }
+  table.pi th, table.pi td { padding:5px 8px; text-align:left;
+    border-bottom:1px solid rgba(48,54,61,.5); }
+  table.pi th { color:var(--muted); font-weight:600; }
+  .advisory-tag { background:rgba(88,166,255,.1); border:1px solid rgba(88,166,255,.4);
+                  color:var(--accent); border-radius:12px; padding:2px 10px;
+                  font-size:.72rem; font-weight:700; }
+  .pi-health { font-size:1.7rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .pi-meta { color:var(--muted); font-size:.74rem; }
+</style>
+
+<p class="pi-note" style="margin-bottom:12px">
+  <span class="advisory-tag" id="pi-advisory-tag">SALT OKUNUR · TAVSİYE</span>
+  Bu panel portföy analizini yalnız görüntüler. Hiçbir hesaplama
+  tarayıcıda yapılmaz; emir girişi, AL/SAT veya düzenleme yoktur.
+  Bilinmeyen değerler "—" olarak kalır — asla 0 varsayılmaz.
+</p>
+
+<div class="pi-banner" id="pi-partial-banner" role="alert">
+  ⚠️ Analiz KISMİ: bazı kaynaklar bayat veya erişilemez. Bilinmeyen
+  alanlar boş gösterilir.
+</div>
+<div class="pi-banner err" id="pi-unavailable-banner" role="alert">
+  ⛔ Analiz KULLANILAMAZ: portföy değeri belirlenemedi. Bu ekran sağlıklı
+  veri İÇERMEZ — hiçbir değer tahmin edilmez.
+</div>
+<div class="pi-banner err" id="pi-error-banner" role="alert">
+  ⚠️ Analiz alınamadı (API hatası). Değerler tahmin edilmez — alanlar boş
+  bırakıldı.
+</div>
+
+<div class="pi-grid" aria-live="polite">
+  <div class="pi-card"><h3>Analiz Durumu</h3>
+    <div class="v"><span class="pi-badge st-loading" id="pi-status">Yükleniyor…</span></div></div>
+  <div class="pi-card"><h3>Portföy Sağlığı (0–100)</h3>
+    <div class="pi-health" id="pi-health">—</div></div>
+  <div class="pi-card"><h3>NAV (USDT)</h3><div class="v" id="pi-nav">—</div></div>
+  <div class="pi-card"><h3>Nakit (USDT)</h3><div class="v" id="pi-cash">—</div></div>
+  <div class="pi-card"><h3>Brüt Maruziyet</h3><div class="v" id="pi-gross">—</div></div>
+  <div class="pi-card"><h3>Net Maruziyet</h3><div class="v" id="pi-net">—</div></div>
+</div>
+
+<section class="pi-sec" aria-labelledby="h-perf">
+  <h2 id="h-perf">📈 Performans</h2>
+  <div style="overflow-x:auto"><table class="pi" aria-describedby="h-perf">
+    <thead><tr><th scope="col">Gerçekleşen PnL</th>
+      <th scope="col">Gerçekleşmemiş PnL</th><th scope="col">Toplam Ücret</th>
+      <th scope="col">Drawdown %</th><th scope="col">Tahmin</th></tr></thead>
+    <tbody id="pi-perf-body"><tr><td colspan="5">Yükleniyor…</td></tr></tbody>
+  </table></div>
+  <p class="pi-note">Tahmin (forecast) bu sürümde üretilmez ve "—"
+  gösterilir; ileriye dönük getiri vaadi yoktur.</p>
+</section>
+
+<section class="pi-sec" aria-labelledby="h-alloc">
+  <h2 id="h-alloc">🧩 Dağılım (Allocation)</h2>
+  <div style="overflow-x:auto"><table class="pi" aria-describedby="h-alloc">
+    <thead><tr><th scope="col">Varlık</th><th scope="col">Notional (USDT)</th>
+      <th scope="col">Ağırlık %</th></tr></thead>
+    <tbody id="pi-alloc-body"><tr><td colspan="3">Yükleniyor…</td></tr></tbody>
+  </table></div>
+  <p class="pi-note" id="pi-alloc-meta">Nakit ağırlığı: — · Bilinmeyen/karşılıksız: —</p>
+</section>
+
+<section class="pi-sec" aria-labelledby="h-pos">
+  <h2 id="h-pos">📋 Pozisyonlar</h2>
+  <div style="overflow-x:auto"><table class="pi" aria-describedby="h-pos">
+    <thead><tr><th scope="col">Sembol</th><th scope="col">Yön</th>
+      <th scope="col">Miktar</th><th scope="col">Giriş</th>
+      <th scope="col">Mark</th><th scope="col">Kaldıraç</th>
+      <th scope="col">Notional</th><th scope="col">PnL</th>
+      <th scope="col">Ağırlık %</th></tr></thead>
+    <tbody id="pi-pos-body"><tr><td colspan="9">Yükleniyor…</td></tr></tbody>
+  </table></div>
+</section>
+
+<section class="pi-sec" aria-labelledby="h-div">
+  <h2 id="h-div">🎯 Çeşitlendirme ve Risk Kullanımı</h2>
+  <div class="pi-grid">
+    <div class="pi-card"><h3>HHI</h3><div class="v" id="pi-hhi">—</div></div>
+    <div class="pi-card"><h3>En Büyük Sembol</h3><div class="v" id="pi-top">—</div></div>
+    <div class="pi-card"><h3>En Büyük Pay %</h3><div class="v" id="pi-topshare">—</div></div>
+    <div class="pi-card"><h3>Etkin Pozisyon</h3><div class="v" id="pi-eff">—</div></div>
+    <div class="pi-card"><h3>Net Maruziyet Kullanımı %</h3><div class="v" id="pi-u-net">—</div></div>
+    <div class="pi-card"><h3>Drawdown Kullanımı %</h3><div class="v" id="pi-u-dd">—</div></div>
+    <div class="pi-card"><h3>Yoğunlaşma Kullanımı %</h3><div class="v" id="pi-u-conc">—</div></div>
+    <div class="pi-card"><h3>Limit Aşımı</h3><div class="v" id="pi-breach">—</div></div>
+  </div>
+  <div style="overflow-x:auto;margin-top:10px"><table class="pi" aria-describedby="h-div">
+    <thead><tr><th scope="col">Sağlık Bileşeni</th><th scope="col">Skor</th>
+      <th scope="col">Ağırlık</th></tr></thead>
+    <tbody id="pi-health-body"><tr><td colspan="3">Yükleniyor…</td></tr></tbody>
+  </table></div>
+  <p class="pi-note">Limit aşımları tavsiye niteliğindedir; Risk Engine
+  kararları bu ekrandan değiştirilemez.</p>
+</section>
+
+<section class="pi-sec" aria-labelledby="h-src">
+  <h2 id="h-src">🛰️ Kaynak Durumu</h2>
+  <div style="overflow-x:auto"><table class="pi" aria-describedby="h-src">
+    <thead><tr><th scope="col">Kaynak</th><th scope="col">Durum</th>
+      <th scope="col">Tazelik</th><th scope="col">Kod</th></tr></thead>
+    <tbody id="pi-src-body"><tr><td colspan="4">Yükleniyor…</td></tr></tbody>
+  </table></div>
+  <p class="pi-meta" id="pi-envelope-meta">
+    analysis_version: — · generated_at: — · read_only: — · advisory_only: —
+  </p>
+</section>
+
+<script>
+(function () {
+  "use strict";
+  function el(id) { return document.getElementById(id); }
+  function txt(v, suffix) {
+    return (v === null || v === undefined || v === "")
+      ? "—" : String(v) + (suffix || "");
+  }
+  function cell(tr, value) {
+    var td = document.createElement("td");
+    td.textContent = txt(value);
+    tr.appendChild(td);
+    return td;
+  }
+  function clearBody(id, cols, msg) {
+    var body = el(id);
+    body.textContent = "";
+    var tr = document.createElement("tr");
+    var td = document.createElement("td");
+    td.colSpan = cols;
+    td.textContent = msg;
+    tr.appendChild(td);
+    body.appendChild(tr);
+  }
+
+  var STATUS_TR = { OK: "SAĞLIKLI", PARTIAL: "KISMİ",
+                    UNAVAILABLE: "KULLANILAMAZ" };
+
+  function setStatus(kind, label) {
+    var node = el("pi-status");
+    node.className = "pi-badge st-" + kind;
+    node.textContent = label;
+  }
+
+  function resetFields() {
+    ["pi-health", "pi-nav", "pi-cash", "pi-gross", "pi-net", "pi-hhi",
+     "pi-top", "pi-topshare", "pi-eff", "pi-u-net", "pi-u-dd",
+     "pi-u-conc", "pi-breach"].forEach(function (id) {
+      el(id).textContent = "—";
+    });
+  }
+
+  function showBanner(id) {
+    ["pi-partial-banner", "pi-unavailable-banner", "pi-error-banner"]
+      .forEach(function (b) {
+        el(b).style.display = (b === id) ? "block" : "none";
+      });
+  }
+
+  function renderEnvelopeMeta(env) {
+    el("pi-envelope-meta").textContent =
+      "analysis_version: " + txt(env.analysis_version) +
+      " · generated_at: " + txt(env.generated_at) +
+      " · read_only: " + txt(env.read_only) +
+      " · advisory_only: " + txt(env.advisory_only);
+  }
+
+  function renderSources(sources) {
+    var body = el("pi-src-body");
+    body.textContent = "";
+    var names = Object.keys(sources || {}).sort();
+    if (!names.length) { clearBody("pi-src-body", 4, "—"); return; }
+    names.forEach(function (name) {
+      var s = sources[name] || {};
+      var tr = document.createElement("tr");
+      cell(tr, name);
+      cell(tr, s.status);
+      cell(tr, s.freshness);
+      cell(tr, s.code);
+      body.appendChild(tr);
+    });
+  }
+
+  function renderPortfolio(p) {
+    var eq = p.equity || {};
+    el("pi-nav").textContent = txt(eq.nav_usdt);
+    el("pi-cash").textContent = txt(eq.cash_usdt);
+    var ex = p.exposure || {};
+    el("pi-gross").textContent = txt(ex.gross);
+    el("pi-net").textContent = txt(ex.net);
+    var h = p.health || {};
+    el("pi-health").textContent = txt(h.portfolio_health_score);
+
+    var perf = p.performance || {};
+    var pb = el("pi-perf-body");
+    pb.textContent = "";
+    var ptr = document.createElement("tr");
+    cell(ptr, perf.realized_pnl);
+    cell(ptr, perf.unrealized_pnl);
+    cell(ptr, perf.total_fees);
+    cell(ptr, perf.drawdown_pct);
+    cell(ptr, perf.forecast);
+    pb.appendChild(ptr);
+
+    var alloc = p.allocation || {};
+    var ab = el("pi-alloc-body");
+    ab.textContent = "";
+    var assets = alloc.assets || [];
+    if (!assets.length) { clearBody("pi-alloc-body", 3, "Varlık yok"); }
+    assets.forEach(function (a) {
+      var tr = document.createElement("tr");
+      cell(tr, a.symbol); cell(tr, a.notional); cell(tr, a.weight_pct);
+      ab.appendChild(tr);
+    });
+    el("pi-alloc-meta").textContent =
+      "Nakit ağırlığı: " + txt(alloc.cash_weight_pct, "%") +
+      " · Bilinmeyen/karşılıksız: " +
+      txt(alloc.unallocated_or_unknown_pct, "%");
+
+    var posBody = el("pi-pos-body");
+    posBody.textContent = "";
+    var positions = p.positions || [];
+    if (!positions.length) { clearBody("pi-pos-body", 9, "Açık pozisyon yok"); }
+    positions.forEach(function (row) {
+      var tr = document.createElement("tr");
+      ["symbol", "side", "quantity", "entry_price", "mark_price",
+       "leverage", "notional", "unrealized_pnl", "weight_pct"]
+        .forEach(function (k) { cell(tr, row[k]); });
+      posBody.appendChild(tr);
+    });
+
+    var c = p.concentration || {};
+    el("pi-hhi").textContent = txt(c.hhi);
+    el("pi-top").textContent = txt(c.top_symbol);
+    el("pi-topshare").textContent = txt(c.top_share_pct);
+    el("pi-eff").textContent = txt(c.effective_positions);
+
+    var u = p.risk_utilization || {};
+    el("pi-u-net").textContent = txt(u.net_exposure_util_pct);
+    el("pi-u-dd").textContent = txt(u.drawdown_util_pct);
+    el("pi-u-conc").textContent = txt(u.concentration_util_pct);
+    var breaches = u.limits_breached;
+    el("pi-breach").textContent =
+      (breaches === null || breaches === undefined) ? "—"
+        : (breaches.length ? breaches.join(", ") : "Yok");
+
+    var hb = el("pi-health-body");
+    hb.textContent = "";
+    var comps = (p.health || {}).components || [];
+    if (!comps.length) { clearBody("pi-health-body", 3, "—"); }
+    comps.forEach(function (comp) {
+      var tr = document.createElement("tr");
+      cell(tr, comp.code); cell(tr, comp.score); cell(tr, comp.weight);
+      hb.appendChild(tr);
+    });
+  }
+
+  function clearAllValues() {
+    // Tüm değer taşıyan alanlar ve tablolar aktif olarak temizlenir;
+    // payload'ın null olmasına GÜVENİLMEZ.
+    resetFields();
+    clearBody("pi-perf-body", 5, "—");
+    clearBody("pi-alloc-body", 3, "—");
+    clearBody("pi-pos-body", 9, "—");
+    clearBody("pi-health-body", 3, "—");
+    el("pi-alloc-meta").textContent =
+      "Nakit ağırlığı: — · Bilinmeyen/karşılıksız: —";
+  }
+
+  function renderError() {
+    clearAllValues();
+    clearBody("pi-src-body", 4, "—");
+    el("pi-envelope-meta").textContent =
+      "analysis_version: — · generated_at: — · read_only: — · " +
+      "advisory_only: —";
+    setStatus("error", "HATA");
+    showBanner("pi-error-banner");
+  }
+
+  function render(env) {
+    if (!env || typeof env !== "object" || !env.status) {
+      renderError();
+      return;
+    }
+    var status = env.status;
+    if (status === "UNAVAILABLE") {
+      // UNAVAILABLE asla sağlıklı görünmez: önce her şey temizlenir,
+      // portföy değerleri HİÇ render edilmez; yalnız zarf meta verisi
+      // ve kaynak tanı tablosu gösterilir.
+      clearAllValues();
+      setStatus("unavailable", STATUS_TR.UNAVAILABLE);
+      showBanner("pi-unavailable-banner");
+      renderEnvelopeMeta(env);
+      renderSources(env.sources);
+      return;
+    }
+    if (status !== "OK" && status !== "PARTIAL") {
+      renderError();
+      return;
+    }
+    setStatus(status === "OK" ? "ok" : "partial", STATUS_TR[status]);
+    showBanner(status === "PARTIAL" ? "pi-partial-banner" : null);
+    renderEnvelopeMeta(env);
+    renderSources(env.sources);
+    renderPortfolio(env.portfolio || {});
+  }
+
+  function load() {
+    setStatus("loading", "Yükleniyor…");
+    fetch("/api/v1/portfolio/intelligence", {
+      headers: { "Accept": "application/json" },
+      credentials: "same-origin"
+    }).then(function (r) {
+      if (!r.ok) { throw new Error("HTTP " + r.status); }
+      return r.json();
+    }).then(render).catch(renderError);
+  }
+
+  var refreshBtn = document.getElementById("refresh-btn");
+  if (refreshBtn) { refreshBtn.addEventListener("click", load); }
+  load();
+}());
+</script>
+{% endblock %}

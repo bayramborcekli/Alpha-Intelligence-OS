@@ -1938,6 +1938,12 @@ def api_automation_export_status():
 # (Core/Service duvar saati okumaz). İstemciden generated_at override
 # kabul edilmez. Kimlik doğrulama _security_gate ile zorunludur.
 
+@app.get("/portfolio-intelligence")
+def portfolio_intelligence_page():
+    return _render_workspace("portfolio_intelligence.html",
+                             "portfolio_intelligence")
+
+
 @app.get("/api/portfolio/intelligence")
 @app.get("/api/v1/portfolio/intelligence")
 def api_portfolio_intelligence():
