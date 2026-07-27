@@ -1,0 +1,538 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1900 — MONITORING & ALERTING
+
+AGENT 07 — SECURITY VERIFICATION
+
+ROLE
+
+Implement the final security verification layer for Mission 1900.
+
+This layer performs deterministic security verification of the completed
+Monitoring stack.
+
+It performs no monitoring.
+
+It performs no alert generation.
+
+It performs no API work.
+
+It performs no export work.
+
+It performs no persistence.
+
+It performs only verification.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1800
+
+OFFICIALLY CLOSED
+
+Mission 1900
+
+Agent 01 — PASS
+Agent 02 — PASS
+Agent 03 — PASS
+Agent 04 — PASS
+Agent 05 — PASS
+Agent 06 — PASS
+
+Current Commit
+
+c38112a
+
+Regression Baseline
+
+1875 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement a deterministic Mission Security Verifier.
+
+The verifier SHALL inspect the completed Monitoring stack and report
+security violations.
+
+It SHALL NEVER modify production objects.
+
+It SHALL NEVER repair violations.
+
+It SHALL NEVER call Exchange APIs.
+
+────────────────────────────────────────
+3. FILES
+
+Create
+
+monitoring_security.py
+
+Create
+
+tests/test_monitoring_security.py
+
+Do not modify unrelated production files.
+
+────────────────────────────────────────
+4. PUBLIC ENTRY POINT
+
+Expose only:
+
+verify_monitoring_security()
+
+Return immutable
+
+MonitoringSecurityReport
+
+No additional public business API.
+
+────────────────────────────────────────
+5. VERIFICATION SCOPE
+
+Verify:
+
+✓ Import surface
+
+✓ Forbidden modules
+
+✓ Exchange isolation
+
+✓ Broker isolation
+
+✓ Persistence isolation
+
+✓ Filesystem isolation
+
+✓ Network isolation
+
+✓ Thread isolation
+
+✓ Scheduler isolation
+
+✓ Environment isolation
+
+✓ Secret isolation
+
+✓ UUID ownership
+
+✓ Datetime ownership
+
+✓ Layer dependency graph
+
+✓ Public API ownership
+
+No runtime mutation.
+
+No monkey patching.
+
+────────────────────────────────────────
+6. FORBIDDEN IMPORTS
+
+Verification shall fail if Monitoring stack imports:
+
+exchange*
+
+broker*
+
+ccxt
+
+requests
+
+httpx
+
+urllib3
+
+socket
+
+threading
+
+asyncio
+
+subprocess
+
+multiprocessing
+
+sqlite3
+
+sqlalchemy
+
+redis
+
+pickle
+
+shelve
+
+pathlib
+
+os
+
+sys
+
+dotenv
+
+secrets
+
+cryptography
+
+or equivalent infrastructure outside the approved design.
+
+────────────────────────────────────────
+7. METADATA OWNERSHIP
+
+Verify:
+
+Only Monitoring API owns:
+
+report_id
+
+observed_at
+
+generated_at
+
+Export SHALL NOT generate metadata.
+
+Service SHALL NOT generate metadata.
+
+Core SHALL NOT generate metadata.
+
+Alert Engine SHALL NOT generate metadata.
+
+────────────────────────────────────────
+8. LAYER DEPENDENCIES
+
+Verify allowed dependency chain:
+
+Monitoring API
+
+↓
+
+Monitoring Service
+
+↓
+
+Monitoring Core
+
+↓
+
+Alert Engine
+
+Export
+
+↓
+
+Monitoring API only
+
+Security
+
+↓
+
+Read-only verification
+
+Reject dependency inversions.
+
+────────────────────────────────────────
+9. PUBLIC SURFACE
+
+Verify only approved public functions exist.
+
+Unexpected public entry points SHALL fail verification.
+
+────────────────────────────────────────
+10. IMMUTABILITY
+
+Verify exported models remain immutable.
+
+Mutation attempts shall fail.
+
+Security verification itself shall never mutate production objects.
+
+────────────────────────────────────────
+11. RESULT MODEL
+
+MonitoringSecurityReport
+
+verified
+
+violations
+
+checked_rules
+
+version
+
+All immutable.
+
+verified
+
+↓
+
+True only if
+
+violations == ()
+
+────────────────────────────────────────
+12. DETERMINISM
+
+Same codebase
+
+↓
+
+Identical report.
+
+No timestamps.
+
+No UUID.
+
+No randomness.
+
+No cache.
+
+────────────────────────────────────────
+13. ERROR MODEL
+
+Allowed failure:
+
+SECURITY_VERIFICATION_FAILED
+
+Return sterile failures only.
+
+Never expose:
+
+paths
+
+stack traces
+
+source code
+
+environment
+
+secrets
+
+────────────────────────────────────────
+14. SECURITY
+
+Verifier itself SHALL contain:
+
+No Exchange
+
+No Broker
+
+No Filesystem write
+
+No Database
+
+No Network
+
+No Scheduler
+
+No Threads
+
+No Environment access
+
+No Secret access
+
+No eval
+
+No exec
+
+────────────────────────────────────────
+15. TEST REQUIREMENTS
+
+Minimum
+
+50 focused tests.
+
+Required coverage:
+
+A.
+
+Approved imports PASS
+
+B.
+
+Forbidden imports FAIL
+
+C.
+
+Dependency graph PASS
+
+D.
+
+Dependency inversion FAIL
+
+E.
+
+Metadata ownership
+
+F.
+
+Public API ownership
+
+G.
+
+Immutability verification
+
+H.
+
+Determinism
+
+I.
+
+Sterile failures
+
+J.
+
+No false positives
+
+K.
+
+AST verification
+
+L.
+
+Regression remains PASS
+
+────────────────────────────────────────
+16. PROHIBITIONS
+
+Do not modify:
+
+Monitoring Core
+
+Alert Engine
+
+Monitoring Service
+
+Monitoring API
+
+Monitoring Export
+
+No persistence.
+
+No execution.
+
+No Exchange connectivity.
+
+No broker connectivity.
+
+No AI.
+
+No ML.
+
+────────────────────────────────────────
+17. DELIVERY REPORT
+
+Return:
+
+── CREATED FILES ──
+
+List
+
+── SECURITY VERIFICATION ──
+
+Implemented rules
+
+── IMPORT SURFACE ──
+
+Verification summary
+
+── DEPENDENCY GRAPH ──
+
+Verification summary
+
+── METADATA OWNERSHIP ──
+
+Verification summary
+
+── PUBLIC API ──
+
+Verification summary
+
+── IMMUTABILITY ──
+
+Verification summary
+
+── DETERMINISM ──
+
+Verification summary
+
+── SECURITY ──
+
+Verification summary
+
+── PRODUCTION CODE CHANGES ──
+
+Exact list
+
+── TEST RESULTS ──
+
+PASS count
+
+── FAIL / SKIP ──
+
+Counts
+
+── TOTAL REGRESSION ──
+
+Total PASS
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash + GitHub push
+
+── NEXT AGENT ──
+
+AGENT 08 — FULL REGRESSION
+
+────────────────────────────────────────
+18. PASS CRITERIA
+
+PASS requires:
+
+• Monitoring Security Verifier completed
+
+• Dependency graph verified
+
+• Import surface verified
+
+• Metadata ownership verified
+
+• Public API verified
+
+• Immutability verified
+
+• Deterministic reports
+
+• ≥50 new tests PASS
+
+• Full regression remains 100% PASS
+
+• No production regressions
+
+• No persistence
+
+• No execution
+
+• No Exchange connectivity
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
