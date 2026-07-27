@@ -1,0 +1,775 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2100
+
+AGENT 01
+
+CONTROLLED EXECUTION FOUNDATION
+
+ROLE
+
+Establish the extension architecture for:
+
+• Paper Trading
+• Shadow Mode
+• Micro Live
+
+This Agent SHALL NOT:
+
+• execute real trades
+• call an exchange
+• modify Execution Core v1.0.0
+• introduce network access
+• implement paper fills
+• implement shadow comparison
+• implement live authorization
+
+It creates only the architectural foundation,
+contracts, policies and permanent mission boundaries.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 2000 is CLOSED.
+
+Execution Core:
+
+Version:
+v1.0.0
+
+Release:
+Execution Foundation
+
+Baseline commit:
+03e181d
+
+Regression:
+4375 PASS
+
+Architecture:
+FROZEN
+
+Security:
+CERTIFIED
+
+Use these values exactly.
+
+Do not invent or replace baseline values.
+
+────────────────────────────────────────
+2. TARGET RELEASE
+
+Mission 2100 target:
+
+Alpha Intelligence OS v1.1.0
+
+Release name:
+
+Controlled Execution
+
+Mission status during this Agent:
+
+IN_PROGRESS
+
+────────────────────────────────────────
+3. PRIMARY OBJECTIVE
+
+Create a new runtime extension layer above
+the frozen Execution Core.
+
+Required architecture:
+
+Client / Future Desktop / Future Mobile
+                ↓
+Controlled Execution API
+                ↓
+Controlled Execution Service
+                ↓
+Runtime Mode Policy
+       ┌────────┼────────┐
+       ↓        ↓        ↓
+     PAPER    SHADOW   MICRO_LIVE
+       ↓        ↓        ↓
+Execution API / Approved Extension Contracts
+                ↓
+Execution Core v1.0.0
+
+Execution Core SHALL NOT import Mission 2100 modules.
+
+Mission 2100 may depend downward on the frozen core.
+
+Reverse dependency is forbidden.
+
+────────────────────────────────────────
+4. ARCHITECTURE DECISIONS
+
+Create and register:
+
+ADR-011 — Plugin Architecture
+
+ADR-012 — Desktop Shell Boundary
+
+ADR-013 — Update Manager Boundary
+
+ADR-014 — Extension Policy
+
+ADR-015 — Release Governance
+
+ADR-016 — Controlled Execution Modes
+
+ADR-017 — Paper Trading Isolation
+
+ADR-018 — Shadow Mode Is Read-Only
+
+ADR-019 — Micro Live Requires Explicit Authorization
+
+ADR-020 — No Implicit Mode Escalation
+
+Each ADR SHALL contain:
+
+• Decision
+• Context
+• Reason
+• Alternatives
+• Consequences
+• Security impact
+• Compatibility impact
+• Future extension policy
+
+────────────────────────────────────────
+5. FILES
+
+Create:
+
+controlled_execution_foundation.py
+
+controlled_execution_models.py
+
+controlled_execution_policy.py
+
+controlled_execution_errors.py
+
+MISSION_2100_ARCHITECTURE.md
+
+MISSION_2100_ADR_INDEX.md
+
+tests/test_controlled_execution_foundation.py
+
+Update:
+
+tests/test_mission_2100_architecture.py
+
+Do not modify any Mission 2000 production module.
+
+Do not modify the frozen Execution Core API.
+
+────────────────────────────────────────
+6. CANONICAL RUNTIME MODES
+
+Create a closed enum:
+
+ControlledExecutionMode
+
+Values exactly:
+
+PAPER
+SHADOW
+MICRO_LIVE
+
+Do not add:
+
+LIVE
+FULL_LIVE
+PRODUCTION
+AUTO_LIVE
+UNRESTRICTED
+
+There is no unrestricted live mode in Mission 2100.
+
+────────────────────────────────────────
+7. MODE SAFETY MODEL
+
+Define immutable mode metadata.
+
+Each mode SHALL declare:
+
+PAPER
+
+• exchange_write_allowed = False
+• simulated_fill_allowed = True
+• broker_read_allowed = False
+• human_confirmation_required = False
+• explicit_authorization_required = False
+
+SHADOW
+
+• exchange_write_allowed = False
+• simulated_fill_allowed = False
+• broker_read_allowed = True
+• human_confirmation_required = False
+• explicit_authorization_required = False
+
+MICRO_LIVE
+
+• exchange_write_allowed = potentially true
+• simulated_fill_allowed = False
+• broker_read_allowed = True
+• human_confirmation_required = True
+• explicit_authorization_required = True
+
+Important:
+
+Agent 01 SHALL NOT enable Micro Live.
+
+It only defines its permanent safety contract.
+
+Default runtime state SHALL be non-writing.
+
+────────────────────────────────────────
+8. DEFAULT SAFETY
+
+Default mode:
+
+PAPER
+
+Default exchange write permission:
+
+DENIED
+
+Unknown mode:
+
+DENIED
+
+Missing policy:
+
+DENIED
+
+Missing authorization:
+
+DENIED
+
+Invalid configuration:
+
+DENIED
+
+Ambiguous state:
+
+DENIED
+
+Every uncertainty SHALL fail closed.
+
+────────────────────────────────────────
+9. MODE TRANSITION POLICY
+
+Allowed transitions:
+
+PAPER → SHADOW
+SHADOW → PAPER
+
+Future controlled transition:
+
+SHADOW → MICRO_LIVE
+
+But only through a future explicit authorization component.
+
+Forbidden direct transitions:
+
+PAPER → MICRO_LIVE
+MICRO_LIVE → any elevated mode
+UNKNOWN → MICRO_LIVE
+
+No automatic escalation.
+
+No environment-driven escalation.
+
+No time-driven escalation.
+
+No strategy-driven escalation.
+
+No broker-driven escalation.
+
+No AI-driven escalation.
+
+────────────────────────────────────────
+10. IMMUTABLE MODE POLICY
+
+Create an immutable policy object containing:
+
+• mode
+• exchange_write_allowed
+• simulated_fill_allowed
+• broker_read_allowed
+• human_confirmation_required
+• explicit_authorization_required
+• maximum_order_notional
+• maximum_daily_notional
+• maximum_open_orders
+• authorization_reference
+• logical_sequence
+
+Requirements:
+
+• frozen
+• slots
+• hashable where possible
+• Decimal for financial limits
+• no float
+• no generated IDs
+• no current timestamp
+• caller-owned references
+• sterile validation errors
+
+For Agent 01:
+
+Micro Live limits may be represented,
+but exchange writes remain disabled.
+
+────────────────────────────────────────
+11. EXTENSION REGISTRY
+
+Create a deterministic,
+immutable extension registry.
+
+It SHALL declare future extension points:
+
+• PaperExecutionProvider
+• ShadowObservationProvider
+• MicroLiveAuthorizationProvider
+• RuntimeStateProvider
+• RuntimeAuditSink
+• DesktopClientAdapter
+• MobileClientAdapter
+• UpdateManagerAdapter
+• PluginProvider
+
+These are contracts or declarations only.
+
+No implementations.
+
+No plugin loading.
+
+No dynamic imports.
+
+No filesystem scanning.
+
+No package installation.
+
+────────────────────────────────────────
+12. DESKTOP AND MOBILE READINESS
+
+Mission 2100 runtime contracts SHALL be:
+
+• protocol-independent
+• UI-independent
+• desktop-independent
+• mobile-independent
+• framework-independent
+
+Forbidden dependencies:
+
+• Electron
+• Tauri
+• Qt
+• PySide
+• React
+• Flutter
+• Swift
+• Kotlin
+• Android SDK
+• iOS SDK
+• FastAPI
+• Flask
+• Django
+
+Desktop and mobile clients will be added later
+without modifying the controlled execution domain.
+
+────────────────────────────────────────
+13. UPDATE READINESS
+
+Define an Update Manager boundary only.
+
+It SHALL NOT:
+
+• download files
+• contact GitHub
+• install packages
+• restart processes
+• modify production files
+• inspect operating-system registries
+
+The future update mechanism SHALL remain outside:
+
+• Execution Core
+• Controlled Execution Service
+• Risk Engine
+• Broker Adapter
+
+────────────────────────────────────────
+14. PLUGIN-FIRST POLICY
+
+New brokers, strategies, AI modules,
+notifications and client integrations
+SHALL be introduced through declared extension points.
+
+Execution Core SHALL NOT contain:
+
+• plugin discovery
+• plugin installation
+• marketplace logic
+• dynamic code execution
+• remote code loading
+
+Agent 01 defines policy only.
+
+────────────────────────────────────────
+15. PUBLIC API
+
+Public exports SHALL be explicit through __all__.
+
+Expected primary public symbols:
+
+• ControlledExecutionMode
+• ControlledExecutionPolicy
+• ControlledExecutionFoundation
+• ControlledExecutionDecision
+• ControlledExecutionDecisionCode
+• ControlledExecutionError
+• ControlledExecutionContractError
+• ControlledExecutionConfigurationError
+• ExtensionPoint
+• ExtensionRegistry
+
+Do not expose internal dictionaries,
+mutable registries or implementation helpers.
+
+────────────────────────────────────────
+16. DECISION MODEL
+
+Create a closed decision enum:
+
+ALLOW_NON_WRITING_MODE
+DENY_EXCHANGE_WRITE
+REQUIRE_EXPLICIT_AUTHORIZATION
+INVALID_MODE
+INVALID_POLICY
+INVALID_TRANSITION
+
+The foundation may evaluate policy eligibility.
+
+It SHALL NOT:
+
+• submit an order
+• simulate an order
+• contact a broker
+• invoke Execution Service
+• invoke Execution API
+• calculate trading risk
+• change Kill Switch state
+
+────────────────────────────────────────
+17. SECURITY RESTRICTIONS
+
+Forbidden in all Agent 01 production modules:
+
+• HTTP
+• REST
+• WebSocket
+• socket
+• broker SDK
+• API key
+• secret
+• signing
+• environment access
+• file read/write
+• database
+• SQL
+• ORM
+• subprocess
+• thread
+• process
+• scheduler
+• sleep
+• retry
+• UUID
+• randomness
+• datetime.now
+• dynamic import
+• eval
+• exec
+• pickle
+• telemetry publisher
+• exchange write
+
+No network dependencies.
+
+No credentials.
+
+No real broker invocation.
+
+────────────────────────────────────────
+18. EXECUTION CORE PROTECTION
+
+Tests SHALL prove:
+
+• No Mission 2000 production file changed.
+• Execution Core does not import Mission 2100.
+• Mission 2100 cannot redefine frozen canonical models.
+• Existing ExecutionMode is not duplicated.
+• Existing BrokerProfile is not duplicated.
+• Existing ExecutionRequest is not duplicated.
+• Existing RiskDecision is not duplicated.
+• Existing BrokerAdapter is not duplicated.
+• Existing public APIs remain byte-for-byte compatible
+  where repository tooling permits.
+• Mission 2000 architecture freeze tests remain PASS.
+
+────────────────────────────────────────
+19. TEST REQUIREMENTS
+
+Minimum:
+
+220 focused tests
+
+Cover:
+
+• closed runtime mode enum
+• default PAPER mode
+• fail-closed behavior
+• all mode metadata
+• immutable models
+• hashability
+• Decimal-only limits
+• bool rejection for integer sequence
+• blank reference rejection
+• invalid mode rejection
+• transition matrix
+• no implicit escalation
+• no PAPER → MICRO_LIVE
+• unknown mode denial
+• missing authorization denial
+• exchange write always denied in Agent 01
+• extension registry immutability
+• explicit public exports
+• no duplicate canonical domain models
+• dependency direction
+• forbidden imports
+• forbidden calls
+• forbidden framework tokens
+• no network
+• no broker invocation
+• no generated identity
+• no timestamp generation
+• no environment access
+• no mutable module-level state
+• Mission 2000 regression compatibility
+
+No intentional skip unless technically unavoidable
+and explicitly justified.
+
+────────────────────────────────────────
+20. ARCHITECTURE TESTS
+
+AST tests SHALL verify:
+
+Mission 2000
+does not import
+Mission 2100.
+
+Controlled execution foundation
+does not import:
+
+• concrete brokers
+• Binance adapter
+• transport implementations
+• desktop frameworks
+• mobile frameworks
+• network frameworks
+
+No broker-name branching:
+
+• Binance
+• IBKR
+• Midas
+• Bybit
+• OKX
+• Kraken
+
+No mode-name string branching
+outside the canonical mode policy mapping.
+
+────────────────────────────────────────
+21. PERFORMANCE
+
+Agent 01 must remain lightweight.
+
+Requirements:
+
+• no background task
+• no polling
+• no I/O
+• no network
+• no persistence
+• deterministic lookup
+• bounded registry
+• no unbounded collection
+• no recursive evaluation
+
+Policy evaluation should be constant-time
+with respect to registered modes.
+
+────────────────────────────────────────
+22. MAINTAINABILITY
+
+Use:
+
+• clear canonical ownership
+• frozen dataclasses
+• closed enums
+• small modules
+• explicit exports
+• type annotations
+• sterile error codes
+• no framework coupling
+• no hidden global mutation
+
+Do not over-engineer.
+
+No runtime framework.
+
+No dependency injection container.
+
+No event bus.
+
+No plugin loader.
+
+These belong to later Agents or Missions.
+
+────────────────────────────────────────
+23. DOCUMENTATION
+
+MISSION_2100_ARCHITECTURE.md SHALL document:
+
+• Mission objective
+• Frozen-core relationship
+• Controlled execution architecture
+• Runtime mode definitions
+• Mode transition rules
+• Fail-closed policy
+• Desktop readiness
+• Mobile readiness
+• Update readiness
+• Plugin-first policy
+• Security boundaries
+• Agent roadmap
+• Deferred functionality
+
+MISSION_2100_ADR_INDEX.md SHALL include
+ADR-011 through ADR-020.
+
+────────────────────────────────────────
+24. DELIVERY FORMAT
+
+Return exactly:
+
+── CREATED FILES ──
+
+List
+
+── BASELINE ──
+
+Execution Core v1.0.0
+Commit 03e181d
+Regression 4375 PASS
+
+── CONTROLLED EXECUTION FOUNDATION ──
+
+Summary
+
+── RUNTIME MODES ──
+
+Summary
+
+── MODE SAFETY ──
+
+Summary
+
+── TRANSITION POLICY ──
+
+Summary
+
+── EXTENSION REGISTRY ──
+
+Summary
+
+── DESKTOP / MOBILE READINESS ──
+
+Summary
+
+── UPDATE READINESS ──
+
+Summary
+
+── PLUGIN POLICY ──
+
+Summary
+
+── EXECUTION CORE PROTECTION ──
+
+Summary
+
+── ADR ──
+
+ADR-011 through ADR-020 summary
+
+── SECURITY ──
+
+Summary
+
+── TEST RESULTS ──
+
+PASS count
+
+── TOTAL REGRESSION ──
+
+PASS count
+FAIL count
+SKIP count
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── PRODUCTION NETWORK REQUEST ──
+
+0
+
+── COMMIT ──
+
+Hash
+GitHub push status
+
+────────────────────────────────────────
+25. PASS CRITERIA
+
+PASS requires:
+
+• Mission 2000 remains frozen
+• No frozen-core production change
+• Runtime extension architecture created
+• PAPER is default
+• All exchange writes denied
+• No implicit mode escalation
+• Extension registry immutable
+• Desktop/mobile/update boundaries declared
+• ADR-011 through ADR-020 completed
+• ≥220 focused tests PASS
+• Full regression PASS
+• FAIL = 0
+• Exchange Write Request = 0
+• Secret Exposure = 0
+• Production Network Request = 0
