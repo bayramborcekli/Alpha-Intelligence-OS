@@ -1,0 +1,527 @@
+MISSION 2200 — AGENT 02
+
+PROFESSIONAL TRADING WORKSPACE
+LIVE OPERATIONS CONSOLE
+
+ROLE
+
+You are responsible for transforming the existing monitoring dashboard into
+the primary trading workspace of Alpha Intelligence OS.
+
+Mission 2200 Agent 01 created the Operation Control foundation.
+
+This agent must transform that foundation into the real operator workspace.
+
+This is NOT a cosmetic redesign.
+
+This is NOT a UI refresh.
+
+This is the primary operational cockpit used every day.
+
+==================================================
+MISSION OBJECTIVE
+==================================================
+
+The operator must be able to perform every daily trading operation from a
+single screen.
+
+The workspace must replace dashboard-centric workflow.
+
+Information and controls must exist together.
+
+The operator must never need to navigate between multiple pages to understand
+the state of the system.
+
+==================================================
+DO NOT
+==================================================
+
+Do not modify Mission 2100.
+
+Do not modify certified execution.
+
+Do not bypass ControlledExecutionAPI.
+
+Do not create direct exchange communication.
+
+Do not create fake buttons.
+
+Do not simulate functionality.
+
+==================================================
+WORKSPACE LAYOUT
+==================================================
+
+Create a full screen workspace.
+
+Top Bar
+
+System State
+
+Execution Mode
+
+Paper / Shadow / Micro Live / Live
+
+Bot State
+
+Last Update
+
+Broker Health
+
+Latency
+
+Kill Switch
+
+==================================================
+LEFT PANEL
+
+ACTIVE STRATEGIES
+==================================================
+
+Display every running strategy.
+
+Example
+
+BTCUSDT
+
+Trend Following
+
+RUNNING
+
+Confidence
+
+91%
+
+PnL Today
+
++2.3%
+
+Buttons
+
+Pause
+
+Resume
+
+Disable
+
+Restart
+
+Open Details
+
+Each strategy is independently controllable.
+
+==================================================
+CENTER PANEL
+
+LIVE POSITIONS
+==================================================
+
+Every position must display
+
+Symbol
+
+Direction
+
+Strategy
+
+Entry Price
+
+Current Price
+
+Quantity
+
+Notional
+
+Current Profit
+
+Profit %
+
+Realized Profit
+
+Commission
+
+Opened
+
+Duration
+
+Stop Loss
+
+Take Profit
+
+Reconciliation
+
+Buttons
+
+Close Position
+
+Move Stop
+
+Update Take Profit
+
+Open Timeline
+
+No decorative buttons.
+
+==================================================
+RIGHT PANEL
+
+LIVE SIGNALS
+==================================================
+
+Display
+
+Time
+
+Strategy
+
+Confidence
+
+Direction
+
+Decision
+
+Risk Result
+
+Authorization
+
+Execution
+
+Rejected Reason
+
+Lifecycle
+
+Only certified events.
+
+==================================================
+BOTTOM PANEL
+
+ORDERS
+==================================================
+
+Display
+
+Order ID
+
+Client ID
+
+State
+
+Created
+
+Submitted
+
+Acknowledged
+
+Filled
+
+Cancelled
+
+Rejected
+
+Reconciled
+
+Every row expandable.
+
+==================================================
+PORTFOLIO BAR
+==================================================
+
+Display
+
+Portfolio Value
+
+Cash
+
+Equity
+
+Daily PnL
+
+Weekly PnL
+
+Monthly PnL
+
+Open Risk
+
+Exposure
+
+Drawdown
+
+Largest Winner
+
+Largest Loser
+
+==================================================
+AUTOMATION CONTROL
+==================================================
+
+Large control section.
+
+Buttons
+
+START
+
+PAUSE
+
+STOP
+
+STOP NEW ENTRIES
+
+REQUEST CLOSE ALL
+
+EMERGENCY KILL SWITCH
+
+Every destructive action requires
+
+confirmation
+
+reason
+
+idempotency
+
+audit
+
+==================================================
+BROKER STATUS
+==================================================
+
+Instead of
+
+Connected
+
+display
+
+Heartbeat
+
+Latency
+
+API Status
+
+Rate Limit
+
+Reconnect Count
+
+Synchronization
+
+Authentication
+
+Permission
+
+Data Age
+
+==================================================
+RECONCILIATION
+==================================================
+
+Display
+
+Broker
+
+Ledger
+
+Difference
+
+Orders
+
+Positions
+
+Pending
+
+Matched
+
+Unknown
+
+Error
+
+==================================================
+PERFORMANCE
+==================================================
+
+Create dedicated performance widgets.
+
+Daily Equity Curve
+
+Daily Profit
+
+Weekly Profit
+
+Monthly Profit
+
+Trade Count
+
+Win Rate
+
+Loss Rate
+
+Average Win
+
+Average Loss
+
+Profit Factor
+
+Sharpe
+
+Max Drawdown
+
+Average Hold Time
+
+==================================================
+TRADING JOURNAL
+==================================================
+
+Timeline
+
+Signal Generated
+
+Risk Approved
+
+Authorized
+
+Submitted
+
+Filled
+
+Closed
+
+Reconciled
+
+Every event clickable.
+
+==================================================
+WORKSPACE BEHAVIOUR
+==================================================
+
+Workspace must update without page refresh.
+
+Use repository-supported realtime mechanism.
+
+Fallback polling allowed only if realtime unavailable.
+
+Operator selections must never reset.
+
+Expanded rows must remain expanded.
+
+==================================================
+VISUAL RULES
+==================================================
+
+Professional desktop trading terminal.
+
+No oversized cards.
+
+High information density.
+
+Consistent spacing.
+
+Color semantics
+
+Green
+
+Profit
+
+Red
+
+Loss
+
+Amber
+
+Pending
+
+Blue
+
+Information
+
+Gray
+
+Unknown
+
+==================================================
+LEGACY CLEANUP
+==================================================
+
+Current General Dashboard remains as
+
+System Overview
+
+Create new menu entry
+
+Operation Center
+
+Operation Center becomes default landing page
+after login.
+
+General Dashboard becomes secondary.
+
+==================================================
+ACCESSIBILITY
+==================================================
+
+Keyboard navigation.
+
+Search.
+
+Column sorting.
+
+Filtering.
+
+Resizable tables.
+
+Export CSV.
+
+==================================================
+TESTS
+==================================================
+
+Minimum
+
+700 PASS
+
+Add UI integration tests.
+
+Add navigation tests.
+
+Add realtime update tests.
+
+Add action binding tests.
+
+Add responsive layout tests.
+
+Add accessibility tests.
+
+==================================================
+SECURITY
+==================================================
+
+Exchange Direct Write
+
+0
+
+Fail Open
+
+0
+
+Secret Exposure
+
+0
+
+Credential Leak
+
+0
+
+Mission 2100 Frozen Integrity
+
+PASS
+
+==================================================
+DELIVERABLE
+==================================================
+
+MISSION 2200 — AGENT 02
+
+Professional Trading Workspace
+
+The delivered workspace must feel comparable to a professional trading terminal,
+not a monitoring dashboard.
+
+Completion is accepted only if the operator can manage the entire trading
+lifecycle from this workspace while all execution continues to pass through the
+certified Mission 2100 Controlled Execution pipeline.
