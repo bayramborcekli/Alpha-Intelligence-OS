@@ -1,0 +1,546 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2100
+
+AGENT 04
+
+PAPER EXECUTION SERVICE
+
+ROLE
+
+Integrate the frozen Execution Core with
+the deterministic Paper Broker and Ledger.
+
+This Agent SHALL:
+
+• accept canonical execution requests
+• enforce PAPER mode
+• invoke risk controls
+• invoke kill switch checks
+• route approved requests to PaperBroker
+• return canonical immutable results
+• preserve deterministic audit trace
+
+This Agent SHALL NOT:
+
+• contact a real broker
+• enable SHADOW mode
+• enable MICRO_LIVE
+• perform exchange writes
+• use network access
+• modify Mission 2000
+• duplicate canonical execution models
+
+────────────────────────────────────────
+1. BASELINE
+
+Execution Core v1.0.0
+Commit:
+03e181d
+
+Agent 01:
+4304527
+
+Agent 02:
+69bd05c
+
+Agent 03:
+Use Agent 03 delivery commit
+
+Required regression baseline:
+Use Agent 03 final regression count
+
+Architecture:
+FROZEN
+
+────────────────────────────────────────
+2. CREATE
+
+paper_execution_service.py
+
+paper_execution_models.py
+
+paper_execution_mapper.py
+
+paper_execution_errors.py
+
+tests/test_paper_execution_service.py
+
+tests/test_paper_execution_mapper.py
+
+tests/test_paper_execution_architecture.py
+
+────────────────────────────────────────
+3. SERVICE
+
+Create:
+
+PaperExecutionService
+
+Required pipeline:
+
+request validation
+        ↓
+runtime mode validation
+        ↓
+PAPER policy validation
+        ↓
+risk evaluation
+        ↓
+permission gate
+        ↓
+kill switch snapshot
+        ↓
+paper request mapping
+        ↓
+PaperBroker submit/cancel
+        ↓
+ledger snapshot
+        ↓
+canonical result mapping
+        ↓
+immutable audit result
+
+The pipeline order is permanent.
+
+────────────────────────────────────────
+4. PAPER-ONLY ENFORCEMENT
+
+Allowed mode:
+
+PAPER
+
+Denied modes:
+
+SHADOW
+MICRO_LIVE
+UNKNOWN
+MISSING
+
+No automatic mode conversion.
+
+No fallback from another mode to PAPER.
+
+No implicit escalation.
+
+────────────────────────────────────────
+5. SERVICE OPERATIONS
+
+Implement:
+
+submit_order()
+
+cancel_order()
+
+get_account_snapshot()
+
+get_orders()
+
+get_executions()
+
+get_positions()
+
+get_statistics()
+
+heartbeat()
+
+Only submit_order and cancel_order may alter
+the immutable paper state by producing a new snapshot.
+
+All read operations are side-effect free.
+
+────────────────────────────────────────
+6. REQUEST OWNERSHIP
+
+Use Mission 2000 canonical:
+
+ExecutionRequest
+ExecutionResult
+ExecutionMode
+OrderSide
+OrderType
+OrderState
+RiskDecision
+KillSwitch snapshot/contracts
+
+Do not duplicate them.
+
+Use Mission 2100 runtime references where needed.
+
+────────────────────────────────────────
+7. RISK AND PERMISSION
+
+Paper orders SHALL pass through:
+
+Risk Engine
+Permission Gate
+Kill Switch
+
+Risk outcomes:
+
+ALLOW
+→ continue
+
+REJECT
+→ no PaperBroker invocation
+
+REDUCE_SIZE
+→ return recommendation only
+→ no automatic resizing
+→ no PaperBroker invocation
+
+REQUIRE_CONFIRMATION
+→ deny in Agent 04
+→ no PaperBroker invocation
+
+Kill Switch non-enabled state:
+→ deny
+→ no PaperBroker invocation
+
+Denied paths must invoke PaperBroker exactly zero times.
+
+────────────────────────────────────────
+8. PAPER BROKER INVOCATION
+
+Approved submit path:
+
+PaperBroker submit exactly once.
+
+Approved cancel path:
+
+PaperBroker cancel exactly once.
+
+No retry.
+
+No duplicate invocation.
+
+No background retry.
+
+No hidden resubmission.
+
+Idempotency reference is caller-owned.
+
+────────────────────────────────────────
+9. STATE OWNERSHIP
+
+PaperExecutionService SHALL remain stateless.
+
+Paper state ownership remains with:
+
+PaperBroker
+PaperLedgerSnapshot
+
+Service receives current immutable state
+and returns the next immutable state.
+
+No module-level mutable state.
+
+No singleton.
+
+No cache.
+
+No database.
+
+────────────────────────────────────────
+10. RESULT MODEL
+
+Create immutable service result containing:
+
+operation
+decision
+decision_code
+execution_result_reference
+previous_ledger_reference
+current_ledger_reference
+order_reference
+execution_references
+risk_decision_reference
+kill_switch_reference
+audit_records
+logical_sequence
+
+Requirements:
+
+• frozen
+• slots
+• Decimal only
+• no float
+• caller-owned identifiers
+• no generated timestamp
+• no UUID
+• sterile validation
+
+────────────────────────────────────────
+11. MAPPING
+
+PaperExecutionMapper SHALL map:
+
+ExecutionRequest
+→ PaperOrder input
+
+PaperExecution / PaperOrder
+→ canonical ExecutionResult references
+
+PaperLedgerSnapshot
+→ RuntimeAccountSnapshot-compatible output
+
+Mapping SHALL be:
+
+deterministic
+lossless where domains overlap
+side-effect free
+broker-independent
+framework-independent
+
+────────────────────────────────────────
+12. ERROR MODEL
+
+Closed error taxonomy:
+
+PaperExecutionError
+
+PaperExecutionContractError
+
+PaperExecutionConfigurationError
+
+PaperExecutionModeError
+
+PaperExecutionRiskError
+
+PaperExecutionPermissionError
+
+PaperExecutionStateError
+
+No raw internal exceptions may cross
+the public service boundary.
+
+────────────────────────────────────────
+13. AUDIT
+
+Every service operation SHALL create
+a deterministic immutable audit trace.
+
+Required stages:
+
+REQUEST_VALIDATED
+MODE_VALIDATED
+RISK_EVALUATED
+PERMISSION_EVALUATED
+KILL_SWITCH_CHECKED
+PAPER_BROKER_INVOKED
+LEDGER_UPDATED
+RESULT_MAPPED
+
+Denied paths include only reached stages.
+
+No timestamp generation.
+
+No identity generation.
+
+Logical sequence is caller-owned.
+
+────────────────────────────────────────
+14. SECURITY
+
+Forbidden:
+
+network
+real broker
+Binance adapter
+REST
+WebSocket
+socket
+credentials
+API keys
+signing
+filesystem
+database
+environment access
+thread
+process
+scheduler
+sleep
+retry
+UUID
+random
+datetime.now
+subprocess
+dynamic import
+eval
+exec
+pickle
+
+Exchange write count:
+
+0
+
+────────────────────────────────────────
+15. DEPENDENCY RULES
+
+Allowed:
+
+stdlib
+Mission 2000 public contracts
+Agent 01 public contracts
+Agent 02 runtime models
+Agent 03 paper contracts
+
+Forbidden:
+
+concrete live broker adapters
+Binance transport
+desktop frameworks
+mobile frameworks
+web frameworks
+AI modules
+update manager implementations
+
+Mission 2000 SHALL NOT import Agent 04.
+
+Agents 01–03 SHALL NOT import Agent 04.
+
+────────────────────────────────────────
+16. TESTS
+
+Minimum:
+
+360 focused tests
+
+Cover:
+
+service pipeline order
+PAPER-only enforcement
+risk ALLOW path
+risk REJECT path
+REDUCE_SIZE recommendation
+REQUIRE_CONFIRMATION denial
+kill switch denial
+zero broker calls on denied paths
+exactly one broker call on approved paths
+submit
+cancel
+ledger transition
+immutable results
+deterministic mapping
+audit stage order
+idempotency reference preservation
+duplicate request rejection
+Decimal-only validation
+bool rejection
+unknown mode denial
+missing policy denial
+raw exception containment
+public exports
+dependency direction
+forbidden imports
+forbidden calls
+no network
+no secret
+no exchange write
+Mission 2000 compatibility
+Agent 01 compatibility
+Agent 02 compatibility
+Agent 03 compatibility
+
+────────────────────────────────────────
+17. PERFORMANCE
+
+No I/O.
+
+No polling.
+
+No recursion.
+
+No background tasks.
+
+No unbounded retry.
+
+No hidden copies beyond immutable state transitions.
+
+Denied-path evaluation must remain bounded.
+
+────────────────────────────────────────
+18. PUBLIC API
+
+Explicit __all__ only.
+
+Expected primary exports:
+
+PaperExecutionService
+PaperExecutionServiceResult
+PaperExecutionOperation
+PaperExecutionDecisionCode
+PaperExecutionMapper
+PaperExecutionError
+PaperExecutionContractError
+PaperExecutionConfigurationError
+PaperExecutionModeError
+PaperExecutionRiskError
+PaperExecutionPermissionError
+PaperExecutionStateError
+
+────────────────────────────────────────
+19. DELIVERY
+
+Return exactly:
+
+── CREATED FILES ──
+
+── BASELINE ──
+
+── PAPER EXECUTION SERVICE ──
+
+── PIPELINE ──
+
+── PAPER-ONLY ENFORCEMENT ──
+
+── RISK / PERMISSION / KILL SWITCH ──
+
+── BROKER INVOCATION ──
+
+── LEDGER TRANSITIONS ──
+
+── MAPPING ──
+
+── AUDIT ──
+
+── SECURITY ──
+
+── TEST RESULTS ──
+
+── TOTAL REGRESSION ──
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── PRODUCTION NETWORK REQUEST ──
+
+0
+
+── COMMIT ──
+
+Hash
+GitHub push status
+
+────────────────────────────────────────
+20. PASS
+
+PASS requires:
+
+• ≥360 focused tests PASS
+• 0 FAIL
+• full regression PASS
+• PAPER-only execution certified
+• deterministic state transitions
+• denied paths call PaperBroker 0 times
+• approved paths call PaperBroker exactly once
+• Mission 2000 unchanged
+• Agents 01–03 unchanged
+• Exchange Write Request = 0
+• Secret Exposure = 0
+• Production Network Request = 0

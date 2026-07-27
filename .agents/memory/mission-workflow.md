@@ -20,6 +20,7 @@ implement → tests → architect code-review subagent (fix real findings; re-re
 - Mission 2100 (v1.1.0 "Controlled Execution") A01: Controlled Execution Foundation, commit `4304527`, regression 4619 PASS (244 new tests)
 - Mission 2100 A02: Runtime Domain Models, commit `69bd05c`, regression 5215 PASS (596 new tests)
 - Mission 2100 A03: Paper Broker & Ledger, commit `32f4a3a`, regression 5585 PASS (370 new tests; exact double-entry via cost_basis, IMMEDIATE_FULL_FILL only)
+- Mission 2100 A04: Paper Execution Service, commit `bf2a21d`, regression 5994 PASS (409 new tests). PAPER-policy validation risk'ten ÖNCE; cancel'da risk aşaması bilinçli muaf (istek uydurulamaz, testle sabit); broker catch-all → INTERNAL_FAILURE steril kod; tests/test_ownership.py'ye paper_execution_service.py "submit_order" token muafiyeti eklendi (PAPER-only, kendi mimari taramaları altında).
 
 ## Standing constraints (all missions)
 Read-only architecture (exchange writes forever 0); Decimal-only money math (AST-tested, no float literals); unknown → null; sterile error codes only; no threads/schedulers; wall-clock/UUID only at API boundary; never `pkill gunicorn`; keep `attached_assets/` out of scoped commits; MappingProxyType → plain dict before json.dumps.
