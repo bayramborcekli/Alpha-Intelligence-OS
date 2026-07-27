@@ -1,0 +1,263 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1700 — PORTFOLIO INTELLIGENCE
+
+AGENT 01 — ARCHITECTURE
+
+ROLE
+
+You are the Architecture Agent for Mission 1700.
+
+Your responsibility is to design the Portfolio Intelligence architecture.
+
+Do NOT implement code.
+
+Do NOT modify any existing behavior.
+
+Create only the architectural specification that future agents will implement.
+
+────────────────────────────────────────
+
+1. BASELINE
+
+Mission 1600
+
+OFFICIALLY CLOSED
+
+Baseline Commit
+
+50a886d
+
+Regression
+
+1148 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+This baseline must remain unchanged.
+
+────────────────────────────────────────
+
+2. OBJECTIVE
+
+Introduce a dedicated Portfolio Intelligence layer.
+
+The purpose is to understand portfolio state before any future execution architecture exists.
+
+Portfolio Intelligence MUST NOT execute trades.
+
+Portfolio Intelligence MUST NOT communicate with exchanges.
+
+Portfolio Intelligence MUST remain advisory.
+
+────────────────────────────────────────
+
+3. HIGH LEVEL ARCHITECTURE
+
+Design the following flow:
+
+Intelligence Engine
+
+↓
+
+Portfolio Intelligence
+
+↓
+
+Risk Engine
+
+↓
+
+Recommendation
+
+↓
+
+Timeline
+
+Portfolio Intelligence becomes the single source of truth for portfolio analysis.
+
+────────────────────────────────────────
+
+4. RESPONSIBILITIES
+
+Portfolio Intelligence shall be responsible for:
+
+• Portfolio state
+
+• Current positions
+
+• Position sizing
+
+• Asset allocation
+
+• Exposure
+
+• Cash allocation
+
+• Unrealized PnL
+
+• Realized PnL
+
+• Drawdown
+
+• Portfolio concentration
+
+• Position limits
+
+• Risk utilization
+
+• Diversification metrics
+
+• Portfolio health score
+
+It must not calculate market intelligence.
+
+It must not replace Risk Engine.
+
+────────────────────────────────────────
+
+5. DATA MODEL
+
+Define the logical portfolio model.
+
+Include:
+
+Portfolio
+
+Position
+
+Allocation
+
+Exposure
+
+Cash
+
+Equity
+
+Risk
+
+Performance
+
+Health
+
+Only logical models.
+
+No implementation.
+
+────────────────────────────────────────
+
+6. ARCHITECTURAL RULES
+
+Portfolio Intelligence
+
+MUST NOT
+
+write Workspace.
+
+MUST NOT
+
+write Timeline.
+
+MUST NOT
+
+call Exchange.
+
+MUST NOT
+
+submit orders.
+
+MUST NOT
+
+modify Risk Engine.
+
+It may only return normalized portfolio analysis.
+
+────────────────────────────────────────
+
+7. INTEGRATION
+
+Describe interactions with:
+
+Mission 1500 Intelligence Engine
+
+Mission 1600 Automation
+
+Future Mission 1800 Strategy Intelligence
+
+Future Execution Layer
+
+Clearly define responsibilities.
+
+────────────────────────────────────────
+
+8. SUCCESS CRITERIA
+
+Architecture must provide:
+
+Clear separation of responsibility
+
+Deterministic design
+
+Future scalability
+
+Backward compatibility
+
+No breaking changes
+
+No exchange dependency
+
+No execution capability
+
+────────────────────────────────────────
+
+9. DELIVERABLE
+
+Provide:
+
+Architecture Diagram
+
+Component Responsibilities
+
+Data Flow
+
+Logical Data Model
+
+Integration Points
+
+Security Principles
+
+Operational Principles
+
+Future Extension Points
+
+No source code.
+
+────────────────────────────────────────
+
+10. PASS CRITERIA
+
+PASS requires:
+
+• No code changes
+• No repository modifications
+• No API changes
+• No UI changes
+• Architecture complete
+• Integration documented
+• Responsibilities clearly separated
+• No execution capability introduced
+• No exchange dependency introduced
+
+Next Agent:
+
+AGENT 02 — Core Implementation
