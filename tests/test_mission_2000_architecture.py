@@ -31,7 +31,7 @@ with open(DOC_PATH, encoding="utf-8") as handle:
 PLANNED_MODULES = (
     "execution_api.py", "execution_service.py",
     "execution_risk_engine.py", "execution_kill_switch.py",
-    "exchange_adapter.py", "binance_spot_adapter.py")
+    "broker_adapter.py", "binance_spot_adapter.py")
 
 LAYER_ORDER = (
     "Execution API", "Execution Service", "Risk Engine",
@@ -97,8 +97,11 @@ class TestArchitectureDiagram:
             assert module_file in DOC
 
     def test_future_adapters_documented(self):
-        for adapter in ("Bybit Adapter", "OKX Adapter",
-                        "Kraken Adapter"):
+        for adapter in ("BinanceSpotAdapter",
+                        "BinanceFuturesAdapter",
+                        "InteractiveBrokersAdapter", "MidasAdapter",
+                        "BybitAdapter", "OKXAdapter",
+                        "KrakenAdapter"):
             assert adapter in DOC
 
     def test_mandatory_execution_chain_documented(self):
@@ -187,7 +190,7 @@ class TestMetadataOwnership:
 class TestPublicApi:
     APPROVED = ("execute_order_api", "execute_order",
                 "ExecutionService", "validate_execution",
-                "verify_execution", "ExchangeAdapter",
+                "verify_execution", "BrokerAdapter",
                 "BinanceSpotAdapter")
 
     @pytest.mark.parametrize("entry", APPROVED)
@@ -266,14 +269,14 @@ class TestNoProductionBehavior:
         import strategy_service
         forbidden = {"execution_api", "execution_service",
                      "execution_risk_engine", "execution_kill_switch",
-                     "exchange_adapter", "binance_spot_adapter"}
+                     "broker_adapter", "binance_spot_adapter"}
         assert not _module_imports(strategy_service) & forbidden
 
     def test_monitoring_does_not_import_execution(self):
         import monitoring_service
         forbidden = {"execution_api", "execution_service",
                      "execution_risk_engine", "execution_kill_switch",
-                     "exchange_adapter", "binance_spot_adapter"}
+                     "broker_adapter", "binance_spot_adapter"}
         assert not _module_imports(monitoring_service) & forbidden
 
     def test_doc_introduces_no_code(self):

@@ -27,13 +27,22 @@ Risk Engine                (execution_risk_engine.py)
         ↓
 Kill Switch                (execution_kill_switch.py)
         ↓
-Exchange Adapter           (exchange_adapter.py)
+Exchange Adapter           (broker_adapter.py — BrokerAdapter, soyut)
         ↓
 Exchange Implementation    (örnek: binance_spot_adapter.py)
 ```
 
-Gelecek uygulamalar: Bybit Adapter, OKX Adapter, Kraken Adapter —
-tümü aynı Exchange Adapter soyutlamasının arkasında.
+Adapter soyutlaması `BrokerAdapter`'dır (soyut sınıf) ve hem kripto
+exchange'lerini hem aracı kurumları (broker) kapsar. Gelecek
+uygulamalar — tümü aynı `BrokerAdapter` soyutlamasının arkasında:
+
+- BinanceSpotAdapter (örnek ilk uygulama)
+- BinanceFuturesAdapter
+- InteractiveBrokersAdapter
+- MidasAdapter
+- BybitAdapter
+- OKXAdapter
+- KrakenAdapter
 
 **Hiçbir Strategy katmanı bir Exchange ile doğrudan iletişim
 kuramaz.** Tüm yürütme ZORUNLU olarak şu zincirden geçer:
@@ -98,7 +107,7 @@ YALNIZ Execution API üretir: `execution_id`, `requested_at`,
 | Execution Service | `execute_order`, `ExecutionService` |
 | Risk Engine | `validate_execution` |
 | Kill Switch | `verify_execution` |
-| Exchange Adapter | `ExchangeAdapter` |
+| Exchange Adapter | `BrokerAdapter` |
 | Exchange Implementation | `BinanceSpotAdapter` |
 
 Ek kamu API YOKTUR.
