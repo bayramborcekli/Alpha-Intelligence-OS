@@ -1,0 +1,256 @@
+{% extends "dash_base.html" %}
+{% block title %}Strategy Intelligence{% endblock %}
+{% block heading %}♟️ Strategy Intelligence{% endblock %}
+{% block subheading %}Strateji önerileri — yalnız görüntüleme, tavsiye niteliğinde{% endblock %}
+
+{% block content %}
+<style>
+  .si-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+             margin-bottom:18px; }
+  .si-card { background:var(--panel); border:1px solid var(--border); border-radius:10px;
+             padding:12px 14px; }
+  .si-card h3 { font-size:.72rem; color:var(--muted); text-transform:uppercase;
+                letter-spacing:.05em; margin-bottom:6px; font-weight:600; }
+  .si-card .v { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .si-sec { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+            padding:16px; margin-bottom:18px; }
+  .si-sec h2 { font-size:.9rem; margin-bottom:12px; }
+  .si-note { color:var(--muted); font-size:.76rem; margin-top:8px; }
+  .si-banner { border-left:3px solid var(--warn); background:rgba(210,153,34,.08);
+               padding:10px 14px; border-radius:6px; margin-bottom:14px;
+               font-size:.85rem; display:none; }
+  .si-banner.err { border-left-color:var(--danger); background:rgba(248,81,73,.08); }
+  .si-badge { display:inline-block; border-radius:12px; padding:2px 10px;
+              font-size:.74rem; font-weight:700; border:1px solid var(--border); }
+  .st-loading { color:var(--muted); }
+  .st-ok { color:var(--ok); border-color:rgba(63,185,80,.5); }
+  .st-partial { color:var(--warn); border-color:rgba(210,153,34,.5); }
+  .st-unavailable, .st-error { color:var(--danger); border-color:rgba(248,81,73,.5); }
+  table.si { width:100%; border-collapse:collapse; font-size:.8rem; }
+  table.si th, table.si td { padding:5px 8px; text-align:left; vertical-align:top;
+    border-bottom:1px solid rgba(48,54,61,.5); }
+  table.si th { color:var(--muted); font-weight:600; }
+  .advisory-tag { background:rgba(88,166,255,.1); border:1px solid rgba(88,166,255,.4);
+                  color:var(--accent); border-radius:12px; padding:2px 10px;
+                  font-size:.72rem; font-weight:700; }
+  .si-meta { color:var(--muted); font-size:.74rem; }
+  ul.si-list { margin:0; padding-left:18px; font-size:.8rem; }
+</style>
+
+<p class="si-note" style="margin-bottom:12px">
+  <span class="advisory-tag" id="si-advisory-tag">SALT OKUNUR · TAVSİYE</span>
+  Bu panel strateji önerilerini yalnız görüntüler. Hiçbir hesaplama
+  tarayıcıda yapılmaz; emir girişi, AL/SAT, onay veya uygulama düğmesi
+  yoktur. Bilinmeyen değerler "Unknown" gösterilir — asla 0 varsayılmaz.
+</p>
+
+<div class="si-banner" id="si-partial-banner" role="alert">
+  ⚠️ Kısmi veri mevcut (Partial data available). Bilinmeyen alanlar
+  "Unknown" gösterilir; güven düşürülmüştür.
+</div>
+<div class="si-banner err" id="si-unavailable-banner" role="alert">
+  ⛔ Strateji kullanılamaz (Strategy unavailable). Bu ekran öneri
+  İÇERMEZ — hiçbir değer tahmin edilmez.
+</div>
+<div class="si-banner err" id="si-error-banner" role="alert">
+  ⚠️ Strateji alınamadı (API hatası). Değerler tahmin edilmez — alanlar
+  boş bırakıldı.
+</div>
+
+<div class="si-grid" aria-live="polite">
+  <div class="si-card"><h3>Veri Kalitesi</h3>
+    <div class="v"><span class="si-badge st-loading" id="si-status">Yükleniyor…</span></div></div>
+  <div class="si-card"><h3>Strategy Version</h3><div class="v" id="si-version">Unknown</div></div>
+  <div class="si-card"><h3>Generated At</h3><div class="v" id="si-generated" style="font-size:.8rem">Unknown</div></div>
+  <div class="si-card"><h3>Confidence</h3><div class="v" id="si-confidence">Unknown</div></div>
+  <div class="si-card"><h3>Market Regime</h3><div class="v" id="si-regime">Unknown</div></div>
+  <div class="si-card"><h3>Overall Risk</h3><div class="v" id="si-risk">Unknown</div></div>
+</div>
+
+<section class="si-sec" aria-labelledby="h-recs">
+  <h2 id="h-recs">📋 Öneriler (Recommendations)</h2>
+  <div style="overflow-x:auto"><table class="si" aria-describedby="h-recs">
+    <thead><tr>
+      <th scope="col">Enstrüman</th><th scope="col">Aksiyon</th>
+      <th scope="col">Öncelik</th><th scope="col">Güven</th>
+      <th scope="col">Mevcut Ağırlık %</th><th scope="col">Hedef Ağırlık %</th>
+      <th scope="col">Risk Seviyesi</th><th scope="col">Neden Kodları</th>
+      <th scope="col">Beklenen Etki</th><th scope="col">Geçersizlik Koşulları</th>
+    </tr></thead>
+    <tbody id="si-recs-body"><tr><td colspan="10">Yükleniyor…</td></tr></tbody>
+  </table></div>
+  <p class="si-note">Öneriler API sırasıyla gösterilir; tarayıcıda
+  yeniden sıralanmaz, değiştirilmez, uygulanmaz.</p>
+</section>
+
+<section class="si-sec" aria-labelledby="h-warn">
+  <h2 id="h-warn">⚠️ Uyarılar (Warnings)</h2>
+  <ul class="si-list" id="si-warnings"><li>Yükleniyor…</li></ul>
+</section>
+
+<section class="si-sec" aria-labelledby="h-lim">
+  <h2 id="h-lim">🧱 Kısıtlar (Limitations)</h2>
+  <ul class="si-list" id="si-limitations"><li>Yükleniyor…</li></ul>
+</section>
+
+<p class="si-meta" id="si-envelope-meta">
+  strategy_version: Unknown · proposal_id: Unknown · read_only: Unknown ·
+  advisory_only: Unknown
+</p>
+
+<script>
+(function () {
+  "use strict";
+  function el(id) { return document.getElementById(id); }
+  function txt(v) {
+    return (v === null || v === undefined || v === "")
+      ? "Unknown" : String(v);
+  }
+  function cell(tr, value) {
+    var td = document.createElement("td");
+    td.textContent = txt(value);
+    tr.appendChild(td);
+    return td;
+  }
+  function clearBody(id, cols, msg) {
+    var body = el(id);
+    body.textContent = "";
+    var tr = document.createElement("tr");
+    var td = document.createElement("td");
+    td.colSpan = cols;
+    td.textContent = msg;
+    tr.appendChild(td);
+    body.appendChild(tr);
+  }
+  function renderList(id, items, emptyMsg) {
+    var node = el(id);
+    node.textContent = "";
+    var list = Array.isArray(items) ? items : [];
+    if (!list.length) {
+      var li = document.createElement("li");
+      li.textContent = emptyMsg;
+      node.appendChild(li);
+      return;
+    }
+    list.forEach(function (item) {
+      var li2 = document.createElement("li");
+      li2.textContent = txt(item);
+      node.appendChild(li2);
+    });
+  }
+
+  var QUALITY_TR = { OK: "SAĞLIKLI", PARTIAL: "KISMİ",
+                     UNAVAILABLE: "KULLANILAMAZ" };
+
+  function setStatus(kind, label) {
+    var node = el("si-status");
+    node.className = "si-badge st-" + kind;
+    node.textContent = label;
+  }
+
+  function showBanner(id) {
+    ["si-partial-banner", "si-unavailable-banner", "si-error-banner"]
+      .forEach(function (b) {
+        el(b).style.display = (b === id) ? "block" : "none";
+      });
+  }
+
+  function resetFields() {
+    ["si-version", "si-generated", "si-confidence", "si-regime",
+     "si-risk"].forEach(function (id) {
+      el(id).textContent = "Unknown";
+    });
+    el("si-envelope-meta").textContent =
+      "strategy_version: Unknown · proposal_id: Unknown · " +
+      "read_only: Unknown · advisory_only: Unknown";
+  }
+
+  function joinEffect(eff) {
+    if (!eff || typeof eff !== "object") { return "Unknown"; }
+    return txt(eff.metric) + " " + txt(eff.direction) + " " +
+      txt(eff.magnitude_pct) + "%";
+  }
+
+  function renderRecs(recs) {
+    var body = el("si-recs-body");
+    body.textContent = "";
+    var list = Array.isArray(recs) ? recs : [];
+    if (!list.length) {
+      clearBody("si-recs-body", 10, "No recommendations.");
+      return;
+    }
+    // API sırası AYNEN korunur — sıralama/filtreleme yapılmaz.
+    list.forEach(function (r) {
+      var tr = document.createElement("tr");
+      cell(tr, r.instrument);
+      cell(tr, r.action);
+      cell(tr, r.priority);
+      cell(tr, r.confidence);
+      cell(tr, r.current_weight);
+      cell(tr, r.target_weight);
+      cell(tr, r.risk_level);
+      cell(tr, Array.isArray(r.reason_codes)
+        ? r.reason_codes.join(", ") : null);
+      cell(tr, joinEffect(r.expected_effect));
+      cell(tr, Array.isArray(r.invalidation_conditions)
+        ? r.invalidation_conditions.join(", ") : null);
+      body.appendChild(tr);
+    });
+  }
+
+  function renderMeta(p) {
+    el("si-version").textContent = txt(p.strategy_version);
+    el("si-generated").textContent = txt(p.generated_at);
+    el("si-confidence").textContent = txt(p.confidence);
+    el("si-regime").textContent = txt(p.market_regime);
+    el("si-risk").textContent = txt(p.overall_risk);
+    el("si-envelope-meta").textContent =
+      "strategy_version: " + txt(p.strategy_version) +
+      " · proposal_id: " + txt(p.proposal_id) +
+      " · read_only: " + txt(p.read_only) +
+      " · advisory_only: " + txt(p.advisory_only);
+  }
+
+  function renderError() {
+    resetFields();
+    clearBody("si-recs-body", 10, "No recommendations.");
+    renderList("si-warnings", [], "Uyarı bilgisi alınamadı.");
+    renderList("si-limitations", [], "Kısıt bilgisi alınamadı.");
+    setStatus("error", "HATA");
+    showBanner("si-error-banner");
+  }
+
+  function render(p) {
+    if (!p || typeof p !== "object" || !p.data_quality ||
+        !QUALITY_TR[p.data_quality]) {
+      renderError();
+      return;
+    }
+    var q = p.data_quality;
+    setStatus(q === "OK" ? "ok" : (q === "PARTIAL" ? "partial"
+      : "unavailable"), QUALITY_TR[q]);
+    showBanner(q === "PARTIAL" ? "si-partial-banner"
+      : (q === "UNAVAILABLE" ? "si-unavailable-banner" : null));
+    renderMeta(p);
+    renderRecs(p.recommendations);
+    renderList("si-warnings", p.warnings, "Uyarı yok.");
+    renderList("si-limitations", p.limitations, "Kısıt yok.");
+  }
+
+  function load() {
+    setStatus("loading", "Yükleniyor…");
+    fetch("/api/v1/strategy/intelligence", {
+      headers: { "Accept": "application/json" },
+      credentials: "same-origin"
+    }).then(function (r) {
+      if (!r.ok) { throw new Error("HTTP " + r.status); }
+      return r.json();
+    }).then(render).catch(renderError);
+  }
+
+  var refreshBtn = document.getElementById("refresh-btn");
+  if (refreshBtn) { refreshBtn.addEventListener("click", load); }
+  load();
+}());
+</script>
+{% endblock %}

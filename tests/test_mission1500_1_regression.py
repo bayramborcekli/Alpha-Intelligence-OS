@@ -169,6 +169,8 @@ class TestRouteSurface:
         # Mission 1800 / Agent 04: Strategy Intelligence (GET-only,
         # advisory-only) — yüzey bilinçli olarak genişletildi.
         "/api/strategy/intelligence", "/api/v1/strategy/intelligence",
+        # Mission 1800 / Agent 05: UI sayfası (GET-only).
+        "/strategy-intelligence",
     }
 
     def test_intelligence_route_set_exact(self):

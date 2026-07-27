@@ -1994,6 +1994,15 @@ def api_portfolio_intelligence_export_csv():
     return _portfolio_intelligence_export("csv")
 
 
+# ── Mission 1800 / Agent 05: Strategy Intelligence UI ───────────────
+# Salt-okunur sunum sayfası; veri YALNIZ Agent 04 API'sından çekilir.
+
+@app.get("/strategy-intelligence")
+def strategy_intelligence_page():
+    return _render_workspace("strategy_intelligence.html",
+                             "strategy_intelligence")
+
+
 # ── Mission 1800 / Agent 04: Strategy Intelligence API ──────────────
 # YALNIZCA GET. Rota hesap YAPMAZ: strategy_service → strategy çekirdeği
 # zinciri tek otoridedir. proposal_id + generated_at YALNIZ bu API
