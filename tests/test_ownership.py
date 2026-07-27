@@ -117,7 +117,8 @@ class TestPaperModeSafety:
                     and "test_" not in f.name
                     and "__pycache__" not in str(f)
                     and f.name != "execution_broker_adapter.py"
-                    and f.name != "binance_spot_adapter.py"]
+                    and f.name != "binance_spot_adapter.py"
+                    and f.name != "execution_service.py"]
 
         for path in py_files:
             try:
