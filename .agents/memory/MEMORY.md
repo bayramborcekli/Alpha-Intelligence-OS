@@ -4,4 +4,5 @@
 - [Real-signal replay sizing](real-signal-replay-sizing.md) — score≥65 fires ~0.06 trades/candle/3sym; size the data window to the trade target or the run OOMs; precompute the signal stream once for cross-variant determinism.
 - [Mission 1500.2 baseline](mission-1500-2-baseline.md) — Workspace scope frozen as reference baseline; immutable contracts + regression rules for all future missions.
 - [Runtime config drift](runtime-config-drift.md) — bot mutates alpha20_v1 configs; platform auto-commits can bake unsafe state into HEAD, so revert against last intentional commit.
+- [Read-only summary persist](read-only-summary-persist.md) — risk_api.summary() writes a daily snapshot by default; read-only layers must pass persist=False.
 - [Binance TR API quirks](binance-tr-api.md) — `data` may be list or dict; movements API omits trades so reconciliation is PARTIAL by design; transferType=1 = internal.

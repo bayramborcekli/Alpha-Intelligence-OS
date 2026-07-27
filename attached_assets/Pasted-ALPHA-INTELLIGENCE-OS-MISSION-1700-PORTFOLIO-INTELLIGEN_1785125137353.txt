@@ -1,0 +1,423 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1700 — PORTFOLIO INTELLIGENCE
+
+AGENT 07 — SECURITY VERIFICATION
+
+ROLE
+
+You are the Security Verification Agent for Mission 1700.
+
+Verify the entire Portfolio Intelligence stack implemented in
+Agents 01–06.
+
+Do not implement new features.
+
+Do not redesign any layer.
+
+Security verification only.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1600
+
+OFFICIALLY CLOSED
+
+Mission 1700
+
+Agent 01 — PASS
+Agent 02 — PASS
+Agent 03 — PASS
+Agent 04 — PASS
+Agent 05 — PASS
+Agent 06 — PASS
+
+Baseline Commit
+
+65199d2
+
+Regression Baseline
+
+1256 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Perform a complete security verification of:
+
+Core
+
+Service
+
+API
+
+UI
+
+Export
+
+Verify that every architectural security rule approved in Mission 1700 is
+still satisfied.
+
+No functionality changes unless required to fix a verified security issue.
+
+────────────────────────────────────────
+3. SCOPE
+
+Verify at minimum:
+
+Portfolio Core
+
+Portfolio Service
+
+Portfolio API
+
+Portfolio UI
+
+Portfolio Export
+
+Route registration
+
+Imports
+
+Serialization
+
+Error handling
+
+Dependency boundaries
+
+────────────────────────────────────────
+4. ARCHITECTURE BOUNDARIES
+
+Verify:
+
+Core performs calculations only.
+
+Service performs aggregation only.
+
+API performs routing only.
+
+UI performs rendering only.
+
+Export performs serialization only.
+
+No layer bypasses another.
+
+No reverse dependencies.
+
+No circular dependencies.
+
+────────────────────────────────────────
+5. READ-ONLY GUARANTEES
+
+Verify there are absolutely no writes to:
+
+Workspace
+
+Timeline
+
+Snapshots
+
+append_snapshot()
+
+Exchange
+
+Execution layer
+
+Order system
+
+Risk Engine state
+
+Filesystem
+
+Temporary files
+
+Network clients
+
+────────────────────────────────────────
+6. IMPORT AUDIT
+
+Verify absence of:
+
+requests
+
+websocket
+
+socket
+
+subprocess
+
+pickle
+
+marshal
+
+ctypes
+
+eval
+
+exec
+
+__import__
+
+open(...,"w")
+
+tempfile
+
+pathlib write operations
+
+Dynamic code execution.
+
+AST verification required.
+
+────────────────────────────────────────
+7. DATA SAFETY
+
+Verify:
+
+Unknown remains null/empty.
+
+No silent conversion to zero.
+
+No float introduction.
+
+Decimal preserved.
+
+Fixed-point strings preserved.
+
+No locale-dependent formatting.
+
+No payload mutation.
+
+────────────────────────────────────────
+8. API SECURITY
+
+Verify:
+
+GET-only behavior.
+
+Unsupported methods rejected.
+
+Sterile errors.
+
+No traceback leakage.
+
+No provider leakage.
+
+No Risk Engine leakage.
+
+No Exchange leakage.
+
+No secret leakage.
+
+Authentication behavior unchanged.
+
+────────────────────────────────────────
+9. UI SECURITY
+
+Verify:
+
+No execution controls.
+
+No editable portfolio controls.
+
+No BUY/SELL.
+
+No hidden execution actions.
+
+No provider internals.
+
+No innerHTML.
+
+textContent-only rendering.
+
+No client-side business logic.
+
+────────────────────────────────────────
+10. EXPORT SECURITY
+
+Verify:
+
+JSON deterministic.
+
+CSV deterministic.
+
+No temporary files.
+
+No filesystem writes.
+
+No alternate data path.
+
+Formula injection neutralized.
+
+UTF-8 correctness.
+
+────────────────────────────────────────
+11. DETERMINISM
+
+Verify:
+
+Identical inputs
+
+↓
+
+Identical outputs
+
+Core
+
+Service
+
+API
+
+UI
+
+Export
+
+No random.
+
+No UUID.
+
+No hidden timestamps.
+
+No unordered iteration.
+
+────────────────────────────────────────
+12. PENETRATION TESTS
+
+Include focused tests for:
+
+Malformed provider payload
+
+Unexpected exception
+
+Large Decimal
+
+Negative values
+
+Unknown values
+
+Formula injection
+
+JSON injection
+
+XSS payload
+
+Unsupported HTTP method
+
+Invalid export format
+
+Authentication bypass attempt
+
+Route fuzzing
+
+Unexpected status
+
+────────────────────────────────────────
+13. REGRESSION
+
+Run complete regression.
+
+All previous missions must remain green.
+
+────────────────────────────────────────
+14. DELIVERY REPORT
+
+── VERIFIED FILES ──
+
+── ARCHITECTURE AUDIT ──
+
+── IMPORT AUDIT ──
+
+── READ-ONLY AUDIT ──
+
+── API SECURITY ──
+
+── UI SECURITY ──
+
+── EXPORT SECURITY ──
+
+── DETERMINISM AUDIT ──
+
+── PENETRATION TEST RESULTS ──
+
+── SECURITY FIXES (IF ANY) ──
+
+None
+or
+Minimal verified fixes only
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0 hedeflenir
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 08 — Full Regression
+
+────────────────────────────────────────
+15. PASS CRITERIA
+
+PASS requires:
+
+• Full architecture audit PASS
+
+• Full import audit PASS
+
+• Read-only guarantees verified
+
+• No Exchange dependency
+
+• No append_snapshot usage
+
+• No filesystem writes
+
+• No temporary files
+
+• No network clients
+
+• No dynamic execution
+
+• No payload mutation
+
+• Deterministic outputs verified
+
+• Penetration tests PASS
+
+• Full regression PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+• Commit created and pushed to GitHub
+
+MISSION 1700 continues only after Agent 07 passes.
