@@ -248,15 +248,30 @@
     } else { wb.style.display = "none"; }
 
     var ga = d.global_futures || {};
-    // Kart 1: Binance Global (bağlantı / doğrulama)
-    if (ga.ok) {
-      setCard("global", ga,
+    var gs = d.global_spot || {};
+    // Kart 1: Binance Global — SPOT hesabı (HOTFIX 2100-HF-001)
+    if (gs.ok) {
+      var spotBody =
         kv("Bağlantı", okTxt(true, "Bağlı", "")) +
-        kv("Read-only doğrulama", okTxt(ga.read_only_auth === "OK", "Doğrulandı", ga.read_only_auth || "Hata")) +
-        kv("API anahtarı", '<span class="st-neutral">' + (ga.api_key_masked || "—") + "</span>") +
-        kv("Veri durumu", ga.meta.freshness === "FRESH"
-          ? '<span class="st-ok">GÜNCEL</span>' : '<span class="st-warn">ESKİ VERİ</span>'));
-    } else { setCard("global", ga, errHtml(ga, "Binance Global")); }
+        kv("Read-only doğrulama", okTxt(gs.read_only_auth === "OK", "Doğrulandı", gs.read_only_auth || "Hata")) +
+        kv("API anahtarı", '<span class="st-neutral">' + (gs.api_key_masked || "—") + "</span>") +
+        kv("Senkron durumu", gs.meta.freshness === "FRESH"
+          ? '<span class="st-ok">GÜNCEL</span>' : '<span class="st-warn">ESKİ VERİ</span>');
+      if (!gs.has_spot_assets) {
+        spotBody += '<p class="st-neutral" style="margin:6px 0">Spot Varlık Yok</p>';
+      } else {
+        spotBody +=
+          kv("Toplam Spot Değeri", trNum(gs.total_spot_value_usdt, " USDT") +
+            (gs.valuation === "PARTIAL" ? ' <span class="st-warn" style="font-size:.75rem">(KISMİ)</span>' : "")) +
+          kv("Kullanılabilir USDT", gs.usdt_free !== null && gs.usdt_free !== undefined ? trNum(gs.usdt_free, " USDT") : "—") +
+          kv("Kilitli USDT", gs.usdt_locked !== null && gs.usdt_locked !== undefined ? trNum(gs.usdt_locked, " USDT") : "—") +
+          kv("Varlık sayısı", gs.asset_count + " / " + gs.total_asset_count) +
+          kv("En büyük varlıklar", (gs.top_holdings || []).map(function (h) {
+            return '<span class="st-neutral" title="' + (h.value_usdt || "") + ' USDT">' + h.asset + "</span>";
+          }).join(", ") || "—");
+      }
+      setCard("global", gs, spotBody);
+    } else { setCard("global", gs, errHtml(gs, "Binance Global (Spot)")); }
 
     // Kart 2: Binance Futures (hesap)
     if (ga.ok) {

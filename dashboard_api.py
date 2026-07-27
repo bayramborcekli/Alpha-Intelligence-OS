@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import threading
 import time
@@ -28,6 +29,7 @@ LEDGER_PATH = ROOT / "alpha20_v1" / "mission1310b" / "ledger_events.json"
 M1310B_REPORT = ROOT / "alpha20_v1" / "mission1310b" / "mission_1310b_report.json"
 
 GLOBAL_BASE = "https://fapi.binance.com"
+SPOT_BASE = "https://api.binance.com"
 TR_BASE = "https://www.trbinance.com"
 
 # ── Yazma güvenliği ──────────────────────────────────────────────────────────
@@ -47,12 +49,17 @@ GLOBAL_ALLOWLIST = {
     ("GET", "/fapi/v1/openOrders"),
     ("GET", "/fapi/v1/positionSide/dualSide"),
 }
+SPOT_ALLOWLIST = {
+    ("GET", "/api/v3/account"),        # imzalı, salt-okunur hesap
+    ("GET", "/api/v3/ticker/price"),   # imzasız, halka açık fiyat
+}
 TR_ALLOWLIST = {
     ("GET", "/open/v1/account/spot"),
 }
 
 # ── Önbellek ve tazelik politikası (merkezî) ────────────────────────────────
 CACHE_TTL = {          # saniye — sunucu tarafı güvenli okuma önbelleği
+    "global_spot": 15,
     "global_account": 15,
     "global_positions": 10,
     "global_orders": 10,
@@ -60,6 +67,7 @@ CACHE_TTL = {          # saniye — sunucu tarafı güvenli okuma önbelleği
     "tr_movements": 300,
 }
 FRESH_LIMIT = {        # saniye — bu yaşın üstü ESKİ VERİ
+    "global_spot": 60,
     "global_account": 60,
     "global_positions": 60,
     "global_orders": 60,
@@ -173,6 +181,33 @@ def _signed_get(base: str, path: str, allowlist: set, key: str, secret: str,
         "EXCHANGE_UNAVAILABLE", ERROR_MESSAGES["EXCHANGE_UNAVAILABLE"])
 
 
+def _public_get(base: str, path: str, allowlist: set,
+                params: dict | None = None, timeout: int = 10) -> Any:
+    """Allowlist'li, İMZASIZ, halka açık salt-okunur GET (fiyat vb.).
+    Anahtar/imza/özel başlık taşımaz."""
+    if ("GET", path) not in allowlist:
+        raise RuntimeError(f"GÜVENLİK BLOĞU: allowlist dışı GET {path}")
+    try:
+        r = requests.get(base + path, params=dict(params or {}),
+                         timeout=timeout)
+        if r.status_code == 200:
+            try:
+                return r.json()
+            except ValueError:
+                raise SafeExchangeError(
+                    "INVALID_EXCHANGE_RESPONSE",
+                    ERROR_MESSAGES["INVALID_EXCHANGE_RESPONSE"])
+        raise _classify_http(r.status_code)
+    except SafeExchangeError:
+        raise
+    except requests.Timeout:
+        raise SafeExchangeError("EXCHANGE_TIMEOUT",
+                                ERROR_MESSAGES["EXCHANGE_TIMEOUT"])
+    except requests.RequestException:
+        raise SafeExchangeError("EXCHANGE_UNAVAILABLE",
+                                ERROR_MESSAGES["EXCHANGE_UNAVAILABLE"])
+
+
 # ── Önbellek çekirdeği ──────────────────────────────────────────────────────
 
 def _freshness_label(kind: str, age: float | None, ok: bool) -> str:
@@ -241,6 +276,103 @@ def mark_full_refresh() -> str:
     global _last_full_refresh
     _last_full_refresh = _now_iso()
     return _last_full_refresh
+
+
+# ── Binance Global (Spot hesabı — HOTFIX 2100-HF-001) ──────────────────────
+# Global panosu ASLA Futures hesap uçlarını kullanmaz; Spot hesabını gösterir.
+
+_spot_log = logging.getLogger("dashboard.spot")
+
+
+def global_spot_account() -> dict:
+    """BINANCE GLOBAL panosu için Spot hesabı (GET /api/v3/account).
+
+    Salt-okunur; emir/çekim/transfer yolu YOK. Sır/imza/özel başlık asla
+    loglanmaz."""
+    def build() -> dict:
+        key, sec = _global_creds()
+        if not key or not sec:
+            raise SafeExchangeError("EXCHANGE_AUTH_FAILED",
+                                    "Salt-okunur anahtar yapılandırılmamış "
+                                    "(fail closed).")
+        _spot_log.info("Spot Account Request: GET /api/v3/account")
+        t0 = time.monotonic()
+        try:
+            acc = _signed_get(SPOT_BASE, "/api/v3/account", SPOT_ALLOWLIST,
+                              key, sec)
+        except SafeExchangeError as exc:
+            _spot_log.warning("Spot Account Failure: code=%s", exc.code)
+            raise
+        latency = int((time.monotonic() - t0) * 1000)
+        balances = acc.get("balances", [])
+        if not isinstance(balances, list):
+            _spot_log.warning("Spot Account Failure: code=%s",
+                              "INVALID_EXCHANGE_RESPONSE")
+            raise SafeExchangeError(
+                "INVALID_EXCHANGE_RESPONSE",
+                ERROR_MESSAGES["INVALID_EXCHANGE_RESPONSE"])
+        nonzero = [b for b in balances
+                   if _dec_val(b.get("free")) + _dec_val(b.get("locked")) != 0]
+        usdt = next((b for b in balances if b.get("asset") == "USDT"), None)
+        # Fiyatlama: halka açık, İMZASIZ fiyat listesi; başarısızsa toplam
+        # değer KISMİ olarak işaretlenir (asla uydurulmaz).
+        prices: dict[str, Decimal] = {}
+        valuation = "FULL"
+        if any(b.get("asset") != "USDT" for b in nonzero):
+            try:
+                ticker = _public_get(SPOT_BASE, "/api/v3/ticker/price",
+                                     SPOT_ALLOWLIST)
+                if isinstance(ticker, list):
+                    # Bozuk/sıfır fiyat sözlüğe ALINMAZ → varlık
+                    # fiyatlanamaz sayılır ve toplam KISMİ işaretlenir
+                    # (sessizce 0 değerleme yok).
+                    prices = {
+                        t.get("symbol"): _dec_val(t.get("price"))
+                        for t in ticker
+                        if isinstance(t, dict)
+                        and _dec_val(t.get("price")) > 0}
+                else:
+                    valuation = "PARTIAL"
+            except SafeExchangeError:
+                valuation = "PARTIAL"
+        holdings = []
+        total = Decimal(0)
+        for b in nonzero:
+            asset = b.get("asset")
+            qty = _dec_val(b.get("free")) + _dec_val(b.get("locked"))
+            if asset == "USDT":
+                value = qty
+            else:
+                px = prices.get(f"{asset}USDT")
+                if px is None:
+                    valuation = "PARTIAL"
+                    value = None
+                else:
+                    value = qty * px
+            if value is not None:
+                total += value
+            holdings.append({"asset": asset, "amount": str(qty),
+                             "value_usdt": (str(value)
+                                            if value is not None else None)})
+        holdings.sort(key=lambda h: Decimal(h["value_usdt"] or 0),
+                      reverse=True)
+        _spot_log.info("Spot Account Success: assets=%d total_usdt=%s "
+                       "latency_ms=%d", len(nonzero), str(total), latency)
+        return {
+            "_latency_ms": latency,
+            "read_only_auth": "OK",
+            "can_trade_flag": bool(acc.get("canTrade")),
+            "has_spot_assets": len(nonzero) > 0,
+            "total_spot_value_usdt": _dec(total),
+            "valuation": valuation,
+            "usdt_free": _dec(usdt.get("free")) if usdt else None,
+            "usdt_locked": _dec(usdt.get("locked")) if usdt else None,
+            "asset_count": len(nonzero),
+            "total_asset_count": len(balances),
+            "top_holdings": holdings[:5],
+            "api_key_masked": mask(key),
+        }
+    return _serve("global_spot", "BINANCE_GLOBAL_SPOT", build)
 
 
 # ── Binance Global (USDT-M Futures) ─────────────────────────────────────────
@@ -504,13 +636,15 @@ def system_status(app_info: dict) -> dict:
 def overview(app_info: dict) -> dict:
     """Tüm kaynakların sterilize toplaması. Tek kaynak hatası diğerlerini
     ETKİLEMEZ; birleşik yanıltıcı portföy toplamı üretilmez."""
+    gs = global_spot_account()
     ga = global_account()
     gp = global_positions()
     go = global_orders()
     ta = tr_account()
     tm = tr_movements_summary()
     warnings: list[str] = []
-    for name, m in (("Binance Global", ga), ("Pozisyonlar", gp),
+    for name, m in (("Binance Global (Spot)", gs),
+                    ("Binance Futures", ga), ("Pozisyonlar", gp),
                     ("Emirler", go), ("Binance TR", ta),
                     ("TR Hareketleri", tm)):
         if not m.get("ok"):
@@ -532,6 +666,7 @@ def overview(app_info: dict) -> dict:
             "withdrawals_enabled": False,
             "server_time": _now_iso(),
         },
+        "global_spot": gs,
         "global_futures": ga,
         "positions": gp,
         "orders": go,
