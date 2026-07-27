@@ -1,0 +1,329 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1800 — STRATEGY INTELLIGENCE
+
+AGENT 05 — STRATEGY UI
+
+ROLE
+
+You are the UI Agent for Mission 1800.
+
+Implement the Strategy Intelligence user interface exactly as defined by
+Agent 01 architecture and Agent 04 API.
+
+The UI is a read-only presentation layer.
+
+No business rules.
+
+No strategy calculations.
+
+No execution.
+
+No persistence.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1700
+
+OFFICIALLY CLOSED
+
+Mission 1800
+
+Agent 01 — PASS
+
+Agent 02 — PASS
+
+Agent 03 — PASS
+
+Agent 04 — PASS
+
+Baseline Commit
+
+<Agent 04 HEAD>
+
+Regression Baseline
+
+<Agent 04 final PASS>
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Expose Strategy Intelligence through the existing web interface.
+
+The UI SHALL:
+
+Call the Strategy API only.
+
+Render StrategyProposal.
+
+Display advisory information.
+
+Nothing else.
+
+────────────────────────────────────────
+3. FILES
+
+Modify only existing UI assets required for integration
+(e.g. templates/static JS already used by the project).
+
+Create:
+
+tests/test_mission1800_strategy_ui.py
+
+No Core changes.
+
+No Service changes.
+
+No API changes.
+
+No Export.
+
+────────────────────────────────────────
+4. UI REQUIREMENTS
+
+Add a read-only Strategy Intelligence panel.
+
+Display:
+
+Strategy Version
+
+Generated At
+
+Confidence
+
+Data Quality
+
+Market Regime
+
+Overall Risk
+
+Warnings
+
+Limitations
+
+Recommendations
+
+For each recommendation show:
+
+Instrument
+
+Action
+
+Priority
+
+Confidence
+
+Current Weight
+
+Target Weight
+
+Risk Level
+
+Reason Codes
+
+Expected Effect
+
+Invalidation Conditions
+
+If recommendations are empty:
+
+Display:
+
+"No recommendations."
+
+────────────────────────────────────────
+5. PRESENTATION RULES
+
+The UI SHALL:
+
+Consume API JSON only.
+
+Never calculate values.
+
+Never reorder recommendations.
+
+Never modify confidence.
+
+Never generate identifiers.
+
+Never infer missing values.
+
+Render null as:
+
+"Unknown"
+
+Render empty lists gracefully.
+
+Read-only.
+
+────────────────────────────────────────
+6. FAILURE HANDLING
+
+Display sterile messages only.
+
+Examples:
+
+Strategy unavailable.
+
+Partial data available.
+
+Unknown data quality.
+
+Never display:
+
+Stack traces
+
+Provider names
+
+Internal exceptions
+
+Service implementation
+
+────────────────────────────────────────
+7. SECURITY
+
+UI SHALL NOT:
+
+Call Exchange
+
+Execute trades
+
+Generate orders
+
+Persist anything
+
+Write files
+
+Create temp files
+
+Expose provider internals
+
+Inject HTML from API
+
+Render unsafe content
+
+────────────────────────────────────────
+8. TESTS
+
+Create tests covering:
+
+Panel rendering
+
+Recommendation rendering
+
+Empty recommendations
+
+Null rendering
+
+Unknown rendering
+
+Warnings
+
+Limitations
+
+UNAVAILABLE response
+
+PARTIAL response
+
+XSS escaping
+
+Stable ordering
+
+Read-only behavior
+
+No calculations
+
+Regression compatibility
+
+Target:
+
+20+ new tests
+
+100% PASS
+
+────────────────────────────────────────
+9. DELIVERY REPORT
+
+── CREATED FILES ──
+
+── MODIFIED FILES ──
+
+── UI IMPLEMENTATION ──
+
+── PRESENTATION ──
+
+── SECURITY ──
+
+── TESTS ──
+
+── PRODUCTION CODE CHANGES ──
+
+UI only
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 06 — Strategy Export
+
+────────────────────────────────────────
+10. PASS CRITERIA
+
+PASS requires:
+
+• Strategy Intelligence panel implemented
+
+• API is the only data source
+
+• No strategy calculations in UI
+
+• No execution logic
+
+• No persistence
+
+• No Exchange
+
+• Read-only rendering
+
+• Null → "Unknown"
+
+• XSS-safe rendering
+
+• 20+ tests PASS
+
+• Regression remains PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+Mission 1800 continues only after Agent 05 passes.
