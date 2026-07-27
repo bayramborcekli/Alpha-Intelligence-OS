@@ -1,0 +1,274 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1900 — MONITORING & ALERTING
+
+AGENT 01 — ARCHITECTURE
+
+ROLE
+
+Design the Monitoring & Alerting architecture.
+
+This mission observes Strategy Intelligence.
+
+It does not generate strategies.
+
+It does not execute trades.
+
+It does not interact with exchanges.
+
+────────────────────────────────────────
+
+1. BASELINE
+
+Mission 1800
+
+OFFICIALLY CLOSED
+
+Commit
+
+327e160
+
+Regression
+
+1596 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+
+2. OBJECTIVE
+
+Create the architecture for continuous observation of Strategy Intelligence.
+
+Monitoring SHALL evaluate strategy quality over time.
+
+Alerting SHALL detect abnormal behavior.
+
+The mission SHALL remain completely read-only.
+
+────────────────────────────────────────
+
+3. ARCHITECTURE
+
+Flow
+
+Portfolio Intelligence
+        │
+        ▼
+Strategy Intelligence
+        │
+        ▼
+Monitoring Engine
+        │
+        ▼
+Alert Engine
+        │
+        ▼
+Monitoring API
+        │
+        ▼
+Monitoring UI
+
+Monitoring never feeds data back into Strategy Core.
+
+No circular dependencies.
+
+────────────────────────────────────────
+
+4. COMPONENTS
+
+Monitoring Engine
+
+Responsibilities:
+
+• Observe StrategyProposal objects
+
+• Observe recommendation outcomes
+
+• Track historical quality metrics
+
+• Detect degradation
+
+• Produce immutable MonitoringReport
+
+Alert Engine
+
+Responsibilities:
+
+• Evaluate MonitoringReport
+
+• Produce AlertReport
+
+• No notifications outside the application
+
+• No email
+
+• No SMS
+
+• No webhook
+
+• No broker interaction
+
+────────────────────────────────────────
+
+5. MONITORING REPORT
+
+MonitoringReport SHALL include:
+
+monitoring_version
+
+strategy_version
+
+analysis_version
+
+observed_at
+
+observation_window
+
+recommendation_count
+
+evaluated_count
+
+success_rate
+
+average_return
+
+maximum_drawdown
+
+confidence_accuracy
+
+market_regime
+
+health_status
+
+alerts
+
+limitations
+
+Unknown values SHALL remain null.
+
+────────────────────────────────────────
+
+6. ALERT MODEL
+
+Alert fields:
+
+alert_id
+
+severity
+
+code
+
+title
+
+description
+
+affected_component
+
+trigger_reason
+
+recommended_action
+
+No execution instructions.
+
+No trading instructions.
+
+────────────────────────────────────────
+
+7. LAYER OWNERSHIP
+
+Monitoring Core
+
+Pure calculations.
+
+Monitoring Service
+
+Provider orchestration.
+
+Monitoring API
+
+Transport only.
+
+Monitoring UI
+
+Presentation only.
+
+Monitoring Export
+
+Serialization only.
+
+────────────────────────────────────────
+
+8. SECURITY
+
+Mission SHALL NOT:
+
+Execute trades
+
+Generate orders
+
+Connect to exchanges
+
+Write snapshots
+
+Persist files
+
+Use broker SDKs
+
+Create threads
+
+Open sockets
+
+Perform background scheduling
+
+────────────────────────────────────────
+
+9. FUTURE COMPATIBILITY
+
+Monitoring SHALL provide input for:
+
+Mission 2000
+
+Execution Foundation
+
+without changing Monitoring architecture.
+
+Monitoring remains advisory.
+
+────────────────────────────────────────
+
+10. PASS CRITERIA
+
+PASS requires:
+
+• Architecture documented
+
+• Component boundaries defined
+
+• MonitoringReport defined
+
+• Alert model defined
+
+• Layer ownership defined
+
+• Read-only architecture preserved
+
+• No execution
+
+• No persistence
+
+• No Exchange connectivity
+
+• Regression unchanged
+
+Mission 1900 continues only after Agent 01 passes.
