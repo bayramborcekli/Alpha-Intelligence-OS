@@ -1,145 +1,202 @@
 {% extends "dash_base.html" %}
 {% block title %}Trading Home{% endblock %}
-{% block heading %}🏡 Trading Home{% endblock %}
-{% block subheading %}Yapay zekânız şu an ne yapıyor? Bu ekran yalnız bunu anlatır. Teknik ayrıntılar Operation Center menüsündedir.{% endblock %}
 
 {% block content %}
 <style>
-  /* ── Sahip odaklı, sade, masaüstü-öncelikli yerleşim ── */
-  .th-card { background:var(--card,#14161c); border:1px solid var(--line,#2a2d36);
-             border-radius:10px; padding:14px 16px; }
-  .th-card h2 { margin:0 0 10px; font-size:.9rem; letter-spacing:.05em;
-                text-transform:uppercase; color:var(--muted,#8b90a0); }
+  /* ── Mission 2300 A04: Binance-stili karanlık finans uygulaması ──
+     Sayfa doğrudan finansal bilgiyle açılır: büyük başlık bloğu,
+     karşılama afişi ve açıklama paragrafı yok. */
+  main.content > h1, main.content > p.sub { display:none; }
+  main.content { max-width:none; padding:14px 16px; }
+
+  :root { --amber:#f0b90b; }
   .th-unknown { color:#9aa0ae; }
   .th-profit { color:#3fbf7f; font-weight:700; }
   .th-loss { color:#e05656; font-weight:700; }
-  .th-badge { display:inline-block; padding:2px 10px; border-radius:999px;
-              font-size:.72rem; font-weight:700; letter-spacing:.03em; }
+
+  /* ── Üst özet çubuğu: tek sürekli yatay satır ── */
+  #th-topbar { position:sticky; top:0; z-index:30; display:flex;
+      align-items:stretch; gap:0; background:#12161d;
+      border:1px solid var(--border,#30363d); border-radius:10px;
+      padding:8px 6px; overflow-x:auto; }
+  #th-topbar .cell { padding:2px 18px; min-width:104px;
+      border-left:1px solid rgba(48,54,61,.6); }
+  #th-topbar .cell:first-child { border-left:none; }
+  #th-topbar .brand { display:flex; align-items:center;
+      font-weight:900; letter-spacing:.08em; font-size:.78rem;
+      color:var(--amber); text-transform:uppercase; }
+  #th-topbar b { display:block; font-size:.6rem;
+      color:var(--muted,#8b949e); text-transform:uppercase;
+      letter-spacing:.06em; font-weight:600; }
+  #th-topbar .cell span:last-child { font-size:1rem; font-weight:700; }
+
+  /* ── Kişisel hesap şeridi: TEK yatay satır ── */
+  #th-accounts-strip { display:flex; align-items:center; gap:10px;
+      margin-top:10px; background:#12161d;
+      border:1px solid var(--border,#30363d); border-radius:10px;
+      padding:8px 12px; }
+  #th-wallets { display:flex; flex-direction:row; align-items:center;
+      gap:10px; overflow-x:auto; flex:1; min-width:0; }
+  .th-acct { display:flex; align-items:center; gap:10px;
+      background:#191f29; border:1px solid rgba(48,54,61,.7);
+      border-radius:8px; padding:7px 12px; white-space:nowrap;
+      flex:0 0 auto; }
+  .th-acct .nm { font-weight:700; font-size:.8rem; }
+  .th-acct .bal { font-weight:800; font-size:.88rem; }
+  .th-acct .st { font-size:.68rem; display:flex; gap:5px;
+      align-items:center; color:var(--muted,#8b949e); }
+  .th-dot { width:7px; height:7px; border-radius:50%;
+      background:#9aa0ae; display:inline-block; }
+  .th-dot.ok { background:#3fbf7f; }
+  #th-manage-accounts { flex:0 0 auto; font-size:.78rem;
+      font-weight:700; color:var(--amber); border:1px solid
+      rgba(240,185,11,.45); border-radius:8px; padding:7px 12px; }
+
+  /* ── Ana ızgara: sol %75 işlemler, sağ %25 AI paneli ── */
+  .th-main { display:grid; gap:10px; margin-top:10px;
+      grid-template-columns:minmax(0,3fr) minmax(230px,1fr);
+      align-items:start; }
+  @media (max-width:1100px) { .th-main { grid-template-columns:1fr; } }
+
+  .th-card { background:#12161d; border:1px solid
+      var(--border,#30363d); border-radius:10px; padding:12px 14px; }
+  .th-card h2 { margin:0 0 8px; font-size:.78rem; letter-spacing:.06em;
+      text-transform:uppercase; color:var(--muted,#8b949e);
+      font-weight:600; }
+
+  .th-table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  .th-table th, .th-table td { padding:8px 8px; text-align:right;
+      border-bottom:1px solid rgba(48,54,61,.5); white-space:nowrap; }
+  .th-table th:first-child, .th-table td:first-child { text-align:left; }
+  .th-table th { color:var(--muted,#8b949e); font-size:.64rem;
+      text-transform:uppercase; font-weight:600; }
+  .th-table td b { font-size:.95rem; }
+  .th-empty { color:var(--muted,#8b949e); padding:8px 0;
+      font-size:.83rem; }
+  .th-skel { color:var(--muted,#8b949e); font-style:italic; }
+
+  .th-badge { display:inline-block; padding:2px 10px;
+      border-radius:999px; font-size:.7rem; font-weight:700;
+      letter-spacing:.03em; }
   .th-badge.wait { background:#1b2430; color:#5ab0e0; }
   .th-badge.prep { background:#33291a; color:#d9a441; }
   .th-badge.exec { background:#153322; color:#3fbf7f; }
   .th-badge.close { background:#2c1e33; color:#c58ae0; }
   .th-badge.gray { background:#20232c; color:#9aa0ae; }
-  /* Üst çubuk: yapışkan */
-  #th-topbar { position:sticky; top:0; z-index:30; display:flex; flex-wrap:wrap;
-      gap:8px 22px; align-items:center; background:var(--card,#14161c);
-      border:1px solid var(--line,#2a2d36); border-radius:10px;
-      padding:10px 16px; font-size:.9rem; }
-  #th-topbar b { display:block; font-size:.62rem; color:var(--muted,#8b90a0);
-                 text-transform:uppercase; letter-spacing:.05em; }
-  #th-topbar .cell { min-width:110px; }
-  /* Üç sütun */
-  .th-main { display:grid; gap:12px; margin-top:12px;
-             grid-template-columns:minmax(240px,1fr) minmax(430px,2.4fr) minmax(240px,1fr);
-             align-items:start; }
-  @media (max-width:1100px) { .th-main { grid-template-columns:1fr; } }
-  .th-wallet { border:1px solid var(--line,#2a2d36); border-radius:8px;
-               background:var(--soft,#1b1e26); padding:10px 12px; margin-bottom:8px; }
-  .th-wallet .name { font-weight:800; margin-bottom:4px; }
-  .th-wallet .row { display:flex; justify-content:space-between; gap:8px;
-                    font-size:.8rem; margin:2px 0; }
-  .th-wallet .row span:first-child { color:var(--muted,#8b90a0); }
-  .th-table { width:100%; border-collapse:collapse; font-size:.86rem; }
-  .th-table th, .th-table td { padding:8px 8px; text-align:left;
-      border-bottom:1px solid var(--line,#2a2d36); white-space:nowrap; }
-  .th-table th { color:var(--muted,#8b90a0); font-size:.66rem;
-                 text-transform:uppercase; }
-  .th-empty { color:var(--muted,#8b90a0); padding:8px 0; }
-  .th-btn { border:1px solid #7a2e2e; background:var(--soft,#1b1e26);
-            color:#e05656; border-radius:7px; padding:5px 12px;
-            cursor:pointer; font-size:.8rem; }
+  .th-long { color:#3fbf7f; font-weight:700; }
+  .th-short { color:#e05656; font-weight:700; }
+
+  .th-btn { border:1px solid #7a2e2e; background:#191f29;
+      color:#e05656; border-radius:7px; padding:4px 12px;
+      cursor:pointer; font-size:.78rem; min-height:0; }
   .th-btn:disabled { opacity:.45; cursor:not-allowed; }
-  .th-queue-item { display:flex; justify-content:space-between; gap:8px;
-      align-items:center; border-bottom:1px solid var(--line,#2a2d36);
-      padding:7px 2px; font-size:.85rem; }
-  #th-activity li { padding:6px 2px; border-bottom:1px solid var(--line,#2a2d36);
-      font-size:.85rem; list-style:none; }
-  #th-activity { margin:0; padding:0; }
-  #th-activity time { color:var(--muted,#8b90a0); font-size:.72rem;
-      margin-right:8px; }
-  dialog.th-confirm { background:var(--card,#14161c); color:inherit;
-      border:1px solid var(--line,#2a2d36); border-radius:10px; max-width:420px; }
-  dialog.th-confirm input, dialog.th-confirm textarea { width:100%; margin:6px 0;
-      background:var(--soft,#1b1e26); color:inherit; border:1px solid
-      var(--line,#2a2d36); border-radius:6px; padding:6px 8px; }
-  /* ── Mission 2300 A02: büyük mod kartı + büyük tipografi ── */
-  #th-mode-card { display:flex; flex-wrap:wrap; align-items:center;
-      justify-content:space-between; gap:12px; margin-top:12px;
-      background:var(--card,#14161c); border:1px solid var(--line,#2a2d36);
-      border-radius:12px; padding:18px 22px; }
-  #th-mode-card .mode { font-size:2rem; font-weight:900;
-      letter-spacing:.04em; }
-  #th-mode-card .mode.autonomous { color:#3fbf7f; }
-  #th-mode-card .mode.advisor { color:#d9a441; }
-  #th-mode-card .caption { color:var(--muted,#8b90a0); font-size:.8rem; }
-  .th-status-badge { display:inline-block; padding:5px 14px;
-      border-radius:999px; font-size:.85rem; font-weight:800; }
-  .th-status-badge.run { background:#153322; color:#3fbf7f; }
-  .th-status-badge.pause { background:#33291a; color:#d9a441; }
-  .th-status-badge.err { background:#3a1a1a; color:#e05656; }
-  .th-status-badge.off { background:#20232c; color:#9aa0ae; }
-  #th-topbar .cell span:last-child { font-size:1.05rem; font-weight:700; }
-  .th-table td { font-size:.95rem; }
-  .th-table td b { font-size:1.02rem; }
+
+  /* ── AI durum paneli (sağ) ── */
+  #th-ai .mode { font-size:1.5rem; font-weight:900;
+      letter-spacing:.04em; margin:2px 0 6px; }
+  #th-ai .mode.autonomous { color:#3fbf7f; }
+  #th-ai .mode.advisor { color:var(--amber); }
+  #th-ai .sent { color:var(--muted,#8b949e); font-size:.8rem;
+      margin-bottom:10px; }
+  #th-ai .row { display:flex; justify-content:space-between; gap:8px;
+      font-size:.82rem; padding:5px 0;
+      border-bottom:1px dashed rgba(48,54,61,.6); }
+  #th-ai .row span:first-child { color:var(--muted,#8b949e); }
+  #th-ai .row span:last-child { font-weight:700; }
+  #th-ai a.detail { display:inline-block; margin-top:10px;
+      font-size:.78rem; color:var(--amber); }
+
+  dialog.th-confirm { background:#12161d; color:inherit;
+      border:1px solid var(--border,#30363d); border-radius:10px;
+      max-width:420px; }
+  dialog.th-confirm input, dialog.th-confirm textarea { width:100%;
+      margin:6px 0; background:#191f29; color:inherit;
+      border:1px solid var(--border,#30363d); border-radius:6px;
+      padding:6px 8px; }
 </style>
 
-<!-- ── YAPIŞKAN ÜST ÇUBUK ─────────────────────────────────────── -->
+<!-- ── ÜST ÖZET ÇUBUĞU: tek yatay satır ─────────────────────────── -->
 <header id="th-topbar" aria-label="Portföy özeti">
-  <span class="cell"><b>Portföy Değeri</b><span id="th-portfolio-value" class="th-unknown">UNKNOWN</span></span>
+  <span class="cell brand">Alpha Intelligence OS</span>
+  <span class="cell"><b>Portföy</b><span id="th-portfolio-value" class="th-unknown">UNKNOWN</span></span>
   <span class="cell"><b>Bugünkü Kazanç</b><span id="th-daily-pnl" class="th-unknown">UNKNOWN</span></span>
   <span class="cell"><b>Aktif İşlemler</b><span id="th-active-count" class="th-unknown">UNKNOWN</span></span>
   <span class="cell"><b>Sıradaki İşlemler</b><span id="th-queued-count" class="th-unknown">UNKNOWN</span></span>
-  <span class="cell"><b>Otonom Mod</b><span id="th-auto-mode" class="th-unknown">UNKNOWN</span></span>
-  <span class="cell"><b>Bot Durumu</b><span id="th-bot-status" class="th-unknown">UNKNOWN</span></span>
-  <span class="cell"><b>Cüzdan Bağlantısı</b><span id="th-wallet-conn" class="th-unknown">UNKNOWN</span></span>
+  <span class="cell"><b>Otomasyon Modu</b><span id="th-auto-mode" class="th-unknown">UNKNOWN</span></span>
+  <span class="cell"><b>Sistem Durumu</b><span id="th-bot-status" class="th-unknown">UNKNOWN</span></span>
+  <span class="cell"><b>Son Güncelleme</b><span id="th-last-update" class="th-unknown">UNKNOWN</span></span>
 </header>
 
-<!-- ── OTOMASYON MODU: TEK BÜYÜK DURUM KARTI ─────────────────── -->
-<section id="th-mode-card" aria-labelledby="th-h-mode">
-  <div>
-    <div class="caption" id="th-h-mode">Otomasyon Modu</div>
-    <div class="mode" id="th-mode-big">UNKNOWN</div>
+<!-- ── KİŞİSEL HESAP ŞERİDİ: yatay, tek satır ───────────────────── -->
+<section id="th-accounts-strip" aria-label="Hesaplarım">
+  <span class="st" style="flex:0 0 auto;font-size:.68rem;
+      color:var(--muted,#8b949e)">
+    <span class="th-dot" id="th-wallet-conn" role="img"
+          aria-label="hesap bağlantı durumu"></span></span>
+  <div id="th-wallets" aria-live="polite">
+    <span class="th-skel">Yükleniyor…</span>
   </div>
-  <div>
-    <div class="caption">Sistem Durumu</div>
-    <span class="th-status-badge off" id="th-status-badge">UNKNOWN</span>
-  </div>
+  <a id="th-manage-accounts" href="/settings/accounts">Hesapları
+    Yönet →</a>
 </section>
 
 <div class="th-main">
+  <div>
+    <!-- ── AKTİF İŞLEMLER: en büyük alan ─────────────────────────── -->
+    <section class="th-card" aria-labelledby="th-h-trades">
+      <h2 id="th-h-trades">Aktif İşlemler</h2>
+      <table class="th-table" id="th-trades">
+        <thead><tr><th scope="col">Varlık</th><th scope="col">Yön</th>
+          <th scope="col">Giriş Fiyatı</th>
+          <th scope="col">Anlık Fiyat</th>
+          <th scope="col">Anlık Kazanç</th><th scope="col">Süre</th>
+          <th scope="col">Durum</th><th scope="col">İşlem</th></tr>
+        </thead>
+        <tbody><tr><td colspan="8" class="th-skel">Yükleniyor…</td>
+        </tr></tbody>
+      </table>
+    </section>
 
-  <!-- ── SOL: CÜZDANLAR ─────────────────────────────────────────── -->
-  <section class="th-card" aria-labelledby="th-h-wallets">
-    <h2 id="th-h-wallets">Cüzdanlar</h2>
-    <div id="th-wallets" aria-live="polite">
-      <div class="th-empty">Yükleniyor…</div>
-    </div>
+    <!-- ── SIRADAKİ İŞLEMLER ─────────────────────────────────────── -->
+    <section class="th-card" style="margin-top:10px"
+             aria-labelledby="th-h-queue">
+      <h2 id="th-h-queue">Sıradaki İşlemler</h2>
+      <table class="th-table" id="th-queue-table">
+        <thead><tr><th scope="col">Varlık</th><th scope="col">Yön</th>
+          <th scope="col">Durum</th></tr></thead>
+        <tbody id="th-queue" aria-live="polite">
+          <tr><td colspan="3" class="th-skel">Yükleniyor…</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- ── AI DURUM PANELİ (sağ) ───────────────────────────────────── -->
+  <section class="th-card" id="th-ai" aria-labelledby="th-h-ai">
+    <h2 id="th-h-ai">🤖 AI Durumu</h2>
+    <div class="mode" id="th-ai-mode">UNKNOWN</div>
+    <div class="sent" id="th-ai-sentence">Durum alınamadı.</div>
+    <div class="row"><span>İzlenen Piyasalar</span>
+      <span id="th-ai-scanned" class="th-unknown">UNKNOWN</span></div>
+    <div class="row"><span>Uygun Fırsatlar</span>
+      <span id="th-ai-eligible" class="th-unknown">UNKNOWN</span></div>
+    <div class="row"><span>Son Güncelleme</span>
+      <span id="th-ai-last" class="th-unknown">UNKNOWN</span></div>
+    <a class="detail" href="/operation-center">Ayrıntılı Durum →</a>
   </section>
-
-  <!-- ── ORTA: AKTİF İŞLEMLER ───────────────────────────────────── -->
-  <section class="th-card" aria-labelledby="th-h-trades">
-    <h2 id="th-h-trades">Aktif İşlemler</h2>
-    <table class="th-table" id="th-trades">
-      <thead><tr><th>Varlık</th><th>Yön</th><th>Giriş Fiyatı</th>
-        <th>Anlık Kazanç</th><th>Süre</th><th>Durum</th><th></th></tr></thead>
-      <tbody><tr><td colspan="7" class="th-empty">Yükleniyor…</td></tr></tbody>
-    </table>
-  </section>
-
-  <!-- ── SAĞ: SIRA ──────────────────────────────────────────────── -->
-  <section class="th-card" aria-labelledby="th-h-queue">
-    <h2 id="th-h-queue">Sıra</h2>
-    <div id="th-queue" aria-live="polite">
-      <div class="th-empty">Yükleniyor…</div>
-    </div>
-  </section>
-
 </div>
 
-<!-- ── ALT: SON HAREKETLER ──────────────────────────────────────── -->
-<section class="th-card" style="margin-top:12px" aria-labelledby="th-h-activity">
+<!-- ── SON HAREKETLER: tam genişlik tablo ───────────────────────── -->
+<section class="th-card" style="margin-top:10px"
+         aria-labelledby="th-h-activity">
   <h2 id="th-h-activity">Son Hareketler</h2>
-  <ul id="th-activity"><li class="th-empty">Yükleniyor…</li></ul>
+  <table class="th-table">
+    <thead><tr><th scope="col">Zaman</th><th scope="col">Varlık</th>
+      <th scope="col">Olay</th><th scope="col">Sonuç</th></tr></thead>
+    <tbody id="th-activity">
+      <tr><td colspan="4" class="th-skel">Yükleniyor…</td></tr>
+    </tbody>
+  </table>
 </section>
 
 <dialog class="th-confirm" id="th-dialog">
@@ -151,7 +208,7 @@
     <label>Onay için yazın: <b>ONAYLIYORUM</b>
       <input id="th-dialog-phrase" autocomplete="off" required></label>
     <p style="text-align:right">
-      <button value="cancel" class="th-btn" style="border-color:var(--line,#2a2d36);color:inherit">Vazgeç</button>
+      <button value="cancel" class="th-btn" style="border-color:var(--border,#30363d);color:inherit">Vazgeç</button>
       <button value="ok" class="th-btn" id="th-dialog-ok">Kapat</button>
     </p>
   </form>

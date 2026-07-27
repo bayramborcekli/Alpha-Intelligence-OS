@@ -1,4 +1,4 @@
-/* Mission 2300 Agent 01 — Trading Home istemcisi.
+/* Mission 2300 Agent 04 — Trading Home istemcisi (görsel göç).
  *
  * Felsefe: kullanıcı trader DEĞİL, portföy sahibidir. Yapay zekâ
  * işlem yapar. Bu sayfa hiçbir teknik gösterge İÇERMEZ.
@@ -7,6 +7,8 @@
  * - Yalnız MEVCUT uçlar kullanılır; backend değişikliği yok.
  * - Yoklama ile güncellenir (bu depoda SSE/WebSocket yasak).
  * - Bilinmeyen değer UNKNOWN; sahte 0 üretilmez.
+ * - Ham kayan nokta ASLA gösterilmez: tüm sayılar tr-TR biçiminde,
+ *   merkezî biçimlendiriciden geçer.
  * - Kapat düğmesi mevcut kontrollü kapatma NİYETİ ucuna bağlıdır
  *   (neden + ONAYLIYORUM + idempotency anahtarı zorunlu).
  */
@@ -21,6 +23,38 @@
         return { "&": "&amp;", "<": "&lt;", ">": "&gt;",
                  '"': "&quot;", "'": "&#39;" }[c];
       });
+  }
+
+  // ── Merkezî sayı/tarih biçimlendirme (tr-TR) ───────────────────
+  // Ham float görüntülemek yasak: 9830.331906875032 → 9.830,33
+
+  function fmtMoney(v, unit) {
+    var n = parseFloat(v);
+    if (v === null || v === undefined || v === "UNKNOWN" ||
+        isNaN(n)) return "UNKNOWN";
+    return n.toLocaleString("tr-TR", { minimumFractionDigits: 2,
+      maximumFractionDigits: 2 }) + (unit ? " " + unit : "");
+  }
+
+  function fmtPrice(v) {
+    var n = parseFloat(v);
+    if (v === null || v === undefined || v === "UNKNOWN" ||
+        isNaN(n)) return "UNKNOWN";
+    return n.toLocaleString("tr-TR", { minimumFractionDigits: 2,
+      maximumFractionDigits: 8 });
+  }
+
+  function fmtSigned(v, unit) {
+    var n = parseFloat(v);
+    if (v === null || v === undefined || v === "UNKNOWN" ||
+        isNaN(n)) return "UNKNOWN";
+    return (n > 0 ? "+" : "") + fmtMoney(v, unit);
+  }
+
+  function fmtTime(iso) {
+    var t = Date.parse(iso);
+    if (isNaN(t)) return "UNKNOWN";
+    return new Date(t).toLocaleTimeString("tr-TR");
   }
 
   function get(path) {
@@ -57,42 +91,59 @@
     return m + " dk";
   }
 
-  // ── Cüzdanlar (sol) — TEK kaynak: bağlı kişisel hesaplar ───────
+  // ── Hesap şeridi — TEK kaynak: bağlı kişisel hesaplar ──────────
   // (Mission 2300 A03: /api/accounts/wallets; borsa sayfalarına
-  // doğrudan bağımlılık yok, yeni borsa = UI değişikliği yok.)
+  // doğrudan bağımlılık yok, yeni borsa = UI değişikliği yok.
+  //  A04: dikey cüzdan sütunu kaldırıldı; tek yatay şerit.)
+
+  function stripBalance(a) {
+    // İlk cüzdan satırı şeritte özet bakiye olarak gösterilir;
+    // bilinmeyen değer UNKNOWN kalır, sıfıra çevrilmez.
+    var w = (a.wallets || [])[0];
+    if (!w) return "UNKNOWN";
+    var unit = /TRY/i.test(w.name) ? "TRY" : "USDT";
+    var out = fmtMoney(w.balance, unit);
+    return out === "UNKNOWN" ? "UNKNOWN" : out;
+  }
 
   function renderWallets(accounts) {
     var el = document.getElementById("th-wallets");
     if (!el) return;
     if (!accounts || !accounts.length) {
-      el.innerHTML = "<div class=\"th-empty\">Bağlı hesap yok. " +
-        "Ayarlar · Hesaplarım'dan hesap bağlayın.</div>";
-      setText("th-wallet-conn", null);
+      el.innerHTML = "<span class=\"th-empty\">Bağlı hesap yok. " +
+        "Hesapları Yönet bağlantısından hesap ekleyin.</span>";
+      var dot0 = document.getElementById("th-wallet-conn");
+      if (dot0) dot0.className = "th-dot";
       return;
     }
-    el.innerHTML = accounts.map(function (a) {
-      var rows = (a.wallets || []).map(function (w) {
-        return "<div class=\"row\"><span>" + esc(w.name) +
-          "</span><span>" + esc(w.balance) + "</span></div>";
-      }).join("");
-      return "<div class=\"th-wallet\"><div class=\"name\">" +
-        esc(a.logo) + " " + esc(a.nickname) +
-        (a.primary ? " ★" : "") + "</div>" + rows +
-        "<div class=\"row\"><span>Durum</span><span class=\"" +
-        (a.status === "OK" ? "th-profit" : "th-unknown") + "\">" +
-        esc(a.status === "OK" ? "Bağlı" : a.status) +
-        "</span></div>" +
-        "<div class=\"row\"><span>Son Eşitleme</span><span>" +
-        esc(a.last_sync_at) + "</span></div></div>";
+    var ordered = accounts.slice().sort(function (a, b) {
+      return (b.status === "OK") - (a.status === "OK");
+    });
+    el.innerHTML = ordered.map(function (a) {
+      var ok = a.status === "OK";
+      return "<span class=\"th-acct\">" +
+        "<span>" + esc(a.logo) + "</span>" +
+        "<span><span class=\"nm\">" + esc(a.nickname) +
+        (a.primary ? " ★" : "") + "</span><br>" +
+        "<span class=\"bal " +
+        (stripBalance(a) === "UNKNOWN" ? "th-unknown" : "") + "\">" +
+        esc(stripBalance(a)) + "</span></span>" +
+        "<span class=\"st\"><span class=\"th-dot" +
+        (ok ? " ok" : "") + "\"></span>" +
+        esc(ok ? "bağlı" : a.status) + "</span></span>";
     }).join("");
     var anyOk = accounts.some(function (a) {
       return a.status === "OK";
     });
-    setText("th-wallet-conn", anyOk ? "BAĞLI" : "UNKNOWN",
-            anyOk ? "th-profit" : "th-unknown");
+    var dot = document.getElementById("th-wallet-conn");
+    if (dot) {
+      dot.className = "th-dot" + (anyOk ? " ok" : "");
+      dot.setAttribute("aria-label", anyOk ?
+        "hesap bağlantısı: bağlı" : "hesap bağlantısı: UNKNOWN");
+    }
   }
 
-  // ── Aktif işlemler (orta) ──────────────────────────────────────
+  // ── Aktif işlemler: sayfanın en büyük alanı ────────────────────
 
   function renderTrades(positions) {
     var tbody = document.querySelector("#th-trades tbody");
@@ -101,9 +152,9 @@
             positions ? positions.length : null,
             positions && positions.length ? "th-profit" : "");
     if (!positions || !positions.length) {
-      tbody.innerHTML = "<tr><td colspan=\"7\" class=\"th-empty\">" +
-        "Şu an açık işlem yok. Yapay zekâ fırsat bulduğunda burada " +
-        "görünecek.</td></tr>";
+      tbody.innerHTML = "<tr><td colspan=\"8\" class=\"th-empty\">" +
+        "Şu an açık işlem yok. Yapay zekâ piyasaları izlemeye " +
+        "devam ediyor.</td></tr>";
       return;
     }
     // Sahip diline durum eşlemesi (teknik iç durum sızdırılmaz).
@@ -111,39 +162,54 @@
       CLOSE_REQUESTED: "Kapatılıyor", WAITING_EXIT: "Çıkış Bekliyor",
       EMERGENCY_EXIT: "Acil Çıkış", CLOSED: "Tamamlandı" };
     tbody.innerHTML = positions.map(function (p) {
-      return "<tr><td><b>" + esc(p.symbol) + "</b></td><td>" +
-        esc(p.side === "LONG" ? "Yükseliş" :
+      var longSide = p.side === "LONG";
+      return "<tr><td><b>" + esc(p.symbol) + "</b></td>" +
+        "<td class=\"" + (longSide ? "th-long" : "th-short") + "\">" +
+        esc(longSide ? "Yükseliş" :
             p.side === "SHORT" ? "Düşüş" : p.side) + "</td>" +
-        "<td>" + esc(p.entry_price) + "</td>" +
+        "<td>" + esc(fmtPrice(p.entry_price)) + "</td>" +
+        "<td>" + esc(fmtPrice(p.current_price)) + "</td>" +
         "<td class=\"" + pnlClass(p.unrealized_pnl) + "\">" +
-        esc(p.unrealized_pnl) + "</td><td>" +
-        esc(duration(p.opened_at)) + "</td><td>" +
+        esc(fmtSigned(p.unrealized_pnl, "USDT")) + "</td><td>" +
+        esc(duration(p.opened_at)) + "</td>" +
+        "<td><span class=\"th-badge wait\">" +
         esc(STATUS_TR[p.position_status] || "Yönetiliyor") +
-        "</td><td>" +
+        "</span></td><td>" +
         "<button class=\"th-btn\" data-close=\"" + esc(p.position_id) +
         "\" data-symbol=\"" + esc(p.symbol) + "\">Kapat</button>" +
         "</td></tr>";
     }).join("");
   }
 
-  // ── Sıra (sağ) — mevcut anlık görüntüden türetilir ─────────────
+  // ── Sıradaki işlemler — mevcut anlık görüntüden türetilir ──────
 
-  function queueItem(symbol, badgeCls, label) {
-    return "<div class=\"th-queue-item\"><b>" + esc(symbol) +
-      "</b><span class=\"th-badge " + badgeCls + "\">" + esc(label) +
-      "</span></div>";
+  function queueRow(symbol, side, badgeCls, label) {
+    var sideCell = side === "LONG" ? "<span class=\"th-long\">" +
+        "Yükseliş</span>" : side === "SHORT" ?
+        "<span class=\"th-short\">Düşüş</span>" : "—";
+    return "<tr><td><b>" + esc(symbol) + "</b></td><td>" + sideCell +
+      "</td><td><span class=\"th-badge " + badgeCls + "\">" +
+      esc(label) + "</span></td></tr>";
   }
 
   function renderQueue(products, orders, positions, signals) {
     var el = document.getElementById("th-queue");
     if (!el) return;
+    // Yön yalnız denetimli sinyal/emir verisinden gelir; yoksa "—".
+    var sides = {};
+    (signals || []).forEach(function (s) {
+      if (s.side) sides[s.symbol] = s.side;
+    });
+    (orders || []).forEach(function (o) {
+      if (o.side) sides[o.symbol] = o.side;
+    });
     // Bir sembol sırada tek durumla görünür (çelişki yasak).
     var items = [];
     var taken = {};
     function push(symbol, cls, label) {
       if (taken[symbol]) return;
       taken[symbol] = true;
-      items.push(queueItem(symbol, cls, label));
+      items.push(queueRow(symbol, sides[symbol], cls, label));
     }
     var openSymbols = {};
     (positions || []).forEach(function (p) {
@@ -173,10 +239,11 @@
     });
     setText("th-queued-count", items.length);
     el.innerHTML = items.length ? items.join("") :
-      "<div class=\"th-empty\">Sırada bekleyen varlık yok.</div>";
+      "<tr><td colspan=\"3\" class=\"th-empty\">Sırada bekleyen " +
+      "işlem yok. Piyasalar izlenmeye devam ediyor.</td></tr>";
   }
 
-  // ── Son hareketler (alt) — denetimli günlükten sade dil ───────
+  // ── Son hareketler — denetimli günlükten sade dil ──────────────
 
   function plainEvent(e) {
     // Yalın zaman akışı: teknik ayrıntı, gerekçe veya günlük
@@ -190,14 +257,22 @@
     if (e.kind === "OPERATOR_ACTION") {
       return "Portföy ayarı güncellendi";
     }
-    return esc(e.symbol) + " " + (map[e.kind] || "güncellendi");
+    return map[e.kind] || "güncellendi";
+  }
+
+  function plainResult(e) {
+    var map = { OK: "Tamam", FILLED: "Gerçekleşti",
+                SUBMITTED: "Sırada", REJECTED: "Yapılmadı",
+                CANCELLED: "İptal", SKIPPED: "Atlandı" };
+    return map[e.status] || "—";
   }
 
   function renderActivity(journal) {
     var el = document.getElementById("th-activity");
     if (!el) return;
     if (!journal || !journal.length) {
-      el.innerHTML = "<li class=\"th-empty\">Henüz hareket yok.</li>";
+      el.innerHTML = "<tr><td colspan=\"4\" class=\"th-empty\">" +
+        "Henüz hareket yok.</td></tr>";
       return;
     }
     // En yeni en üstte — uç sıralaması kayarsa bile garanti.
@@ -205,40 +280,52 @@
       return String(b.event_time).localeCompare(String(a.event_time));
     });
     el.innerHTML = sorted.slice(0, 20).map(function (e) {
-      return "<li><time>" + esc(e.event_time) + "</time>" +
-        plainEvent(e) + "</li>";
+      var sym = e.kind === "OPERATOR_ACTION" ? "—" : esc(e.symbol);
+      return "<tr><td>" + esc(fmtTime(e.event_time)) + "</td><td>" +
+        sym + "</td><td style=\"text-align:left\">" + plainEvent(e) +
+        "</td><td>" + esc(plainResult(e)) + "</td></tr>";
     }).join("");
   }
 
-  // ── Üst çubuk ──────────────────────────────────────────────────
+  // ── Üst çubuk + AI paneli ──────────────────────────────────────
 
-  function renderTop(status, portfolio) {
+  function renderTop(status, portfolio, products) {
     if (portfolio) {
-      setText("th-portfolio-value", portfolio.portfolio_value);
-      setText("th-daily-pnl", portfolio.daily_pnl,
+      setText("th-portfolio-value",
+              fmtMoney(portfolio.portfolio_value, "USDT"));
+      setText("th-daily-pnl",
+              fmtSigned(portfolio.daily_pnl, "USDT"),
               pnlClass(portfolio.daily_pnl));
+    } else {
+      // Portföy ucu düşerse bayat değer taze gibi gösterilmez.
+      setText("th-portfolio-value", null);
+      setText("th-daily-pnl", null);
     }
-    var modeEl = document.getElementById("th-mode-big");
-    var badgeEl = document.getElementById("th-status-badge");
+    // "Son Güncelleme" yalnız gerçekten veri geldiyse yenilenir.
+    if (status || portfolio) {
+      setText("th-last-update",
+              new Date().toLocaleTimeString("tr-TR"));
+    } else {
+      setText("th-last-update", null);
+    }
+    var aiMode = document.getElementById("th-ai-mode");
+    var aiSent = document.getElementById("th-ai-sentence");
     if (!status) {
-      if (modeEl) { modeEl.textContent = "UNKNOWN";
-                    modeEl.className = "mode"; }
-      if (badgeEl) { badgeEl.textContent = "Çevrimdışı";
-                     badgeEl.className = "th-status-badge off"; }
-      // Üst çubuk da bayatlamış değer göstermesin.
+      // Üst çubuk bayat değer göstermez; AI paneli de dürüst kalır.
       setText("th-auto-mode", null);
       setText("th-bot-status", "Çevrimdışı", "th-unknown");
+      if (aiMode) { aiMode.textContent = "UNKNOWN";
+                    aiMode.className = "mode th-unknown"; }
+      if (aiSent) aiSent.textContent = "Durum alınamadı.";
+      setText("th-ai-scanned", null);
+      setText("th-ai-eligible", null);
+      setText("th-ai-last", null);
       return;
     }
     var auto = status.automation_state;
     var autonomous = auto === "RUNNING";
-    // Tek büyük mod kartı: OTONOM ya da DANIŞMAN.
-    if (modeEl) {
-      modeEl.textContent = autonomous ? "OTONOM" : "DANIŞMAN";
-      modeEl.className = "mode " +
-        (autonomous ? "autonomous" : "advisor");
-    }
-    setText("th-auto-mode", autonomous ? "OTONOM" : "DANIŞMAN",
+    var modeLabel = autonomous ? "OTONOM" : "DANIŞMAN";
+    setText("th-auto-mode", modeLabel,
             autonomous ? "th-profit" : "");
     // Basit durum rozetleri: Çalışıyor / Duraklatıldı / Hata.
     var badge, cls;
@@ -249,11 +336,29 @@
     } else {
       badge = "Duraklatıldı"; cls = "pause";
     }
-    if (badgeEl) { badgeEl.textContent = badge;
-                   badgeEl.className = "th-status-badge " + cls; }
     setText("th-bot-status", badge,
             cls === "err" ? "th-loss" :
             cls === "run" ? "th-profit" : "");
+    if (aiMode) {
+      aiMode.textContent = modeLabel;
+      aiMode.className = "mode " +
+        (autonomous ? "autonomous" : "advisor");
+    }
+    if (aiSent) {
+      aiSent.textContent = cls === "err"
+        ? "Sistem acil durduruldu; yeni işlem açılmaz."
+        : "Piyasalar izleniyor.";
+    }
+    if (products) {
+      setText("th-ai-scanned", products.length);
+      setText("th-ai-eligible", products.filter(function (p) {
+        return p.entry_eligible;
+      }).length);
+    } else {
+      setText("th-ai-scanned", null);
+      setText("th-ai-eligible", null);
+    }
+    setText("th-ai-last", new Date().toLocaleTimeString("tr-TR"));
   }
 
   // ── Kapatma niyeti (mevcut kontrollü uç) ───────────────────────
@@ -317,7 +422,7 @@
         return b && b.ok && b.data ? b.data[key] : null;
       }
       renderTop(r[0].body && r[0].body.ok ? r[0].body.data : null,
-                data(5, "portfolio"));
+                data(5, "portfolio"), data(3, "products"));
       renderTrades(data(1, "positions"));
       renderQueue(data(3, "products"), data(2, "orders"),
                   data(1, "positions"), data(4, "signals"));
@@ -327,7 +432,8 @@
     }, function () { inflight = false; });
   }
 
-  window.TH = { refresh: refresh, duration: duration };
+  window.TH = { refresh: refresh, duration: duration,
+                fmtMoney: fmtMoney, fmtPrice: fmtPrice };
 
   refresh();
   setInterval(refresh, POLL_MS);

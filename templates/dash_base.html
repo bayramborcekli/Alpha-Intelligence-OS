@@ -20,9 +20,19 @@
              text-transform:uppercase; padding:4px 10px 16px; }
     .nav a, .nav span { display:block; padding:9px 12px; border-radius:8px; font-size:.88rem;
              margin-bottom:2px; }
-    .nav a.active { background:rgba(88,166,255,.16); color:var(--accent); font-weight:600; }
+    .nav a.active { background:rgba(240,185,11,.14); color:#f0b90b; font-weight:600; }
     .nav a:hover { background:var(--soft); }
     .nav span.disabled { color:#4d5661; cursor:not-allowed; }
+    .sidebar { display:flex; flex-direction:column; }
+    .nav-system { margin-top:auto; padding-top:12px;
+                  border-top:1px solid var(--border); }
+    .nav-label { font-size:.62rem; color:var(--muted); text-transform:uppercase;
+                 letter-spacing:.08em; padding:0 12px 6px; }
+    .nav-adv summary { color:var(--muted); font-size:.78rem; padding:7px 12px;
+                       cursor:pointer; list-style:none; }
+    .nav-adv summary::before { content:"▸ "; }
+    .nav-adv[open] summary::before { content:"▾ "; }
+    .nav-adv a { font-size:.8rem; padding:6px 12px 6px 20px; }
     .main { flex:1; display:flex; flex-direction:column; min-width:0; }
     header { display:flex; align-items:center; gap:10px; padding:12px 20px;
              background:var(--panel); border-bottom:1px solid var(--border); flex-wrap:wrap; }
@@ -103,25 +113,33 @@
 <div class="layout">
   <nav class="sidebar" id="sidebar" aria-label="Ana menü">
     <div class="brand">Alpha Intelligence OS</div>
+    <!-- Mission 2300 A04: sade kullanıcı menüsü; sistem/gelişmiş
+         bağlantılar altta ayrı grupta (rota silinmedi). -->
     <div class="nav">
       <a href="/home" {% if active_page=='trading_home' %}class="active" aria-current="page"{% endif %}>🏡 Trading Home</a>
-      <a href="/operation-center" {% if active_page=='operation_center' %}class="active" aria-current="page"{% endif %}>🎛️ Operation Center</a>
-      <a href="/">🏠 Başlangıç</a>
-      <a href="/overview" {% if active_page=='overview' %}class="active" aria-current="page"{% endif %}>📊 Sistem Genel Bakış</a>
-      <a href="/panel">🤖 Bot Kontrol</a>
       <a href="/portfolio" {% if active_page=='portfolio' %}class="active" aria-current="page"{% endif %}>💼 Portföy</a>
       <a href="/positions" {% if active_page=='positions' %}class="active" aria-current="page"{% endif %}>📈 Pozisyonlar</a>
       <a href="/orders" {% if active_page=='orders' %}class="active" aria-current="page"{% endif %}>🧾 Emirler</a>
-      <a href="/ledger" {% if active_page=='ledger' %}class="active" aria-current="page"{% endif %}>📒 Defter</a>
-      <a href="/audit" {% if active_page=='audit' %}class="active" aria-current="page"{% endif %}>🛡️ Denetim</a>
-      <a href="/reports" {% if active_page=='reports' %}class="active" aria-current="page"{% endif %}>📄 Raporlar</a>
-      <a href="/risk" {% if active_page=='risk' %}class="active" aria-current="page"{% endif %}>⚖️ Risk</a>
-      <a href="/intelligence" {% if active_page=='intelligence' %}class="active" aria-current="page"{% endif %}>🧠 Intelligence</a>
-      <a href="/workspace" {% if active_page=='workspace' %}class="active" aria-current="page"{% endif %}>🗂️ Workspace</a>
-      <a href="/automation" {% if active_page=='automation' %}class="active" aria-current="page"{% endif %}>⚙️ Intelligence Automation</a>
-      <a href="/portfolio-intelligence" {% if active_page=='portfolio_intelligence' %}class="active" aria-current="page"{% endif %}>🧭 Portfolio Intel</a>
-      <a href="/strategy-intelligence" {% if active_page=='strategy_intelligence' %}class="active" aria-current="page"{% endif %}>♟️ Strategy Intel</a>
+      <a href="/automation" {% if active_page=='automation' %}class="active" aria-current="page"{% endif %}>🤖 Otomasyon</a>
       <a href="/settings/accounts" {% if active_page=='my_accounts' %}class="active" aria-current="page"{% endif %}>⚙️ Ayarlar · Hesaplarım</a>
+    </div>
+    <div class="nav nav-system">
+      <div class="nav-label">Sistem</div>
+      <a href="/operation-center" {% if active_page=='operation_center' %}class="active" aria-current="page"{% endif %}>🎛️ Operation Center</a>
+      <details class="nav-adv"{% if active_page in ('overview','ledger','audit','reports','risk','intelligence','workspace','portfolio_intelligence','strategy_intelligence') %} open{% endif %}>
+        <summary>Gelişmiş</summary>
+        <a href="/">🏠 Başlangıç</a>
+        <a href="/overview" {% if active_page=='overview' %}class="active" aria-current="page"{% endif %}>📊 Sistem Genel Bakış</a>
+        <a href="/panel">🕹️ Bot Kontrol</a>
+        <a href="/ledger" {% if active_page=='ledger' %}class="active" aria-current="page"{% endif %}>📒 Defter</a>
+        <a href="/audit" {% if active_page=='audit' %}class="active" aria-current="page"{% endif %}>🛡️ Denetim</a>
+        <a href="/reports" {% if active_page=='reports' %}class="active" aria-current="page"{% endif %}>📄 Raporlar</a>
+        <a href="/risk" {% if active_page=='risk' %}class="active" aria-current="page"{% endif %}>⚖️ Risk</a>
+        <a href="/intelligence" {% if active_page=='intelligence' %}class="active" aria-current="page"{% endif %}>🧠 Intelligence</a>
+        <a href="/workspace" {% if active_page=='workspace' %}class="active" aria-current="page"{% endif %}>🗂️ Workspace</a>
+        <a href="/portfolio-intelligence" {% if active_page=='portfolio_intelligence' %}class="active" aria-current="page"{% endif %}>🧭 Portfolio Intel</a>
+        <a href="/strategy-intelligence" {% if active_page=='strategy_intelligence' %}class="active" aria-current="page"{% endif %}>♟️ Strategy Intel</a>
+      </details>
     </div>
   </nav>
   <div class="main">

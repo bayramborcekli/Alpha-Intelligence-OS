@@ -1,0 +1,685 @@
+MISSION 2300 — AGENT 04
+
+TRADING HOME VISUAL MIGRATION
+
+ROLE
+
+Redesign the existing Trading Home page to match the approved reference design.
+
+This is a frontend-only visual migration.
+
+The approved reference is the dark Binance-style Alpha Intelligence dashboard shown by the user.
+
+The reference image is the visual source of truth.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Transform the current Trading Home into a clean, professional, Binance-style autonomous investment dashboard.
+
+The screen must feel like a finished financial application.
+
+It must NOT feel like:
+
+- an admin panel
+- a developer dashboard
+- a system health console
+- a collection of unrelated cards
+
+The user is the portfolio owner.
+
+The AI manages investments.
+
+The page shows balances, active operations, queued operations and simple AI status.
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Modify only:
+
+- Trading Home HTML/template
+- Trading Home CSS
+- Trading Home JavaScript presentation layer
+- navigation presentation if required
+- frontend tests related to this page
+
+Do NOT modify:
+
+- backend business logic
+- API contracts
+- database
+- automation engine
+- risk engine
+- portfolio calculations
+- execution logic
+- ControlledExecutionAPI
+- Operation Center functionality
+- wallet balance sources
+- authentication
+- existing safety controls
+
+Use only existing API endpoints and existing data.
+
+Do not fabricate missing data.
+
+UNKNOWN remains UNKNOWN.
+
+==================================================
+REFERENCE PRIORITY
+==================================================
+
+Follow this visual hierarchy exactly:
+
+1. Thin top portfolio summary bar
+2. Horizontal personal-account strip
+3. Large active operations table
+4. AI status panel on the right
+5. Queued operations table
+6. Recent activity table
+7. Minimal left navigation
+
+Do not introduce new dashboard sections.
+
+==================================================
+PAGE SHELL
+==================================================
+
+Use a full-height dark application layout.
+
+Structure:
+
+- fixed left sidebar
+- fixed or sticky top summary bar
+- scrollable main content
+- no unnecessary outer margins
+- no oversized page title block
+- no welcome banner
+- no large explanatory paragraph
+
+The page should open directly into useful financial information.
+
+==================================================
+COLOR SYSTEM
+==================================================
+
+Base background:
+
+- near-black
+- dark charcoal panels
+- subtle gray separators
+
+Accent:
+
+- Binance-style amber/gold
+
+Status colors:
+
+- green: profit, connected, active, long
+- red: loss, disconnected, stopped, short
+- amber: advisor mode, preparing, warning
+- blue: managed operation status
+- gray: unavailable, disconnected, unknown
+
+Avoid:
+
+- bright gradients
+- excessive glow
+- large colored card backgrounds
+- decorative colors without meaning
+
+==================================================
+TYPOGRAPHY
+==================================================
+
+Use a clean modern sans-serif stack.
+
+Priorities:
+
+- portfolio values: bold
+- profit/loss: bold and colored
+- section titles: medium weight
+- labels: muted gray
+- timestamps and metadata: smaller
+- no oversized headings
+
+Format all financial values for human readability.
+
+Examples:
+
+9830.331906875032
+
+must display as:
+
+9.830,33 USDT
+
+35094.2
+
+must display as:
+
+35.094,20 TRY
+
+Use tr-TR formatting.
+
+Never display raw floating-point values.
+
+==================================================
+TOP SUMMARY BAR
+==================================================
+
+Create one continuous horizontal top bar.
+
+Display:
+
+- Alpha Intelligence OS
+- Total Portfolio
+- Today's PnL
+- Active Operations
+- Queued Operations
+- Automation Mode
+- System Status
+- Last Update
+
+Example layout:
+
+ALPHA INTELLIGENCE OS
+
+Portfolio
+9.830,33 USDT
+
+Today
++124,32 USDT
+
+Active Operations
+3
+
+Queued Operations
+2
+
+Automation Mode
+ADVISOR
+
+System Status
+Emergency Stopped
+
+Last Update
+20:04:33 UTC
+
+Rules:
+
+- one horizontal row on desktop
+- subtle vertical separators
+- no separate large cards
+- no duplicate status information elsewhere in the header
+- mode and system status must be immediately visible
+- stale or missing values must show UNKNOWN
+
+==================================================
+LEFT SIDEBAR
+==================================================
+
+Simplify the sidebar.
+
+Visible user navigation:
+
+- Trading Home
+- Portfolio
+- Positions
+- Orders
+- Automation
+- My Accounts
+- Settings
+
+Separate system navigation at the bottom:
+
+- Operation Center
+
+Rename visually if appropriate:
+
+Operation Center
+or
+System Console
+
+Do not delete the route.
+
+Rules:
+
+- compact icon + label rows
+- selected page uses amber accent
+- no long developer menu
+- no intelligence, workspace or internal engineering links in the primary user list
+- advanced/internal pages may remain under Operation Center or an Advanced group
+
+==================================================
+PERSONAL ACCOUNTS STRIP
+==================================================
+
+Place My Accounts directly below the top summary bar.
+
+Accounts must appear in one horizontal row.
+
+Do not use a vertical wallet column.
+
+Each connected-account item displays:
+
+- exchange/account icon
+- account name
+- balance
+- currency
+- small connection indicator
+
+Examples:
+
+Binance Global
+9.830,33 USDT
+connected
+
+Binance TR
+35.094,20 TRY
+connected
+
+Bybit
+Not connected
+
+OKX
+Not connected
+
+Paper Account
+10.000,00 USDT
+
+At the far right show:
+
+Manage Accounts
+
+or
+
+Add Account
+
+This action links to Settings > My Accounts.
+
+Rules:
+
+- compact horizontal items
+- one row at 1440 px and above
+- horizontal scrolling only as a last fallback
+- connected accounts first
+- do not show API keys
+- do not show technical permission details
+- do not invent balances
+
+==================================================
+MAIN CONTENT GRID
+==================================================
+
+Use a two-column grid.
+
+Left main column:
+
+approximately 75%
+
+Right AI panel:
+
+approximately 25%
+
+The active operations table occupies the largest visible area.
+
+==================================================
+ACTIVE OPERATIONS
+==================================================
+
+Use a table, not individual cards.
+
+Columns:
+
+- Asset
+- Direction
+- Entry Price
+- Current Price
+- Profit/Loss
+- Duration
+- Status
+- Action
+
+Example:
+
+BTCUSDT
+LONG
+66.812,40
+67.245,10
++124,32 USDT
+2s 15dk
+Managed
+Close
+
+Rules:
+
+- show current PnL prominently
+- positive green
+- negative red
+- LONG green
+- SHORT red
+- status may use blue/amber dot
+- one compact row per operation
+- no RSI
+- no EMA
+- no MACD
+- no confidence score
+- no strategy name
+- no decision reason
+- no raw internal state
+- keep existing controlled Close action unchanged
+
+If empty:
+
+Show a clean single-row empty state:
+
+No active operation.
+
+The AI continues monitoring markets.
+
+Do not use a large empty card.
+
+==================================================
+AI STATUS PANEL
+==================================================
+
+Place a narrow vertical panel to the right of Active Operations.
+
+Display only simple operational status.
+
+Suggested structure:
+
+AI STATUS
+
+ADVISOR
+
+Markets are being monitored
+
+Scanned Markets
+2.341
+
+Eligible Opportunities
+2
+
+Last Scan
+20:04:21
+
+Optional action:
+
+Detailed Status
+
+This may link to Operation Center.
+
+Rules:
+
+- do not show AI reasoning
+- do not show indicators
+- do not show model internals
+- do not show confidence
+- do not show risk calculations
+- do not show architecture components
+- use a simple robot/status icon
+- preserve truthful UNKNOWN behavior
+
+The panel must feel informative, not decorative.
+
+==================================================
+QUEUED OPERATIONS
+==================================================
+
+Place below Active Operations in the left column or full-width beneath the main grid.
+
+Use a compact table.
+
+Columns:
+
+- Asset
+- Direction
+- Status
+
+Allowed statuses:
+
+- Ready
+- Waiting
+- Preparing
+- Executing
+- Closing
+
+Do not show:
+
+- confidence percentage
+- preparation percentage
+- technical reason
+- signal reason
+- strategy name
+- risk score
+
+Each asset must appear only once with one final status.
+
+If empty:
+
+No queued operation.
+
+Markets continue to be monitored.
+
+==================================================
+RECENT ACTIVITY
+==================================================
+
+Place as a full-width table at the bottom.
+
+Columns:
+
+- Time
+- Asset
+- Event
+- Result or Price
+
+Examples:
+
+20:03:11
+BTCUSDT
+LONG opened
+Entry: 66.812,40
+
+19:54:22
+ETHUSDT
+SHORT closed
+PnL: +41,15 USDT
+
+Rules:
+
+- newest first
+- maximum 20 records
+- compact rows
+- no technical log language
+- no JSON
+- no internal event names
+- no raw exception text
+
+==================================================
+REMOVE FROM TRADING HOME
+==================================================
+
+Remove or relocate all of the following from the primary page:
+
+- installation status
+- feature flags
+- sprint information
+- ledger status
+- audit status
+- repository status
+- worker state
+- API health lists
+- dry-run engineering status
+- internal service names
+- raw system metrics
+- duplicated connection rows
+- large explanatory text
+- oversized automation mode card
+- separate vertical wallet cards
+- debug information
+- UNKNOWN boxes used as visual cards
+
+These may remain in Operation Center.
+
+==================================================
+RESPONSIVE RULES
+==================================================
+
+Primary target:
+
+1440 × 900
+
+Also support:
+
+1920 × 1080
+
+At desktop widths:
+
+- accounts remain horizontal
+- active operations table remains readable
+- AI panel remains on the right
+- no page-level horizontal scrollbar
+
+At smaller widths:
+
+- AI panel may move below active operations
+- account strip may scroll horizontally
+- sidebar may collapse
+
+Desktop quality has priority.
+
+==================================================
+INTERACTION RULES
+==================================================
+
+Preserve existing behavior.
+
+Allowed frontend interactions:
+
+- navigation
+- manual refresh
+- manage accounts link
+- view all links
+- close operation through existing controlled endpoint
+- optional table row expansion if already supported
+
+Do not create fake buttons.
+
+Do not display controls that have no working endpoint.
+
+==================================================
+LOADING, EMPTY AND ERROR STATES
+==================================================
+
+Loading:
+
+- use subtle skeleton rows
+- do not show fake values
+
+Empty:
+
+- short natural-language message
+- no oversized illustration
+
+Error:
+
+- preserve last valid values only if existing freshness rules permit
+- otherwise show UNKNOWN
+- connection failure must not display zero balance
+- raw backend exceptions must never reach the user
+
+==================================================
+ACCESSIBILITY
+==================================================
+
+- keyboard-accessible navigation
+- visible focus states
+- semantic tables
+- accessible button names
+- sufficient contrast
+- status must not rely only on color
+- close action must retain existing confirmation safety
+
+==================================================
+IMPLEMENTATION DISCIPLINE
+==================================================
+
+Before coding:
+
+1. Inspect current Trading Home template.
+2. Inspect current CSS and JavaScript.
+3. Map every reference-design field to an existing endpoint or existing frontend state.
+4. Mark any unavailable field as UNKNOWN.
+5. Do not create backend work merely to fill a visual field.
+
+During implementation:
+
+- reuse current data loaders
+- introduce presentation adapters only where necessary
+- centralize number/date formatting
+- centralize status-label mapping
+- escape all user/API-provided text
+- do not duplicate polling loops
+- preserve current refresh interval unless there is a frontend-only reason to consolidate it
+
+==================================================
+TEST REQUIREMENTS
+==================================================
+
+Add or update frontend tests covering:
+
+- Trading Home remains default landing page
+- Operation Center remains accessible
+- accounts appear horizontally
+- no vertical wallet column
+- active operations table is the largest main section
+- AI status panel appears on the right at desktop width
+- tr-TR number formatting
+- raw floats are never displayed
+- UNKNOWN balances are not converted to zero
+- forbidden indicators do not appear
+- forbidden internal system terms do not appear
+- queue does not show confidence percentages
+- recent activity is newest first
+- maximum 20 activity records
+- controlled close action remains unchanged
+- no new backend endpoints are introduced
+- existing full regression remains green
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+PASS only if:
+
+- the screen visually matches the approved dark Binance-style reference
+- wallets/accounts appear in one horizontal row at the top
+- operations appear below
+- active operations dominate the page
+- AI status remains simple
+- user-facing navigation is reduced
+- Operation Center remains available
+- no business logic changes
+- no API contract changes
+- no fake data
+- no raw float values
+- no technical clutter
+- full regression passes
+
+==================================================
+DELIVERY REPORT
+==================================================
+
+Return:
+
+1. Files changed
+2. Visual sections implemented
+3. Existing endpoints reused
+4. Any reference field unavailable from current data
+5. Tests added or updated
+6. Full regression result
+7. Screenshot of final Trading Home at 1440 × 900
+8. Confirmation that backend and business logic were not modified

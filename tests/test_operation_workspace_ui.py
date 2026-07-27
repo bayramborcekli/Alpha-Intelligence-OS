@@ -301,12 +301,12 @@ class TestHonesty:
 # ── Gezinme ────────────────────────────────────────────────────────
 
 class TestNavigation:
-    def test_operation_center_first_in_nav(self):
-        ops = BASE.index("operation-center")
-        others = [BASE.index(path) for path in
-                  ("/dashboard", "/positions", "/security")
-                  if path in BASE]
-        assert others and all(ops < other for other in others)
+    def test_operation_center_in_system_group(self):
+        # Mission 2300 A04: kullanıcı menüsü sadeleşti; Operation
+        # Center alttaki "Sistem" grubunda erişilebilir kalır.
+        assert 'href="/operation-center"' in BASE
+        assert BASE.index('nav-system') < BASE.index(
+            'href="/operation-center"')
 
     def test_login_default_is_a_workspace_page(self):
         # Mission 2300: varsayılan açılış Trading Home'a taşındı;

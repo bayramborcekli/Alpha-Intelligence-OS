@@ -98,22 +98,91 @@ class TestLayout:
         assert "@media" in TEMPLATE  # dar ekranda tek sütun
 
     @pytest.mark.parametrize("heading", [
-        "Cüzdanlar", "Aktif İşlemler", "Sıra", "Son Hareketler"])
+        "Aktif İşlemler", "Sıradaki İşlemler", "Son Hareketler",
+        "AI Durumu"])
     def test_section_headings(self, heading):
         assert heading in TEMPLATE
 
     @pytest.mark.parametrize("label", [
-        "Portföy Değeri", "Bugünkü Kazanç", "Aktif İşlemler",
-        "Sıradaki İşlemler", "Otonom Mod", "Bot Durumu",
-        "Cüzdan Bağlantısı"])
+        "Alpha Intelligence OS", "Portföy", "Bugünkü Kazanç",
+        "Aktif İşlemler", "Sıradaki İşlemler", "Otomasyon Modu",
+        "Sistem Durumu", "Son Güncelleme"])
     def test_topbar_labels(self, label):
         assert label in TEMPLATE
 
     @pytest.mark.parametrize("column", [
-        "Varlık", "Yön", "Giriş Fiyatı", "Anlık Kazanç", "Süre",
-        "Durum"])
+        "Varlık", "Yön", "Giriş Fiyatı", "Anlık Fiyat",
+        "Anlık Kazanç", "Süre", "Durum", "İşlem"])
     def test_trade_columns(self, column):
         assert column in TEMPLATE
+
+    # ── Mission 2300 A04: Binance-stili görsel göç ────────────────
+
+    def test_no_oversized_title_block(self):
+        # Sayfa doğrudan finansal bilgiyle açılır: varsayılan büyük
+        # başlık ve alt açıklama gizlenir; karşılama afişi yok.
+        compact = TEMPLATE.replace(" ", "")
+        assert "main.content>h1" in compact
+        assert "display:none" in compact
+
+    def test_accounts_strip_horizontal(self):
+        # Hesaplar TEK yatay şerittir; dikey cüzdan sütunu yok.
+        idx = TEMPLATE.index("#th-wallets")
+        block = TEMPLATE[idx:idx + 220]
+        assert "flex-direction:row" in block.replace(" ", "")
+        assert "th-wallet " not in TEMPLATE  # eski dikey kart sınıfı
+
+    def test_manage_accounts_link(self):
+        assert 'id="th-manage-accounts"' in TEMPLATE
+        assert 'href="/settings/accounts"' in TEMPLATE
+
+    def test_main_grid_75_25(self):
+        compact = TEMPLATE.replace(" ", "").replace("\n", "")
+        assert "minmax(0,3fr)minmax" in compact  # sol ~%75, sağ ~%25
+
+    def test_ai_panel_elements(self):
+        for el in ("th-ai", "th-ai-mode", "th-ai-scanned",
+                   "th-ai-eligible", "th-ai-last"):
+            assert f'id="{el}"' in TEMPLATE, el
+        assert 'href="/operation-center"' in TEMPLATE  # Ayrıntılı Durum
+
+    def test_activity_is_table(self):
+        # Son hareketler tam genişlik tablo: Zaman/Varlık/Olay/Sonuç.
+        for col in ("Zaman", "Olay", "Sonuç"):
+            assert col in TEMPLATE, col
+        assert '<tbody id="th-activity">' in TEMPLATE
+
+    def test_amber_accent_present(self):
+        assert "#f0b90b" in TEMPLATE or "--amber" in TEMPLATE
+
+    def test_tr_number_formatting_centralized(self):
+        # Ham float asla gösterilmez: merkezî tr-TR biçimlendirici.
+        assert 'toLocaleString("tr-TR"' in JS
+        for fn in ("function fmtMoney", "function fmtPrice",
+                   "function fmtSigned"):
+            assert fn in JS, fn
+        # Değerler biçimlendiriciden geçirilir.
+        assert "fmtPrice(p.entry_price)" in JS
+        assert "fmtSigned(p.unrealized_pnl" in JS
+        assert "fmtMoney(portfolio.portfolio_value" in JS
+
+    def test_unknown_not_converted_to_zero(self):
+        # Bilinmeyen değer 0'a çevrilmez; UNKNOWN döner.
+        idx = JS.index("function fmtMoney")
+        assert '"UNKNOWN"' in JS[idx:idx + 400]
+
+    def test_sidebar_user_menu_reduced(self):
+        # Kullanıcı menüsünde iç mühendislik bağlantıları yok;
+        # gelişmiş sayfalar alttaki Sistem grubunda kalır.
+        user_nav = BASE[BASE.index('<div class="nav">'):
+                        BASE.index('nav-system')]
+        for banned in ("/intelligence", "/workspace", "/ledger",
+                       "/audit", "/overview"):
+            assert f'href="{banned}"' not in user_nav, banned
+        assert 'href="/operation-center"' not in user_nav
+        system_nav = BASE[BASE.index("nav-system"):]
+        assert 'href="/operation-center"' in system_nav
+        assert 'href="/workspace"' in system_nav  # rota silinmedi
 
 
 # ── Felsefe: teknik gösterge YOK ───────────────────────────────────
@@ -142,14 +211,16 @@ class TestNoTechnicalNoise:
 # ── Cüzdanlar (sol panel) ──────────────────────────────────────────
 
 class TestWallets:
-    @pytest.mark.parametrize("field", ["Durum", "Son Eşitleme"])
-    def test_wallet_fields(self, field):
-        assert field in JS
+    def test_connection_indicator_not_color_only(self):
+        # Bağlantı durumu yalnız renge dayanmaz: metin/aria da var.
+        assert "aria-label" in JS and "bağlı" in JS
 
     def test_wallet_rows_come_from_account_source(self):
-        # Bakiye satırları sunucu anlık görüntüsünden gelir
-        # (w.name/w.balance); istemcide borsa adı sabitlenmez.
+        # Bakiye sunucu anlık görüntüsünden gelir (w.name/w.balance);
+        # istemcide borsa adı sabitlenmez, bakiye uydurulmaz.
         assert "w.name" in JS and "w.balance" in JS
+        idx = JS.index("function stripBalance")
+        assert '"UNKNOWN"' in JS[idx:idx + 500]
 
     def test_single_source_is_connected_accounts(self):
         # Mission 2300 A03: cüzdan paneli YALNIZ bağlı kişisel
@@ -262,10 +333,12 @@ class TestBackendUntouched:
 # ── Mission 2300 A02: AI Karar Panosu ──────────────────────────────
 
 class TestAgent02ModeCard:
-    def test_large_mode_card_present(self):
-        assert 'id="th-mode-card"' in TEMPLATE
-        assert 'id="th-mode-big"' in TEMPLATE
-        assert 'id="th-status-badge"' in TEMPLATE
+    def test_mode_lives_in_topbar_and_ai_panel(self):
+        # A04: ayrı büyük mod kartı kaldırıldı; mod üst çubukta ve
+        # AI panelinde görünür (başlıkta bilgi tekrarı yok).
+        assert 'id="th-mode-card"' not in TEMPLATE
+        assert 'id="th-auto-mode"' in TEMPLATE
+        assert 'id="th-ai-mode"' in TEMPLATE
 
     def test_mode_values(self):
         assert '"OTONOM"' in JS and '"DANIŞMAN"' in JS
@@ -336,3 +409,18 @@ class TestAgent02ArchitectFixes:
 
     def test_unknown_position_status_not_leaked(self):
         assert 'STATUS_TR[p.position_status] || "Yönetiliyor"' in JS
+
+
+class TestAgent04ArchitectFixes:
+    def test_last_update_only_on_real_data(self):
+        # "Son Güncelleme" yalnız veri gerçekten geldiyse yenilenir;
+        # her iki uç da düşerse UNKNOWN'a döner.
+        idx = JS.index("if (status || portfolio) {")
+        block = JS[idx:idx + 300]
+        assert "th-last-update" in block
+        assert 'setText("th-last-update", null)' in JS
+
+    def test_portfolio_reset_when_missing(self):
+        # Portföy ucu düşünce bayat değer taze gibi kalmaz.
+        assert 'setText("th-portfolio-value", null)' in JS
+        assert 'setText("th-daily-pnl", null)' in JS

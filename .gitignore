@@ -119,3 +119,7 @@ login_attempts.db-*
 alpha20_v1/.auto_controller.lock
 automation_state.json
 automation_state.json.lock
+
+# Operation Control paylaşımlı durum (runtime, worker-arası)
+alpha20_v1/operation_control_state.json
+alpha20_v1/operation_control_state.json.lock
