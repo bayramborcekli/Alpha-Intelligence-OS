@@ -241,11 +241,12 @@ class TestNoProductionBehavior:
         # broker_adapter.py, execution_broker_adapter.py adıyla
         # teslim edildi)
         # Agent 06: binance_spot_adapter.py teslim edildi
-        # Agent 07: execution_service.py teslim edildi
+        # Agent 07/08: execution_service.py + execution_api.py
         delivered = {"execution_risk_engine.py",
                      "execution_kill_switch.py",
                      "binance_spot_adapter.py",
-                     "execution_service.py"}
+                     "execution_service.py",
+                     "execution_api.py"}
         delivered_as = {
             "broker_adapter.py": "execution_broker_adapter.py"}
         for module_file in PLANNED_MODULES:

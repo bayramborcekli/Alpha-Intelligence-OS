@@ -1342,9 +1342,7 @@ class TestPublicApiFreeze:
                   == module.__name__}
         assert public <= set(module.__all__)
 
-    def test_no_execution_api_implemented(self):
-        assert not os.path.exists(
-            os.path.join(_ROOT, "execution_api.py"))
+    def test_no_http_framework_in_service(self):
         for module in SERVICE_MODULES:
             source = _code_source(module)
             for token in ("flask", "Flask", "route", "Blueprint",
