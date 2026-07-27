@@ -1,0 +1,993 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 2000 — EXECUTION FOUNDATION
+
+AGENT 05 — BROKER ADAPTER INTERFACE
+
+ROLE
+
+Design and implement the canonical asynchronous Broker Adapter Interface.
+
+This Agent defines contracts only.
+
+It SHALL NOT implement any real broker, exchange, network connection,
+authentication, signing, REST request, WebSocket connection, retry loop,
+order execution or persistence.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 2000
+
+Agent 04
+
+PASS
+
+Current Commit
+
+bfbbd4b
+
+Regression Baseline
+
+2754 PASS
+0 FAIL
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Create the stable broker boundary used by every future broker implementation.
+
+The interface SHALL support future implementations such as:
+
+• Binance Spot
+• Binance Futures
+• Interactive Brokers
+• Midas
+• Bybit
+• OKX
+• Kraken
+• Future equity brokers
+• Future forex brokers
+• Future paper brokers
+
+WITHOUT changing Execution Service, Risk Engine or Kill Switch.
+
+This Agent SHALL freeze:
+
+• Broker adapter contract
+• Broker operation contracts
+• Capability discovery
+• Canonical error taxonomy
+• Result normalization
+• Idempotency requirements
+• Health reporting contract
+• Native payload isolation
+• Public API
+
+────────────────────────────────────────
+3. FILES
+
+Create:
+
+execution_broker_adapter.py
+
+execution_broker_models.py
+
+execution_broker_errors.py
+
+tests/test_execution_broker_adapter.py
+
+Update only when necessary:
+
+tests/test_mission_2000_architecture.py
+
+The architecture test MUST mark:
+
+execution_broker_adapter.py
+
+as delivered.
+
+No unrelated production files may be modified.
+
+────────────────────────────────────────
+4. ARCHITECTURE
+
+Portfolio Intelligence
+        ↓
+Strategy Intelligence
+        ↓
+Monitoring
+        ↓
+Execution API
+        ↓
+Execution Service
+        ↓
+Risk Engine
+        ↓
+Kill Switch
+        ↓
+BrokerAdapter
+        ↓
+Broker Implementation
+
+BrokerAdapter is a boundary.
+
+It SHALL NOT:
+
+• evaluate strategy logic
+• evaluate portfolio logic
+• calculate risk
+• control Kill Switch
+• expose broker SDK objects
+• expose raw REST responses
+• expose raw WebSocket messages
+
+Execution Service SHALL know only BrokerAdapter contracts.
+
+────────────────────────────────────────
+5. CANONICAL OWNERSHIP
+
+Do not duplicate models already owned by Agent 02 or Agent 03.
+
+Import canonical models from their owning modules.
+
+Examples:
+
+• ExecutionRequest
+• ExecutionResult
+• Order
+• Position
+• Fill
+• Instrument
+• BrokerProfile
+
+There MUST be exactly one canonical owner for each domain concept.
+
+Forbidden:
+
+• A second BrokerProfile
+• A second Order model
+• A second Position model
+• Broker-specific copies of ExecutionRequest
+• Structurally identical duplicate models
+
+If an existing model is insufficient, report the incompatibility.
+
+Do not silently duplicate or mutate it.
+
+────────────────────────────────────────
+6. BROKER ADAPTER TYPE
+
+Create:
+
+BrokerAdapter
+
+BrokerAdapter SHALL be an abstract asynchronous interface.
+
+All operations that may perform broker I/O SHALL use:
+
+async def
+
+The interface SHALL contain no implementation logic beyond invariant
+validation shared by all adapters.
+
+The adapter instance SHALL expose no public mutable state.
+
+────────────────────────────────────────
+7. APPROVED BROKER OPERATIONS
+
+Freeze the minimum canonical operation surface.
+
+Required operations:
+
+profile()
+
+health_check()
+
+submit_order()
+
+cancel_order()
+
+get_order()
+
+list_open_orders()
+
+get_positions()
+
+get_balances()
+
+No additional public broker operation without architectural justification.
+
+Each concrete broker implementation in future Agents MUST implement the full
+contract or explicitly report an unsupported capability using the canonical
+error model.
+
+────────────────────────────────────────
+8. OPERATION SIGNATURE PRINCIPLES
+
+Broker operations SHALL consume and return canonical domain objects only.
+
+Examples:
+
+submit_order(
+    request: ExecutionRequest,
+    context: BrokerRequestContext
+) -> BrokerOperationResult
+
+cancel_order(
+    request: CancelOrderRequest,
+    context: BrokerRequestContext
+) -> BrokerOperationResult
+
+get_order(
+    query: OrderQuery,
+    context: BrokerRequestContext
+) -> BrokerOperationResult
+
+No operation may accept or return:
+
+• requests.Response
+• aiohttp objects
+• httpx objects
+• broker SDK objects
+• untyped dictionaries
+• arbitrary JSON
+• raw bytes
+• native broker exceptions
+
+────────────────────────────────────────
+9. IMMUTABLE BROKER MODELS
+
+Create immutable broker boundary models as needed.
+
+Approved concepts:
+
+BrokerRequestContext
+
+BrokerOperationResult
+
+BrokerHealth
+
+BrokerBalance
+
+CancelOrderRequest
+
+OrderQuery
+
+OpenOrdersQuery
+
+PositionsQuery
+
+BalancesQuery
+
+BrokerErrorDetail
+
+All models SHALL be:
+
+• frozen=True
+• slots=True
+• hashable where semantically valid
+• free of mutable defaults
+• explicitly typed
+• deterministic
+
+Financial values SHALL use Decimal only.
+
+No float fields.
+
+────────────────────────────────────────
+10. BROKER REQUEST CONTEXT
+
+BrokerRequestContext SHALL contain deterministic caller-supplied context.
+
+Suggested fields:
+
+request_id
+
+correlation_id
+
+idempotency_key
+
+account_id
+
+portfolio_id
+
+strategy_id
+
+execution_mode
+
+logical_sequence
+
+No field may be generated inside BrokerAdapter.
+
+Forbidden inside BrokerAdapter:
+
+• UUID generation
+• wall-clock generation
+• random identifier generation
+• implicit default idempotency keys
+
+Unknown optional values SHALL remain None.
+
+Unknown SHALL never silently become:
+
+• empty string
+• zero
+• fabricated identifier
+
+────────────────────────────────────────
+11. EXECUTION MODES
+
+Create or reuse a closed canonical enum.
+
+Approved execution modes:
+
+PAPER
+
+SHADOW
+
+MICRO_LIVE
+
+LIVE
+
+The Broker Adapter interface SHALL carry the mode but SHALL NOT decide
+whether the mode is allowed.
+
+Mode authorization belongs to higher execution orchestration.
+
+Agent 05 SHALL NOT implement live trading.
+
+────────────────────────────────────────
+12. IDEMPOTENCY CONTRACT
+
+Every state-changing broker operation SHALL require an idempotency key.
+
+State-changing operations include:
+
+• submit_order
+• cancel_order
+
+The interface SHALL reject missing or invalid idempotency context before any
+future broker implementation performs I/O.
+
+Rules:
+
+• Caller owns the idempotency key.
+• Adapter never invents the key.
+• Same logical request + same key must represent the same operation.
+• Reuse of one key for conflicting operations is forbidden.
+• No hidden retry may create a new key.
+• No adapter may silently submit twice.
+
+Agent 05 defines the contract only.
+
+Persistence and distributed idempotency storage are deferred.
+
+────────────────────────────────────────
+13. CAPABILITY MODEL
+
+Broker capability discovery SHALL use canonical BrokerProfile.
+
+BrokerProfile capabilities MAY include:
+
+• supported_assets
+• supported_order_types
+• supports_fractional
+• supports_short
+• supports_margin
+• supports_options
+• supports_after_hours
+• supports_modify
+• supports_cancel
+• supports_trailing_stop
+• supports_oco
+• supports_market_orders
+
+BrokerAdapter SHALL NOT use broker-name checks.
+
+Forbidden:
+
+if broker_name == "Binance"
+
+if broker_name == "IBKR"
+
+if broker_name == "Midas"
+
+Capability decisions SHALL be data-driven.
+
+────────────────────────────────────────
+14. RESULT NORMALIZATION
+
+Every broker operation SHALL return a canonical BrokerOperationResult.
+
+Approved result statuses:
+
+SUCCESS
+
+REJECTED
+
+NOT_FOUND
+
+UNSUPPORTED
+
+TEMPORARY_FAILURE
+
+PERMANENT_FAILURE
+
+UNKNOWN
+
+The result SHALL make success and failure explicit.
+
+It SHALL NOT use exceptions for ordinary broker outcomes such as:
+
+• broker rejection
+• unsupported operation
+• order not found
+• insufficient broker-side buying power
+• market closed
+
+Programming and contract violations MAY raise canonical local exceptions.
+
+No native broker status may escape the adapter boundary.
+
+────────────────────────────────────────
+15. ERROR TAXONOMY
+
+Create a closed error code enum.
+
+Minimum canonical codes:
+
+INVALID_REQUEST
+
+INVALID_CONTEXT
+
+MISSING_IDEMPOTENCY_KEY
+
+IDEMPOTENCY_CONFLICT
+
+UNSUPPORTED_OPERATION
+
+UNSUPPORTED_ASSET
+
+UNSUPPORTED_ORDER_TYPE
+
+AUTHENTICATION_FAILURE
+
+AUTHORIZATION_FAILURE
+
+RATE_LIMITED
+
+MARKET_CLOSED
+
+ORDER_REJECTED
+
+ORDER_NOT_FOUND
+
+INSUFFICIENT_FUNDS
+
+INVALID_INSTRUMENT
+
+NETWORK_FAILURE
+
+BROKER_UNAVAILABLE
+
+TIMEOUT
+
+MALFORMED_BROKER_RESPONSE
+
+UNKNOWN_BROKER_FAILURE
+
+Error details SHALL be immutable.
+
+Error details SHALL never contain:
+
+• API keys
+• secrets
+• signatures
+• authorization headers
+• full raw request payloads
+• full native responses
+• stack traces intended for external consumers
+
+────────────────────────────────────────
+16. EXCEPTION BOUNDARY
+
+Native broker exceptions MUST NOT cross BrokerAdapter.
+
+Future implementations SHALL translate native failures into:
+
+BrokerOperationResult
+
+or canonical BrokerAdapter exceptions for local contract violations.
+
+Create a minimal closed exception hierarchy.
+
+Suggested:
+
+BrokerAdapterError
+
+BrokerContractError
+
+BrokerConfigurationError
+
+BrokerNormalizationError
+
+Do not create one Python exception class for every broker outcome.
+
+Normal operational failures belong in BrokerOperationResult.
+
+────────────────────────────────────────
+17. HEALTH CONTRACT
+
+health_check() SHALL return BrokerHealth.
+
+BrokerHealth SHALL describe adapter availability without performing trading.
+
+Approved health states:
+
+HEALTHY
+
+DEGRADED
+
+UNAVAILABLE
+
+UNKNOWN
+
+BrokerHealth MAY contain:
+
+• state
+• logical_sequence
+• reason_code
+• message
+• read_available
+• write_available
+
+No wall-clock timestamp shall be generated.
+
+No network call exists in Agent 05.
+
+Concrete adapters may implement health I/O later.
+
+────────────────────────────────────────
+18. BALANCE CONTRACT
+
+BrokerBalance SHALL distinguish:
+
+• total
+• available
+• reserved
+• currency
+
+Unknown values SHALL remain None.
+
+Unknown values SHALL never be treated as zero.
+
+Financial fields SHALL use Decimal.
+
+Invariant examples:
+
+• total cannot be negative unless explicitly supported by account semantics
+• available cannot exceed total where both are known
+• reserved cannot be negative
+• currency cannot be blank
+
+Do not implement currency conversion.
+
+────────────────────────────────────────
+19. NATIVE PAYLOAD ISOLATION
+
+Raw broker payloads SHALL remain private to concrete broker implementations.
+
+Canonical models SHALL not expose fields such as:
+
+raw_response
+
+native_payload
+
+exchange_json
+
+sdk_object
+
+http_response
+
+A sanitized opaque reference MAY be considered later for audit storage,
+but SHALL NOT be introduced in Agent 05.
+
+This prevents:
+
+• vendor lock-in
+• secret leakage
+• unstable API coupling
+• serialization failures
+• broker SDK contamination
+
+────────────────────────────────────────
+20. RETRY OWNERSHIP
+
+BrokerAdapter SHALL NOT implement generic retry policy.
+
+No automatic retry loops.
+
+No exponential backoff.
+
+No sleep.
+
+No scheduler.
+
+No retry counter generated internally.
+
+Retry orchestration belongs to Execution Service or a future resilience layer.
+
+Concrete adapters SHALL only classify failures accurately, for example:
+
+TEMPORARY_FAILURE
+
+PERMANENT_FAILURE
+
+RATE_LIMITED
+
+This prevents duplicate orders and hidden side effects.
+
+────────────────────────────────────────
+21. CANCELLATION SEMANTICS
+
+Cancel operations SHALL be explicit and idempotent.
+
+The interface SHALL distinguish:
+
+• cancellation accepted
+• already cancelled
+• already filled
+• order not found
+• cancellation unsupported
+• temporary cancellation failure
+
+Do not collapse all outcomes into bool.
+
+The adapter SHALL never claim an order was cancelled without a canonical
+normalized result supporting that conclusion.
+
+────────────────────────────────────────
+22. READ AND WRITE SEPARATION
+
+Contractually distinguish:
+
+Read operations:
+
+• profile
+• health_check
+• get_order
+• list_open_orders
+• get_positions
+• get_balances
+
+Write operations:
+
+• submit_order
+• cancel_order
+
+Tests SHALL certify which methods are state-changing.
+
+Future permission and security layers must be able to identify write methods
+without broker-specific knowledge.
+
+────────────────────────────────────────
+23. SECURITY
+
+Agent 05 SHALL NOT:
+
+• access network
+• access filesystem
+• read environment variables
+• load secrets
+• sign requests
+• authenticate
+• create HTTP clients
+• create WebSocket clients
+• import broker SDKs
+• submit orders
+• cancel real orders
+• generate UUIDs
+• generate timestamps
+• use randomness
+• call sleep
+• start threads
+• create processes
+
+Exchange Write Request:
+
+0
+
+Secret Exposure:
+
+0
+
+────────────────────────────────────────
+24. PUBLIC API
+
+Freeze the approved public surface.
+
+Approved exported concepts only:
+
+BrokerAdapter
+
+BrokerRequestContext
+
+BrokerOperationResult
+
+BrokerOperationStatus
+
+BrokerHealth
+
+BrokerHealthState
+
+BrokerBalance
+
+CancelOrderRequest
+
+OrderQuery
+
+OpenOrdersQuery
+
+PositionsQuery
+
+BalancesQuery
+
+BrokerErrorCode
+
+BrokerErrorDetail
+
+BrokerAdapterError
+
+BrokerContractError
+
+BrokerConfigurationError
+
+BrokerNormalizationError
+
+No implementation-specific API.
+
+No Binance classes.
+
+No convenience network methods.
+
+────────────────────────────────────────
+25. TEST REQUIREMENTS
+
+Minimum:
+
+170 focused tests.
+
+Tests SHALL verify:
+
+• BrokerAdapter is abstract
+• asynchronous operation signatures
+• exact required method set
+• immutable models
+• closed enums
+• Decimal-only financial values
+• no mutable defaults
+• canonical model ownership
+• no duplicate Order model
+• no duplicate Position model
+• no duplicate BrokerProfile model
+• idempotency contract
+• missing key rejection
+• deterministic request context
+• no internal UUID generation
+• no wall-clock generation
+• no randomness
+• capability-driven design
+• no broker-name branches
+• normalized operation statuses
+• closed error taxonomy
+• native exception isolation
+• no raw payload exposure
+• no untyped dictionary contract
+• health-state contract
+• read/write operation classification
+• cancellation outcome distinctions
+• unknown values remain None
+• public API freeze
+• forbidden imports
+• no filesystem
+• no environment access
+• no network
+• no broker SDK
+• no REST
+• no WebSocket
+• no retry loop
+• no sleep
+• no execution capability
+• architecture test marks delivery
+• full regression
+
+Use structural, behavioral and AST/source-level tests.
+
+Test count alone is insufficient.
+
+────────────────────────────────────────
+26. PROHIBITIONS
+
+Do not implement:
+
+• Binance Spot Adapter
+• Binance Futures Adapter
+• Interactive Brokers Adapter
+• Midas Adapter
+• Paper Broker
+• Shadow Broker
+• HTTP transport
+• WebSocket transport
+• Authentication
+• Request signing
+• Secret management
+• Retry engine
+• Rate-limit scheduler
+• Execution Service
+• Execution API
+• Kill Switch changes
+• Risk Engine changes
+• Persistence
+• Database
+• Event bus
+• Monitoring integration
+• Real order submission
+• Real cancellation
+
+────────────────────────────────────────
+27. ARCHITECTURAL INVARIANTS
+
+The following invariants SHALL be test-frozen:
+
+1. Execution Service depends on BrokerAdapter abstraction.
+
+2. BrokerAdapter does not depend on Execution Service.
+
+3. BrokerAdapter does not depend on Risk Engine.
+
+4. BrokerAdapter does not depend on Kill Switch.
+
+5. BrokerAdapter never authorizes execution.
+
+6. BrokerAdapter never calculates risk.
+
+7. BrokerAdapter never creates idempotency identity.
+
+8. BrokerAdapter never leaks native broker models.
+
+9. Broker implementations normalize inward to canonical models.
+
+10. Adding a new broker does not require modifying Risk Engine.
+
+11. Adding a new broker does not require modifying Kill Switch.
+
+12. Adding a new broker does not require broker-name branches in core code.
+
+────────────────────────────────────────
+28. DELIVERY REPORT
+
+Return exactly:
+
+── CREATED FILES ──
+
+List
+
+── BROKER ADAPTER CONTRACT ──
+
+Summary
+
+── ASYNC INTERFACE ──
+
+Summary
+
+── CANONICAL MODEL OWNERSHIP ──
+
+Summary
+
+── IMMUTABLE MODELS ──
+
+Summary
+
+── CAPABILITY MODEL ──
+
+Summary
+
+── IDEMPOTENCY CONTRACT ──
+
+Summary
+
+── RESULT NORMALIZATION ──
+
+Summary
+
+── ERROR TAXONOMY ──
+
+Summary
+
+── HEALTH CONTRACT ──
+
+Summary
+
+── READ / WRITE SEPARATION ──
+
+Summary
+
+── NATIVE PAYLOAD ISOLATION ──
+
+Summary
+
+── PUBLIC API ──
+
+Approved surface
+
+── SAFETY CERTIFICATION ──
+
+Summary
+
+── PRODUCTION CODE CHANGES ──
+
+Broker Adapter contracts only
+
+── TEST RESULTS ──
+
+New PASS count
+
+── FAIL / SKIP ──
+
+Counts
+
+── TOTAL REGRESSION ──
+
+Total PASS count
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash + GitHub push status
+
+── NEXT AGENT ──
+
+AGENT 06 — BINANCE SPOT ADAPTER
+
+────────────────────────────────────────
+29. PASS CRITERIA
+
+PASS requires:
+
+• Canonical BrokerAdapter complete
+• Async interface certified
+• Canonical ownership preserved
+• No duplicated domain models
+• Broker capability abstraction certified
+• Idempotency contract certified
+• Normalized result contract certified
+• Closed error taxonomy certified
+• Native broker payload isolation certified
+• Read/write separation certified
+• Public API frozen
+• ≥170 focused tests PASS
+• Architecture test marks delivery
+• No real broker implementation
+• No network capability
+• No execution capability
+• No hidden retry
+• Full regression PASS
+• Exchange Write Request = 0
+• Secret Exposure = 0
