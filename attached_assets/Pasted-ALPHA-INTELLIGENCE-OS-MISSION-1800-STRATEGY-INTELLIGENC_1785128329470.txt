@@ -1,0 +1,358 @@
+ALPHA INTELLIGENCE OS
+
+MISSION 1800 — STRATEGY INTELLIGENCE
+
+AGENT 02 — STRATEGY CORE
+
+ROLE
+
+You are the Core Agent for Mission 1800.
+
+Implement the deterministic Strategy Intelligence Core exactly as defined by
+Agent 01.
+
+This is a pure computation layer.
+
+No Flask.
+
+No HTTP.
+
+No Exchange.
+
+No persistence.
+
+No filesystem.
+
+No network.
+
+No global mutable state.
+
+────────────────────────────────────────
+1. BASELINE
+
+Mission 1700
+
+OFFICIALLY CLOSED
+
+Mission 1800
+
+Agent 01 — PASS
+
+Baseline Commit
+
+474beb0
+
+Regression Baseline
+
+1335 PASS
+
+0 FAIL
+
+0 SKIP
+
+Exchange Write Request
+
+0
+
+Secret Exposure
+
+0
+
+────────────────────────────────────────
+2. OBJECTIVE
+
+Implement the Strategy Core.
+
+Input:
+
+PortfolioAnalysis
+
+Output:
+
+Immutable StrategyProposal
+
+Core owns all deterministic strategy logic.
+
+Nothing else.
+
+────────────────────────────────────────
+3. FILES
+
+Create:
+
+strategy_intelligence.py
+
+tests/test_mission1800_strategy_core.py
+
+Modify only imports where required.
+
+No API.
+
+No Service.
+
+No UI.
+
+No Export.
+
+────────────────────────────────────────
+4. CORE REQUIREMENTS
+
+Implement:
+
+build_strategy(
+    portfolio_analysis: PortfolioAnalysis
+) -> StrategyProposal
+
+Core SHALL:
+
+Consume PortfolioAnalysis
+
+Evaluate:
+
+• allocation
+
+• concentration
+
+• diversification
+
+• exposure
+
+• risk utilization
+
+Generate deterministic recommendations.
+
+Each recommendation shall include:
+
+recommendation_id
+
+instrument
+
+action
+
+reason_codes
+
+priority
+
+confidence
+
+current_weight
+
+target_weight
+
+risk_level
+
+expected_effect
+
+invalidation_conditions
+
+Unknown values SHALL remain null.
+
+Missing inputs SHALL NOT become zero.
+
+────────────────────────────────────────
+5. RULE ENGINE
+
+Implement deterministic rules only.
+
+No AI.
+
+No LLM.
+
+No randomness.
+
+No ML inference.
+
+Rules SHALL be explainable.
+
+Example categories:
+
+CONCENTRATION_HIGH
+
+DIVERSIFICATION_LOW
+
+EXCESS_CASH
+
+RISK_LIMIT_NEAR
+
+UNDER_ALLOCATED
+
+OVER_ALLOCATED
+
+LOW_DATA_QUALITY
+
+Rules may emit zero recommendations.
+
+Rule evaluation order SHALL be fixed.
+
+────────────────────────────────────────
+6. DETERMINISM
+
+Core SHALL use:
+
+Decimal only
+
+Stable ordering
+
+Immutable outputs
+
+Fixed-point strings
+
+Unknown → null
+
+Deterministic serialization
+
+No timestamps
+
+No UUID generation
+
+No proposal_id
+
+No generated_at
+
+Those belong only to API.
+
+────────────────────────────────────────
+7. SECURITY
+
+Core SHALL NOT:
+
+Import Flask
+
+Import requests
+
+Import exchange SDKs
+
+Open files
+
+Write files
+
+Create temp files
+
+Call append_snapshot
+
+Modify workspace
+
+Modify timeline
+
+Use sockets
+
+Spawn threads
+
+Use subprocess
+
+────────────────────────────────────────
+8. TESTS
+
+Create deterministic tests covering:
+
+Empty analysis
+
+Healthy portfolio
+
+High concentration
+
+Low diversification
+
+High cash
+
+Unknown values
+
+Stable ordering
+
+Decimal rejection
+
+Float rejection
+
+Immutable output
+
+Deterministic serialization
+
+No side effects
+
+AST security inspection
+
+Regression compatibility
+
+Target:
+
+40+ new tests
+
+100% PASS
+
+────────────────────────────────────────
+9. DELIVERY REPORT
+
+── CREATED FILES ──
+
+── MODIFIED FILES ──
+
+── CORE IMPLEMENTATION ──
+
+── RULE ENGINE ──
+
+── DETERMINISM ──
+
+── SECURITY ──
+
+── TESTS ──
+
+── PRODUCTION CODE CHANGES ──
+
+Core only
+
+── TEST RESULTS ──
+
+PASS
+
+── FAIL / SKIP ──
+
+0 / 0
+
+── EXCHANGE WRITE REQUEST ──
+
+0
+
+── SECRET EXPOSURE ──
+
+0
+
+── COMMIT ──
+
+Hash
+
+Push
+
+── NEXT AGENT ──
+
+AGENT 03 — Strategy Service
+
+────────────────────────────────────────
+10. PASS CRITERIA
+
+PASS requires:
+
+• strategy_intelligence.py implemented
+
+• Deterministic StrategyProposal generation
+
+• Pure rule engine
+
+• No execution logic
+
+• No persistence
+
+• No Exchange
+
+• No Flask
+
+• No filesystem/network writes
+
+• 40+ tests PASS
+
+• Regression remains PASS
+
+• Exchange Write Request = 0
+
+• Secret Exposure = 0
+
+Mission 1800 continues only after Agent 02 passes.
