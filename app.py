@@ -1932,6 +1932,28 @@ def api_automation_export_status():
     return _aex_response(aex.export_status(raw))
 
 
+# ── Mission 1700 / Agent 04: Portfolio Intelligence API ─────────────
+# YALNIZCA GET. Rota hesap YAPMAZ: portfolio_service → portfolio çekirdeği
+# zinciri tek otoritedir. generated_at yalnız bu API sınırında üretilir
+# (Core/Service duvar saati okumaz). İstemciden generated_at override
+# kabul edilmez. Kimlik doğrulama _security_gate ile zorunludur.
+
+@app.get("/api/portfolio/intelligence")
+@app.get("/api/v1/portfolio/intelligence")
+def api_portfolio_intelligence():
+    import portfolio_service as _psv
+    generated_at = datetime.now(timezone.utc).isoformat()
+    try:
+        envelope = _psv.get_portfolio_analysis(
+            _psv.build_default_providers(), generated_at)
+    except Exception:
+        app.logger.exception("portfolio intelligence hatası")
+        return _automation_json({"ok": False, "error": {
+            "code": "PORTFOLIO_ANALYSIS_ERROR",
+            "message": "Portföy analizi üretilemedi."}}, 500)
+    return _automation_json(envelope)
+
+
 # ── Mission 1500.2: Workspace Read-Only API ──────────────────────────
 # YALNIZCA GET. Veri tek kaynaktan gelir: intelligence_workspace_service
 # (timeline modülüne doğrudan erişilmez). Kimlik doğrulama _security_gate
