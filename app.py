@@ -897,6 +897,88 @@ def logout():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Parola değiştir (Windows/yerel — data/local_admin.json)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/settings/password", methods=["GET", "POST"])
+def change_password():
+    """Girişli operatör için güvenli parola değiştirme.
+
+    - Windows/yerel: mevcut parola doğrulanır, yeni parola hash'lenir ve
+      data/local_admin.json ATOMIC olarak güncellenir (local_admin.save).
+      Yeniden başlatma gerekmez; dosya elle silinmez.
+    - Replit: yerel kimlik deposu devre dışıdır — sayfa yalnızca Secrets
+      yönlendirmesi gösterir, POST 403 döner.
+    Kaba kuvvete karşı ayrı "pwchange:" rate-limit ad alanı kullanılır;
+    login kilit bütçesi tüketilmez.
+    """
+    is_local = local_admin.enabled()
+    error = None
+    success = None
+
+    def _render(status: int = 200):
+        from version import get_version
+        import alpha_platform as ap
+        return render_template(
+            "account_password.html",
+            is_local=is_local, error=error, success=success,
+            app_mode=ap.app_mode(), app_version=get_version(),
+            owner=session.get("username", ""),
+            active_page="change_password",
+        ), status
+
+    if request.method == "POST":
+        ip = auth.get_client_ip()
+        if not is_local:
+            return _render(403)
+        _key = "pwchange:" + ip
+        allowed, secs = auth.check_rate_limit(_key)
+        if not allowed:
+            slog.log_event(slog.LOGIN_FAIL, ip=ip,
+                           detail=f"pwchange rate limited {secs}s")
+            error = f"Çok fazla başarısız deneme. {secs} saniye bekleyin."
+        else:
+            current = request.form.get("current_password", "")
+            new_pw = request.form.get("new_password", "")
+            confirm = request.form.get("confirm_password", "")
+            creds = local_admin.get_credentials()
+            if creds is None:
+                error = "Yerel kimlik kaydı bulunamadı. Kurulum sihirbazını kullanın."
+            elif not auth.verify_credentials(creds[0], current):
+                auth.record_attempt(_key, success=False)
+                slog.log_event(slog.LOGIN_FAIL, ip=ip,
+                               detail="pwchange: mevcut parola dogrulanamadi")
+                error = "Mevcut parola hatalı."
+            elif not new_pw or len(new_pw) < 6:
+                error = "Yeni parola en az 6 karakter olmalıdır."
+            elif len(new_pw) > 1024:
+                error = "Yeni parola çok uzun."
+            elif new_pw != confirm:
+                error = "Yeni parolalar birbiriyle eşleşmiyor."
+            elif new_pw == current:
+                error = "Yeni parola mevcut paroladan farklı olmalıdır."
+            else:
+                from werkzeug.security import generate_password_hash
+                try:
+                    local_admin.save(creds[0], generate_password_hash(new_pw))
+                except (ValueError, OSError) as exc:
+                    logging.getLogger(__name__).error(
+                        "pwchange write failed: %s", type(exc).__name__)
+                    error = ("Parola dosyası güncellenemedi (yazma hatası). "
+                             "Disk izinlerini kontrol edin; mevcut parola "
+                             "geçerli kalmaya devam ediyor.")
+                else:
+                    auth.record_attempt(_key, success=True)
+                    slog.log_event(slog.PASSWORD_CHANGE,
+                                   username=session.get("username", ""),
+                                   ip=ip, detail="pwchange: parola guncellendi")
+                    success = ("Parolanız güncellendi. Yeni parola hemen "
+                               "geçerli; yeniden başlatma gerekmez.")
+
+    return _render()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Sayfa render
 # ══════════════════════════════════════════════════════════════════════════════
 
