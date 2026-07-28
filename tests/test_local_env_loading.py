@@ -125,3 +125,29 @@ class TestLegacyNameWarning:
         text = self._load_env(tmp_path, "BINANCE_API_Key=LK1\n", caplog)
         assert "BINANCE_API_Key" in text
         assert "BINANCE_GLOBAL_API_KEY," not in text
+
+
+class TestSanitizerCoversAllAliases:
+    """GUARD (Task 71 kök nedeni): tests/conftest.py sanitizer'ı
+    exchange_credentials.CANONICAL + LEGACY içindeki TÜM env isimlerini
+    silmelidir. Yeni bir alias eklenip sanitizer güncellenmezse bu test
+    kırmızı olur — sahte anahtarlar testler arasına sızabilir."""
+
+    def test_sanitizer_covers_canonical_and_legacy(self):
+        import tests.conftest as conftest
+
+        required = set()
+        for pair in xc.CANONICAL.values():
+            required.update(pair)
+        for pairs in xc.LEGACY.values():
+            for pair in pairs:
+                required.update(pair)
+
+        sanitized = set(conftest.SANITIZED_CRED_ENV_KEYS)
+        missing = sorted(required - sanitized)
+        assert not missing, (
+            "tests/conftest.py SANITIZED_CRED_ENV_KEYS eksik: "
+            f"{missing}. exchange_credentials.py'ye eklenen her yeni "
+            "CANONICAL/LEGACY env ismi sanitizer listesine de eklenmeli, "
+            "yoksa sahte anahtarlar testler arasına sızar (bkz. Task 71)."
+        )

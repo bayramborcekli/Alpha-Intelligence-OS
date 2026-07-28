@@ -33,14 +33,24 @@ def _isolated_login_attempts_db():
             pass
 
 
+# Sanitizer'ın sildiği env isimleri. exchange_credentials.CANONICAL +
+# LEGACY içindeki TÜM isimleri kapsamak ZORUNDA — guard testi
+# (tests/test_local_env_loading.py) bunu doğrular. Yeni bir alias
+# eklersen buraya da ekle.
+SANITIZED_CRED_ENV_KEYS = (
+    "BINANCE_GLOBAL_API_KEY", "BINANCE_GLOBAL_API_SECRET",
+    "BINANCE_GLOBAL_API_Key", "BINANCE_GLOBAL_Secret_Key",
+    "BINANCE_TR_API_KEY", "BINANCE_TR_API_SECRET",
+    "BINANCE_API_KEY", "BINANCE_API_SECRET",
+    "BINANCE_API_Key", "BINANCE_Secret_Key",
+)
+
+
 @pytest.fixture(autouse=True)
 def _sanitize_real_creds(monkeypatch):
-    # Testler ASLA gerçek Global creds ile ağa çıkmamalı: ortamdaki
-    # gerçek alias secret'ları test tabanından silinir (testler kendi
+    # Testler ASLA gerçek creds ile ağa çıkmamalı: ortamdaki gerçek
+    # alias secret'ları test tabanından silinir (testler kendi
     # sahte anahtarlarını monkeypatch.setenv ile koyar).
-    for key in ("BINANCE_GLOBAL_API_KEY", "BINANCE_GLOBAL_API_SECRET",
-                "BINANCE_GLOBAL_API_Key", "BINANCE_GLOBAL_Secret_Key",
-                "BINANCE_API_KEY", "BINANCE_API_SECRET",
-                "BINANCE_API_Key", "BINANCE_Secret_Key"):
+    for key in SANITIZED_CRED_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
     yield
