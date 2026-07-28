@@ -47,6 +47,22 @@ SANITIZED_CRED_ENV_KEYS = (
 
 
 @pytest.fixture(autouse=True)
+def _disable_dev_auth_bypass(monkeypatch):
+    """Geliştirme auth bypass'ını test tabanından temizle.
+
+    Replit workspace'inde REPLIT_DEV_BYPASS=1 + REPL_ID set olduğundan
+    app._security_gate anonim istekleri otomatik login yapıyor ve tüm
+    "anonim reddedilmeli" testleri (73 adet) kırmızıya dönüyordu. Bypass
+    davranışını bilerek test eden dosyalar (test_replit_dev_bypass.py,
+    test_local_dev_bypass.py) flag'i test içinde kendileri set eder;
+    burada silmek onları etkilemez.
+    """
+    monkeypatch.delenv("REPLIT_DEV_BYPASS", raising=False)
+    monkeypatch.delenv("LOCAL_DEV_BYPASS", raising=False)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _sanitize_real_creds(monkeypatch):
     # Testler ASLA gerçek creds ile ağa çıkmamalı: ortamdaki gerçek
     # alias secret'ları test tabanından silinir (testler kendi
