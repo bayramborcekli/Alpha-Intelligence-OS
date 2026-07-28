@@ -127,3 +127,6 @@ alpha20_v1/accounts.json
 
 # ── Windows/desktop runtime durumu (PID, launcher log) ─────────────
 runtime/
+
+# runtime-generated local auth state
+data/
