@@ -1,0 +1,567 @@
+ALPHA INTELLIGENCE OS — WINDOWS DESKTOP PACKAGING + EXCHANGE CONNECTIVITY HARDENING
+
+MISSION GOAL
+Alpha Intelligence OS’u Windows’ta temiz GitHub clone’dan kurulabilen, tek tıkla açılabilen paket program haline getir.
+Aynı anda Replit/GitHub/Windows arasında config ve exchange bağlantı mimarisini tekleştir.
+
+KAPSAM:
+- Windows temiz clone kurulumu
+- .venv bootstrap
+- start_alpha.cmd / stop_alpha.cmd
+- masaüstü kısayol desteği
+- serve_windows.py / Waitress
+- doğru working directory
+- port 5000 yönetimi
+- local_env.py tek env kaynağı
+- Binance TR Spot (çalışan mevcut çözümü koru)
+- Binance Global Spot
+- Futures kapalı
+- Replit uyumu
+- GitHub pull sonrası tekrar çalışabilirlik
+
+KAPSAM DIŞI:
+- Bybit / OKX geliştirme
+- Futures trading
+- canlı emir
+- transfer
+- withdraw
+- UI redesign
+- risk/trading engine değişikliği
+
+====================================================================
+MEVCUT DURUM / BİLİNEN GERÇEKLER
+====================================================================
+
+1) Binance TR Replit üzerinde ÇALIŞIYOR:
+   - HTTP 200
+   - code=0
+   - get_server_time OK
+   - get_spot_account OK
+   - 380 asset row
+   - process_env / Replit Secrets
+   - 13.042 PASS + 1 skip / 0 FAIL
+
+2) Binance TR root cause daha önce bulundu:
+   - stale base URL: trbinance.com -> binance.tr
+   - env precedence sorunu
+   - dağınık signing kodu
+   - bunlar düzeltildi
+   - çalışan `binance_tr_client.py` ve `local_env.py` mimarisini BOZMA
+
+3) Windows temiz clone yolu örneği:
+   D:\PROGRAMLAR\GTHUPNEW\Alpha-Intelligence-OS
+
+4) Temiz clone içinde:
+   - serve_windows.py
+   - start_alpha.cmd
+   - stop_alpha.cmd
+mevcut.
+
+5) Ancak `start_alpha.cmd` şu an PowerShell’den çalıştırıldığında sessizce dönüyor;
+   program açılmıyor, pencere/hata görünmüyor.
+
+6) Eski Windows klasöründe .venv vardı:
+   D:\PROGRAMLAR\GitHub\.venv\Scripts\python.exe
+Ama yeni temiz clone’da .venv var mı belirsiz.
+
+7) Daha önce sistem Python yanlışlıkla kullanıldı:
+   C:\Users\...\python.exe
+ve waitress bulunamadı.
+Doğru davranış:
+   <project>\.venv\Scripts\python.exe
+
+8) Masaüstü kısayolu eski yolu gösterebilir.
+Yeni clone için yeni shortcut yaratılmalı veya launcher bunu otomatik yönetmeli.
+
+====================================================================
+GÖREV A — WINDOWS CLEAN INSTALL / BOOTSTRAP
+====================================================================
+
+Amaç:
+Yeni clone sonrası kullanıcı yalnızca:
+1. repo’yu indirir/clone eder
+2. gerekirse `.env` koyar
+3. `start_alpha.cmd` çift tıklar
+ve program açılır.
+
+Kurulum akışı:
+
+A1) `.venv` yoksa:
+- sessizce fail etme
+- bootstrap başlat
+- `py -3` / `python` arasında güvenli seçim yap
+- mümkünse resmi Python launcher kullan
+- `.venv` oluştur
+- pip upgrade
+- requirements.txt / pyproject dependency kur
+- waitress dahil olduğunu doğrula
+- bootstrap logu göster
+
+A2) `.venv` varsa:
+- MUTLAKA `.venv\Scripts\python.exe` kullan
+- sistem Python’a fallback YAPMA
+
+A3) Python yoksa:
+- net kullanıcı mesajı:
+  "Python 3.x bulunamadı"
+- hangi sürümün gerekli olduğunu söyle
+- sessiz kapanma YOK
+
+A4) requirements eksikse:
+- dependency check
+- otomatik kurulum veya açık yönlendirme
+
+A5) bootstrap idempotent olmalı:
+- ikinci çalıştırmada tekrar tüm paketleri kurmamalı
+
+====================================================================
+GÖREV B — START_ALPHA.CMD HARDENING
+====================================================================
+
+`start_alpha.cmd`:
+- project root’u `%~dp0` ile bulmalı
+- `cd /d "%~dp0"` yapmalı
+- `.venv\Scripts\python.exe` kullanmalı
+- `serve_windows.py` çağırmalı
+- hata varsa pencere kapanmamalı
+- exit code göstermeli
+- log dosyası üretmeli:
+  runtime\launcher.log
+- secret/env değerlerini loglamamalı
+
+Geliştirme önerisi:
+- `start_alpha.cmd` yalnız launcher çağırabilir
+- asıl akıl `launcher_windows.py` içinde olabilir
+
+ÖRNEK BEKLENEN:
+- double click -> terminal/launcher window opens
+- server starts
+- browser opens
+- terminal optionally minimize edilebilir
+- failure -> visible message, not silent
+
+====================================================================
+GÖREV C — WINDOWS LAUNCHER
+====================================================================
+
+Tek bir Windows launcher oluştur/iyileştir:
+`launcher_windows.py`
+
+Sorumluluklar:
+- project root
+- .venv path
+- serve_windows.py
+- port check
+- log setup
+- browser open
+- process lifecycle
+- graceful shutdown
+- duplicate instance prevention
+
+Port 5000:
+- boşsa start
+- Alpha zaten çalışıyorsa yeni instance açma, browser’a git
+- başka process kullanıyorsa net hata:
+  "Port 5000 başka uygulama tarafından kullanılıyor"
+
+Process PID:
+- runtime\alpha.pid
+- stale PID temizliği
+- stop_alpha.cmd bu PID ile düzgün kapatabilsin
+
+====================================================================
+GÖREV D — DESKTOP SHORTCUT
+====================================================================
+
+Amaç:
+Kullanıcı eski klasör yolu yüzünden bozuk shortcut yaşamamalı.
+
+Bir yardımcı script:
+`tools/windows/create_desktop_shortcut.ps1`
+
+Bu script:
+- current project root’taki `start_alpha.cmd` için Desktop shortcut yaratır
+- shortcut target = current clone path
+- working directory = current project root
+- isim: "Alpha Intelligence OS"
+- eski shortcut varsa günceller
+
+Opsiyonel:
+`INSTALL_WINDOWS.cmd`
+- venv bootstrap
+- dependency install
+- shortcut creation
+- smoke test
+
+====================================================================
+GÖREV E — SERVE_WINDOWS.PY
+====================================================================
+
+`serve_windows.py`:
+- yalnız doğru local_env loader çağırmalı
+- duplicate env loading YOK
+- Waitress import check
+- host=127.0.0.1
+- port=5000 default
+- threads makul
+- startup log:
+  Python executable
+  project root
+  port
+  config source summary (secret değeri olmadan)
+
+Ama:
+- PATCH10 SOURCE CHECK gibi geçici debug textlerini kaldır
+- production-grade log kullan
+
+====================================================================
+GÖREV F — LOCAL_ENV / CONFIG SINGLE SOURCE
+====================================================================
+
+Mevcut çalışan `local_env.py` mimarisini koru ve repo genelinde TEK env loader yap.
+
+WINDOWS LOCAL:
+- project `.env` exchange credentials için source of truth olabilir
+- stale user/system env sessizce override etmemeli
+
+REPLIT:
+- process env / Replit Secrets kazanır
+- `.env` production’da okunmaz
+
+Production:
+- FLASK_ENV=production -> process env
+
+Mükerrer loader araması:
+- app.py
+- serve_windows.py
+- launcher_windows.py
+- gunicorn config
+- tests
+- tools
+içinde ikinci loader kaldır.
+
+Güvenli diagnostic:
+- source
+- present
+- length
+- ascii
+ama secret value ASLA yok
+
+====================================================================
+GÖREV G — BINANCE TR
+====================================================================
+
+MEVCUT ÇALIŞAN ADAPTÖRÜ KORU.
+
+`binance_tr_client.py`:
+- base: https://www.binance.tr
+- time: /open/v1/common/time
+- account: /open/v1/account/spot
+- Session(trust_env=False)
+- default TLS verification
+- verify=False YOK
+- exact HMAC
+- recvWindow=5000
+- sanitized errors
+
+Replit live test zaten çalışıyor.
+Windows smoke/live test ekle.
+
+Windows local secret varsa:
+- get_server_time
+- get_spot_account
+- sadece read-only
+
+====================================================================
+GÖREV H — BINANCE GLOBAL SPOT
+====================================================================
+
+Sadece Spot.
+Futures disabled.
+
+Tek adaptör:
+`binance_global_client.py`
+
+Read-only:
+- get_server_time
+- get_spot_account
+- optional ticker valuation
+
+Kurallar:
+- exact HMAC
+- X-MBX-APIKEY
+- server timestamp
+- recvWindow
+- Session(trust_env=False)
+- default TLS
+- verify=False YOK
+- custom CA workaround varsayılan YOK
+
+Futures disabled ise:
+- hiçbir `/fapi/*` çağrısı OLMAMALI
+- overview/wallet/health futures çağırmamalı
+- UI = DISABLED
+- warning üretmemeli
+
+====================================================================
+GÖREV I — COMMON EXCHANGE TRANSPORT
+====================================================================
+
+Binance TR ve Global mümkünse ortak güvenli transport kullanmalı:
+
+- Session(trust_env=False)
+- timeout
+- safe GET retry
+- TLS verify default
+- JSON parsing
+- HTTP normalization
+- safe diagnostics
+
+Ama signing exchange adapter içinde kalabilir.
+
+Güvenli error model:
+- http_status
+- exchange_code
+- sanitized message
+- endpoint path
+- retryable
+- latency
+
+ASLA:
+- key
+- secret
+- signature
+- query string
+- full signed URL
+loglama.
+
+====================================================================
+GÖREV J — REPLIT/GITHUB/WINDOWS SYNC SAFETY
+====================================================================
+
+GitHub main Windows’a çekildiğinde:
+- `.env` tracked OLMAMALI
+- `.venv` tracked OLMAMALI
+- runtime/ tracked OLMAMALI
+- Windows install files tracked OLMALI:
+  start_alpha.cmd
+  stop_alpha.cmd
+  launcher_windows.py
+  serve_windows.py
+  tools/windows/create_desktop_shortcut.ps1
+
+`.gitignore` kontrol et.
+
+Eski patch/debug dosyaları repo’ya girmemeli.
+
+====================================================================
+GÖREV K — STALE CLEANUP
+====================================================================
+
+Repo genelinde ara ve aktif runtime’dan temizle:
+- PATCH09
+- PATCH10
+- PATCH11
+- PATCH20
+- PATCH21
+- PATCH22
+- SOURCE CHECK
+- curl.exe Binance workaround
+- custom CA workaround
+- duplicate env loader
+- trbinance.com
+- os.environ.setdefault(exchange credentials)
+
+Tarihsel raporlarda varsa "deprecated/history" olabilir.
+
+====================================================================
+GÖREV L — WINDOWS TEST MATRİSİ
+====================================================================
+
+Unit/integration:
+
+1. clean clone no .venv -> bootstrap
+2. .venv exists -> reused
+3. system python ignored
+4. waitress missing -> installed or clear error
+5. start_alpha working directory
+6. launcher correct executable
+7. port free
+8. Alpha already running
+9. port collision other process
+10. browser open
+11. pid file
+12. stop_alpha graceful shutdown
+13. no secret in launcher.log
+14. env Windows precedence
+15. Replit env precedence
+16. Binance TR Windows read-only
+17. Binance Global Spot Windows read-only
+18. futures zero calls
+19. `/home` HTTP 200
+20. `/settings/accounts` HTTP 200
+
+Tam regresyon:
+0 FAIL zorunlu.
+
+====================================================================
+GÖREV M — WINDOWS INSTALLER UX
+====================================================================
+
+Mümkünse tek entrypoint:
+`INSTALL_WINDOWS.cmd`
+
+İlk kurulum:
+- detect Python
+- create .venv
+- install deps
+- validate .env.example
+- DO NOT create real secrets
+- create desktop shortcut
+- smoke test
+- message:
+  "Installation completed"
+
+Sonraki kullanım:
+desktop shortcut -> start_alpha.cmd
+
+====================================================================
+GÖREV N — SON RAPOR
+====================================================================
+
+Şu formatta raporla:
+
+1. ROOT CAUSES
+2. WINDOWS STARTUP ROOT CAUSE
+3. ARCHITECTURE CHANGES
+4. CHANGED FILES
+5. CLEAN INSTALL TEST
+6. START_ALPHA TEST
+7. DESKTOP SHORTCUT TEST
+8. PORT/PID TEST
+9. ENV SOURCE TEST
+10. BINANCE TR WINDOWS RESULT
+11. BINANCE TR REPLIT RESULT
+12. BINANCE GLOBAL SPOT WINDOWS RESULT
+13. BINANCE GLOBAL SPOT REPLIT RESULT
+14. FUTURES DISABLED VERIFICATION
+15. FULL REGRESSION
+16. EXACT WINDOWS INSTALL COMMAND
+17. EXACT WINDOWS START METHOD
+18. EXACT WINDOWS STOP METHOD
+19. GIT COMMIT HASH
+20. REMAINING RISKS
+
+====================================================================
+KRİTİK KISITLAR
+====================================================================
+
+- PAPER_MODE=true
+- canlı emir yok
+- transfer yok
+- withdraw yok
+- futures trading yok
+- Binance TR çalışan çözümü bozma
+- verify=False yasak
+- secret loglama yok
+- silent failure yok
+- system Python fallback yok
+- patch zinciri yok
+- clean architecture
+- UI redesign yok
+- risk/trading engine değişikliği yok
+
+SUCCESS CRITERIA:
+Yeni Windows PC/temiz clone üzerinde:
+1. INSTALL_WINDOWS.cmd
+2. desktop shortcut
+3. Alpha açılır
+4. /home gelir
+5. Binance TR read-only HEALTHY
+6. Binance Global Spot read-only HEALTHY (credentials mevcutsa)
+7. Futures DISABLED
+8. stop_alpha.cmd düzgün kapatır
+
+Bu akış kullanıcıdan PowerShell komut ezberi gerektirmemeli.
+
+
+====================================================================
+GÖREV O — PATH / PYTHON / PROJECT ROOT İZOLASYONU (KRİTİK)
+====================================================================
+
+Windows'taki mevcut ana sorunlardan biri PATH ve klasör karışmasıdır.
+Alpha'nın çalışması Windows PATH düzenine bağımlı OLMAMALI.
+
+KESİN KURALLAR:
+
+1) Alpha runtime sistem PATH'teki `python` komutunu kullanmayacak.
+   Runtime için yalnız:
+   <CURRENT_PROJECT_ROOT>\.venv\Scripts\python.exe
+
+2) start_alpha.cmd:
+   - `%~dp0` ile kendi bulunduğu clone klasörünü project root kabul etsin.
+   - Eski sabit yollar kullanmasın:
+     D:\PROGRAMLAR\GitHub
+     D:\PROGRAMLAR\GTHUPNEW\...
+     C:\Users\...\Python...
+   - hiçbir hard-coded kullanıcı/drive yolu olmasın.
+
+3) launcher_windows.py:
+   - Path(__file__).resolve().parent üzerinden root çözsün.
+   - cwd'yi root'a alsın.
+   - `sys.executable` beklenen `.venv\Scripts\python.exe` değilse fail-fast yapsın
+     veya doğru .venv executable ile kendini yeniden başlatsın.
+   - sistem Python ile server başlatmasın.
+
+4) Windows PATH'i global olarak DEĞİŞTİRME.
+   - installer user/system PATH'e Python, Git veya proje klasörü eklememeli.
+   - PATH mutation yapma.
+   - subprocess çağrılarında absolute executable path kullan.
+
+5) Git:
+   - runtime'ın çalışması için git CLI zorunlu OLMASIN.
+   - GitHub Desktop ile clone/pull yapılabilsin.
+   - installer Git PATH aramamalı veya sistem PATH'e Git eklememeli.
+
+6) Shortcut:
+   - Target: current clone içindeki start_alpha.cmd veya launcher
+   - Start In: current clone root
+   - eski clone path'i referanslamasın
+   - shortcut yeniden oluşturulunca path otomatik güncellensin.
+
+7) `.env`:
+   - yalnız current project root'taki `.env`
+   - parent/sibling/old clone `.env` tarama YOK
+   - `.env.bak-*` / `.env.example` runtime source OLMAYACAK
+   - source metadata current root ile doğrulansın fakat secret yazılmasın.
+
+8) `.venv`:
+   - yalnız current project root `.venv`
+   - eski clone `.venv` reuse YOK
+   - global site-packages kullanma
+   - venv oluşturulduğunda `sys.prefix` ve executable root doğrulansın.
+
+9) Runtime state:
+   - PID/log/cache yalnız:
+     <CURRENT_PROJECT_ROOT>\runtime\
+   - eski clone runtime/PID dosyaları dikkate alınmasın.
+
+10) Port 5000 process teşhisi:
+   - mevcut process'in executable + command line current root'a ait mi kontrol et.
+   - eski Alpha clone process ise kullanıcıya:
+     "Eski Alpha instance çalışıyor: <safe path>"
+     mesajı ver ve ikinci server başlatma.
+   - otomatik olarak rastgele process kill etme.
+
+11) Testler:
+   - iki farklı clone aynı PC'de mevcutken doğru root izolasyonu
+   - eski clone .env mevcutken current clone yalnız kendi .env'sini kullanıyor
+   - eski clone .venv mevcutken current clone yalnız kendi .venv'sini kullanıyor
+   - PATH'te başka Python önce gelse dahi Alpha doğru .venv'i kullanıyor
+   - shortcut eski path'ten yeni clone'a recreate edildiğinde doğru target
+   - cwd farklı dizinden start_alpha çağrılsa dahi current project root bulunuyor
+
+SUCCESS:
+Alpha hangi klasöre clone edilirse edilsin, yalnız kendi klasöründeki
+`.venv`, `.env`, runtime ve launcher dosyaları ile çalışmalı.
+Windows global PATH ve eski Alpha klasörleri sonucu değiştirmemeli.
