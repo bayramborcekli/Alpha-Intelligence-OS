@@ -128,6 +128,25 @@
     var ordered = (accounts || []).slice().sort(function (a, b) {
       return (b.status === "OK") - (a.status === "OK");
     });
+    // Kanonik connection_state → Türkçe etiket (my_accounts.js
+    // STATE_BADGE / overview.html STATE_TXT ile aynı metinler).
+    // Bilinmeyen/eksik alan asla "bağlı" göstermez.
+    var STATE_TR = {
+      HEALTHY: "bağlı",
+      STALE: "Bağlı (eski veri)",
+      NOT_CONFIGURED: "Anahtar Yapılandırılmamış",
+      AUTH_FAILED: "Kimlik Hatası",
+      CONNECTION_FAILED: "Bağlantı Hatası",
+      DISABLED: "Bağlı Değil"
+    };
+    function stateLabel(a) {
+      var s = STATE_TR[a.connection_state];
+      if (s) return s;
+      // connection_state yoksa/bilinmiyorsa yalnızca eşlenmiş eski
+      // status kodlarına düş; asla "bağlı" varsayma — teknik kod ya
+      // da yanlış pozitif basılmaz.
+      return STATE_TR[a.status] || "Durum Bilinmiyor";
+    }
     el.innerHTML = ordered.map(function (a) {
       var ok = a.status === "OK";
       return "<span class=\"th-acct\">" +
@@ -139,7 +158,7 @@
         esc(stripBalance(a)) + "</span></span>" +
         "<span class=\"st\"><span class=\"th-dot" +
         (ok ? " ok" : "") + "\"></span>" +
-        esc(ok ? "bağlı" : a.status) + "</span></span>";
+        esc(stateLabel(a)) + "</span></span>";
     }).join("") + offline.map(function (a) {
       return "<span class=\"th-acct th-offline\">" +
         "<span>" + esc(a.logo) + "</span>" +
