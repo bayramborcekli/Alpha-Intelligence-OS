@@ -2587,7 +2587,9 @@ def api_v1_audit_events():
 @app.get("/api/v1/audit/summary")
 def api_v1_audit_summary():
     import ledger_api as la
-    return _dash_json(la.audit_summary())
+    d = la.audit_summary()
+    d["legacy_env_warnings"] = local_env.legacy_name_warnings()
+    return _dash_json(d)
 
 
 @app.get("/api/v1/reports")

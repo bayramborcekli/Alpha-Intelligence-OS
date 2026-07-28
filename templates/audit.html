@@ -82,7 +82,7 @@
       if (d.latest_event)
         document.getElementById("au-fresh").textContent =
           "Salt okunur · son olay: " + new Date(d.latest_event).toLocaleString("tr-TR");
-      showWarnings(d.warnings || []);
+      showWarnings((d.warnings || []).concat(d.legacy_env_warnings || []));
     } catch (_) {}
   }
   async function loadEvents() {
