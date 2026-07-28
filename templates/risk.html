@@ -36,6 +36,9 @@
     font-weight:700; cursor:pointer; }
   .sim-btn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   svg.rk-chart { width:100%; height:120px; background:var(--soft); border-radius:8px; }
+  .rk-badge { display:inline-block; font-size:.68rem; font-weight:700;
+    padding:2px 8px; border-radius:999px; border:1px solid var(--warn);
+    color:var(--warn); background:rgba(210,153,34,.1); white-space:nowrap; }
 </style>
 
 <div class="rk-grid" id="rk-cards" aria-live="polite">
@@ -70,6 +73,7 @@
     <tbody><tr><td colspan="4">Yükleniyor…</td></tr></tbody>
   </table></div>
   <div id="expo-meta" class="rk-note"></div>
+  <div id="expo-unpriced" class="rk-note"></div>
   <div id="tr-holdings" class="rk-note"></div>
 </section>
 
@@ -240,17 +244,44 @@
     .then(function (d) {
       var tb = el("expo-table").querySelector("tbody");
       if (!d.ok) { tb.innerHTML = "<tr><td colspan='4'>Veri Yok</td></tr>"; return; }
-      if (!d.by_asset.length) {
+      var unpriced = d.unpriced_assets || [];
+      var unpricedSet = {};
+      unpriced.forEach(function (u) { unpricedSet[u.asset] = true; });
+      if (!d.by_asset.length && !unpriced.length) {
         tb.innerHTML = "<tr><td colspan='4'>Açık pozisyon yok.</td></tr>";
       } else {
-        tb.innerHTML = d.by_asset.map(function (a) {
+        var rows = d.by_asset.map(function (a) {
+          if (a.exposure_value_usdt === null && unpricedSet[a.asset]) {
+            return "<tr><td>" + esc(a.asset) +
+              " <span class='rk-badge'>fiyatlanamadı</span></td><td>—</td>" +
+              "<td>Veri Yok</td><td></td></tr>";
+          }
           var pct = a.exposure_pct === null ? 0 : parseFloat(a.exposure_pct);
           return "<tr><td>" + esc(a.asset) + "</td><td>" +
             vy(a.exposure_value_usdt) + "</td><td>" +
             (a.exposure_pct === null ? "Veri Yok" : "%" + esc(a.exposure_pct)) +
             "</td><td><div class='rk-bar' aria-hidden='true'><i style='width:" +
             Math.min(100, pct) + "%'></i></div></td></tr>";
-        }).join("");
+        });
+        var listed = {};
+        d.by_asset.forEach(function (a) { listed[a.asset] = true; });
+        unpriced.forEach(function (u) {
+          if (listed[u.asset]) { return; }
+          rows.push("<tr><td>" + esc(u.asset) +
+            " <span class='rk-badge'>fiyatlanamadı</span></td><td>" +
+            esc(u.quantity === null || u.quantity === undefined
+                ? "—" : u.quantity + " adet") +
+            "</td><td>Veri Yok</td><td></td></tr>");
+        });
+        tb.innerHTML = rows.join("");
+      }
+      var unpMeta = el("expo-unpriced");
+      if (unpMeta) {
+        unpMeta.textContent = unpriced.length
+          ? "⚠️ Fiyatlanamayan varlıklar (USDT değeri doğrulanamadı): " +
+            unpriced.map(function (u) {
+              return u.asset + " (" + u.quantity + " adet)"; }).join(" · ")
+          : "";
       }
       el("expo-meta").textContent =
         "Brüt: " + vy(d.gross_exposure_usdt, " USDT") +

@@ -171,6 +171,7 @@ def exposure() -> dict:
     usdt_free = None
     usdt_locked = None
     by_asset_raw: list[dict] = []
+    unpriced_assets: list[dict] = []
     if spot is not None:
         total_spot = _dec(spot.get("total_spot_value_usdt"))
         spot_valuation = spot.get("valuation")
@@ -182,6 +183,12 @@ def exposure() -> dict:
                     {"asset": h.get("asset"),
                      "quantity": h.get("amount"),
                      "value_usdt": _dec(h.get("value_usdt"))})
+        # Fiyatlanamayan varlıklar (asset + adet; value_usdt her zaman null)
+        for u in (spot.get("unpriced_holdings") or []):
+            if isinstance(u, dict):
+                unpriced_assets.append({"asset": u.get("asset"),
+                                        "quantity": u.get("amount"),
+                                        "value_usdt": None})
 
     gross = total_spot if total_spot is not None else Decimal(0)
     stable_value = (usdt_free or Decimal(0)) + (usdt_locked or Decimal(0)) \
@@ -227,6 +234,7 @@ def exposure() -> dict:
         "cash_available_usdt": _q2(usdt_free),
         "stablecoin_value_usdt": _q2(stable_value),
         "by_asset": assets,
+        "unpriced_assets": unpriced_assets,
         "by_direction": {
             "long_pct": "100.00" if total_spot else None,
             "short_pct": "0.00" if total_spot else None,
@@ -547,6 +555,8 @@ def summary(persist: bool = True) -> dict:
         if exp.get("ok") else None,
         "total_spot_value_usdt": _q2(total_spot),
         "spot_valuation": exp.get("spot_valuation")
+        if exp.get("ok") else None,
+        "unpriced_assets": exp.get("unpriced_assets")
         if exp.get("ok") else None,
         "exposure_pct_of_margin": exp.get("exposure_pct_of_margin")
         if exp.get("ok") else None,

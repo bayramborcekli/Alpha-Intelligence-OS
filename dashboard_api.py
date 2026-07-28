@@ -391,6 +391,7 @@ def global_spot_account() -> dict:
             except SafeExchangeError:
                 valuation = "PARTIAL"
         holdings = []
+        unpriced = []
         total = Decimal(0)
         for b in nonzero:
             asset = b.get("asset")
@@ -406,6 +407,11 @@ def global_spot_account() -> dict:
                     value = qty * px
             if value is not None:
                 total += value
+            else:
+                # Fiyatlanamayan varlık: şeffaflık için ayrı listelenir
+                # (asset + adet; USDT değeri null — asla uydurulmaz).
+                unpriced.append({"asset": asset, "amount": str(qty),
+                                 "value_usdt": None})
             holdings.append({"asset": asset, "amount": str(qty),
                              "value_usdt": (str(value)
                                             if value is not None else None)})
@@ -425,6 +431,8 @@ def global_spot_account() -> dict:
             "asset_count": len(nonzero),
             "total_asset_count": len(balances),
             "top_holdings": holdings[:5],
+            "unpriced_holdings": unpriced[:50],
+            "unpriced_count": len(unpriced),
             "api_key_masked": mask(key),
         }
     return _serve("global_spot", "BINANCE_GLOBAL_SPOT", build)
