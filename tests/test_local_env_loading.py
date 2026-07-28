@@ -31,6 +31,12 @@ def clean_env(monkeypatch):
     local_env.reset_for_tests()
     yield
     local_env.reset_for_tests()
+    # load_project_env os.environ'a DOĞRUDAN yazar; monkeypatch bunları
+    # geri alamaz (test öncesi mevcut olmayan anahtar kaydedilmez).
+    # Sızıntı sonraki testlerde sahte credential görünümü yaratır.
+    for k in list(os.environ):
+        if "BINANCE" in k:
+            os.environ.pop(k, None)
 
 
 def _load_with(tmp_path, payload: bytes):

@@ -9,5 +9,6 @@
 - [Operation shared state](operation-shared-state.md) — new mutable operation-service fields must join the flock/JSON shared store, or they regress to per-worker state.
 - [Spot-only architecture](spot-only-architecture.md) — Futures private API permanently removed; tombstone FUTURES_REMOVED contract + deliberate public-klines/PAPER keeps.
 - [Exchange credential resolver](exchange-credential-resolver.md) — exchange_credentials.py tek çözümleyici; kanonik BINANCE_GLOBAL_API_Key her zaman kazanır; Windows deposu env'i ezer; hesap fetch'i dashboard_api raw cache'te tek yol.
+- [Test env isolation](test-env-isolation.md) — code writing creds directly to os.environ leaks past monkeypatch; conftest sanitizer must cover every resolver alias.
 - [Binance TR API quirks](binance-tr-api.md) — `data` may be list or dict; movements API omits trades so reconciliation is PARTIAL by design; transferType=1 = internal.
 - [Task agent scope deletions](task-agent-scope-deletions.md) — merge'ler son eklenen kodu ve .replit userenv değişkenlerini "kapsam dışı" diye silebilir; her merge sonrası doğrula.

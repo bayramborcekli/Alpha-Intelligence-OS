@@ -40,6 +40,7 @@ def _sanitize_real_creds(monkeypatch):
     # sahte anahtarlarını monkeypatch.setenv ile koyar).
     for key in ("BINANCE_GLOBAL_API_KEY", "BINANCE_GLOBAL_API_SECRET",
                 "BINANCE_GLOBAL_API_Key", "BINANCE_GLOBAL_Secret_Key",
+                "BINANCE_API_KEY", "BINANCE_API_SECRET",
                 "BINANCE_API_Key", "BINANCE_Secret_Key"):
         monkeypatch.delenv(key, raising=False)
     yield
