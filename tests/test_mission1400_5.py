@@ -146,6 +146,65 @@ class TestTopbarEverywhere:
         assert "<button" not in bar  # üst çubukta hiçbir eylem düğmesi yok
 
 
+class TestTopbarFailureModes:
+    """Görev 76 — fetch hata ayrımı JS'te yaşar; template sözleşmesini koru.
+
+    Topbar yeniden düzenlenirse bu ayrım sessizce kaybolmasın:
+    - 401 → oturum uyarısı + /login yönlendirmesi ("Bağlantı Yok" DEĞİL)
+    - 500/ağ hatası → rozetler "Veri Alınamadı" + neden
+    - Başarılı yanıt → servis durumları tek tek set edilir
+    """
+
+    @pytest.fixture
+    def bar(self, client):
+        _login(client)
+        html = client.get("/overview").get_data(as_text=True)
+        start = html.index('id="exec-topbar"')
+        end = html.index("</script>", start)
+        return html[start:end]
+
+    def test_401_triggers_session_flow_not_down(self, bar):
+        # 401 dalı sessionExpired'e gider, generic hataya değil
+        assert "r.status === 401" in bar
+        assert "sessionExpired()" in bar
+        # Oturum akışı: uyarı metni + login yönlendirmesi
+        assert "Oturum süresi doldu" in bar
+        assert 'window.location.href = "/login"' in bar
+        # 401 nedeni "oturum" olarak etiketlenir
+        assert 'unavailable("oturum")' in bar
+        # 401 kontrolü genel !r.ok kontrolünden ÖNCE gelmeli, yoksa
+        # oturum hatası sıradan HTTP hatasına düşer
+        assert bar.index("r.status === 401") < bar.index("!r.ok")
+
+    def test_http_and_network_errors_show_unavailable_reason(self, bar):
+        # Rozetler DOWN değil, "Veri Alınamadı" + neden gösterir
+        assert "Veri Alınamadı" in bar
+        assert "err.httpStatus = r.status" in bar
+        assert '"HTTP " + e.httpStatus' in bar
+        assert '"ağ hatası"' in bar
+        assert "unavailable(reason)" in bar
+        # unavailable tüm servis rozetlerini bilinmiyor (st-unk) yapar
+        assert "st-unk" in bar
+        for sid in ("xh-s-bg", "xh-s-tr", "xh-s-led",
+                    "xh-s-aud", "xh-s-risk", "xh-s-hp"):
+            assert sid in bar, sid
+        # Geçersiz gövde de aynı yoldan geçer
+        assert 'unavailable("geçersiz yanıt")' in bar
+
+    def test_success_sets_each_service_individually(self, bar):
+        for pair in ('setSt("xh-s-bg", s.binance_global)',
+                     'setSt("xh-s-tr", s.binance_tr)',
+                     'setSt("xh-s-led", s.ledger)',
+                     'setSt("xh-s-aud", s.audit)',
+                     'setSt("xh-s-risk", s.risk_engine)',
+                     'setSt("xh-s-hp", s.health)'):
+            assert pair in bar, pair
+        # setSt üç ayrı durumu ayrı gösterir
+        assert "● Bağlı" in bar
+        assert "◐ Kısmi" in bar
+        assert "○ Bağlantı Yok" in bar
+
+
 class TestQuickActions:
     def test_quick_cards_on_overview(self, client):
         _login(client)
