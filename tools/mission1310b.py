@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "alpha20_v1" / "mission1310b"
 LEDGER_PATH = OUT / "ledger_events.json"
 
-TR_BASE = "https://www.trbinance.com"
+TR_BASE = "https://www.binance.tr"  # resmi güncel base (eski trbinance.com KULLANILMAZ)
 EXCHANGE = "BINANCE_TR"
 ALLOWLIST = {
     ("GET", "/open/v1/account/spot"),

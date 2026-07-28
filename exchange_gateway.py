@@ -23,7 +23,7 @@ from typing import Any
 import requests
 
 GLOBAL_BASE = "https://fapi.binance.com"
-TR_BASE = "https://www.trbinance.com"
+TR_BASE = "https://www.binance.tr"  # tek adaptör: binance_tr_client (eski trbinance.com KULLANILMAZ)
 
 # Yalnızca GET; ağ isteğinden önce zorunlu.
 GLOBAL_ALLOWLIST = {
@@ -123,14 +123,14 @@ def tr_spot_summary() -> dict[str, Any]:
 
     def build() -> dict:
         try:
-            r = _signed_get(TR_BASE, "/open/v1/account/spot",
-                            TR_ALLOWLIST, key, sec)
-            body = r.json() if r.status_code == 200 else {}
-            if r.status_code != 200 or body.get("code", 0) not in (0, "0"):
-                return {"source": "binance_tr_spot", "configured": True,
-                        "ok": False, "key_masked": mask(key),
-                        "error": f"HTTP {r.status_code}"}
-            accs = (body.get("data") or {}).get("accountAssets") or []
+            # Tek adaptör: tüm Binance TR erişimi binance_tr_client üzerinden.
+            import binance_tr_client as btr
+            body = btr.BinanceTRClient(key, sec).get_spot_account()
+            data = body.get("data")
+            if isinstance(data, list):
+                accs = data
+            else:
+                accs = (data or {}).get("accountAssets") or []
             balances = [{"asset": a.get("asset"), "free": a.get("free"),
                          "locked": a.get("locked")}
                         for a in accs if isinstance(a, dict)
@@ -140,9 +140,15 @@ def tr_spot_summary() -> dict[str, Any]:
                     "ok": True, "key_masked": mask(key),
                     "balances": balances, "read_only": True}
         except Exception as exc:  # bozuk/beklenmedik yanıt → güvenli hata
-            return {"source": "binance_tr_spot", "configured": True,
-                    "ok": False, "key_masked": mask(key),
-                    "error": f"yanıt hatası: {type(exc).__name__}"}
+            out = {"source": "binance_tr_spot", "configured": True,
+                   "ok": False, "key_masked": mask(key),
+                   "error": f"yanıt hatası: {type(exc).__name__}"}
+            xc = getattr(exc, "exchange_code", None)
+            if xc is not None:
+                out["exchange_code"] = xc
+                out["exchange_message"] = getattr(
+                    exc, "exchange_message", "")
+            return out
 
     return _cached("tr_spot", build)
 

@@ -14,6 +14,12 @@ from __future__ import annotations
 
 import os
 
+import local_env
+
+# Tek env yükleyici: Windows'ta proje .env, Replit'te process env kazanır.
+# İdempotent — app.py de çağırsa .env yalnız bir kez uygulanır.
+local_env.load_project_env()
+
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("ALPHA_PORT", "5000"))
 

@@ -3,7 +3,7 @@
 Yalnızca GET; allowlist ağ isteğinden önce uygulanır. Emir/transfer/çekim
 uçlarına giden kod yolu yok. Fail closed. Secret'lar maskeli raporlanır.
 
-Binance TR Open API: https://www.trbinance.com  (path'ler /open/v1/...)
+Binance TR Open API: https://www.binance.tr  (path'ler /open/v1/...)
 İmza: HMAC-SHA256(query string), header X-MBX-APIKEY.
 
 Kullanım: python tools/mission1310a.py
@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "alpha20_v1" / "mission1310a"
 OUT.mkdir(exist_ok=True)
 
-TR_BASE = "https://www.trbinance.com"
+TR_BASE = "https://www.binance.tr"  # resmi güncel base (eski trbinance.com KULLANILMAZ)
 ALLOWLIST = {
     ("GET", "/open/v1/common/time"),
     ("GET", "/open/v1/common/symbols"),

@@ -24,13 +24,15 @@ from typing import Any, Callable
 
 import requests
 
+import binance_tr_client as btr
+
 ROOT = Path(__file__).resolve().parent
 LEDGER_PATH = ROOT / "alpha20_v1" / "mission1310b" / "ledger_events.json"
 M1310B_REPORT = ROOT / "alpha20_v1" / "mission1310b" / "mission_1310b_report.json"
 
 GLOBAL_BASE = "https://fapi.binance.com"
 SPOT_BASE = "https://api.binance.com"
-TR_BASE = "https://www.trbinance.com"
+TR_BASE = "https://www.binance.tr"  # resmi güncel base (eski trbinance.com KULLANILMAZ)
 
 # ── Yazma güvenliği ──────────────────────────────────────────────────────────
 # Bu sayaçlar hiçbir kod yolunda artırılmaz; sistem durumu raporlar.
@@ -108,11 +110,20 @@ def _now_iso() -> str:
 
 
 class SafeExchangeError(Exception):
-    """Normalize edilmiş güvenli hata."""
-    def __init__(self, code: str, message_tr: str):
+    """Normalize edilmiş güvenli hata.
+
+    exchange_code/exchange_message: borsanın kendi {code,msg} zarfı
+    (sanitize). Tanınmayan borsa kodu INVALID_EXCHANGE_RESPONSE arkasına
+    GİZLENMEZ; UI/diagnostic bu alanları görebilir. Key/secret/imza/query
+    asla taşınmaz."""
+    def __init__(self, code: str, message_tr: str,
+                 exchange_code: int | str | None = None,
+                 exchange_message: str | None = None):
         super().__init__(code)
         self.code = code
         self.message_tr = message_tr
+        self.exchange_code = exchange_code
+        self.exchange_message = exchange_message
 
 
 ERROR_MESSAGES = {
@@ -142,9 +153,23 @@ def _classify_http(status: int) -> SafeExchangeError:
 
 def _signed_get(base: str, path: str, allowlist: set, key: str, secret: str,
                 params: dict | None = None, timeout: int = 10) -> Any:
-    """Allowlist'li, imzalı, yalnızca-GET istek; sınırlı yeniden deneme."""
+    """Allowlist'li, imzalı, yalnızca-GET istek; sınırlı yeniden deneme.
+
+    Binance TR istekleri TEK adaptöre (binance_tr_client) yönlendirilir:
+    trust_env=False, sunucu zaman damgası, recvWindow=5000, exchange
+    code/msg korunarak normalize edilir."""
     if ("GET", path) not in allowlist:
         raise RuntimeError(f"GÜVENLİK BLOĞU: allowlist dışı GET {path}")
+    if base == TR_BASE:
+        client = btr.BinanceTRClient(key, secret, timeout=timeout)
+        try:
+            if path == btr.PATH_SPOT_ACCOUNT:
+                return client.get_spot_account()
+            if path == btr.PATH_TIME:
+                return {"code": 0, "timestamp": client.get_server_time()}
+            raise RuntimeError(f"GÜVENLİK BLOĞU: allowlist dışı GET {path}")
+        except btr.BinanceTRError as exc:
+            raise _tr_error_to_safe(exc)
     last_err: SafeExchangeError | None = None
     for attempt in range(MAX_RETRIES + 1):
         try:
@@ -239,15 +264,18 @@ def _serve(kind: str, source: str, builder: Callable[[], dict]) -> dict:
                    else SafeExchangeError(
                        "INVALID_EXCHANGE_RESPONSE",
                        ERROR_MESSAGES["INVALID_EXCHANGE_RESPONSE"]))
+            err_payload = {"code": exc.code, "message": exc.message_tr}
+            if getattr(exc, "exchange_code", None) is not None:
+                err_payload["exchange_code"] = exc.exchange_code
+                err_payload["exchange_message"] = (
+                    exc.exchange_message or "")
             if hit:  # son bilinen veriyi yaşıyla sun
                 entry = dict(hit)
-                entry["error"] = {"code": exc.code,
-                                  "message": exc.message_tr}
+                entry["error"] = err_payload
             else:
                 entry = {"mono": None, "retrieved_at": None,
                          "latency_ms": None, "ok": False, "data": None,
-                         "error": {"code": exc.code,
-                                   "message": exc.message_tr}}
+                         "error": err_payload}
     age = (time.monotonic() - entry["mono"]) if entry["mono"] else None
     meta = {
         "source": source,
@@ -524,6 +552,36 @@ def global_orders() -> dict:
 
 
 # ── Binance TR ──────────────────────────────────────────────────────────────
+
+def _tr_error_to_safe(exc: "btr.BinanceTRError") -> SafeExchangeError:
+    """BinanceTRError → SafeExchangeError; exchange code/msg KORUNUR."""
+    kind_map = {
+        "NOT_CONFIGURED": ("EXCHANGE_AUTH_FAILED",
+                           "Binance TR anahtarı yapılandırılmamış "
+                           "(fail closed)."),
+        "TIMEOUT": ("EXCHANGE_TIMEOUT", ERROR_MESSAGES["EXCHANGE_TIMEOUT"]),
+        "NETWORK": ("EXCHANGE_UNAVAILABLE",
+                    ERROR_MESSAGES["EXCHANGE_UNAVAILABLE"]),
+    }
+    if exc.kind in kind_map:
+        code, msg = kind_map[exc.kind]
+        return SafeExchangeError(code, msg)
+    if exc.kind == "EXCHANGE_ERROR":
+        if exc.http_status in (401, 403):
+            base = "EXCHANGE_AUTH_FAILED"
+        elif exc.http_status in (418, 429):
+            base = "EXCHANGE_RATE_LIMITED"
+        else:
+            base = "INVALID_EXCHANGE_RESPONSE"
+        return SafeExchangeError(
+            base, ERROR_MESSAGES[base],
+            exchange_code=exc.exchange_code,
+            exchange_message=exc.exchange_message)
+    if exc.http_status is not None and exc.http_status != 200:
+        return _classify_http(exc.http_status)
+    return SafeExchangeError("INVALID_EXCHANGE_RESPONSE",
+                             ERROR_MESSAGES["INVALID_EXCHANGE_RESPONSE"])
+
 
 def tr_account() -> dict:
     def build() -> dict:

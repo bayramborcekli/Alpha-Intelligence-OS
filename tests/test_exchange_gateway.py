@@ -47,10 +47,12 @@ def test_no_secret_material_in_summary():
     g_payload = [{"asset": "USDT", "balance": "5", "availableBalance": "5"}]
     tr_payload = {"code": 0, "data": {"accountAssets": [
         {"asset": "TRY", "free": "1.39", "locked": "0"}]}}
+    import binance_tr_client as btr
     with mock.patch.dict(xg.os.environ, env, clear=True), \
          mock.patch.object(xg.requests, "get",
-                           side_effect=[_fake_resp(g_payload),
-                                        _fake_resp(tr_payload)]):
+                           return_value=_fake_resp(g_payload)), \
+         mock.patch.object(btr.BinanceTRClient, "get_spot_account",
+                           return_value=tr_payload):
         out = xg.exchange_summary()
     blob = json.dumps(out)
     for secret in (env["BINANCE_API_KEY"], env["BINANCE_API_SECRET"],
@@ -107,7 +109,12 @@ def test_malformed_payloads_return_safe_error():
             out = xg.global_futures_summary()
             assert out["ok"] is False               # istisna fırlatılmaz
         xg.clear_cache()
-        with mock.patch.object(xg.requests, "get", return_value=bad):
+        import binance_tr_client as btr
+        with mock.patch.object(
+                btr.BinanceTRClient, "get_spot_account",
+                side_effect=btr.BinanceTRError(
+                    "INVALID_RESPONSE", http_status=200,
+                    path="/open/v1/account/spot")):
             out = xg.tr_spot_summary()
             assert out["ok"] is False
 
@@ -122,10 +129,12 @@ def test_authenticated_summary_contract_no_secrets():
     tr_payload = {"code": 0, "data": {"accountAssets": []}}
     flask_app.app.config["TESTING"] = True
     client = flask_app.app.test_client()
+    import binance_tr_client as btr
     with mock.patch.dict(xg.os.environ, env, clear=True), \
          mock.patch.object(xg.requests, "get",
-                           side_effect=[_fake_resp(g_payload),
-                                        _fake_resp(tr_payload)]):
+                           return_value=_fake_resp(g_payload)), \
+         mock.patch.object(btr.BinanceTRClient, "get_spot_account",
+                           return_value=tr_payload):
         r = client.get("/api/exchange/summary")
     assert r.status_code == 200
     assert "no-store" in r.headers.get("Cache-Control", "")
