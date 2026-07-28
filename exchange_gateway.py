@@ -34,6 +34,7 @@ _cache: dict[str, tuple[float, dict]] = {}
 _cache_lock = threading.Lock()
 
 
+
 def mask(s: str) -> str:
     return (s[:4] + "…" + s[-4:]) if len(s) > 10 else "****"
 
@@ -115,7 +116,7 @@ def tr_spot_summary() -> dict[str, Any]:
 
 
 def exchange_summary() -> dict[str, Any]:
-    """Dashboard için birleşik salt-okunur borsa özeti."""
+    """Dashboard için birleşik salt-okunur borsa özeti (Spot-only)."""
     return {
         "live_trading": False,      # Mission 1400: otomatik canlı emir YOK
         "cache_ttl_seconds": CACHE_TTL_SECONDS,

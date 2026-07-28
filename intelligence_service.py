@@ -35,13 +35,15 @@ _FRESHNESS_MAP = {"FRESH": IntelligenceStatus.OK,
 
 
 def _default_account():
-    import dashboard_api as dapi
-    return dapi.global_account()
+    """Spot-only: Futures global_account kaldırıldı — boş model döner."""
+    return {"ok": False, "error": {"code": "NOT_AVAILABLE",
+            "message": "Futures hesabı kaldırıldı (Spot-only mimari)."}}
 
 
 def _default_positions():
-    import dashboard_api as dapi
-    return dapi.global_positions()
+    """Spot-only: Futures pozisyon verisi kaldırıldı — boş model döner."""
+    return {"ok": False, "error": {"code": "NOT_AVAILABLE",
+            "message": "Futures pozisyonları kaldırıldı (Spot-only mimari)."}}
 
 
 def _default_risk():

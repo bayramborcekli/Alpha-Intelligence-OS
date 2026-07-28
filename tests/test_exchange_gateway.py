@@ -15,8 +15,6 @@ def _clean_cache():
     xg.clear_cache()
     yield
     xg.clear_cache()
-
-
 def test_allowlist_blocks_non_listed_paths_before_network():
     with mock.patch.object(xg.requests, "get") as g:
         with pytest.raises(RuntimeError, match="GÜVENLİK BLOĞU"):
@@ -40,7 +38,7 @@ def test_fail_closed_without_secrets_no_network():
          mock.patch.object(xg.requests, "get") as g:
         out = xg.exchange_summary()
         g.assert_not_called()
-    assert "global_futures" not in out
+    assert "global_futures" not in out   # Futures kaldırıldı
     assert out["tr_spot"]["configured"] is False
     assert out["live_trading"] is False
 
@@ -65,6 +63,7 @@ def test_no_secret_material_in_summary():
     blob = json.dumps(out)
     for secret in (env["BINANCE_TR_API_KEY"], env["BINANCE_TR_API_SECRET"]):
         assert secret not in blob, "secret yanıt gövdesine sızdı!"
+    assert "global_futures" not in out   # Futures kaldırıldı
     assert out["tr_spot"]["ok"]
     assert out["tr_spot"]["key_masked"].count("…") == 1
 
@@ -110,7 +109,7 @@ def test_authenticated_summary_contract_no_secrets():
     assert "no-store" in r.headers.get("Cache-Control", "")
     d = r.get_json()
     assert d["live_trading"] is False
-    assert "global_futures" not in d
+    assert "global_futures" not in d   # Futures kaldırıldı
     blob = r.get_data(as_text=True)
     for s in env.values():
         assert s not in blob

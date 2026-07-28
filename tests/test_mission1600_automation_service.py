@@ -223,10 +223,9 @@ def test_no_flask_routes_or_network_imports():
 
 
 def test_default_service_uses_existing_providers():
-    # Gerçek bağlanış: mevcut dashboard_api/risk_api sağlayıcıları
+    # Spot-only: global_account/global_positions kaldırıldı;
+    # _default_service varsayılan intelligence_service sağlayıcılarını kullanır.
     svc = asv._default_service()
-    import dashboard_api, risk_api
-    assert svc._account is dashboard_api.global_account
-    assert svc._positions is dashboard_api.global_positions
+    import risk_api
     assert svc._risk is risk_api.summary
     assert svc._alerts is risk_api.alerts

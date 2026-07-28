@@ -47,11 +47,10 @@ _service_factory: Callable[[], Any] | None = None
 
 def _default_service() -> Any:
     """Gerçek IntelligenceService'i mevcut sağlayıcılarla kurar."""
-    import dashboard_api
     import risk_api
+    # Spot-only: global_account / global_positions kaldırıldı;
+    # varsayılan IntelligenceService sağlayıcıları kullanılır.
     return intelligence_service.IntelligenceService(
-        account_provider=dashboard_api.global_account,
-        positions_provider=dashboard_api.global_positions,
         risk_provider=risk_api.summary,
         alerts_provider=risk_api.alerts,
     )

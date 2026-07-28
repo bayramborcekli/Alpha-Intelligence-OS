@@ -2809,75 +2809,8 @@ def _operation_raw() -> dict[str, Any]:
         },
     }
     service = get_operation_service()
-    try:
-        import portfolio_api as pf
-        _probe_t0 = time.monotonic()
-        pv = pf.positions_view()
-        _probe_ms = int((time.monotonic() - _probe_t0) * 1000)
-        # Broker sağlık sondası — yalnız gerçek okuma sonucu;
-        # başarısızlıkta alanlar UNKNOWN'a düşer (sahte sağlık yok).
-        if pv.get("ok"):
-            _workspace_probe.update({
-                "heartbeat_at": now, "latency_ms": _probe_ms,
-                "api_status": "OK", "rate_limit_state": "OK",
-                "synchronization_state": "SYNCED",
-                "authentication_state": "AUTHENTICATED",
-            })
-        else:
-            _workspace_probe.update({
-                "api_status": "DEGRADED",
-                "synchronization_state": "UNKNOWN",
-            })
-        if pv.get("ok"):
-            raw["status"]["last_sync_at"] = datetime.now(
-                timezone.utc).isoformat(timespec="seconds")
-            for p in pv.get("positions") or []:
-                if p.get("direction") == "FLAT":
-                    continue
-                raw["positions"].append({
-                    "position_id": p.get("symbol"),
-                    "symbol": p.get("symbol"),
-                    "market": "FUTURES",
-                    "side": p.get("direction"),
-                    "position_status": "OPEN",
-                    "strategy": "alpha20_v1",
-                    "entry_price": p.get("entry_price"),
-                    "current_price": p.get("mark_price"),
-                    "quantity": p.get("abs_quantity"),
-                    "notional_value": p.get("notional"),
-                    "unrealized_pnl": p.get("unrealized_pnl"),
-                    "execution_mode": get_execution_mode(cfg),
-                })
-                raw["reconciliation"].append({
-                    "symbol": p.get("symbol"),
-                    "state": "UNKNOWN",
-                    "operator_action":
-                        "Mutabakat motoru: sonraki agent",
-                })
-        ov = pf.orders_view()
-        if ov.get("ok"):
-            for o in ov.get("orders") or []:
-                raw["orders"].append({
-                    "order_id": str(o.get("order_id") or ""),
-                    "client_order_id":
-                        str(o.get("client_order_id") or ""),
-                    "symbol": o.get("symbol"),
-                    "side": o.get("side"),
-                    "order_type": o.get("type"),
-                    "quantity": o.get("orig_qty"),
-                    "requested_price": o.get("price"),
-                    "filled_quantity": o.get("executed_qty"),
-                    "remaining_quantity": o.get("remaining_qty"),
-                    "status": o.get("status"),
-                    "created_at": str(o.get("time") or ""),
-                    "updated_at": str(o.get("update_time") or ""),
-                    "execution_mode": get_execution_mode(cfg),
-                })
-    except Exception:
-        # Dış okuma başarısız → bölümler boş kalır, tazelik
-        # UNKNOWN'a düşer; hata koduna ham metin sızmaz.
-        raw["status"]["source_timestamp"] = None
-        raw["status"]["last_error_code"] = "DATA_SOURCE_UNAVAILABLE"
+    # Spot-only: Futures pozisyon/emir sondası kaldırıldı.
+    # positions ve orders listesi boş kalır (Futures yoktur).
     for symbol in _operation_symbols(cfg):
         raw["products"].append({
             "symbol": symbol,
@@ -3231,7 +3164,8 @@ def api_accounts_test(account_id: str):
         res = dapi.global_spot_account()
         if res.get("ok"):
             checks.update(connected="OK", authentication="OK",
-                          wallet_access="OK", spot_permission="OK",
+                          wallet_access="OK",
+                          spot_permission="OK",
                           trading_permission="NOT_CONFIGURED",
                           synchronization="OK")
         overall = "HEALTHY" if res.get("ok") else "FAILED"

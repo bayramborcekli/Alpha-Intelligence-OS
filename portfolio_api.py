@@ -19,20 +19,20 @@ from dashboard_api import (SafeExchangeError, _dec, _dec_val, _serve,
                            _signed_get, TR_ALLOWLIST, TR_BASE)
 
 # Yeni önbellek türleri (merkezî politikaya kayıt)
-dapi.CACHE_TTL.setdefault("global_assets", 15)
-dapi.FRESH_LIMIT.setdefault("global_assets", 60)
 dapi.CACHE_TTL.setdefault("tr_assets", 30)
 dapi.FRESH_LIMIT.setdefault("tr_assets", 60)
+dapi.CACHE_TTL.setdefault("global_assets", 15)
+dapi.FRESH_LIMIT.setdefault("global_assets", 60)
 
 MAX_ROWS = 500          # istek başına üst sınır
 DEFAULT_LIMIT = 100
 MAX_SEARCH_LEN = 32
 
 REFRESH_SCOPES = {
-    "portfolio": ["global_assets", "tr_assets", "global_account", "tr_account"],
-    "positions": ["global_positions"],
-    "orders": ["global_orders"],
+    "portfolio": ["global_assets", "tr_assets", "tr_account"],
 }
+
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
 class InvalidParameter(ValueError):
@@ -94,8 +94,6 @@ def _sort_rows(rows: list[dict], key: str, numeric: bool,
     return sorted(rows, key=lambda r: str(r.get(key) or ""),
                   reverse=descending)
 
-
-# ── Varlık listeleri ────────────────────────────────────────────────────────
 
 def global_assets() -> dict:
     """Binance Global SPOT hesap varlıkları (tam liste, tipli).
@@ -238,50 +236,18 @@ def portfolio(app_mode: str, include_zero: bool = False, search: str = "",
     }
 
 
-# ── Pozisyon/emir zenginleştirme ────────────────────────────────────────────
-
 def positions_view(include_zero: bool = False) -> dict:
-    model = dapi.global_positions(include_zero=include_zero)
-    if not model.get("ok"):
-        return model
-    rows = model.get("positions") or []
-    for p in rows:
-        p["abs_quantity"] = str(abs(_dec_val(p.get("position_amt"))))
-    total_pnl = sum((_dec_val(p.get("unrealized_pnl")) for p in rows
-                     if p.get("direction") != "FLAT"), Decimal(0))
-    model["positions"] = rows[:MAX_ROWS]
-    model["summary"] = {
-        "active_count": sum(1 for p in rows if p["direction"] != "FLAT"),
-        "long_count": sum(1 for p in rows if p["direction"] == "LONG"),
-        "short_count": sum(1 for p in rows if p["direction"] == "SHORT"),
-        "total_unrealized_pnl": str(total_pnl),
-        "pnl_note": "Toplam Gerçekleşmemiş PnL (aynı Futures hesabı içinde; "
-                    "gerçekleşmiş kâr veya hesap özkaynağı DEĞİLDİR)",
-    }
-    return model
+    """KALDIRILDI — Futures kaldırıldı (Spot-only mimari)."""
+    return {"ok": False, "error": {"code": "FUTURES_REMOVED",
+            "message": "Futures kaldırıldı (Spot-only mimari)."},
+            "meta": None, "positions": []}
 
 
 def orders_view() -> dict:
-    model = dapi.global_orders()
-    if not model.get("ok"):
-        return model
-    rows = model.get("orders") or []
-    for o in rows:
-        remaining = _dec_val(o.get("orig_qty")) - _dec_val(o.get("executed_qty"))
-        o["remaining_qty"] = str(remaining)
-    model["orders"] = rows[:MAX_ROWS]
-    model["summary"] = {
-        "open_count": len(rows),
-        "buy_count": sum(1 for o in rows if o.get("side") == "BUY"),
-        "sell_count": sum(1 for o in rows if o.get("side") == "SELL"),
-        "reduce_only_count": sum(1 for o in rows if o.get("reduce_only")),
-    }
-    return model
-
-
-# ── CSV dışa aktarım (formül-enjeksiyon korumalı) ──────────────────────────
-
-_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+    """KALDIRILDI — Futures kaldırıldı (Spot-only mimari)."""
+    return {"ok": False, "error": {"code": "FUTURES_REMOVED",
+            "message": "Futures kaldırıldı (Spot-only mimari)."},
+            "meta": None, "orders": []}
 
 
 def _csv_text(v: Any) -> str:
@@ -314,8 +280,7 @@ def _stamp() -> str:
 def portfolio_csv(include_zero: bool, search: str, sort: str | None,
                   order: str, limit: int) -> tuple[bytes, str]:
     data = portfolio("PAPER", include_zero, search, sort, order, limit)
-    header = ["source", "asset", "wallet_or_free", "available_or_locked",
-              "margin_balance", "unrealized_pnl", "total",
+    header = ["source", "asset", "free", "locked", "total",
               "retrieved_at", "freshness"]
     rows = []
     for sec in data["sections"]:
@@ -323,9 +288,9 @@ def portfolio_csv(include_zero: bool, search: str, sort: str | None,
         for a in sec.get("assets", []):
             rows.append([_csv_text(sec["source"]), _csv_text(a["asset"]),
                          _csv_num(a["free"]), _csv_num(a["locked"]),
-                         "", "", _csv_num(a["total"]),
+                         _csv_num(a["total"]),
                          _csv_text(meta.get("retrieved_at")),
-                             _csv_text(meta.get("freshness"))])
+                         _csv_text(meta.get("freshness"))])
     return (_csv_response_body(header, rows),
             f"alpha-portfolio-{_stamp()}.csv")
 

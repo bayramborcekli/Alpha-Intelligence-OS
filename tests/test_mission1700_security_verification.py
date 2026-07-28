@@ -280,13 +280,8 @@ class TestReadOnly:
         """
         import risk_api
 
-        monkeypatch.setattr(risk_api, "_account", lambda: {
-            "usdt_margin_balance": "1000", "usdt_available_balance":
-            "400"})
-        monkeypatch.setattr(risk_api, "_active_positions", lambda: [
-            {"symbol": "BTCUSDT", "side": "LONG", "quantity": "0.004",
-             "entry_price": "100000", "mark_price": "100000",
-             "leverage": "1", "unrealized_pnl": "0"}])
+        # Spot-only: _account ve _active_positions kaldırıldı;
+        # sadece _open_orders_count hâlâ mevcut.
         monkeypatch.setattr(risk_api, "_open_orders_count", lambda: 0)
 
         class _Snap:
@@ -318,10 +313,7 @@ class TestReadOnly:
     def test_risk_summary_persist_false_skips_snapshot(self,
                                                        monkeypatch):
         import risk_api
-        monkeypatch.setattr(risk_api, "_account", lambda: {
-            "usdt_margin_balance": "1000",
-            "usdt_available_balance": "400"})
-        monkeypatch.setattr(risk_api, "_active_positions", lambda: [])
+        # Spot-only: _account ve _active_positions kaldırıldı
         monkeypatch.setattr(risk_api, "_open_orders_count", lambda: 0)
         appended = []
         monkeypatch.setattr(risk_api, "_append_snapshot",
@@ -350,6 +342,25 @@ class TestReadOnly:
         # risk_api yalnız thresholds()/summary() okuma uçlarıyla anılır
         for banned in ("set_", "update_", "write", "save", "persist"):
             assert f"risk_api.{banned}" not in src, banned
+
+    def test_risk_alerts_spot_only_no_crash(self):
+        """Spot-only mimaride risk_api.alerts() çökmemeli ve beklenen
+        sözleşmeyi karşılamalı (ok=True, advisory_only=True)."""
+        import risk_api
+        result = risk_api.alerts()
+        assert result["ok"] is True
+        assert result["advisory_only"] is True
+        assert isinstance(result["alerts"], list)
+        assert "count" in result
+        assert result["count"] == len(result["alerts"])
+        # Futures kaldırıldığından marj/pozisyon uyarısı OLMAMALI
+        codes = {a["code"] for a in result["alerts"]}
+        for futures_only in ("HIGH_EXPOSURE", "HIGH_MARGIN_USAGE",
+                             "LOW_AVAILABLE_BALANCE",
+                             "SINGLE_ASSET_CONCENTRATION",
+                             "NEGATIVE_UNREALIZED_PNL"):
+            assert futures_only not in codes, (
+                f"{futures_only} Spot-only mimaride üretilmemeli")
 
 
 # ── 7. Veri güvenliği ───────────────────────────────────────────────

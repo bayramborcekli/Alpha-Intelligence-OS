@@ -1,7 +1,7 @@
 """HOTFIX 2100-HF-001 — Binance Global panosu SPOT hesabı testleri.
 
-Global pano Spot hesabını gösterir (/api/v3/account); Futures paneli
-DEĞİŞMEDEN kalır. Ağ isteği asla çıkmaz (mock)."""
+Global pano Spot hesabını gösterir (/api/v3/account). Ağ isteği asla
+çıkmaz (mock). Futures paneli Spot-only mimarisi kapsamında kaldırıldı."""
 import pytest
 from decimal import Decimal
 from werkzeug.security import generate_password_hash

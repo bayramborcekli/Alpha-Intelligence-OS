@@ -147,65 +147,10 @@ def build_recommendations(account: dict | None = None,
                 source="risk_engine", field="exposure_pct_of_margin",
                 value=exp_pct, unit="%", observed_at=observed),))
 
-    # 4) Nakit oranı incelemesi
-    margin = _dec((account or {}).get("usdt_margin_balance"))
-    avail = _dec((account or {}).get("usdt_available_balance"))
-    cash_pct = _pct(avail, margin)
-    if cash_pct is not None and cash_pct <= th["LOW_AVAILABLE_PERCENT"]:
-        add("CASH_RATIO_REVIEW", sources=("global_account",), category="PORTFOLIO",
-            title="Nakit oranı incelemesi",
-            observation=f"Kullanılabilir bakiye marjın %{cash_pct}'i.",
-            reason=f"Oran, yapılandırılmış eşiğin "
-                   f"(%{th['LOW_AVAILABLE_PERCENT']}) altında.",
-            impact="Ani teminat ihtiyaçlarında tampon daralabilir.",
-            recommendation="Serbest bakiye düzeyinin gözden geçirilmesi "
-                           "önerilir.",
-            evidence=(
-                IntelligenceEvidence(source="global_account",
-                                     field="usdt_available_balance",
-                                     value=avail, unit="USDT",
-                                     observed_at=observed),
-                IntelligenceEvidence(source="global_account",
-                                     field="usdt_margin_balance",
-                                     value=margin, unit="USDT",
-                                     observed_at=observed)))
+    # 4) Spot-only mimaride Futures marj/nakit oranı ve pozisyon incelemesi
+    # uygulanamaz; bu kurallar kaldırıldı.
 
-    # 5) Pozisyon incelemesi (negatif PnL'li pozisyon varsa)
-    if positions:
-        act = [p for p in positions if p.get("direction") != "FLAT"]
-        # Bilinmeyen PnL ASLA 0 sayılmaz: bilinmeyenler ayrı raporlanır.
-        losing = sorted(str(p.get("symbol")) for p in act
-                        if _dec(p.get("unrealized_pnl")) is not None
-                        and _dec(p.get("unrealized_pnl")) < 0)
-        unknown_pnl = sorted(str(p.get("symbol")) for p in act
-                             if _dec(p.get("unrealized_pnl")) is None)
-        if losing:
-            add("POSITION_REVIEW", sources=("global_positions",), category="PORTFOLIO",
-                title="Pozisyon incelemesi",
-                observation=f"{len(losing)} pozisyon zarar bölgesinde: "
-                            f"{', '.join(losing)}.",
-                reason="Gerçekleşmemiş PnL değerleri doğrulanmış pozisyon "
-                       "verisinden okunur.",
-                impact="Mevcut seviyeler korunursa zarar gerçekleşmemiş "
-                       "olarak sürebilir.",
-                recommendation="İlgili pozisyonların durumunun "
-                               "değerlendirilmesi önerilir.",
-                evidence=(IntelligenceEvidence(
-                    source="global_positions", field="unrealized_pnl",
-                    value=len(losing), unit=None, observed_at=observed),))
-        if unknown_pnl:
-            add("DATA_REFRESH", sources=("global_positions",),
-                category="DATA_QUALITY", title="Veri yenileme",
-                observation=f"{len(unknown_pnl)} pozisyonun PnL değeri "
-                            f"doğrulanamadı: {', '.join(unknown_pnl)}.",
-                reason="Bilinmeyen PnL 0 sayılmaz; değerlendirme dışında "
-                       "tutulur ve açıkça raporlanır.",
-                impact="Pozisyon incelemesi bu pozisyonlar için eksiktir.",
-                recommendation="Bağlantı durumunun kontrol edilmesi "
-                               "önerilir.",
-                confidence=ConfidenceLevel.INSUFFICIENT_DATA)
-
-    # 6) Bayat veri uyarısı + 7) Veri yenileme
+    # 5) Bayat veri uyarısı + 6) Veri yenileme
     stale_sources = sorted(f.source for f in fl
                            if f.status is IntelligenceStatus.STALE)
     missing = not account and positions is None and not risk_summary

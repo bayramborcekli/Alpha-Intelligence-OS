@@ -25,7 +25,7 @@ from typing import Any, Callable
 import requests
 
 import binance_global_client as bgc
-import binance_tr_client as btr
+import binance_tr_client as btr  # noqa: F401 (TR client used via _tr_error_to_safe)
 
 ROOT = Path(__file__).resolve().parent
 LEDGER_PATH = ROOT / "alpha20_v1" / "mission1310b" / "ledger_events.json"
@@ -43,8 +43,7 @@ WRITE_COUNTERS = {
     "other_exchange_write_requests": 0,
 }
 
-# Yalnızca GET; ağ isteğinden ÖNCE zorunlu. (Futures allowlist'i YOK —
-# Spot-only mimari.)
+# Yalnızca GET; ağ isteğinden ÖNCE zorunlu. (Futures allowlist'i YOK — Spot-only mimari.)
 SPOT_ALLOWLIST = {
     ("GET", "/api/v3/account"),        # imzalı, salt-okunur hesap
     ("GET", "/api/v3/ticker/price"),   # imzasız, halka açık fiyat
@@ -56,17 +55,11 @@ TR_ALLOWLIST = {
 # ── Önbellek ve tazelik politikası (merkezî) ────────────────────────────────
 CACHE_TTL = {          # saniye — sunucu tarafı güvenli okuma önbelleği
     "global_spot": 15,
-    "global_account": 15,
-    "global_positions": 10,
-    "global_orders": 10,
     "tr_account": 30,
     "tr_movements": 300,
 }
 FRESH_LIMIT = {        # saniye — bu yaşın üstü ESKİ VERİ
     "global_spot": 60,
-    "global_account": 60,
-    "global_positions": 60,
-    "global_orders": 60,
     "tr_account": 60,
     "tr_movements": 900,
 }

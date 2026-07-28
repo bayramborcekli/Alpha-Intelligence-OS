@@ -30,7 +30,7 @@ _HISTORY_LOCK = threading.Lock()
 _MAX_HISTORY_LINES = 5000                   # sınırsız okuma yok
 
 STABLECOINS = {"USDT", "USDC", "FDUSD", "BUSD", "TUSD", "DAI", "USDP"}
-KNOWN_EXCHANGES = {"BINANCE_GLOBAL_FUTURES"}
+KNOWN_EXCHANGES: set[str] = set()  # Futures kaldırıldı; simulate() artık exchange doğrulaması yapmıyor
 
 # ── PAKET 6.10 — Yapılandırılabilir eşikler ────────────────────────────────
 # İş mantığında sabit kodlanmış eşik YOKTUR; tüm değerler risk_config.json
@@ -127,26 +127,9 @@ def _cached_model(kind: str) -> dict | None:
         return entry["data"]
     return None
 
-def _account() -> dict | None:
-    ga = dapi.global_account()
-    if not ga.get("ok"):
-        return None
-    return ga.get("account") or {}
-
-
-def _active_positions() -> list[dict] | None:
-    gp = pf.positions_view()
-    if not gp.get("ok"):
-        return None
-    return [p for p in (gp.get("positions") or [])
-            if p.get("direction") != "FLAT"]
-
-
 def _open_orders_count() -> int | None:
-    go = pf.orders_view()
-    if not go.get("ok"):
-        return None
-    return (go.get("summary") or {}).get("open_count")
+    """Futures kaldırıldı — artık Spot emirleri için kullanılmıyor; None döner."""
+    return None
 
 
 def _base_asset(symbol: str) -> str:
@@ -165,18 +148,11 @@ def _notional(p: dict) -> Decimal:
 # ── PAKET 6.2 — Maruziyet ──────────────────────────────────────────────────
 
 def exposure() -> dict:
-    acc = _account()
-    positions = _active_positions()
+    positions: list[dict] = []   # Futures kaldırıldı — pozisyon verisi yok
     ta = dapi.tr_account()
 
-    if positions is None:
-        return {"ok": False, "error": {"code": "SOURCE_UNAVAILABLE",
-                "message": "Pozisyon verisi doğrulanamadı — maruziyet "
-                           "hesaplanmıyor (tahmin üretilmez)."},
-                "read_only": True}
-
-    margin_balance = _dec(acc.get("usdt_margin_balance")) if acc else None
-    available = _dec(acc.get("usdt_available_balance")) if acc else None
+    margin_balance = None
+    available = None
 
     long_notional = Decimal(0)
     short_notional = Decimal(0)
@@ -216,7 +192,7 @@ def exposure() -> dict:
 
     return {
         "ok": True, "read_only": True, "as_of": _now_iso(),
-        "universe": "BINANCE_GLOBAL_FUTURES_USDT",
+        "universe": "SPOT_ONLY",
         "gross_exposure_usdt": _q2(gross),
         "net_exposure_usdt": _q2(net),
         "long_exposure_usdt": _q2(long_notional),
@@ -231,9 +207,7 @@ def exposure() -> dict:
         "by_quote_currency": [{"quote": "USDT",
                                "exposure_value_usdt": _q2(gross),
                                "exposure_pct": "100.00" if gross else None}],
-        "by_exchange": [{"exchange": "BINANCE_GLOBAL_FUTURES",
-                         "exposure_value_usdt": _q2(gross),
-                         "exposure_pct": "100.00" if gross else None}],
+        "by_exchange": [],
         "by_market": [{"market": "USDT-M FUTURES",
                        "exposure_value_usdt": _q2(gross),
                        "exposure_pct": "100.00" if gross else None}],
@@ -249,11 +223,7 @@ def exposure() -> dict:
 # ── PAKET 6.3 — Konsantrasyon ──────────────────────────────────────────────
 
 def concentration() -> dict:
-    positions = _active_positions()
-    if positions is None:
-        return {"ok": False, "error": {"code": "SOURCE_UNAVAILABLE",
-                "message": "Pozisyon verisi doğrulanamadı."},
-                "read_only": True}
+    positions: list[dict] = []  # Spot-only: Futures pozisyon verisi yok
     rows = sorted(positions, key=_notional, reverse=True)
     gross = sum((_notional(p) for p in rows), Decimal(0))
     top = [{"symbol": p.get("symbol"), "direction": p.get("direction"),
@@ -285,8 +255,7 @@ def concentration() -> dict:
         "top5": top,
         "single_position_pct": str(largest_pct) if largest_pct is not None
         else None,
-        "exchange_pct": [{"exchange": "BINANCE_GLOBAL_FUTURES",
-                          "pct": "100.00" if gross else None}],
+        "exchange_pct": [],
         "sector_grouping": None,   # doğrulanmış sektör verisi yok — uydurulmaz
         "warnings": warnings,
     }
@@ -436,9 +405,13 @@ def health_score(exp: dict, conc: dict, acc: dict | None,
 # ── PAKET 6.5 — Uyarı motoru (tekrarsız) ───────────────────────────────────
 
 def alerts() -> dict:
-    exp = exposure()
-    conc = concentration()
-    acc = _account()
+    """Risk uyarıları — Spot-only mimari.
+
+    Futures kaldırıldı: marj/pozisyon tabanlı uyarılar (HIGH_EXPOSURE,
+    HIGH_MARGIN_USAGE, LOW_AVAILABLE_BALANCE, SINGLE_ASSET_CONCENTRATION,
+    NEGATIVE_UNREALIZED_PNL) artık üretilmez. Drawdown uyarısı
+    bakiye-bağımsız geçmiş veriyle çalışmaya devam eder.
+    """
     th = thresholds()
     out: dict[str, dict] = {}    # kod → uyarı (tekrar imkânsız)
 
@@ -449,48 +422,11 @@ def alerts() -> dict:
                          "message": message, "timestamp": _now_iso(),
                          "advisory_only": True}
 
-    if exp.get("ok") and acc:
-        margin = _dec(acc.get("usdt_margin_balance"))
-        avail = _dec(acc.get("usdt_available_balance"))
-        gross = _dec(exp.get("gross_exposure_usdt")) or Decimal(0)
-        if margin and margin > 0:
-            exp_pct = gross / margin * 100
-            if exp_pct >= th["HIGH_EXPOSURE_PERCENT"]:
-                add("HIGH_EXPOSURE", "WARNING", "exposure",
-                    f"Brüt maruziyet marj bakiyesinin %{_q2(exp_pct)}'i "
-                    f"(eşik %{th['HIGH_EXPOSURE_PERCENT']}).")
-            if avail is not None:
-                usage = (margin - avail) / margin * 100
-                if usage >= th["RISK_CRITICAL_MARGIN"]:
-                    add("HIGH_MARGIN_USAGE", "HIGH", "margin",
-                        f"Marj kullanımı %{_q2(usage)} "
-                        f"(kritik eşik %{th['RISK_CRITICAL_MARGIN']}).")
-                elif usage >= th["RISK_HIGH_MARGIN"]:
-                    add("HIGH_MARGIN_USAGE", "WARNING", "margin",
-                        f"Marj kullanımı %{_q2(usage)} "
-                        f"(eşik %{th['RISK_HIGH_MARGIN']}).")
-                if avail / margin * 100 <= th["LOW_AVAILABLE_PERCENT"]:
-                    add("LOW_AVAILABLE_BALANCE", "WARNING", "balance",
-                        f"Kullanılabilir bakiye marjın "
-                        f"%{th['LOW_AVAILABLE_PERCENT']}'sinin altında.")
-    if conc.get("ok"):
-        sp = _dec(conc.get("single_position_pct"))
-        if sp is not None and sp >= th["MAX_POSITION_PERCENT"]:
-            add("SINGLE_ASSET_CONCENTRATION",
-                "HIGH" if sp >= th["POSITION_HIGH_PERCENT"] else "WARNING",
-                "concentration", f"En büyük pozisyonun payı %{sp}.")
-    margin_now = _dec((acc or {}).get("usdt_margin_balance")) if acc else None
-    dd_day = _drawdown(1, margin_now)
+    # Drawdown: hesap bakiyesinden bağımsız geçmiş anlık görüntülerle çalışır.
+    dd_day = _drawdown(1, None)
     dd = _dec(dd_day)
     if dd is not None and dd <= th["DRAWDOWN_WARN_PERCENT"]:
         add("LARGE_DRAWDOWN", "HIGH", "drawdown", f"Günlük düşüş %{dd}.")
-    upnl = None
-    gp = pf.positions_view()
-    if gp.get("ok"):
-        upnl = _dec((gp.get("summary") or {}).get("total_unrealized_pnl"))
-    if upnl is not None and upnl < 0:
-        add("NEGATIVE_UNREALIZED_PNL", "INFO", "pnl",
-            f"Toplam gerçekleşmemiş PnL negatif ({_q2(upnl)} USDT).")
 
     return {"ok": True, "read_only": True, "advisory_only": True,
             "as_of": _now_iso(), "count": len(out),
@@ -503,41 +439,29 @@ def summary(persist: bool = True) -> dict:
     """Risk özeti. ``persist=False`` ile SALT-OKUNUR görünüm: günlük
     ekle-yalnız anlık görüntü YAZILMAZ (Mission 1700 portföy yolu bu
     modu kullanır; varsayılan davranış mevcut çağıranlar için aynıdır).
+
+    Spot-only mimari: Futures hesap/pozisyon verisi kaldırıldı.
+    Maruziyet ve yoğunlaşma hesaplamaları pozisyon verisi olmadığından
+    her zaman boş döner.
     """
-    acc = _account()
     exp = exposure()
     conc = concentration()
     open_orders = _open_orders_count()
-    positions = _active_positions()
 
-    margin = _dec(acc.get("usdt_margin_balance")) if acc else None
-    avail = _dec(acc.get("usdt_available_balance")) if acc else None
+    # Spot-only: marj/bakiye verisi yok
+    margin: Decimal | None = None
+    avail: Decimal | None = None
     usage_pct = None
-    if margin and margin > 0 and avail is not None:
-        usage_pct = _pct(margin - avail, margin)
-
-    largest_loss = largest_gain = None
-    if positions:
-        pnls = [(_dec(p.get("unrealized_pnl")) or Decimal(0), p)
-                for p in positions]
-        lo = min(pnls, key=lambda t: t[0])
-        hi = max(pnls, key=lambda t: t[0])
-        if lo[0] < 0:
-            largest_loss = {"symbol": lo[1].get("symbol"),
-                            "unrealized_pnl_usdt": _q2(lo[0])}
-        if hi[0] > 0:
-            largest_gain = {"symbol": hi[1].get("symbol"),
-                            "unrealized_pnl_usdt": _q2(hi[0])}
 
     dd_day = _drawdown(1, margin)
     dd_week = _drawdown(7, margin)
     dd_month = _drawdown(30, margin)
 
-    hs = health_score(exp, conc, acc, open_orders, dd_day)
+    hs = health_score(exp, conc, None, open_orders, dd_day)
 
     # Günlük ekle-yalnız anlık görüntü (varsa dokunulmaz);
     # persist=False → hiç yazılmaz (salt-okunur çağıranlar için).
-    if persist and hs["score"] is not None and margin is not None:
+    if persist and hs["score"] is not None:
         alert_model = alerts()
         _append_snapshot({
             "date": _today(), "recorded_at": _now_iso(),
@@ -548,7 +472,7 @@ def summary(persist: bool = True) -> dict:
             "gross_exposure_usdt": exp.get("gross_exposure_usdt"),
             "exposure_pct_of_margin": exp.get("exposure_pct_of_margin"),
             "margin_usage_pct": usage_pct,
-            "margin_balance_usdt": _q2(margin),
+            "margin_balance_usdt": None,
             "daily_drawdown_pct": dd_day,
         })
 
@@ -564,18 +488,17 @@ def summary(persist: bool = True) -> dict:
         if exp.get("ok") else None,
         "exposure_pct_of_margin": exp.get("exposure_pct_of_margin")
         if exp.get("ok") else None,
-        "available_margin_usdt": _q2(avail),
+        "available_margin_usdt": None,
         "margin_usage_pct": usage_pct,
-        "open_position_count": len(positions) if positions is not None
-        else None,
+        "open_position_count": None,
         "open_order_count": open_orders,
         "largest_position": conc.get("largest_position")
         if conc.get("ok") else None,
         "top5_positions": conc.get("top5") if conc.get("ok") else None,
         "concentration_warnings": conc.get("warnings")
         if conc.get("ok") else None,
-        "largest_unrealized_loss": largest_loss,
-        "largest_unrealized_gain": largest_gain,
+        "largest_unrealized_loss": None,
+        "largest_unrealized_gain": None,
         "daily_drawdown_pct": dd_day,
         "weekly_drawdown_pct": dd_week,
         "monthly_drawdown_pct": dd_month,
@@ -589,11 +512,7 @@ def summary(persist: bool = True) -> dict:
 
 def simulate(params: dict) -> dict:
     """Tamamen yerel hesap — borsaya istek atılmaz, emir önizlemesi yok."""
-    exchange = (params.get("exchange") or
-                "BINANCE_GLOBAL_FUTURES").strip().upper()
-    if exchange not in KNOWN_EXCHANGES:
-        raise ValueError("exchange: yalnızca BINANCE_GLOBAL_FUTURES "
-                         "desteklenir")
+    exchange = (params.get("exchange") or "SPOT").strip().upper()
     symbol = (params.get("symbol") or "").strip().upper()
     direction = (params.get("direction") or "").strip().upper()
     if not _SYMBOL_RE.match(symbol):
@@ -613,24 +532,9 @@ def simulate(params: dict) -> dict:
     value = price * qty
     est_margin = value / lev
 
-    # KESİNLİKLE YEREL: yalnızca zaten bellekte olan önbellek okunur;
-    # önbellek boşsa borsa ÇAĞRILMAZ, ilgili alanlar null döner.
+    # Futures kaldırıldı; portföy bağlamı önbellekten okunamıyor.
     after_exposure_pct = after_concentration_pct = None
     largest_position_after_pct = None
-    acc = _cached_model("global_account")
-    pos = _cached_model("global_positions")
-    if acc is not None and pos is not None:
-        margin_bal = _dec(acc.get("usdt_margin_balance"))
-        actives = [p for p in pos.get("positions_all") or []
-                   if p.get("direction") != "FLAT"]
-        gross = sum((_notional(p) for p in actives), Decimal(0))
-        if margin_bal and margin_bal > 0:
-            after_exposure_pct = _pct(gross + value, margin_bal)
-        if gross + value > 0:
-            after_concentration_pct = _pct(value, gross + value)
-            # İşlem sonrası EN BÜYÜK pozisyonun payı (yeni işlem dahil)
-            notionals = [_notional(p) for p in actives] + [value]
-            largest_position_after_pct = _pct(max(notionals), gross + value)
 
     # Yaklaşık tasfiye tamponu: 1/kaldıraç (bakım marjı hariç, açıkça etiketli)
     liq_buffer_pct = _q2(Decimal(100) / lev)

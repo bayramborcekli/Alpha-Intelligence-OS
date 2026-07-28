@@ -260,20 +260,12 @@ class TestReadOnly:
         strateji istekleri snapshot append/dosya yazımı yapmaz."""
         import risk_api
 
-        monkeypatch.setattr(risk_api, "_account", lambda: {
-            "usdt_margin_balance": "1000",
-            "usdt_available_balance": "400"})
-        monkeypatch.setattr(risk_api, "_active_positions", lambda: [
-            {"symbol": "BTCUSDT", "side": "LONG", "quantity": "0.004",
-             "entry_price": "100000", "mark_price": "100000",
-             "leverage": "1", "unrealized_pnl": "0"}])
+        # Spot-only: _account ve _active_positions kaldırıldı
         monkeypatch.setattr(risk_api, "_open_orders_count", lambda: 0)
 
         class _Snap:
             def get_snapshot(self):
-                return {"account": {"usdt_margin_balance": "1000",
-                                    "usdt_available_balance": "400"},
-                        "positions": []}
+                return {"account": None, "positions": []}
         import intelligence_service
         monkeypatch.setattr(intelligence_service, "IntelligenceService",
                             lambda: _Snap())
@@ -305,20 +297,9 @@ class TestReadOnly:
         """
         import risk_api
 
-        monkeypatch.setattr(risk_api, "_account", lambda: {
-            "usdt_margin_balance": "1000",
-            "usdt_available_balance": "400"})
-        monkeypatch.setattr(risk_api, "_active_positions", lambda: [
-            {"symbol": "BTCUSDT", "side": "LONG", "quantity": "0.004",
-             "entry_price": "100000", "mark_price": "100000",
-             "leverage": "1", "unrealized_pnl": "0"}])
+        # Spot-only: _account / _active_positions / global_account /
+        # global_positions kaldırıldı; sadece _open_orders_count mevcut.
         monkeypatch.setattr(risk_api, "_open_orders_count", lambda: 0)
-        import dashboard_api
-        monkeypatch.setattr(dashboard_api, "global_account", lambda: {
-            "ok": True, "account": {"usdt_margin_balance": "1000",
-                                    "usdt_available_balance": "400"}})
-        monkeypatch.setattr(dashboard_api, "global_positions",
-                            lambda: {"ok": True, "positions": []})
 
         appended = []
         monkeypatch.setattr(risk_api, "_append_snapshot",

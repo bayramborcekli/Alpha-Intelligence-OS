@@ -49,9 +49,9 @@ class TestPriority:
     def test_ordered_by_priority(self):
         r = _build()
         codes = [x["code"] for x in r["recommendations"]]
+        # Spot-only: CASH_RATIO_REVIEW ve POSITION_REVIEW (Futures) kaldırıldı
         assert codes == ["RISK_ALERT_REVIEW", "CONCENTRATION_REVIEW",
-                         "EXPOSURE_REVIEW", "CASH_RATIO_REVIEW",
-                         "POSITION_REVIEW"]
+                         "EXPOSURE_REVIEW"]
         prios = [x["priority"] for x in r["recommendations"]]
         assert prios == sorted(prios)
         assert r["recommendations"][0]["severity"] == "Yüksek"
@@ -174,23 +174,20 @@ class TestPerSourceConfidence:
                    for x in r["recommendations"])
 
     def test_confidence_follows_own_source(self):
-        # Yalnızca hesap kaynağı taze: hesaba dayalı öneri HIGH,
-        # risk motoruna dayalılar INSUFFICIENT_DATA olmalı
-        r = _build(freshness_list=[_f("global_account")])
+        # Yalnızca risk_engine kaynağı taze: risk motoruna dayalı öneriler
+        # (RISK_ALERT_REVIEW, CONCENTRATION_REVIEW, EXPOSURE_REVIEW) HIGH;
+        # kaynağı risk_engine olmayan öneriler INSUFFICIENT_DATA olmalı.
+        r = _build(freshness_list=[_f("risk_engine")])
         by = {x["code"]: x["confidence"] for x in r["recommendations"]}
-        assert by["CASH_RATIO_REVIEW"] == "HIGH"
-        assert by["CONCENTRATION_REVIEW"] == "INSUFFICIENT_DATA"
+        assert by["CONCENTRATION_REVIEW"] == "HIGH"
+        assert by["RISK_ALERT_REVIEW"] == "HIGH"
 
-    def test_unknown_pnl_not_zeroed(self):
+    def test_unknown_pnl_param_no_longer_fires_position_rules(self):
+        # Spot-only: POSITION_REVIEW kaldırıldı; positions parametresi
+        # artık hiçbir kural tetiklemiyor.
         pos = [{"symbol": "BTCUSDT", "direction": "LONG",
-                "unrealized_pnl": None},
-               {"symbol": "ETHUSDT", "direction": "SHORT",
-                "unrealized_pnl": "-1"}]
+                "unrealized_pnl": None}]
         r = _build(positions=pos)
-        pr = next(x for x in r["recommendations"]
-                  if x["code"] == "POSITION_REVIEW")
-        assert "BTCUSDT" not in pr["observation"]    # bilinmeyen dahil değil
-        dr = next(x for x in r["recommendations"]
-                  if x["code"] == "DATA_REFRESH")
-        assert "BTCUSDT" in dr["observation"]
-        assert dr["confidence"] == "INSUFFICIENT_DATA"
+        codes = [x["code"] for x in r["recommendations"]]
+        assert "POSITION_REVIEW" not in codes
+        assert "DATA_REFRESH" not in codes  # pozisyon PnL kuralı yok artık
