@@ -380,3 +380,139 @@ class TestSetupSaveEndpoint:
         assert env_text.count("ALPHA_OWNER_USERNAME=") == 1
         assert "ALPHA_OWNER_USERNAME=newuser" in env_text
         assert "olduser" not in env_text
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Kurulum → giriş tam döngüsü (Windows giriş regresyon testi)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSetupToLoginFlow:
+    """
+    İlk kurulum sihirbazının TAM döngüsünü kapsayan entegrasyon testi:
+
+        POST /setup/hash  → paroladan hash üret
+        POST /setup/save  → .env'e yaz + os.environ'u güncelle
+        GET  /setup/check → kurulum tamamlandı (404 = artık ifşa yok)
+        POST /login       → YENİDEN BAŞLATMA OLMADAN giriş başarılı
+
+    Windows'ta /setup/save os.environ'u anında güncellediği için restart
+    gerekmez; bu test o davranışın sessizce kırılmasını önler.
+    """
+
+    PASSWORD = "wizard-flow-pass-2026!"
+    USERNAME = "flowoperator"
+
+    def _run_wizard(self, client, tmp_path):
+        """Sihirbaz adımlarını (hash → save) çalıştırır; save yanıtını döndürür."""
+        import local_env
+
+        # Adım 1: paroladan hash üret
+        resp = client.post(
+            "/setup/hash",
+            data=json.dumps({"password": self.PASSWORD}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        pw_hash = resp.get_json()["password_hash"]
+        assert pw_hash.startswith(("pbkdf2:", "scrypt:"))
+
+        # Adım 2: .env'e kaydet (yerel/Windows yolu)
+        fake_env = tmp_path / ".env"
+        with patch.object(local_env, "is_replit", return_value=False), \
+             patch.object(local_env, "ENV_FILE", fake_env):
+            save = client.post(
+                "/setup/save",
+                data=json.dumps({"password_hash": pw_hash,
+                                 "username": self.USERNAME}),
+                content_type="application/json",
+            )
+        return save, fake_env, pw_hash
+
+    def test_full_cycle_login_without_restart(self, unconfigured_client,
+                                              tmp_path, monkeypatch):
+        """Kurulum → kaydet → doğrula → giriş; restart olmadan başarılı olmalı."""
+        import os
+        import auth
+
+        # Kurulumdan önce sistem kilidi: giriş sihirbaza yönlendirir
+        pre = unconfigured_client.get("/login", follow_redirects=False)
+        assert pre.status_code == 302 and "/setup" in pre.headers.get("Location", "")
+
+        save, fake_env, pw_hash = self._run_wizard(unconfigured_client, tmp_path)
+        assert save.status_code == 200, save.get_data(as_text=True)
+        assert save.get_json()["ok"] is True
+
+        # os.environ ANINDA güncellenmiş olmalı (restart gerekmez)
+        assert os.environ.get("ALPHA_OWNER_USERNAME") == self.USERNAME
+        assert os.environ.get("ALPHA_OWNER_PASSWORD_HASH") == pw_hash
+        # monkeypatch temizliği: test sonunda env geri alınsın
+        monkeypatch.setenv("ALPHA_OWNER_USERNAME", self.USERNAME)
+        monkeypatch.setenv("ALPHA_OWNER_PASSWORD_HASH", pw_hash)
+
+        # .env dosyası da kalıcı kayıt içermeli
+        env_text = fake_env.read_text(encoding="utf-8")
+        assert f"ALPHA_OWNER_USERNAME={self.USERNAME}" in env_text
+        assert pw_hash in env_text
+
+        # Adım 3: /setup/check — kurulum tamamlandı, endpoint artık 404
+        # (güvenlik kararı: yapılandırma durumu anonim istemciye ifşa edilmez)
+        assert auth.password_hash_configured() is True
+        check = unconfigured_client.get("/setup/check")
+        assert check.status_code == 404
+
+        # Sihirbaz da kapanmış olmalı
+        assert unconfigured_client.get("/setup").status_code == 404
+
+        # Adım 4: POST /login — restart olmadan giriş başarılı
+        login = unconfigured_client.post(
+            "/login",
+            data={"username": self.USERNAME, "password": self.PASSWORD},
+            follow_redirects=False,
+        )
+        assert login.status_code == 302, (
+            f"Giriş 302 (başarı) bekleniyor; {login.status_code} alındı: "
+            f"{login.get_data(as_text=True)[:300]}"
+        )
+        assert login.headers.get("Location", "").endswith("/home")
+
+        # Oturum gerçekten açık: korumalı bir sayfa login'e yönlendirmemeli
+        home = unconfigured_client.get("/login", follow_redirects=False)
+        assert home.status_code == 302
+        assert "/home" in home.headers.get("Location", "")
+
+    def test_wrong_password_still_rejected_after_setup(self, unconfigured_client,
+                                                       tmp_path, monkeypatch):
+        """Kurulum sonrası YANLIŞ parola ile giriş başarısız kalmalı."""
+        import os
+
+        save, _fake_env, pw_hash = self._run_wizard(unconfigured_client, tmp_path)
+        assert save.status_code == 200
+        monkeypatch.setenv("ALPHA_OWNER_USERNAME",
+                           os.environ["ALPHA_OWNER_USERNAME"])
+        monkeypatch.setenv("ALPHA_OWNER_PASSWORD_HASH", pw_hash)
+
+        resp = unconfigured_client.post(
+            "/login",
+            data={"username": self.USERNAME, "password": "wrong-password-!!"},
+            follow_redirects=False,
+        )
+        # Başarısız giriş: yönlendirme YOK, login sayfası hata ile döner
+        assert resp.status_code == 200, (
+            f"Yanlış parola için 200 (hata sayfası) bekleniyor; "
+            f"{resp.status_code} alındı"
+        )
+        assert "hatal" in resp.get_data(as_text=True).lower(), (
+            "Yanıt gövdesinde hata mesajı bekleniyor"
+        )
+        # Oturum açılmamış olmalı: /login hâlâ erişilebilir (yönlendirme yok)
+        again = unconfigured_client.get("/login", follow_redirects=False)
+        assert again.status_code == 200
+
+        # Doğru parola ile giriş hâlâ mümkün (kilitlenme yok)
+        ok = unconfigured_client.post(
+            "/login",
+            data={"username": self.USERNAME, "password": self.PASSWORD},
+            follow_redirects=False,
+        )
+        assert ok.status_code == 302
+        assert ok.headers.get("Location", "").endswith("/home")
