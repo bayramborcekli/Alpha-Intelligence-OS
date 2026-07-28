@@ -110,6 +110,51 @@ def credential_metadata() -> dict[str, dict]:
     return meta
 
 
+def write_env_vars(mapping: dict[str, str]) -> None:
+    """Verilen anahtar/değer çiftlerini proje .env dosyasına yaz ve
+    os.environ'u hemen güncelle.
+
+    - Anahtar zaten .env içindeyse satır yerine yazılır (update).
+    - Anahtar yoksa dosyanın sonuna eklenir.
+    - Değer ASLA loglanmaz.
+    - Sadece yerel/Windows ortamında kullanılmalıdır; Replit'te ValueError üretir.
+
+    Dikkat: Bu fonksiyon yalnızca ilk kurulum sihirbazı tarafından çağrılır.
+    """
+    if is_replit():
+        raise ValueError("Replit ortamında .env dosyasına yazılamaz; Secrets kullanın.")
+    # Mevcut içeriği oku
+    try:
+        text = ENV_FILE.read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    lines = text.splitlines(keepends=True)
+    updated_keys: set[str] = set()
+    new_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            new_lines.append(line)
+            continue
+        key, _, _ = stripped.partition("=")
+        key = key.strip()
+        if key in mapping:
+            # Mevcut satırı yeni değerle değiştir
+            new_lines.append(f"{key}={mapping[key]}\n")
+            updated_keys.add(key)
+        else:
+            new_lines.append(line)
+    # Yeni anahtarları ekle
+    for key, val in mapping.items():
+        if key not in updated_keys:
+            new_lines.append(f"{key}={val}\n")
+    ENV_FILE.write_text("".join(new_lines), encoding="utf-8")
+    # os.environ'u hemen güncelle (yeniden başlatma gerektirmez)
+    for key, val in mapping.items():
+        os.environ[key] = val
+        _sources[key] = "project_env"
+
+
 def reset_for_tests() -> None:
     """Yalnız testler için: idempotency bayrağını sıfırlar."""
     global _loaded

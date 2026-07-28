@@ -170,7 +170,8 @@ def _security_gate():
     if app.config.get("TESTING"):
         app.config["WTF_CSRF_ENABLED"] = False
         return
-    exempt = {"/login", "/logout", "/setup", "/setup/hash", "/setup/check",
+    exempt = {"/login", "/logout", "/setup", "/setup/hash", "/setup/save",
+              "/setup/check",
               "/favicon.ico", "/health", "/api/v1/health",
               "/api/v1/auth/login"}
     if request.path in exempt or request.path.startswith("/static/"):
@@ -728,7 +729,7 @@ def setup_wizard():
         # Kurulum tamamlanmışsa sihirbazı tamamen gizle (404).
         # 302 yerine 404 döndürmek, endpoint'in varlığını ifşa etmez.
         return "", 404
-    return render_template("setup.html")
+    return render_template("setup.html", is_replit=local_env.is_replit())
 
 
 @app.post("/setup/hash")
@@ -768,6 +769,53 @@ def setup_generate_hash():
     slog.log_event(slog.STARTUP, detail="setup: hash generated", ip=ip)
     # "hash" alanı geriye dönük uyumluluk için korunur.
     return {"ok": True, "password_hash": pw_hash, "hash": pw_hash}
+
+
+@app.post("/setup/save")
+def setup_save():
+    """Yerel / Windows kurulumu için: hash + kullanıcı adını .env'e yaz ve
+    os.environ'u hemen güncelle — yeniden başlatma gerekmez.
+
+    Yalnızca kurulum sihirbazı aktifken (parola yapılandırılmamışken) ve
+    Replit DIŞINDA (yerel/.env ortamı) kullanılabilir. Replit'te 403 döner.
+    """
+    if auth.password_hash_configured():
+        return "", 404
+    if local_env.is_replit():
+        return {"ok": False, "error": {
+            "code": "REPLIT_ENV",
+            "message": "Replit ortamında bu endpoint kullanılamaz; Secrets'ı kullanın."
+        }}, 403
+    data = request.get_json(silent=True) or {}
+    pw_hash = data.get("password_hash", "")
+    username = data.get("username", "")
+    if not pw_hash or not isinstance(pw_hash, str):
+        return {"ok": False, "error": {"code": "MISSING_HASH", "message": "password_hash boş."}}, 400
+    if not username or not isinstance(username, str):
+        return {"ok": False, "error": {"code": "MISSING_USERNAME", "message": "username boş."}}, 400
+    if len(username) > 64:
+        return {"ok": False, "error": {"code": "INVALID_USERNAME", "message": "Kullanıcı adı çok uzun."}}, 400
+    # Temel hash biçimi doğrulaması (werkzeug pbkdf2:sha256:... veya eski scrypt:)
+    if not (pw_hash.startswith("pbkdf2:") or pw_hash.startswith("scrypt:")):
+        return {"ok": False, "error": {
+            "code": "INVALID_HASH",
+            "message": "Geçersiz hash biçimi — yalnızca bu sihirbazdan üretilen hash kabul edilir."
+        }}, 400
+    try:
+        local_env.write_env_vars({
+            "ALPHA_OWNER_USERNAME": username,
+            "ALPHA_OWNER_PASSWORD_HASH": pw_hash,
+        })
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("setup/save write failed: %s", exc)
+        return {"ok": False, "error": {
+            "code": "WRITE_ERROR",
+            "message": f".env dosyasına yazılamadı: {exc}"
+        }}, 500
+    ip = auth.get_client_ip()
+    slog.log_event(slog.STARTUP, detail="setup: credentials saved to .env", ip=ip)
+    return {"ok": True}
 
 
 @app.get("/setup/check")

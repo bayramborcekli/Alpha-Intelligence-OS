@@ -3,10 +3,14 @@ tests/test_setup_wizard.py — Setup sihirbazı güvenlik testleri
 
 Parola ayarlandıktan sonra /setup ve /setup/hash endpoint'lerinin
 yetkisiz erişime kapalı kaldığını doğrular.
+
+Ayrıca Windows/yerel kurulum için /setup/save endpoint'inin
+.env'e yazma ve os.environ güncelleme akışını test eder.
 """
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -216,3 +220,112 @@ class TestSetupHashEndpoint:
         assert not check_password_hash(pw_hash, "wrongpassword"), (
             "Hash yanlış parolayla eşleşmemeli"
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# /setup/save — Windows/yerel .env otomatik kayıt
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSetupSaveEndpoint:
+    """POST /setup/save yerel ortamda .env'e yazar ve os.environ'u günceller."""
+
+    def _make_hash(self):
+        from werkzeug.security import generate_password_hash
+        return generate_password_hash("testpassword99!")
+
+    def test_save_blocked_when_already_configured(self, configured_client):
+        """Kurulum tamamlanmışken /setup/save 404 dönmeli."""
+        resp = configured_client.post(
+            "/setup/save",
+            data=json.dumps({"password_hash": self._make_hash(), "username": "admin"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 404
+
+    def test_save_blocked_on_replit(self, unconfigured_client):
+        """Replit ortamında /setup/save 403 dönmeli."""
+        import local_env
+        with patch.object(local_env, "is_replit", return_value=True):
+            resp = unconfigured_client.post(
+                "/setup/save",
+                data=json.dumps({"password_hash": self._make_hash(), "username": "admin"}),
+                content_type="application/json",
+            )
+        assert resp.status_code == 403
+        body = resp.get_json()
+        assert body["error"]["code"] == "REPLIT_ENV"
+
+    def test_save_rejects_missing_hash(self, unconfigured_client):
+        """Hash eksikse 400 döndürmeli."""
+        import local_env
+        with patch.object(local_env, "is_replit", return_value=False):
+            resp = unconfigured_client.post(
+                "/setup/save",
+                data=json.dumps({"username": "admin"}),
+                content_type="application/json",
+            )
+        assert resp.status_code == 400
+        assert resp.get_json()["error"]["code"] == "MISSING_HASH"
+
+    def test_save_rejects_invalid_hash_format(self, unconfigured_client):
+        """Werkzeug formatında olmayan hash reddedilmeli."""
+        import local_env
+        with patch.object(local_env, "is_replit", return_value=False):
+            resp = unconfigured_client.post(
+                "/setup/save",
+                data=json.dumps({"password_hash": "notahash", "username": "admin"}),
+                content_type="application/json",
+            )
+        assert resp.status_code == 400
+        assert resp.get_json()["error"]["code"] == "INVALID_HASH"
+
+    def test_save_writes_env_and_updates_environ(self, unconfigured_client, tmp_path):
+        """Geçerli istek: .env dosyasına yazar ve os.environ'u hemen günceller."""
+        import local_env
+        import os
+        fake_env = tmp_path / ".env"
+        fake_env.write_text("EXISTING_KEY=existing_value\n", encoding="utf-8")
+        pw_hash = self._make_hash()
+        with patch.object(local_env, "is_replit", return_value=False), \
+             patch.object(local_env, "ENV_FILE", fake_env):
+            resp = unconfigured_client.post(
+                "/setup/save",
+                data=json.dumps({"password_hash": pw_hash, "username": "testoperator"}),
+                content_type="application/json",
+            )
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        body = resp.get_json()
+        assert body["ok"] is True
+        # .env dosyası yeni anahtarları içermeli
+        env_text = fake_env.read_text(encoding="utf-8")
+        assert "ALPHA_OWNER_USERNAME=testoperator" in env_text
+        assert "ALPHA_OWNER_PASSWORD_HASH=" in env_text
+        # Değerin kendisi loglanmaz/gizlenmez ama dosyada vardır
+        assert pw_hash in env_text
+        # Mevcut anahtar korunmalı
+        assert "EXISTING_KEY=existing_value" in env_text
+        # os.environ güncellenmiş olmalı
+        assert os.environ.get("ALPHA_OWNER_USERNAME") == "testoperator"
+
+    def test_save_overwrites_existing_env_key(self, unconfigured_client, tmp_path):
+        """Aynı anahtar .env'de zaten varsa satır güncellenmeli (duplikasyon olmamalı)."""
+        import local_env
+        fake_env = tmp_path / ".env"
+        fake_env.write_text(
+            "ALPHA_OWNER_USERNAME=olduser\nALPHA_OWNER_PASSWORD_HASH=oldhash\n",
+            encoding="utf-8"
+        )
+        pw_hash = self._make_hash()
+        with patch.object(local_env, "is_replit", return_value=False), \
+             patch.object(local_env, "ENV_FILE", fake_env):
+            resp = unconfigured_client.post(
+                "/setup/save",
+                data=json.dumps({"password_hash": pw_hash, "username": "newuser"}),
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        env_text = fake_env.read_text(encoding="utf-8")
+        # Sadece bir kez görünmeli
+        assert env_text.count("ALPHA_OWNER_USERNAME=") == 1
+        assert "ALPHA_OWNER_USERNAME=newuser" in env_text
+        assert "olduser" not in env_text

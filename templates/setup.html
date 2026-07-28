@@ -217,6 +217,9 @@
 
   <!-- ── ADIM 2: Kaydet ── -->
   <div class="step-panel" id="panel-2">
+
+    {% if is_replit %}
+    <!-- Replit: manuel Secrets akışı -->
     <div class="instruction-box">
       <h3>🔐 Hash değerini Replit Secrets'a kaydedin</h3>
       <ol>
@@ -232,23 +235,56 @@
         <li>Uygulamayı yeniden başlatın (Replit'te <strong>Run</strong> düğmesine basın).</li>
       </ol>
     </div>
-
     <div class="info-box info">
       Hash değeri zaten pano'da. Gerekirse önceki adıma dönüp tekrar kopyalayabilirsiniz.
     </div>
-
     <div class="btn-row">
       <button class="btn btn-secondary" onclick="goStep(1)">← Geri</button>
       <button class="btn btn-primary" onclick="goStep(3)">Kaydettim →</button>
     </div>
+
+    {% else %}
+    <!-- Windows / yerel: otomatik .env kayıt akışı -->
+    <div class="info-box info">
+      Kullanıcı adınızı girin ve <strong>Kaydet</strong>'e tıklayın — yönetici bilgileri
+      projenizin <code>.env</code> dosyasına otomatik olarak yazılır. Yeniden başlatma gerekmez.
+    </div>
+
+    <div class="field">
+      <label for="admin-username">
+        Yönetici Kullanıcı Adı
+        <span class="label-hint">— giriş ekranında kullanılır</span>
+      </label>
+      <input id="admin-username" type="text" autocomplete="username"
+             placeholder="admin" value="admin" maxlength="64">
+    </div>
+
+    <div id="save-error" class="info-box error" style="display:none;"></div>
+    <div id="save-ok"    class="info-box ok"    style="display:none;"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(1)">← Geri</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveToEnv()">
+        💾 .env'e Kaydet
+      </button>
+    </div>
+    {% endif %}
+
   </div>
 
   <!-- ── ADIM 3: Doğrula ── -->
   <div class="step-panel" id="panel-3">
+    {% if is_replit %}
     <div class="info-box info">
       Uygulamayı yeniden başlattıktan sonra aşağıdaki düğmeye tıklayarak kurulumun
       tamamlandığını doğrulayın.
     </div>
+    {% else %}
+    <div class="info-box info">
+      Aşağıdaki düğmeye tıklayarak kurulumun tamamlandığını doğrulayın.
+      (Yeniden başlatma gerekmez — bilgiler zaten uygulandı.)
+    </div>
+    {% endif %}
 
     <button class="btn btn-primary" onclick="checkSetup()">
       Kurulumu Doğrula
@@ -312,6 +348,66 @@
     btn.disabled = !(pw1 && pw1 === pw2 && pw1.length >= 6);
   }
 
+  // ── .env'e kaydet (Windows / yerel) ─────────────────────────────────────────
+  let _savedHash = null;  // generateHash'ten aktarılır
+
+  async function saveToEnv() {
+    if (!_savedHash) {
+      alert('Önce 1. adımda hash oluşturun.');
+      goStep(1);
+      return;
+    }
+    const username = (document.getElementById('admin-username')?.value || '').trim();
+    if (!username) {
+      const errBox = document.getElementById('save-error');
+      errBox.textContent = 'Kullanıcı adı boş olamaz.';
+      errBox.style.display = 'block';
+      return;
+    }
+    const errBox  = document.getElementById('save-error');
+    const okBox   = document.getElementById('save-ok');
+    const btn     = document.getElementById('save-btn');
+    errBox.style.display = 'none';
+    okBox.style.display  = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Kaydediliyor…';
+    try {
+      const csrf = document.querySelector('meta[name="csrf-token"]');
+      const resp = await fetch('/setup/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrf ? csrf.content : '',
+        },
+        body: JSON.stringify({ password_hash: _savedHash, username }),
+      });
+      const ctype = resp.headers.get('Content-Type') || '';
+      let data = null;
+      if (ctype.includes('application/json')) {
+        try { data = await resp.json(); } catch (_) { data = null; }
+      }
+      if (!resp.ok || !data || data.ok === false) {
+        let msg = 'Beklenmeyen sunucu hatası. Sayfayı yenileyip tekrar deneyin.';
+        if (data && data.error) {
+          msg = (typeof data.error === 'string') ? data.error : (data.error.message || msg);
+        }
+        errBox.textContent = msg;
+        errBox.style.display = 'block';
+        return;
+      }
+      okBox.textContent = '✅ Bilgiler .env dosyasına kaydedildi. Giriş yapmak için 3. adıma geçin.';
+      okBox.style.display = 'block';
+      // 800ms sonra otomatik Step 3'e geç
+      setTimeout(() => goStep(3), 800);
+    } catch (e) {
+      errBox.textContent = 'Ağ hatası: ' + e.message;
+      errBox.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '💾 .env\'e Kaydet';
+    }
+  }
+
   // ── Hash oluştur ─────────────────────────────────────────────────────────────
   async function generateHash() {
     const pw = document.getElementById('pw1').value;
@@ -349,6 +445,7 @@
         return;
       }
       document.getElementById('hash-val').textContent = data.hash;
+      _savedHash = data.hash;  // Step 2 Windows kayıt için sakla
       // Parola alanlarını bellekten temizle (başarı sonrası)
       document.getElementById('pw1').value = '';
       const pw2El = document.getElementById('pw2');
