@@ -31,7 +31,7 @@ from flask_wtf.csrf import CSRFProtect, CSRFError
 # Replit/production: process env (Secrets) kazanır; .env okunmaz.
 # Windows yerel: proje .env, Binance TR credential'ları için açık kaynaktır.
 # serve_windows.py de çağırır; local_env çifte yüklemeyi kendisi engeller.
-# (Eski _load_local_env/setdefault yükleyicisi kaldırıldı: stale OS env
+# (Eski gömülü setdefault yükleyicisi kaldırıldı: stale OS env
 # değerleri .env'in önüne geçebiliyordu — bkz. local_env.py.)
 import local_env
 local_env.load_project_env()
