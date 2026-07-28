@@ -44,12 +44,25 @@ def is_replit() -> bool:
 
 
 def _parse_env_file(path: Path) -> dict[str, str]:
-    """Basit KEY=VALUE ayrıştırıcı (yorum ve boş satırlar atlanır)."""
+    """Basit KEY=VALUE ayrıştırıcı (yorum ve boş satırlar atlanır).
+
+    Windows dayanıklılığı: Notepad UTF-8 dosyayı BOM ile kaydeder
+    (ilk anahtar '\\ufeffKEY' olur ve eşleşmez); PowerShell Set-Content
+    varsayılanı UTF-16'dır (utf-8 okuma UnicodeDecodeError fırlatır).
+    Bu iki durum GLOBAL=False/TR=False belirtisinin kök nedenidir —
+    utf-8-sig önce denenir, çözülemezse utf-16'ya düşülür."""
     out: dict[str, str] = {}
     try:
-        text = path.read_text(encoding="utf-8")
+        raw = path.read_bytes()
     except OSError:
         return out
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("utf-16")
+        except UnicodeError:
+            return out
     for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
