@@ -356,13 +356,25 @@ def history() -> dict:
 
 
 def _drawdown(window_days: int, current_balance: Decimal | None) -> str | None:
-    """Pencere içi zirveden düşüş %. Yeterli doğrulanmış geçmiş yoksa null."""
+    """Pencere içi zirveden düşüş %. Yeterli doğrulanmış geçmiş yoksa null.
+
+    Yalnızca aynı evrendeki (SPOT_ONLY) kayıtlar karşılaştırılır: Futures
+    döneminden kalan eski kayıtlar hesaba katılmaz — iki farklı büyüklük
+    asla karşılaştırılmaz. Spot kaydı tanıma: `universe == "SPOT_ONLY"`
+    etiketi VEYA (etiket öncesi Spot dönemi için) `total_spot_value_usdt`
+    alanının varlığı — Futures dönemi kayıtlarında bu alan yoktur."""
     if current_balance is None:
         return None
+
+    def _is_spot(r: dict) -> bool:
+        if r.get("universe") is not None:
+            return r.get("universe") == "SPOT_ONLY"
+        return "total_spot_value_usdt" in r
+
     cutoff = (datetime.now(timezone.utc) -
               timedelta(days=window_days)).strftime("%Y-%m-%d")
     balances = [_dec(r.get("margin_balance_usdt")) for r in _read_history()
-                if (r.get("date") or "") >= cutoff]
+                if (r.get("date") or "") >= cutoff and _is_spot(r)]
     balances = [b for b in balances if b is not None]
     if not balances:
         return None
@@ -530,6 +542,7 @@ def summary(persist: bool = True) -> dict:
         alert_model = alerts()
         _append_snapshot({
             "date": _today(), "recorded_at": _now_iso(),
+            "universe": "SPOT_ONLY",
             "alert_codes": [a["code"] for a in alert_model["alerts"]]
             if alert_model.get("ok") else [],
             "risk_score": hs["score"],
