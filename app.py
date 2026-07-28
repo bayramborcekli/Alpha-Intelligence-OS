@@ -27,8 +27,46 @@ import uuid
 from flask import Flask, Response, g, jsonify, render_template, request, redirect, session, url_for
 from flask_wtf.csrf import CSRFProtect, CSRFError
 
-# ── alpha20_v1/ modülleri sys.path üzerinden import ──────────────────────────
+# ── Yerel ortam yapılandırması (.env) ────────────────────────────────────────
 ROOT_DIR = Path(__file__).resolve().parent
+
+def _load_local_env(env_path: Path) -> None:
+    """Proje kökündeki .env dosyasını dış bağımlılık olmadan yükle.
+
+    Mevcut sistem ortam değişkenleri korunur; .env yalnızca eksik değerleri
+    tamamlar. Böylece Windows, Linux ve üretim ortamlarında aynı kod güvenle
+    çalışır.
+    """
+    if not env_path.is_file():
+        return
+
+    try:
+        for raw_line in env_path.read_text(encoding="utf-8-sig").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[7:].lstrip()
+            if "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if not key or not key.replace("_", "a").isalnum():
+                continue
+
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                value = value[1:-1]
+
+            os.environ.setdefault(key, value)
+    except OSError as exc:
+        print(f"[WARN] .env dosyası okunamadı: {exc}", flush=True)
+
+
+_load_local_env(ROOT_DIR / ".env")
+
+# ── alpha20_v1/ modülleri sys.path üzerinden import ──────────────────────────
 sys.path.insert(0, str(ROOT_DIR / "alpha20_v1"))
 
 import universe_manager as um    # noqa: E402
