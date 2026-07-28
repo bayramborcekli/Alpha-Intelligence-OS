@@ -22,13 +22,16 @@ def _now_iso() -> str:
 
 
 def _conn_status(model: dict) -> str:
-    """Kaynak modeli → Bağlı / Kısmi / Bağlantı Yok (renkten bağımsız metin)."""
-    if not model.get("ok"):
-        return "Bağlantı Yok"
-    fresh = ((model.get("meta") or {}).get("freshness") or "").upper()
-    if fresh == "STALE":
+    """Kaynak modeli → Bağlı / Kısmi / Bağlantı Yok.
+
+    Durum KANONİK dapi.connection_state'ten türetilir — bu katman kendi
+    health/credential kontrolünü YAPMAZ (tek snapshot sözleşmesi)."""
+    state = model.get("connection_state") or dapi.connection_state(model)
+    if state == "HEALTHY":
+        return "Bağlı"
+    if state == "STALE":
         return "Kısmi"
-    return "Bağlı"
+    return "Bağlantı Yok"
 
 
 def executive_summary(bot_is_running: bool, app_mode: str) -> dict:

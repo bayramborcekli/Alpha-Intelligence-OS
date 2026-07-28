@@ -2994,8 +2994,20 @@ def api_accounts_list():
     except reg.RegistryError as exc:
         return _accounts_json(False, None, "REGISTRY_ERROR", str(exc),
                               500)
+    cards = []
+    for a in accounts:
+        card = reg.card_view(a)
+        # Kanonik snapshot durumu karta damgalanır: Hesaplarım rozeti
+        # kayıt defteri bayrağından DEĞİL, Genel Bakış'la AYNI kanonik
+        # snapshot'tan okunur (ekranlar arası tutarlılık sözleşmesi).
+        if card["connected"] and card["connector_ready"]:
+            card["connection_state"] = _account_snapshot(
+                a["exchange"])["connection_state"]
+        else:
+            card["connection_state"] = "DISABLED"
+        cards.append(card)
     return _accounts_json(True, {
-        "accounts": [reg.card_view(a) for a in accounts],
+        "accounts": cards,
         "execution_eligible": reg.execution_eligible(accounts),
         # Windows/yerel: API anahtarları Hesaplarım → Düzenle ile yerel
         # güvenli depoya kaydedilebilir; Replit'te Secrets kullanılır.
@@ -3123,21 +3135,12 @@ def _paper_balance() -> str:
 
 
 def _connection_state(res: dict) -> str:
-    """Kanonik hesap durumu (Mission sözleşmesi): UNKNOWN kullanılmaz.
+    """Kanonik durum türetimi TEK yerdedir: dashboard_api.connection_state.
 
-    NOT_CONFIGURED | HEALTHY | STALE | AUTH_FAILED | CONNECTION_FAILED |
-    DISABLED."""
-    if res.get("ok"):
-        fresh = (res.get("meta") or {}).get("freshness")
-        return "STALE" if fresh == "STALE" else "HEALTHY"
-    code = ((res.get("error") or {}).get("code")) or ""
-    if code == "NOT_CONFIGURED":
-        return "NOT_CONFIGURED"
-    if code == "EXCHANGE_AUTH_FAILED":
-        return "AUTH_FAILED"
-    if code == "FUTURES_REMOVED":
-        return "DISABLED"
-    return "CONNECTION_FAILED"
+    Bu sarmalayıcı yalnız delegasyondur — app katmanı kendi state
+    mantığını TAŞIMAZ (ekranlar arası tutarlılık sözleşmesi)."""
+    import dashboard_api as dapi
+    return dapi.connection_state(res)
 
 
 def _account_snapshot(exchange: str) -> dict:

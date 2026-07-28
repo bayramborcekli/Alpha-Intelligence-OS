@@ -61,8 +61,22 @@
     var w = walletsByAccount[a.account_id] || null;
     var ready = a.connector_ready;
     var creds = a.credentials_configured;
+    // Rozet KANONİK snapshot durumundan okunur (connection_state) —
+    // Genel Bakış ile aynı backend state; kayıt defteri bayrağı tek
+    // başına "Bağlı" gösteremez.
+    var STATE_BADGE = {
+      HEALTHY: ["ok", "Bağlı"],
+      STALE: ["warn", "Bağlı (eski veri)"],
+      NOT_CONFIGURED: ["warn", "Anahtar Yapılandırılmamış"],
+      AUTH_FAILED: ["err", "Kimlik Hatası"],
+      CONNECTION_FAILED: ["err", "Bağlantı Hatası"],
+      DISABLED: ["off", "Bağlı Değil"]
+    };
+    var st = STATE_BADGE[a.connection_state];
     var statusBadge = !ready ? badge("warn", "Bağlayıcı Hazır Değil")
-      : a.connected ? badge("ok", "Bağlı") : badge("off", "Bağlı Değil");
+      : !a.connected ? badge("off", "Bağlı Değil")
+      : st ? badge(st[0], st[1])
+      : badge("warn", "Durum Bilinmiyor"); // alan yoksa asla "Bağlı" deme
     var noConn = { disabled: !ready,
                    reason: "Bağlayıcı henüz hazır değil" };
     var offline = { disabled: !a.connected,

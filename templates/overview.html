@@ -223,6 +223,22 @@
     return '<div class="kv"><strong>' + k + "</strong><span" +
       (cls ? ' class="' + cls + '"' : "") + ">" + v + "</span></div>";
   }
+  // Kanonik durum: backend connection_state alanından okunur — bu
+  // ekran kendi credential/health türetimini YAPMAZ (tek snapshot).
+  var STATE_TXT = {
+    HEALTHY: ["st-ok", "Bağlı"],
+    STALE: ["st-warn", "Bağlı (eski veri)"],
+    NOT_CONFIGURED: ["st-warn", "Anahtar Yapılandırılmamış"],
+    AUTH_FAILED: ["st-err", "Kimlik Hatası"],
+    CONNECTION_FAILED: ["st-err", "Bağlantı Hatası"],
+    DISABLED: ["st-neutral", "Kapalı"]
+  };
+  function stateTxt(model) {
+    // Alan eksikse asla yanlış pozitif "Bağlı" gösterme.
+    var s = STATE_TXT[model.connection_state] ||
+      ["st-warn", "Durum Bilinmiyor"];
+    return '<span class="' + s[0] + '">' + s[1] + "</span>";
+  }
   function okTxt(b, yes, no, clsYes, clsNo) {
     return '<span class="' + (b ? (clsYes || "st-ok") : (clsNo || "st-err")) + '">' +
       (b ? yes : no) + "</span>";
@@ -241,7 +257,7 @@
     // Kart 1: Binance Global — SPOT hesabı (HOTFIX 2100-HF-001)
     if (gs.ok) {
       var spotBody =
-        kv("Bağlantı", okTxt(true, "Bağlı", "")) +
+        kv("Bağlantı", stateTxt(gs)) +
         kv("Read-only doğrulama", okTxt(gs.read_only_auth === "OK", "Doğrulandı", gs.read_only_auth || "Hata")) +
         kv("API anahtarı", '<span class="st-neutral">' + (gs.api_key_masked || "—") + "</span>") +
         kv("Senkron durumu", gs.meta.freshness === "FRESH"
@@ -291,7 +307,7 @@
     if (tr.ok) {
       var recon = tm.ok ? tm.reconciliation : "—";
       setCard("tr", tr,
-        kv("Bağlantı", okTxt(true, "Bağlı", "")) +
+        kv("Bağlantı", stateTxt(tr)) +
         kv("Hesap durumu", '<span class="st-ok">Aktif</span>') +
         kv("TRY bakiyesi", trNum(tr.try_free, " ₺")) +
         kv("USDT bakiyesi", trNum(tr.usdt_free, " USDT")) +

@@ -270,6 +270,28 @@ def _freshness_label(kind: str, age: float | None, ok: bool) -> str:
     return "FRESH" if age <= FRESH_LIMIT[kind] else "STALE"
 
 
+def connection_state(res: dict) -> str:
+    """KANONİK bağlantı durumu türetimi — TEK yer (Mission sözleşmesi).
+
+    Tüm ekranlar (Hesaplarım, Genel Bakış, Yönetici şeridi, Portföy,
+    header) hesap durumunu BU fonksiyonun ürettiği değerden okur; hiçbir
+    ekran kendi credential kontrolünü/health check'ini yapamaz.
+
+    NOT_CONFIGURED | HEALTHY | STALE | AUTH_FAILED | CONNECTION_FAILED |
+    DISABLED (UNKNOWN kullanılmaz)."""
+    if res.get("ok"):
+        fresh = (res.get("meta") or {}).get("freshness")
+        return "STALE" if fresh == "STALE" else "HEALTHY"
+    code = ((res.get("error") or {}).get("code")) or ""
+    if code == "NOT_CONFIGURED":
+        return "NOT_CONFIGURED"
+    if code == "EXCHANGE_AUTH_FAILED":
+        return "AUTH_FAILED"
+    if code == "FUTURES_REMOVED":
+        return "DISABLED"
+    return "CONNECTION_FAILED"
+
+
 def _serve(kind: str, source: str, builder: Callable[[], dict]) -> dict:
     """Önbellekli servis: model + meta döndürür. Kaynak hatasında varsa son
     bilinen veri (yaşıyla birlikte) korunur — pano asla tamamen kararmaz."""
@@ -318,6 +340,9 @@ def _serve(kind: str, source: str, builder: Callable[[], dict]) -> dict:
         out.update(entry["data"])
     if entry.get("error"):
         out["error"] = entry["error"]
+    # Kanonik durum modele damgalanır: tüm ekranlar aynı snapshot
+    # jenerasyonu için AYNI state'i okur (ekran-başına türetim YASAK).
+    out["connection_state"] = connection_state(out)
     return out
 
 

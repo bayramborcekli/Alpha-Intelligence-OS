@@ -8,4 +8,5 @@
 - [Read-only summary persist](read-only-summary-persist.md) — risk_api.summary() writes a daily snapshot by default; read-only layers must pass persist=False.
 - [Operation shared state](operation-shared-state.md) — new mutable operation-service fields must join the flock/JSON shared store, or they regress to per-worker state.
 - [Spot-only architecture](spot-only-architecture.md) — Futures private API permanently removed; tombstone FUTURES_REMOVED contract + deliberate public-klines/PAPER keeps.
+- [Exchange credential resolver](exchange-credential-resolver.md) — exchange_credentials.py tek çözümleyici; kanonik BINANCE_GLOBAL_API_Key her zaman kazanır; Windows deposu env'i ezer; hesap fetch'i dashboard_api raw cache'te tek yol.
 - [Binance TR API quirks](binance-tr-api.md) — `data` may be list or dict; movements API omits trades so reconciliation is PARTIAL by design; transferType=1 = internal.
