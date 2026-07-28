@@ -1,0 +1,348 @@
+MISSION — FIX DUPLICATE ACCOUNT SNAPSHOT PATHS
+
+MEVCUT GERÇEK WINDOWS KANITI
+
+Aynı oturumda:
+
+GET /api/accounts
+
+Paper:
+connected=true
+credentials_configured=true
+
+Binance Global:
+connected=true
+
+Binance TR:
+connected=true
+
+Ama:
+
+GET /api/accounts/wallets
+
+Paper:
+status=UNKNOWN
+balance=UNKNOWN
+
+Binance Global:
+status=UNAVAILABLE
+
+Binance TR:
+status=UNAVAILABLE
+
+Ve:
+
+GET /api/accounts/portfolio
+
+Paper=UNKNOWN
+Binance Global=UNKNOWN
+Binance TR=UNKNOWN
+total_usdt=UNKNOWN
+
+Bu nedenle problem frontend değil.
+Backend içinde AYRI account snapshot yolları var.
+
+==================================================
+KÖK NEDEN HEDEFİ
+==================================================
+
+app.py içinde özellikle şu alanları incele:
+
+_account_snapshot(...)
+
+@app.get("/api/accounts/wallets")
+api_accounts_wallets()
+
+@app.get("/api/accounts/portfolio")
+api_accounts_portfolio()
+
+Bu yollar Ayarlar → Hesaplarım'ın kullandığı canonical account state'ten
+ayrı veri üretmemeli.
+
+Şu anki problem:
+
+/api/accounts
+    -> registry/canonical state
+
+/api/accounts/wallets
+    -> ayrı _account_snapshot
+    -> UNKNOWN/UNAVAILABLE
+
+/api/accounts/portfolio
+    -> aynı eski/ayrı snapshot
+    -> UNKNOWN
+
+Bu duplicate mimari kaldırılmalı.
+
+==================================================
+MİMARİ KARAR
+==================================================
+
+TEK SOURCE OF TRUTH:
+
+Canonical Account Snapshot / Account Service
+
+Bütün ekranlar ve endpointler bunu kullanacak:
+
+/api/accounts
+/api/accounts/wallets
+/api/accounts/portfolio
+Ayarlar → Hesaplarım
+Trading Home
+Portfolio
+Header/status
+
+Hiçbiri aynı hesap için ikinci health/balance/account fetch yapmayacak.
+
+==================================================
+PAPER ÖZEL KURAL
+==================================================
+
+Paper exchange credential gerektirmez.
+
+Bu yüzden:
+
+Paper connected=true
+Paper credentials_configured=true
+
+ise:
+
+Paper UNKNOWN olmamalı.
+
+Binance Global/TR credential eksikliği Paper state'i etkileyemez.
+
+Paper wallet/balance kendi simulation ledger kaynağından gelmeli.
+
+==================================================
+GLOBAL/TR DAVRANIŞI
+==================================================
+
+Credential yoksa:
+
+NOT_CONFIGURED
+
+Credential var ama auth başarısızsa:
+
+AUTH_FAILED
+
+Network sorunu:
+
+CONNECTION_FAILED
+
+Başarılı:
+
+HEALTHY
+
+UNAVAILABLE/UNKNOWN yalnız gerçekten state belirlenemiyorsa kullanılmalı.
+
+==================================================
+DÜZELTME PRENSİBİ
+==================================================
+
+Yeni üçüncü servis oluşturma.
+
+Mevcut canonical account state/service hangisiyse:
+
+/api/accounts/wallets
+ve
+/api/accounts/portfolio
+
+ona DELEGE etsin.
+
+Kendi health/connection logic'lerini kaldır.
+
+Gerekirse _account_snapshot():
+
+- canonical snapshot adapter olur
+veya
+- tamamen kaldırılır
+
+Ama duplicate source-of-truth kalmaz.
+
+==================================================
+WALLET ENDPOINT
+==================================================
+
+/api/accounts/wallets artık kendi başına exchange health hesaplamasın.
+
+Canonical snapshot'tan üret:
+
+account_id
+nickname
+primary
+connection_state
+wallet_count
+wallets
+portfolio/value
+last_sync
+
+Paper için simulation ledger snapshot kullan.
+
+Global/TR için canonical exchange account snapshot kullan.
+
+==================================================
+PORTFOLIO ENDPOINT
+==================================================
+
+/api/accounts/portfolio:
+
+wallet endpoint'ten veya aynı canonical account snapshot service'ten
+değer toplasın.
+
+Ayrı Binance/account fetch yapmasın.
+
+Bir account NOT_CONFIGURED ise:
+o account ayrı state'te görünür.
+
+Bu durum Paper değerini UNKNOWN yapmamalı.
+
+Toplam hesaplamada policy açıkça tanımlansın:
+
+- known values toplanabilir
+veya
+- unknown component varsa total unknown kalabilir
+
+AMA component state doğru olmalı.
+
+==================================================
+TRADING HOME
+==================================================
+
+trading_home.js mevcut endpointleri kullanabilir.
+
+Ama backend canonical veri döndürmeli.
+
+Frontend'e yeni workaround yazma.
+
+Paper UNKNOWN problemini JS ile maskeleme.
+
+==================================================
+ACİL DURDURMA
+==================================================
+
+Bu duplicate UNKNOWN/UNAVAILABLE state:
+
+PAPER sisteminde false emergency stop tetikliyorsa bunu düzelt.
+
+Gerçek safety failure fail-closed kalmalı.
+
+Optional exchange NOT_CONFIGURED durumu:
+global emergency stop sebebi olmamalı.
+
+==================================================
+TESTLER
+==================================================
+
+Zorunlu regresyon:
+
+1. /api/accounts Paper connected=true
+   -> /api/accounts/wallets Paper UNKNOWN olamaz
+
+2. Paper wallet simulation ledger'dan gelir
+
+3. Global credential yok
+   -> Global NOT_CONFIGURED
+   -> Paper HEALTHY kalır
+
+4. TR credential yok
+   -> TR NOT_CONFIGURED
+   -> Paper HEALTHY kalır
+
+5. Settings Paper state
+   ==
+   Trading Home Paper state
+
+6. Settings Global state
+   ==
+   wallet endpoint Global state
+
+7. Settings TR state
+   ==
+   wallet endpoint TR state
+
+8. portfolio components canonical snapshot'tan gelir
+
+9. /api/accounts/portfolio bağımsız exchange fetch yapmaz
+
+10. /api/accounts/wallets bağımsız duplicate exchange fetch yapmaz
+
+11. same snapshot generation:
+    Settings/Home/Portfolio same state
+
+12. missing optional exchange != emergency stop
+
+13. real safety failure = emergency stop
+
+14. secret/signature log yok
+
+15. Futures endpoint yok
+
+16. full regression 0 FAIL
+
+==================================================
+ARCHITECTURE GUARD
+==================================================
+
+Bekçi testi ekle:
+
+Aynı exchange için:
+
+- ikinci account fetcher
+- ikinci health calculator
+- ikinci balance snapshot
+- UI-specific exchange client call
+
+yeniden eklenirse FAIL.
+
+==================================================
+SINIRLAR
+==================================================
+
+Bu görevde:
+
+Risk profile ekleme
+LIVE trading ekleme
+Futures ekleme
+UI redesign yapma
+Credential isimlerini yeniden değiştirme
+Çalışan Binance client'larını yeniden yazma
+
+YALNIZ duplicate account snapshot path problemini çöz.
+
+==================================================
+TESLİM RAPORU
+==================================================
+
+Raporla:
+
+1. ROOT CAUSE
+2. duplicate account paths found
+3. _account_snapshot decision
+4. /api/accounts/wallets before/after
+5. /api/accounts/portfolio before/after
+6. Paper UNKNOWN root cause
+7. Global/TR UNAVAILABLE root cause
+8. canonical snapshot source
+9. emergency-stop impact
+10. targeted tests
+11. full regression
+12. changed files
+13. commit hash
+
+GitHub main'e push et.
+
+Başarı kriteri:
+
+Aynı Windows oturumunda:
+
+/api/accounts
+/api/accounts/wallets
+/api/accounts/portfolio
+
+Paper için birbirine zıt state üretmeyecek.
+
+Paper HEALTHY ise:
+Trading Home Paper UNKNOWN gösteremeyecek.
+
+Global/TR canonical HEALTHY ise:
+Trading Home/Portfolio UNKNOWN veya UNAVAILABLE gösteremeyecek.
