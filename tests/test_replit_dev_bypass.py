@@ -78,3 +78,42 @@ class TestGateBehaviour:
             c = _client()
             r = c.get("/api/v1/overview")
             assert r.status_code == 401
+
+
+class TestArchitectureGuard:
+    """Mimari koruma — bypass kodu 'kapsam dışı' diye SESSİZCE SİLİNEMEZ.
+
+    Task #70 merge'i bu bloğu bir kez sildi ve login ekranı geri geldi
+    (elle restore: commit 13e34a6). Bu testler silinmeyi kırmızıya çevirir.
+    Bypass'ın kaldırılmasına yalnız OPERATÖR karar verir; kaldırırken bu
+    guard testleri de operatör onayıyla birlikte kaldırılmalıdır.
+    """
+
+    def _app_source(self):
+        import inspect
+        return inspect.getsource(appmod)
+
+    def test_bypass_helper_exists(self):
+        assert callable(getattr(appmod, "_replit_dev_bypass_active", None)), (
+            "_replit_dev_bypass_active app.py'den silinmiş! Bu bypass "
+            "operatör kararı olmadan kaldırılamaz (bkz. Task #72).")
+
+    def test_security_gate_has_bypass_branch(self):
+        import inspect
+        gate_src = inspect.getsource(appmod._security_gate)
+        assert "_replit_dev_bypass_active()" in gate_src, (
+            "_security_gate içindeki REPLIT_DEV_BYPASS dalı silinmiş! "
+            "Operatör kararı olmadan kaldırılamaz (bkz. Task #72).")
+
+    def test_replit_config_keeps_dev_env_flag(self):
+        import re
+        from pathlib import Path
+        replit_file = Path(appmod.__file__).parent / ".replit"
+        text = replit_file.read_text(encoding="utf-8")
+        assert re.search(
+            r'^\[userenv\.development\]', text, re.MULTILINE), (
+            ".replit dosyasından [userenv.development] bölümü silinmiş!")
+        assert re.search(
+            r'^REPLIT_DEV_BYPASS\s*=\s*"1"', text, re.MULTILINE), (
+            '.replit dosyasından REPLIT_DEV_BYPASS = "1" satırı silinmiş! '
+            "scripts/post-merge.sh geri ekler; kaldırma kararı operatörün.")
