@@ -29,6 +29,7 @@
     .xh-st span { font-weight:700; }
     .xh-st .st-ok { color:#3fb950; } .xh-st .st-part { color:#d29922; }
     .xh-st .st-off { color:#f85149; }
+    .xh-st .st-unk { color:#8b949e; font-style:italic; }
     @media (max-width:760px) {
       .xh-row { padding:5px 10px; gap:8px 12px; }
       .xh-brand { display:none; }
@@ -89,24 +90,50 @@
       else if (s === "Kısmi") { e.textContent = "◐ Kısmi"; e.className = "st-part"; }
       else { e.textContent = "○ Bağlantı Yok"; e.className = "st-off"; }
     }
-    function unavailable() {
+    // Fetch'in kendisi başarısız olduğunda servis rozetleri "Bağlantı Yok"
+    // YERİNE ayrı bir "Veri Alınamadı" durumu gösterir: servislerin durumu
+    // bilinmiyor, DOWN oldukları söylenemez (görev: tek istek hatası tüm
+    // servisleri yanlışlıkla DOWN göstermesin).
+    function unavailable(reason) {
       ["xh-pt","xh-upnl","xh-op","xh-oo","xh-risk"].forEach(function (i) {
         setVal(i, null, "Veri Yok");
       });
       ["xh-rpnl","xh-dpct","xh-tpct","xh-7d","xh-30d"].forEach(function (i) {
         setVal(i, null, "—");
       });
+      var label = "◌ Veri Alınamadı" + (reason ? " (" + reason + ")" : "");
       ["xh-s-bg","xh-s-tr","xh-s-led","xh-s-aud","xh-s-risk","xh-s-hp"]
-        .forEach(function (i) { setSt(i, "Bağlantı Yok"); });
+        .forEach(function (i) {
+          var e = el(i); if (!e) return;
+          e.textContent = label; e.className = "st-unk";
+        });
+    }
+    var sessionWarned = false;
+    function sessionExpired() {
+      // 401: oturum yok/süresi doldu — servisler değil, oturum sorunlu.
+      unavailable("oturum");
+      if (sessionWarned) return;
+      sessionWarned = true;
+      var upd = el("xh-updated");
+      if (upd) { upd.textContent = "Oturum süresi doldu — girişe yönlendiriliyor…"; }
+      setTimeout(function () {
+        window.location.href = "/login";
+      }, 1500);
     }
     function refresh() {
       fetch("/api/v1/executive/summary", { credentials: "same-origin" })
         .then(function (r) {
-          if (!r.ok) throw new Error("http " + r.status);
+          if (r.status === 401) { sessionExpired(); return null; }
+          if (!r.ok) {
+            var err = new Error("http " + r.status);
+            err.httpStatus = r.status;
+            throw err;
+          }
           return r.json();
         })
         .then(function (d) {
-          if (!d || !d.ok) { unavailable(); return; }
+          if (d === null) return; // 401 zaten işlendi
+          if (!d || !d.ok) { unavailable("geçersiz yanıt"); return; }
           el("xh-mode").textContent = d.mode || "…";
           el("xh-updated").textContent =
             (d.as_of || "").replace("T", " ").replace("+00:00", " UTC");
@@ -133,7 +160,11 @@
           setSt("xh-s-risk", s.risk_engine);
           setSt("xh-s-hp", s.health);
         })
-        .catch(unavailable);
+        .catch(function (e) {
+          // HTTP hata kodu varsa göster; yoksa ağ/JS hatasıdır.
+          var reason = (e && e.httpStatus) ? ("HTTP " + e.httpStatus) : "ağ hatası";
+          unavailable(reason);
+        });
     }
     refresh();
     setInterval(refresh, 30000);
