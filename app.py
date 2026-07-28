@@ -33,6 +33,7 @@ from flask_wtf.csrf import CSRFProtect, CSRFError
 # serve_windows.py de çağırır; local_env çifte yüklemeyi kendisi engeller.
 # (Eski gömülü setdefault yükleyicisi kaldırıldı: stale OS env
 # değerleri .env'in önüne geçebiliyordu — bkz. local_env.py.)
+import local_admin
 import local_env
 local_env.load_project_env()
 
@@ -807,19 +808,22 @@ def setup_save():
             "message": "Geçersiz hash biçimi — yalnızca bu sihirbazdan üretilen hash kabul edilir."
         }}, 400
     try:
-        local_env.write_env_vars({
-            "ALPHA_OWNER_USERNAME": username,
-            "ALPHA_OWNER_PASSWORD_HASH": pw_hash,
-        })
-    except Exception as exc:
+        # Windows/yerel giriş kaynağı: data/local_admin.json (atomic yazma,
+        # 0600). Environment veya .env'e YAZILMAZ — Secrets'tan tam ayrım.
+        local_admin.save(username, pw_hash)
+    except Exception:
         import logging
-        logging.getLogger(__name__).error("setup/save write failed: %s", exc)
+        logging.getLogger(__name__).error("setup/save write failed",
+                                          exc_info=True)
         return {"ok": False, "error": {
             "code": "WRITE_ERROR",
-            "message": f".env dosyasına yazılamadı: {exc}"
+            "message": "Yerel kimlik dosyası yazılamadı. Dizin izinlerini "
+                       "kontrol edin (data/)."
         }}, 500
     ip = auth.get_client_ip()
-    slog.log_event(slog.STARTUP, detail="setup: credentials saved to .env", ip=ip)
+    slog.log_event(slog.STARTUP,
+                   detail="setup: credentials saved to local_admin store",
+                   ip=ip)
     return {"ok": True}
 
 

@@ -43,6 +43,11 @@ def missing_owner_secrets() -> list[str]:
     """Eksik zorunlu sahip secret'larının ADLARI (değer asla okunup
     döndürülmez). Geriye dönük uyumluluk: eski ADMIN_PASSWORD_HASH +
     (varsa) ADMIN_USERNAME yapılandırması da kurulumu READY sayar."""
+    import local_admin
+    if local_admin.enabled():
+        # Windows/yerel: tek kaynak data/local_admin.json (env okunmaz).
+        return [] if local_admin.get_credentials() else \
+            list(REQUIRED_OWNER_SECRETS)
     if os.environ.get("ADMIN_PASSWORD_HASH"):
         return []
     return [n for n in REQUIRED_OWNER_SECRETS if not os.environ.get(n)]

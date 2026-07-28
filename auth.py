@@ -17,6 +17,8 @@ from typing import Any
 from flask import current_app, redirect, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import local_admin
+
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 MAX_ATTEMPTS     = 5      # Bu sayıda başarısız denemeden sonra kilitle
 LOCKOUT_SECONDS  = 300    # 5 dakika kilit süresi
@@ -108,11 +110,19 @@ _ATTEMPTS = _AttemptStore()   # IP → [timestamp, ...] (SQLite destekli)
 # ── Yardımcılar ───────────────────────────────────────────────────────────────
 
 def _get_admin_username() -> str:
+    # Windows/yerel: TEK kaynak data/local_admin.json — system env
+    # veya eski clone .env kalıntısı girişi override EDEMEZ.
+    if local_admin.enabled():
+        creds = local_admin.get_credentials()
+        return creds[0] if creds else "admin"
     return (os.environ.get("ALPHA_OWNER_USERNAME")
             or os.environ.get("ADMIN_USERNAME") or "admin")
 
 
 def _get_admin_password_hash() -> str | None:
+    if local_admin.enabled():
+        creds = local_admin.get_credentials()
+        return creds[1] if creds else None
     return (os.environ.get("ALPHA_OWNER_PASSWORD_HASH")
             or os.environ.get("ADMIN_PASSWORD_HASH") or None)
 
@@ -261,11 +271,14 @@ def password_hash_configured() -> bool:
     """Sahip girişi yapılandırılmış mı? (KİLİTLİ KURULUM kararı için tek
     doğruluk kaynağı.)
 
+    - Windows/yerel: yalnızca data/local_admin.json belirler (env okunmaz).
     - Eski şema: ADMIN_PASSWORD_HASH tek başına yeterlidir.
     - Yeni şema (ALPHA_OWNER_*): hem KULLANICI ADI hem HASH zorunludur;
       yalnızca hash varsa uygulama KİLİTLİ kalır (fail closed) —
       alpha_platform.setup_state() ile aynı ölçüt.
     """
+    if local_admin.enabled():
+        return local_admin.get_credentials() is not None
     if os.environ.get("ADMIN_PASSWORD_HASH"):
         return True
     return bool(os.environ.get("ALPHA_OWNER_PASSWORD_HASH")
