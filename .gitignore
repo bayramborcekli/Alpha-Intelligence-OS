@@ -132,3 +132,4 @@ runtime/
 # runtime-generated local auth state
 data/local_admin.json
 data/
+intelligence_history.jsonl
