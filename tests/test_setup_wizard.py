@@ -279,6 +279,57 @@ class TestSetupSaveEndpoint:
         assert resp.status_code == 400
         assert resp.get_json()["error"]["code"] == "INVALID_HASH"
 
+    def test_save_rejects_empty_username(self, unconfigured_client):
+        """Kullanıcı adı boşsa 400 + Türkçe mesaj döndürmeli."""
+        import local_env
+        with patch.object(local_env, "is_replit", return_value=False):
+            resp = unconfigured_client.post(
+                "/setup/save",
+                data=json.dumps({"password_hash": self._make_hash(), "username": ""}),
+                content_type="application/json",
+            )
+        assert resp.status_code == 400
+        body = resp.get_json()
+        assert body["error"]["code"] == "MISSING_USERNAME"
+        assert "boş" in body["error"]["message"]
+
+    def test_save_rejects_username_with_invalid_chars(self, unconfigured_client):
+        """Boşluk/özel karakter içeren kullanıcı adı 400 + net Türkçe mesaj döndürmeli."""
+        import local_env
+        pw_hash = self._make_hash()
+        for bad in ["admin user", "admin!", "kullanıcı", "a@b", "user\t", " admin"]:
+            with patch.object(local_env, "is_replit", return_value=False):
+                resp = unconfigured_client.post(
+                    "/setup/save",
+                    data=json.dumps({"password_hash": pw_hash, "username": bad}),
+                    content_type="application/json",
+                )
+            assert resp.status_code == 400, f"kabul edildi: {bad!r}"
+            body = resp.get_json()
+            assert body["error"]["code"] == "INVALID_USERNAME", bad
+            assert "harf, rakam" in body["error"]["message"]
+
+    def test_save_accepts_valid_username_charset(self, unconfigured_client, tmp_path):
+        """[A-Za-z0-9_-] içindeki kullanıcı adları kabul edilmeli."""
+        import local_env
+        import os
+        pw_hash = self._make_hash()
+        fake_env = tmp_path / ".env"
+        fake_env.write_text("", encoding="utf-8")
+        for good in ["admin", "Test_User-01", "a", "A-B_c9"]:
+            with patch.object(local_env, "is_replit", return_value=False), \
+                 patch.object(local_env, "ENV_FILE", fake_env):
+                resp = unconfigured_client.post(
+                    "/setup/save",
+                    data=json.dumps({"password_hash": pw_hash, "username": good}),
+                    content_type="application/json",
+                )
+            assert resp.status_code == 200, f"reddedildi: {good!r}"
+            # Başarılı kayıt os.environ'u günceller ve sihirbazı kapatır;
+            # sonraki iterasyon için "yapılandırılmamış" duruma geri dön.
+            os.environ.pop("ALPHA_OWNER_PASSWORD_HASH", None)
+            os.environ.pop("ALPHA_OWNER_USERNAME", None)
+
     def test_save_writes_env_and_updates_environ(self, unconfigured_client, tmp_path):
         """Geçerli istek: .env dosyasına yazar ve os.environ'u hemen günceller."""
         import local_env

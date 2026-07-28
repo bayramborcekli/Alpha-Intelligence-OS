@@ -256,7 +256,10 @@
         <span class="label-hint">— giriş ekranında kullanılır</span>
       </label>
       <input id="admin-username" type="text" autocomplete="username"
-             placeholder="admin" value="admin" maxlength="64">
+             placeholder="admin" value="admin" maxlength="64"
+             oninput="validateUsernameField()">
+      <div id="username-error" class="info-box error"
+           style="display:none; margin-top:6px;"></div>
     </div>
 
     <div id="save-error" class="info-box error" style="display:none;"></div>
@@ -348,6 +351,30 @@
     btn.disabled = !(pw1 && pw1 === pw2 && pw1.length >= 6);
   }
 
+  // ── Kullanıcı adı doğrulama (sunucu ile aynı kural: [A-Za-z0-9_-]) ──────────
+  function usernameValidationMessage(username) {
+    if (!username) return 'Kullanıcı adı boş olamaz.';
+    if (username.length > 64) return 'Kullanıcı adı çok uzun (en fazla 64 karakter).';
+    if (!/^[A-Za-z0-9_-]+$/.test(username)) {
+      return 'Kullanıcı adı yalnızca harf, rakam, alt çizgi (_) ve tire (-) içerebilir; boşluk ve özel karakter kullanılamaz.';
+    }
+    return null;
+  }
+
+  function validateUsernameField() {
+    const box = document.getElementById('username-error');
+    if (!box) return true;
+    const username = (document.getElementById('admin-username')?.value || '').trim();
+    const msg = usernameValidationMessage(username);
+    if (msg) {
+      box.textContent = msg;
+      box.style.display = 'block';
+      return false;
+    }
+    box.style.display = 'none';
+    return true;
+  }
+
   // ── .env'e kaydet (Windows / yerel) ─────────────────────────────────────────
   let _savedHash = null;  // generateHash'ten aktarılır
 
@@ -358,10 +385,12 @@
       return;
     }
     const username = (document.getElementById('admin-username')?.value || '').trim();
-    if (!username) {
+    const unameMsg = usernameValidationMessage(username);
+    if (unameMsg) {
       const errBox = document.getElementById('save-error');
-      errBox.textContent = 'Kullanıcı adı boş olamaz.';
+      errBox.textContent = unameMsg;
       errBox.style.display = 'block';
+      validateUsernameField();
       return;
     }
     const errBox  = document.getElementById('save-error');

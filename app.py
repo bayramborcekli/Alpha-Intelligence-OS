@@ -792,9 +792,14 @@ def setup_save():
     if not pw_hash or not isinstance(pw_hash, str):
         return {"ok": False, "error": {"code": "MISSING_HASH", "message": "password_hash boş."}}, 400
     if not username or not isinstance(username, str):
-        return {"ok": False, "error": {"code": "MISSING_USERNAME", "message": "username boş."}}, 400
+        return {"ok": False, "error": {"code": "MISSING_USERNAME", "message": "Kullanıcı adı boş olamaz."}}, 400
     if len(username) > 64:
         return {"ok": False, "error": {"code": "INVALID_USERNAME", "message": "Kullanıcı adı çok uzun."}}, 400
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", username):
+        return {"ok": False, "error": {
+            "code": "INVALID_USERNAME",
+            "message": "Kullanıcı adı yalnızca harf, rakam, alt çizgi (_) ve tire (-) içerebilir; boşluk ve özel karakter kullanılamaz."
+        }}, 400
     # Temel hash biçimi doğrulaması (werkzeug pbkdf2:sha256:... veya eski scrypt:)
     if not (pw_hash.startswith("pbkdf2:") or pw_hash.startswith("scrypt:")):
         return {"ok": False, "error": {
