@@ -144,6 +144,11 @@
       if (r[0].ok) {
         lastCards = r[0].data.accounts;
         localCredsEditable = !!r[0].data.local_credentials_editable;
+        // Task 68: eski Binance env isim uyarıları banner olarak
+        // gösterilir (dash_base.html showWarnings; sır değeri yok).
+        if (typeof showWarnings === "function") {
+          showWarnings(r[0].data.legacy_env_warnings || []);
+        }
       }
       if (r[1].ok) {
         walletsByAccount = {};

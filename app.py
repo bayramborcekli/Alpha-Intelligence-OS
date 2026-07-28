@@ -3061,6 +3061,9 @@ def api_accounts_list():
         # Windows/yerel: API anahtarları Hesaplarım → Düzenle ile yerel
         # güvenli depoya kaydedilebilir; Replit'te Secrets kullanılır.
         "local_credentials_editable": not local_env.is_replit(),
+        # Task 68: Eski Binance env isim uyarıları (yalnız metin; sır
+        # değeri asla içermez) panelde banner olarak gösterilir.
+        "legacy_env_warnings": local_env.legacy_name_warnings(),
     })
 
 
