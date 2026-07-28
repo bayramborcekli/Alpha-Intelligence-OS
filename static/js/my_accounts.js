@@ -35,6 +35,7 @@
 
   var lastCards = [];
   var walletsByAccount = {};
+  var localCredsEditable = false;
 
   function badge(cls, text) {
     return "<span class=\"ma-badge " + cls + "\">" + esc(text) +
@@ -93,7 +94,9 @@
         : btn("Bağlan", "connect", a.account_id,
               !ready ? noConn : !creds
                 ? { disabled: true,
-                    reason: "Önce ortam sırlarına anahtar ekleyin" }
+                    reason: localCredsEditable
+                      ? "Önce Düzenle ile API anahtarlarını girin"
+                      : "Önce ortam sırlarına anahtar ekleyin" }
                 : { cls: "accent" })) +
       btn("Düzenle", "edit", a.account_id, noConn.disabled ? noConn : {}) +
       btn("Eşitle", "sync", a.account_id,
@@ -124,7 +127,10 @@
       api("/api/accounts/wallets"),
       api("/api/accounts/portfolio")
     ]).then(function (r) {
-      if (r[0].ok) lastCards = r[0].data.accounts;
+      if (r[0].ok) {
+        lastCards = r[0].data.accounts;
+        localCredsEditable = !!r[0].data.local_credentials_editable;
+      }
       if (r[1].ok) {
         walletsByAccount = {};
         r[1].data.accounts.forEach(function (w) {
@@ -194,17 +200,50 @@
     document.getElementById("ma-edit-nickname").value = a.nickname;
     var spot = document.getElementById("ma-edit-spot");
     spot.checked = a.spot_enabled; spot.disabled = !a.spot_capable;
+    // Windows/yerel: API anahtarları buradan yerel güvenli depoya
+    // yazılır. Replit'te blok gizli kalır (Secrets kanoniktir).
+    var credBlock = document.getElementById("ma-edit-cred-block");
+    var keyEl = document.getElementById("ma-edit-api-key");
+    var secEl = document.getElementById("ma-edit-api-secret");
+    var credCapable = localCredsEditable &&
+      a.credential_source === "ENV" &&
+      (a.exchange === "BINANCE_GLOBAL" || a.exchange === "BINANCE_TR");
+    if (credBlock) {
+      credBlock.hidden = !credCapable;
+      if (keyEl) keyEl.value = "";
+      if (secEl) secEl.value = "";
+    }
     dlg.returnValue = "cancel";
     dlg.showModal();
     dlg.onclose = function () {
       if (dlg.returnValue !== "ok") return;
-      api("/api/accounts/" + encodeURIComponent(id) + "/edit", "POST", {
-        nickname: document.getElementById("ma-edit-nickname").value,
-        spot_enabled: spot.disabled ? null : spot.checked
-      }).then(function (r) {
-        if (!r.ok && r.message) window.alert(r.message);
-        refresh();
-      });
+      var after = function () {
+        api("/api/accounts/" + encodeURIComponent(id) + "/edit", "POST", {
+          nickname: document.getElementById("ma-edit-nickname").value,
+          spot_enabled: spot.disabled ? null : spot.checked
+        }).then(function (r) {
+          if (!r.ok && r.message) window.alert(r.message);
+          refresh();
+        });
+      };
+      var newKey = credCapable && keyEl ? keyEl.value.trim() : "";
+      var newSec = credCapable && secEl ? secEl.value.trim() : "";
+      if (keyEl) keyEl.value = "";
+      if (secEl) secEl.value = "";
+      if (newKey || newSec) {
+        if (!newKey || !newSec) {
+          window.alert("API Key ve API Secret birlikte girilmelidir.");
+          return after();
+        }
+        api("/api/accounts/" + encodeURIComponent(id) + "/credentials",
+            "POST", { apiKey: newKey, apiSecret: newSec })
+          .then(function (r) {
+            if (!r.ok && r.message) window.alert(r.message);
+            after();
+          });
+      } else {
+        after();
+      }
     };
   }
 

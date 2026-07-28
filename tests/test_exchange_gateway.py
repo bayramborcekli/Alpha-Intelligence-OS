@@ -15,12 +15,11 @@ def _clean_cache():
     xg.clear_cache()
     yield
     xg.clear_cache()
-def test_allowlist_blocks_non_listed_paths_before_network():
-    with mock.patch.object(xg.requests, "get") as g:
-        with pytest.raises(RuntimeError, match="GÜVENLİK BLOĞU"):
-            xg._signed_get(xg.TR_BASE, "/open/v1/orders",
-                           xg.TR_ALLOWLIST, "k" * 20, "s" * 20)
-        g.assert_not_called()
+def test_gateway_has_no_own_signed_fetch_path():
+    # Kanonik hesap servisi delegasyonu: gateway kendi imzalı fetch'ini
+    # taşımaz (tek hesap doğruluk kaynağı).
+    assert not hasattr(xg, "_signed_get")
+    assert not hasattr(xg, "TR_ALLOWLIST")
 
 
 def test_no_futures_remnants_in_gateway():
@@ -34,8 +33,9 @@ def test_no_futures_remnants_in_gateway():
 
 
 def test_fail_closed_without_secrets_no_network():
+    import dashboard_api as dapi
     with mock.patch.dict(xg.os.environ, {}, clear=True), \
-         mock.patch.object(xg.requests, "get") as g:
+         mock.patch.object(dapi, "_tr_account_raw") as g:
         out = xg.exchange_summary()
         g.assert_not_called()
     assert "global_futures" not in out   # Futures kaldırıldı
@@ -82,13 +82,12 @@ def test_api_exchange_requires_auth():
 
 def test_malformed_payloads_return_safe_error():
     env = {"BINANCE_TR_API_KEY": "t" * 20, "BINANCE_TR_API_SECRET": "u" * 20}
+    import dashboard_api as dapi
     with mock.patch.dict(xg.os.environ, env, clear=True):
-        import binance_tr_client as btr
         with mock.patch.object(
-                btr.BinanceTRClient, "get_spot_account",
-                side_effect=btr.BinanceTRError(
-                    "INVALID_RESPONSE", http_status=200,
-                    path="/open/v1/account/spot")):
+                dapi, "_tr_account_raw",
+                side_effect=dapi.SafeExchangeError(
+                    "INVALID_EXCHANGE_RESPONSE", "mock")):
             out = xg.tr_spot_summary()
             assert out["ok"] is False
 

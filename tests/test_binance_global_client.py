@@ -201,8 +201,11 @@ class TestGlobalCredAliases:
         assert dapi._global_creds() == ("shortkey", "shortsec")
 
     def test_canonical_wins(self, monkeypatch):
+        # Mission sözleşmesi: kanonik ad BINANCE_GLOBAL_API_Key'dir ve
+        # legacy alias'lara karşı HER ZAMAN kazanır.
         import dashboard_api as dapi
-        monkeypatch.setenv("BINANCE_API_KEY", "canon")
-        monkeypatch.setenv("BINANCE_API_SECRET", "canonsec")
-        monkeypatch.setenv("BINANCE_GLOBAL_API_Key", "alias")
-        assert dapi._global_creds()[0] == "canon"
+        monkeypatch.setenv("BINANCE_API_KEY", "legacy")
+        monkeypatch.setenv("BINANCE_API_SECRET", "legacysec")
+        monkeypatch.setenv("BINANCE_GLOBAL_API_Key", "canon")
+        monkeypatch.setenv("BINANCE_GLOBAL_Secret_Key", "canonsec")
+        assert dapi._global_creds() == ("canon", "canonsec")

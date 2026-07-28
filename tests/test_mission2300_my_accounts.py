@@ -281,8 +281,12 @@ class TestUiContract:
 
     def test_secret_never_displayed(self):
         assert "asla gösterilmez" in JS
-        # Sır alanı hiçbir uçtan okunup basılmaz.
-        assert "secret_key" not in JS and "api_secret" not in JS
+        # Sır alanı asla OKUNUP basılmaz; api_secret yalnız yazma
+        # yönünde (Windows yerel depo POST'u) kullanılır ve girişten
+        # sonra alan temizlenir.
+        assert "secret_key" not in JS
+        assert "a.api_secret" not in JS
+        assert "data.api_secret" not in JS
 
     def test_no_clipboard_copy(self):
         assert "navigator.clipboard" not in JS

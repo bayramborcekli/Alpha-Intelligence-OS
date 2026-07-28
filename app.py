@@ -2997,6 +2997,9 @@ def api_accounts_list():
     return _accounts_json(True, {
         "accounts": [reg.card_view(a) for a in accounts],
         "execution_eligible": reg.execution_eligible(accounts),
+        # Windows/yerel: API anahtarları Hesaplarım → Düzenle ile yerel
+        # güvenli depoya kaydedilebilir; Replit'te Secrets kullanılır.
+        "local_credentials_editable": not local_env.is_replit(),
     })
 
 
@@ -3060,6 +3063,52 @@ def api_accounts_edit(account_id: str):
     return _account_mutation(account_id, _op)
 
 
+@app.post("/api/accounts/<account_id>/credentials")
+def api_accounts_credentials(account_id: str):
+    """Windows/yerel: API anahtarlarını yerel güvenli depoya kaydeder.
+
+    Replit'te 403 REPLIT_ENV — orada Secrets kanoniktir. Yanıt asla sır
+    içermez (yalnız maskeli anahtar)."""
+    import accounts_registry as reg
+    import dashboard_api as dapi
+    import exchange_credentials as xc
+    if local_env.is_replit():
+        return _accounts_json(
+            False, None, "REPLIT_ENV",
+            "Replit ortamında API anahtarları Secrets'ta yönetilir; "
+            "yerel dosya deposu kullanılmaz.", 403)
+    try:
+        accounts = reg.load_registry()
+        acc = reg.find(accounts, account_id)
+    except reg.RegistryError as exc:
+        return _accounts_json(False, None, "VALIDATION", str(exc), 400)
+    if acc["exchange"] not in xc.EXCHANGES:
+        return _accounts_json(False, None, "VALIDATION",
+                              "Bu hesap türü için API anahtarı girişi "
+                              "desteklenmiyor.", 400)
+    body = request.get_json(silent=True) or {}
+    try:
+        xc.save_local(acc["exchange"], str(body.get("apiKey") or ""),
+                      str(body.get("apiSecret") or ""))
+    except ValueError as exc:
+        return _accounts_json(False, None, "VALIDATION", str(exc), 400)
+    except OSError:
+        return _accounts_json(False, None, "STORAGE_ERROR",
+                              "Anahtar deposu yazılamadı.", 500)
+    # Yeni anahtarların hemen etkinleşmesi için önbellekler temizlenir
+    # (restart gerekmez).
+    dapi.invalidate_caches()
+    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
+                   username=session.get("username", ""),
+                   detail=f"my-accounts credentials {account_id}")
+    return _accounts_json(True, {
+        "account_id": account_id,
+        "exchange": acc["exchange"],
+        "api_key_masked": xc.masked_key(acc["exchange"]),
+        "source": xc.source(acc["exchange"]),
+    })
+
+
 def _paper_balance() -> str:
     """PAPER defter bakiyesi (Decimal-str) veya UNKNOWN."""
     try:
@@ -3073,13 +3122,35 @@ def _paper_balance() -> str:
         return "UNKNOWN"
 
 
+def _connection_state(res: dict) -> str:
+    """Kanonik hesap durumu (Mission sözleşmesi): UNKNOWN kullanılmaz.
+
+    NOT_CONFIGURED | HEALTHY | STALE | AUTH_FAILED | CONNECTION_FAILED |
+    DISABLED."""
+    if res.get("ok"):
+        fresh = (res.get("meta") or {}).get("freshness")
+        return "STALE" if fresh == "STALE" else "HEALTHY"
+    code = ((res.get("error") or {}).get("code")) or ""
+    if code == "NOT_CONFIGURED":
+        return "NOT_CONFIGURED"
+    if code == "EXCHANGE_AUTH_FAILED":
+        return "AUTH_FAILED"
+    if code == "FUTURES_REMOVED":
+        return "DISABLED"
+    return "CONNECTION_FAILED"
+
+
 def _account_snapshot(exchange: str) -> dict:
-    """Bağlı bir hesabın cüzdanları + USDT değeri. Sır yok; ham
+    """Kanonik hesap snapshot'ı: cüzdanlar + USDT değeri + bağlantı
+    durumu. TÜM ekranlar (Hesaplarım, Trading Home, Portföy, header)
+    bu snapshot'ı OKUR — ikinci Binance çağrısı başlatmaz. Sır yok; ham
     istisna yok; bilinmeyen değer UNKNOWN. Tahmin YASAK."""
     import dashboard_api as dapi
     if exchange == "PAPER":
         bal = _paper_balance()
         return {"status": "OK" if bal != "UNKNOWN" else "UNKNOWN",
+                "connection_state": ("HEALTHY" if bal != "UNKNOWN"
+                                     else "CONNECTION_FAILED"),
                 "value_usdt": bal, "last_sync_at": "-",
                 "wallets": [{"name": "Simülasyon Defteri (USDT)",
                              "balance": bal, "available": bal,
@@ -3088,8 +3159,12 @@ def _account_snapshot(exchange: str) -> dict:
         # Spot-only mimari: Global hesap SPOT bakiyeleriyle gösterilir.
         acc = dapi.global_spot_account()
         if not acc.get("ok"):
-            return {"status": (acc.get("meta") or {}).get(
-                        "freshness", "UNKNOWN"),
+            state = _connection_state(acc)
+            return {"status": ("NOT_CONFIGURED"
+                               if state == "NOT_CONFIGURED"
+                               else (acc.get("meta") or {}).get(
+                                   "freshness", "UNKNOWN")),
+                    "connection_state": state,
                     "value_usdt": "UNKNOWN", "wallets": [],
                     "last_sync_at": (acc.get("meta") or {}).get(
                         "retrieved_at") or "UNKNOWN"}
@@ -3107,6 +3182,7 @@ def _account_snapshot(exchange: str) -> dict:
         if acc.get("valuation") == "PARTIAL" and total != "UNKNOWN":
             total = f"{total} (kısmi)"
         return {"status": "OK",
+                "connection_state": _connection_state(acc),
                 "value_usdt": total,
                 "last_sync_at": (acc.get("meta") or {}).get(
                     "retrieved_at") or "UNKNOWN",
@@ -3114,8 +3190,12 @@ def _account_snapshot(exchange: str) -> dict:
     if exchange == "BINANCE_TR":
         acc = dapi.tr_account()
         if not acc.get("ok"):
-            return {"status": (acc.get("meta") or {}).get(
-                        "freshness", "UNKNOWN"),
+            state = _connection_state(acc)
+            return {"status": ("NOT_CONFIGURED"
+                               if state == "NOT_CONFIGURED"
+                               else (acc.get("meta") or {}).get(
+                                   "freshness", "UNKNOWN")),
+                    "connection_state": state,
                     "value_usdt": "UNKNOWN", "wallets": [],
                     "last_sync_at": (acc.get("meta") or {}).get(
                         "retrieved_at") or "UNKNOWN"}
@@ -3131,7 +3211,9 @@ def _account_snapshot(exchange: str) -> dict:
         value = (usdt_total if try_total not in ("UNKNOWN",) and
                  Decimal(try_total) == 0 and usdt_total != "UNKNOWN"
                  else "UNKNOWN")
-        return {"status": "OK", "value_usdt": value,
+        return {"status": "OK",
+                "connection_state": _connection_state(acc),
+                "value_usdt": value,
                 "last_sync_at": (acc.get("meta") or {}).get(
                     "retrieved_at") or "UNKNOWN",
                 "wallets": [
@@ -3143,7 +3225,8 @@ def _account_snapshot(exchange: str) -> dict:
                      "balance": try_total,
                      "available": acc.get("try_free", "UNKNOWN"),
                      "currency": "TRY"}]}
-    return {"status": "UNKNOWN", "value_usdt": "UNKNOWN",
+    return {"status": "UNKNOWN", "connection_state": "DISABLED",
+            "value_usdt": "UNKNOWN",
             "wallets": [], "last_sync_at": "UNKNOWN"}
 
 
@@ -3252,16 +3335,25 @@ def api_accounts_test(account_id: str):
                               "OK" if res.get("can_trade_flag")
                               else "READ_ONLY"),
                           synchronization="OK")
-        overall = "HEALTHY" if res.get("ok") else "FAILED"
     else:  # BINANCE_TR
         res = dapi.tr_account()
         if res.get("ok"):
             checks.update(connected="OK", authentication="OK",
                           wallet_access="OK", spot_permission="OK",
                           synchronization="OK")
-        overall = "HEALTHY" if res.get("ok") else "FAILED"
+    # Kanonik durum: credential yoksa NOT_CONFIGURED (yanıltıcı FAILED
+    # teşhisi üretilmez); diğer ekranlar aynı snapshot'ı okur.
+    state = _connection_state(res)
+    if res.get("ok"):
+        overall = "HEALTHY"
+    elif state == "NOT_CONFIGURED":
+        overall = "NOT_CONFIGURED"
+        checks["connected"] = "NOT_CONFIGURED"
+    else:
+        overall = "FAILED"
     return _accounts_json(True, {"account_id": account_id,
                                  "overall": overall,
+                                 "connection_state": state,
                                  "checks": checks})
 
 

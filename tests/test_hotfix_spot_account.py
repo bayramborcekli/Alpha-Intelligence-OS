@@ -240,7 +240,9 @@ class TestFailures:
         dapi.invalidate_caches(["global_spot"])
         model = dapi.global_spot_account()
         assert model["ok"] is False
-        assert model["error"]["code"] == "EXCHANGE_AUTH_FAILED"
+        # Credential hiç yoksa yanıltıcı AUTH hatası yerine dürüst
+        # NOT_CONFIGURED üretilir (Mission sözleşmesi).
+        assert model["error"]["code"] == "NOT_CONFIGURED"
 
     def test_no_secret_in_model(self, monkeypatch):
         _mock_spot(monkeypatch)

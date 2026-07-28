@@ -77,6 +77,20 @@ devre dışı gösterilir — sahte düğme yoktur.</p>
     <label>Takma Ad
       <input id="ma-edit-nickname" maxlength="40" required></label>
     <label><input type="checkbox" id="ma-edit-spot"> Spot Etkin</label>
+    <div id="ma-edit-cred-block" hidden>
+      <h4>API Anahtarları (yerel güvenli depo)</h4>
+      <p class="ma-note">Anahtarlar bu bilgisayarda
+        <code>data/exchange_credentials.json</code> dosyasında saklanır;
+        asla görüntülenmez veya sunucu dışına gönderilmez. Boş
+        bırakırsanız mevcut anahtarlar değişmez.</p>
+      <label>API Key
+        <input id="ma-edit-api-key" maxlength="256" autocomplete="off"
+               placeholder="değiştirmek için girin"></label>
+      <label>API Secret
+        <input id="ma-edit-api-secret" type="password" maxlength="256"
+               autocomplete="off" placeholder="değiştirmek için girin">
+      </label>
+    </div>
     <p style="text-align:right">
       <button value="cancel" class="ma-btn">Vazgeç</button>
       <button value="ok" class="ma-btn accent">Kaydet</button>

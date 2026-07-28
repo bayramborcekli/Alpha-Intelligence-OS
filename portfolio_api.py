@@ -15,8 +15,7 @@ from decimal import Decimal
 from typing import Any
 
 import dashboard_api as dapi
-from dashboard_api import (SafeExchangeError, _dec, _dec_val, _serve,
-                           _signed_get, TR_ALLOWLIST, TR_BASE)
+from dashboard_api import SafeExchangeError, _dec, _dec_val, _serve
 
 # Yeni önbellek türleri (merkezî politikaya kayıt)
 dapi.CACHE_TTL.setdefault("tr_assets", 30)
@@ -98,18 +97,12 @@ def _sort_rows(rows: list[dict], key: str, numeric: bool,
 def global_assets() -> dict:
     """Binance Global SPOT hesap varlıkları (tam liste, tipli).
 
-    Spot-only mimari: /fapi çağrısı YOK; GET /api/v3/account kullanılır."""
+    Spot-only mimari: /fapi çağrısı YOK; kanonik hesap servisinin
+    paylaşımlı Spot hesabı yanıtı kullanılır."""
     def build() -> dict:
-        import time
-        key, sec = dapi._global_creds()
-        if not key or not sec:
-            raise SafeExchangeError("EXCHANGE_AUTH_FAILED",
-                                    "Salt-okunur anahtar yapılandırılmamış "
-                                    "(fail closed).")
-        t0 = time.monotonic()
-        acc = _signed_get(dapi.SPOT_BASE, "/api/v3/account",
-                          dapi.SPOT_ALLOWLIST, key, sec)
-        latency = int((time.monotonic() - t0) * 1000)
+        # Kanonik hesap servisi: Genel Bakış ile AYNI paylaşımlı ham
+        # yanıt kullanılır — Portföy kendi Binance çağrısını BAŞLATMAZ.
+        acc, latency = dapi._spot_account_raw()
         balances = acc.get("balances", [])
         if not isinstance(balances, list):
             raise SafeExchangeError(
@@ -173,17 +166,8 @@ def global_assets() -> dict:
 def tr_assets() -> dict:
     """Binance TR spot varlıkları (tam liste, Decimal toplamlı)."""
     def build() -> dict:
-        import os, time
-        key = os.environ.get("BINANCE_TR_API_KEY", "")
-        sec = os.environ.get("BINANCE_TR_API_SECRET", "")
-        if not key or not sec:
-            raise SafeExchangeError("EXCHANGE_AUTH_FAILED",
-                                    "Binance TR anahtarı yapılandırılmamış "
-                                    "(fail closed).")
-        t0 = time.monotonic()
-        body = _signed_get(TR_BASE, "/open/v1/account/spot", TR_ALLOWLIST,
-                           key, sec)
-        latency = int((time.monotonic() - t0) * 1000)
+        # Kanonik hesap servisi: TR için de paylaşımlı ham yanıt (tek yol).
+        body, latency = dapi._tr_account_raw()
         if not isinstance(body, dict) or body.get("code", 0) not in (0, "0"):
             raise SafeExchangeError(
                 "INVALID_EXCHANGE_RESPONSE",

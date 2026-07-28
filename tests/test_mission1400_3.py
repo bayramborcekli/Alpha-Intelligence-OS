@@ -61,7 +61,8 @@ def _mock(monkeypatch, account=ACC, tr=TR_OK):
             raise dapi.SafeExchangeError("EXCHANGE_UNAVAILABLE", "mock yok")
         return val
     monkeypatch.setattr(dapi, "_signed_get", fake)
-    monkeypatch.setattr(pf, "_signed_get", fake)
+    # portfolio_api artık kendi imzalı fetch'ini yapmaz; kanonik hesap
+    # servisi (dashboard_api) üzerinden paylaşımlı ham yanıtı okur.
     for k in ("BINANCE_API_KEY", "BINANCE_API_SECRET",
               "BINANCE_TR_API_KEY", "BINANCE_TR_API_SECRET"):
         monkeypatch.setenv(k, "x" * 20)

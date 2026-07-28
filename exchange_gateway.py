@@ -11,24 +11,16 @@ Yanıtlar kısa süreli önbelleğe alınır (rate limit koruması).
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
 import os
 import threading
 import time
-import urllib.parse
 from decimal import Decimal
 from typing import Any
 
-import requests
-
 TR_BASE = "https://www.binance.tr"  # tek adaptör: binance_tr_client (eski trbinance.com KULLANILMAZ)
 
-# Yalnızca GET; ağ isteğinden önce zorunlu. (Spot-only: futures YOK.)
-TR_ALLOWLIST = {
-    ("GET", "/open/v1/account/spot"),
-}
-
+# İmzalı hesap fetch'i artık kanonik hesap servisindedir
+# (dashboard_api._tr_account_raw); gateway kendi imzalı yolunu TAŞIMAZ.
 CACHE_TTL_SECONDS = 30
 _cache: dict[str, tuple[float, dict]] = {}
 _cache_lock = threading.Lock()
@@ -37,20 +29,6 @@ _cache_lock = threading.Lock()
 
 def mask(s: str) -> str:
     return (s[:4] + "…" + s[-4:]) if len(s) > 10 else "****"
-
-
-def _signed_get(base: str, path: str, allowlist: set, key: str,
-                secret: str, params: dict | None = None,
-                timeout: int = 15) -> requests.Response:
-    if ("GET", path) not in allowlist:
-        raise RuntimeError(f"GÜVENLİK BLOĞU: allowlist dışı GET {path}")
-    p = dict(params or {})
-    p["timestamp"] = int(time.time() * 1000)
-    qs = urllib.parse.urlencode(p)
-    p["signature"] = hmac.new(secret.encode(), qs.encode(),
-                              hashlib.sha256).hexdigest()
-    return requests.get(base + path, params=p,
-                        headers={"X-MBX-APIKEY": key}, timeout=timeout)
 
 
 def _cached(name: str, builder) -> dict:
@@ -77,17 +55,20 @@ def _fail_closed(source: str) -> dict:
 
 
 def tr_spot_summary() -> dict[str, Any]:
-    """Binance TR spot bakiye özeti (salt okunur anahtar)."""
-    key = os.environ.get("BINANCE_TR_API_KEY", "")
-    sec = os.environ.get("BINANCE_TR_API_SECRET", "")
+    """Binance TR spot bakiye özeti (salt okunur anahtar).
+
+    Kanonik hesap servisine delege eder: dashboard_api._tr_account_raw()
+    paylaşımlı ham yanıtı kullanılır — gateway kendi imzalı fetch'ini
+    YAPMAZ (tek hesap doğruluk kaynağı)."""
+    import exchange_credentials as xc
+    key, sec = xc.credentials("BINANCE_TR")
     if not key or not sec:
         return _fail_closed("binance_tr_spot")
 
     def build() -> dict:
         try:
-            # Tek adaptör: tüm Binance TR erişimi binance_tr_client üzerinden.
-            import binance_tr_client as btr
-            body = btr.BinanceTRClient(key, sec).get_spot_account()
+            import dashboard_api as dapi
+            body, _latency = dapi._tr_account_raw()
             data = body.get("data")
             if isinstance(data, list):
                 accs = data

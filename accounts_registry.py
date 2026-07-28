@@ -60,7 +60,7 @@ CONNECTORS: dict[str, Connector] = {
         logo="🟡", supported=True, spot_capable=True,
         futures_capable=False,  # Spot-only mimari: Futures kaldırıldı
         credential_source="ENV",
-        env_key_name="BINANCE_API_KEY"),
+        env_key_name="BINANCE_GLOBAL_API_Key"),  # kanonik ad
     "BINANCE_TR": Connector(
         exchange="BINANCE_TR", display_name="Binance TR",
         logo="🇹🇷", supported=True, spot_capable=True,
@@ -224,11 +224,13 @@ def connect(accounts: list[dict[str, Any]], account_id: str) -> None:
         raise RegistryError(
             f"{conn.display_name} bağlayıcısı henüz hazır değil; "
             "bağlantı dürüstçe reddedildi.")
-    if conn.credential_source == "ENV" and not os.environ.get(
-            conn.env_key_name, ""):
-        raise RegistryError(
-            "Bu hesabın kimlik bilgisi ortam sırlarında tanımlı "
-            "değil; önce sır ekleyin.")
+    if conn.credential_source == "ENV":
+        import exchange_credentials as xc
+        if not xc.configured(acc["exchange"]):
+            raise RegistryError(
+                "Bu hesabın kimlik bilgisi tanımlı değil; önce "
+                "Hesaplarım → Düzenle (Windows) veya Secrets (Replit) "
+                "ile anahtar ekleyin.")
     acc["connected"] = True
     acc["updated_at"] = _now_iso()
 
@@ -304,9 +306,12 @@ def card_view(acc: dict[str, Any]) -> dict[str, Any]:
     """Sunum kartı: sır içermez; ortam anahtarı yalnız maskelenir."""
     conn = CONNECTORS[acc["exchange"]]
     if conn.credential_source == "ENV":
-        api_key_masked = mask_key(os.environ.get(conn.env_key_name, ""))
-        credentials_configured = bool(
-            os.environ.get(conn.env_key_name, ""))
+        # TEK kanonik resolver: env adı doğrudan okunmaz (Windows'ta yerel
+        # depo, Replit'te Secrets — çözümleme exchange_credentials'ta).
+        import exchange_credentials as xc
+        resolved_key, _sec = xc.credentials(acc["exchange"])
+        api_key_masked = mask_key(resolved_key)
+        credentials_configured = bool(resolved_key and _sec)
     elif conn.credential_source == "NONE":
         api_key_masked = "-"
         credentials_configured = True

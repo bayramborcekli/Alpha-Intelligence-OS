@@ -273,10 +273,12 @@ class TestSetupSaveEndpoint:
         body = resp.get_json()
         assert body["error"]["code"] == "REPLIT_ENV"
 
-    def test_save_rejects_missing_hash(self, unconfigured_client):
+    def test_save_rejects_missing_hash(self, unconfigured_client, tmp_path):
         """Hash eksikse 400 döndürmeli."""
         import local_env
-        with patch.object(local_env, "is_replit", return_value=False):
+        patches, _f = _patch_local_admin(tmp_path)
+        with patch.object(local_env, "is_replit", return_value=False), \
+                patches[0], patches[1], patches[2]:
             resp = unconfigured_client.post(
                 "/setup/save",
                 data=json.dumps({"username": "admin"}),
@@ -285,10 +287,12 @@ class TestSetupSaveEndpoint:
         assert resp.status_code == 400
         assert resp.get_json()["error"]["code"] == "MISSING_HASH"
 
-    def test_save_rejects_invalid_hash_format(self, unconfigured_client):
+    def test_save_rejects_invalid_hash_format(self, unconfigured_client, tmp_path):
         """Werkzeug formatında olmayan hash reddedilmeli."""
         import local_env
-        with patch.object(local_env, "is_replit", return_value=False):
+        patches, _f = _patch_local_admin(tmp_path)
+        with patch.object(local_env, "is_replit", return_value=False), \
+                patches[0], patches[1], patches[2]:
             resp = unconfigured_client.post(
                 "/setup/save",
                 data=json.dumps({"password_hash": "notahash", "username": "admin"}),
@@ -297,10 +301,12 @@ class TestSetupSaveEndpoint:
         assert resp.status_code == 400
         assert resp.get_json()["error"]["code"] == "INVALID_HASH"
 
-    def test_save_rejects_empty_username(self, unconfigured_client):
+    def test_save_rejects_empty_username(self, unconfigured_client, tmp_path):
         """Kullanıcı adı boşsa 400 + Türkçe mesaj döndürmeli."""
         import local_env
-        with patch.object(local_env, "is_replit", return_value=False):
+        patches, _f = _patch_local_admin(tmp_path)
+        with patch.object(local_env, "is_replit", return_value=False), \
+                patches[0], patches[1], patches[2]:
             resp = unconfigured_client.post(
                 "/setup/save",
                 data=json.dumps({"password_hash": self._make_hash(), "username": ""}),
@@ -311,12 +317,14 @@ class TestSetupSaveEndpoint:
         assert body["error"]["code"] == "MISSING_USERNAME"
         assert "boş" in body["error"]["message"]
 
-    def test_save_rejects_username_with_invalid_chars(self, unconfigured_client):
+    def test_save_rejects_username_with_invalid_chars(self, unconfigured_client, tmp_path):
         """Boşluk/özel karakter içeren kullanıcı adı 400 + net Türkçe mesaj döndürmeli."""
         import local_env
         pw_hash = self._make_hash()
+        patches, _f = _patch_local_admin(tmp_path)
         for bad in ["admin user", "admin!", "kullanıcı", "a@b", "user\t", " admin"]:
-            with patch.object(local_env, "is_replit", return_value=False):
+            with patch.object(local_env, "is_replit", return_value=False), \
+                    patches[0], patches[1], patches[2]:
                 resp = unconfigured_client.post(
                     "/setup/save",
                     data=json.dumps({"password_hash": pw_hash, "username": bad}),

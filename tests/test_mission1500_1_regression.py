@@ -137,6 +137,13 @@ class TestRouteSurface:
         # Mission 2300 / Agent 03: Hesaplarım kayıt defteri (CSRF+auth
         # korumalı; yalnız sunum meta verisi — sır saklamaz, işlem
         # mantığına dokunmaz — bilinçli genişletme)
+        # Windows parola değiştirme (görev #63; CSRF+auth korumalı,
+        # local_admin.json atomic güncelleme — bilinçli genişletme)
+        "/settings/password",
+        # Windows exchange API anahtarı girişi (yerel güvenli depo;
+        # Replit'te 403 REPLIT_ENV; sır asla yanıtta dönmez —
+        # bilinçli genişletme)
+        "/api/accounts/<account_id>/credentials",
         "/api/accounts/<account_id>/connect",
         "/api/accounts/<account_id>/disconnect",
         "/api/accounts/<account_id>/primary",

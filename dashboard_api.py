@@ -114,6 +114,8 @@ class SafeExchangeError(Exception):
 
 
 ERROR_MESSAGES = {
+    "NOT_CONFIGURED": "API anahtarı yapılandırılmamış — Ayarlar → "
+                      "Hesaplarım'dan bağlayın (fail closed).",
     "EXCHANGE_AUTH_FAILED": "Borsa kimlik doğrulaması başarısız.",
     "EXCHANGE_UNAVAILABLE": "Borsaya şu anda ulaşılamıyor.",
     "EXCHANGE_RATE_LIMITED": "Borsa istek sınırı aşıldı; kısa süre sonra "
@@ -324,6 +326,9 @@ def invalidate_caches(kinds: list[str] | None = None) -> list[str]:
     with _cache_lock:
         targets = kinds or list(_cache.keys())
         cleared = [k for k in targets if _cache.pop(k, None) is not None]
+    # Paylaşımlı ham hesap önbelleği de temizlenir ki "Tümünü Yenile"
+    # gerçekten taze snapshot üretsin.
+    _raw_cache.clear()
     return cleared
 
 
@@ -345,20 +350,13 @@ def global_spot_account() -> dict:
     Salt-okunur; emir/çekim/transfer yolu YOK. Sır/imza/özel başlık asla
     loglanmaz."""
     def build() -> dict:
-        key, sec = _global_creds()
-        if not key or not sec:
-            raise SafeExchangeError("EXCHANGE_AUTH_FAILED",
-                                    "Salt-okunur anahtar yapılandırılmamış "
-                                    "(fail closed).")
         _spot_log.info("Spot Account Request: GET /api/v3/account")
-        t0 = time.monotonic()
         try:
-            acc = _signed_get(SPOT_BASE, "/api/v3/account", SPOT_ALLOWLIST,
-                              key, sec)
+            acc, latency = _spot_account_raw()
         except SafeExchangeError as exc:
             _spot_log.warning("Spot Account Failure: code=%s", exc.code)
             raise
-        latency = int((time.monotonic() - t0) * 1000)
+        key, _sec = _global_creds()
         balances = acc.get("balances", [])
         if not isinstance(balances, list):
             _spot_log.warning("Spot Account Failure: code=%s",
@@ -445,17 +443,65 @@ def global_spot_account() -> dict:
 # ağ ve secret olmadan korur.
 
 def _global_creds() -> tuple[str, str]:
-    # Kanonik adlar öncelikli; kullanıcı Secrets'ta alternatif adlarla da
-    # tanımlayabilir (yalnız okunur SPOT anahtarı).
-    key = (os.environ.get("BINANCE_API_KEY", "")
-           or os.environ.get("BINANCE_API_Key", "")
-           or os.environ.get("BINANCE_GLOBAL_API_KEY", "")
-           or os.environ.get("BINANCE_GLOBAL_API_Key", ""))
-    sec = (os.environ.get("BINANCE_API_SECRET", "")
-           or os.environ.get("BINANCE_Secret_Key", "")
-           or os.environ.get("BINANCE_GLOBAL_API_SECRET", "")
-           or os.environ.get("BINANCE_GLOBAL_Secret_Key", ""))
-    return key, sec
+    # TEK kanonik credential resolver'a delegasyon (Mission sözleşmesi):
+    # kanonik BINANCE_GLOBAL_API_Key/Secret_Key her zaman kazanır; legacy
+    # alias'lar yalnız geriye dönük uyumluluk; Windows'ta yerel depo önce.
+    import exchange_credentials as xc
+    return xc.credentials("BINANCE_GLOBAL")
+
+
+def _tr_creds() -> tuple[str, str]:
+    import exchange_credentials as xc
+    return xc.credentials("BINANCE_TR")
+
+
+# ── Paylaşımlı ham hesap çekimi (duplicate wallet fetch YASAĞI) ─────────────
+# Genel Bakış, Portföy ve Hesaplarım aynı imzalı hesap yanıtını paylaşır;
+# her ekran kendi Binance çağrısını BAŞLATMAZ. Single-flight: aynı borsa
+# için eşzamanlı istekler tek ağ çağrısına düşer.
+
+_RAW_TTL = 10.0
+_raw_cache: dict[str, dict] = {}
+_raw_locks = {"global_spot_raw": threading.Lock(),
+              "tr_account_raw": threading.Lock()}
+
+
+def _raw_account(kind: str, creds_fn: Callable[[], tuple[str, str]],
+                 fetch_fn: Callable[[str, str], Any]) -> tuple[Any, int]:
+    """(body, latency_ms) döndürür; kısa TTL önbelleği + single-flight."""
+    with _raw_locks[kind]:
+        now = time.monotonic()
+        hit = _raw_cache.get(kind)
+        if hit and now - hit["mono"] < _RAW_TTL:
+            return hit["body"], hit["latency_ms"]
+        key, sec = creds_fn()
+        if not key or not sec:
+            # Credential hiç yok = NOT_CONFIGURED (yanıltıcı AUTH/TLS
+            # teşhisi üretilmez; istek gönderilmez — fail closed).
+            raise SafeExchangeError("NOT_CONFIGURED",
+                                    ERROR_MESSAGES["NOT_CONFIGURED"])
+        t0 = time.monotonic()
+        body = fetch_fn(key, sec)
+        latency = int((time.monotonic() - t0) * 1000)
+        _raw_cache[kind] = {"mono": time.monotonic(), "body": body,
+                            "latency_ms": latency}
+        return body, latency
+
+
+def _spot_account_raw() -> tuple[dict, int]:
+    """Binance Global ham Spot hesabı (GET /api/v3/account) — TEK yol."""
+    return _raw_account(
+        "global_spot_raw", _global_creds,
+        lambda k, s: _signed_get(SPOT_BASE, "/api/v3/account",
+                                 SPOT_ALLOWLIST, k, s))
+
+
+def _tr_account_raw() -> tuple[dict, int]:
+    """Binance TR ham Spot hesabı (GET /open/v1/account/spot) — TEK yol."""
+    return _raw_account(
+        "tr_account_raw", _tr_creds,
+        lambda k, s: _signed_get(TR_BASE, "/open/v1/account/spot",
+                                 TR_ALLOWLIST, k, s))
 
 
 FUTURES_REMOVED_ERROR = {"code": "FUTURES_REMOVED",
@@ -519,16 +565,8 @@ def _tr_error_to_safe(exc: "btr.BinanceTRError") -> SafeExchangeError:
 
 def tr_account() -> dict:
     def build() -> dict:
-        key = os.environ.get("BINANCE_TR_API_KEY", "")
-        sec = os.environ.get("BINANCE_TR_API_SECRET", "")
-        if not key or not sec:
-            raise SafeExchangeError("EXCHANGE_AUTH_FAILED",
-                                    "Binance TR anahtarı yapılandırılmamış "
-                                    "(fail closed).")
-        t0 = time.monotonic()
-        body = _signed_get(TR_BASE, "/open/v1/account/spot", TR_ALLOWLIST,
-                           key, sec)
-        latency = int((time.monotonic() - t0) * 1000)
+        body, latency = _tr_account_raw()
+        key, _sec = _tr_creds()
         if not isinstance(body, dict) or body.get("code", 0) not in (0, "0"):
             raise SafeExchangeError(
                 "INVALID_EXCHANGE_RESPONSE",
