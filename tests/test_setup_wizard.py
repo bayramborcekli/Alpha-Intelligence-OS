@@ -11,6 +11,7 @@ data/local_admin.json dosyasına atomic yazma akışını test eder
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -538,3 +539,66 @@ class TestSetupToLoginFlow:
         )
         assert ok.status_code == 302
         assert ok.headers.get("Location", "").endswith("/home")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MISSION — eski ADMIN_PASSWORD_HASH kontrolü yerel akıştan kaldırıldı
+# ══════════════════════════════════════════════════════════════════════════════
+
+import local_env  # noqa: E402  (mission testleri)
+
+
+_LEGACY_KEYS = ("ALPHA_OWNER_PASSWORD_HASH", "ALPHA_OWNER_USERNAME",
+                "ADMIN_PASSWORD_HASH", "ADMIN_USERNAME")
+
+
+class TestNoLegacyHashInLocalFlow:
+    """Windows/yerel modda sihirbaz ve login ekranı eski
+    ADMIN_PASSWORD_HASH / Secrets talimatı GÖSTERMEZ; doğrulama kaynağı
+    data/local_admin.json'dur."""
+
+    def test_local_setup_page_has_no_admin_password_hash(self, unconfigured_client,
+                                                         tmp_path):
+        patches, _f = _patch_local_admin(tmp_path)
+        with patch.object(local_env, "is_replit", return_value=False), \
+             patches[0], patches[1], patches[2], \
+             patch.dict(os.environ, {k: v for k, v in os.environ.items()
+                                     if k not in _LEGACY_KEYS},
+                        clear=True):
+            r = unconfigured_client.get("/setup")
+            assert r.status_code == 200
+            body = r.data.decode("utf-8")
+            assert "ADMIN_PASSWORD_HASH" not in body
+            assert "local_admin.json" in body  # yerel kayıt akışı görünür
+
+    def test_replit_setup_page_keeps_secrets_flow(self, unconfigured_client, tmp_path):
+        # Replit Secrets akışı BOZULMAZ: talimatlar durur.
+        with patch.object(local_env, "is_replit", return_value=True), \
+             patch("auth.password_hash_configured", return_value=False):
+            r = unconfigured_client.get("/setup")
+            assert r.status_code == 200
+            assert "ALPHA_OWNER_PASSWORD_HASH" in r.data.decode("utf-8")
+
+    def test_local_verify_uses_local_admin_file(self, unconfigured_client, tmp_path):
+        # Kaydet → /setup/check 404 (yapılandırıldı) — env'e bakılmaz.
+        from werkzeug.security import generate_password_hash
+        patches, file_ = _patch_local_admin(tmp_path)
+        with patch.object(local_env, "is_replit", return_value=False), \
+             patches[0], patches[1], patches[2], \
+             patch.dict(os.environ, {k: v for k, v in os.environ.items()
+                                     if k not in _LEGACY_KEYS},
+                        clear=True):
+            # patch.dict(clear=True) çıkışta ortamı GERİ YÜKLER —
+            # test izolasyonu bozulmaz (env kirliliği yok).
+            h = generate_password_hash("Sifre12345!")
+            r = unconfigured_client.post("/setup/save",
+                            json={"password_hash": h, "username": "u1"})
+            assert r.status_code == 200 and r.get_json()["ok"] is True
+            assert file_.exists()
+            assert unconfigured_client.get("/setup/check").status_code == 404
+            assert unconfigured_client.get("/setup").status_code == 404
+
+    def test_login_page_no_env_var_instruction(self):
+        src = (Path(__file__).resolve().parents[1] /
+               "templates" / "login.html").read_text(encoding="utf-8")
+        assert "ADMIN_PASSWORD_HASH" not in src

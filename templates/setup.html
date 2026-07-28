@@ -204,7 +204,11 @@
     </form>
 
     <div class="hash-box" id="hash-box">
-      <div class="hash-label">ADMIN_PASSWORD_HASH değeri — kopyalayın</div>
+      {% if is_replit %}
+      <div class="hash-label">Parola hash değeri — Secrets'a kopyalayın</div>
+      {% else %}
+      <div class="hash-label">Parola hash'i oluşturuldu — 2. adımda otomatik kaydedilecek</div>
+      {% endif %}
       <div class="hash-value" id="hash-val"></div>
       <button class="copy-btn" onclick="copyHash()">📋 Kopyala</button>
       <div class="copy-feedback" id="copy-feedback">✅ Panoya kopyalandı!</div>
