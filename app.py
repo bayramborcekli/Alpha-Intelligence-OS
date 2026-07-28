@@ -3166,7 +3166,9 @@ def api_accounts_test(account_id: str):
             checks.update(connected="OK", authentication="OK",
                           wallet_access="OK",
                           spot_permission="OK",
-                          trading_permission="NOT_CONFIGURED",
+                          trading_permission=(
+                              "OK" if res.get("can_trade_flag")
+                              else "READ_ONLY"),
                           synchronization="OK")
         overall = "HEALTHY" if res.get("ok") else "FAILED"
     else:  # BINANCE_TR
