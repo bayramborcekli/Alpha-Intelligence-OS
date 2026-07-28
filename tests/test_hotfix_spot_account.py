@@ -233,8 +233,10 @@ class TestFailures:
         assert model["error"]["code"] == "EXCHANGE_AUTH_FAILED"
 
     def test_missing_keys_fail_closed(self, monkeypatch):
-        monkeypatch.delenv("BINANCE_API_KEY", raising=False)
-        monkeypatch.delenv("BINANCE_API_SECRET", raising=False)
+        for key in ("BINANCE_API_KEY", "BINANCE_API_SECRET",
+                    "BINANCE_GLOBAL_API_KEY", "BINANCE_GLOBAL_API_SECRET",
+                    "BINANCE_GLOBAL_API_Key", "BINANCE_GLOBAL_Secret_Key"):
+            monkeypatch.delenv(key, raising=False)
         dapi.invalidate_caches(["global_spot"])
         model = dapi.global_spot_account()
         assert model["ok"] is False

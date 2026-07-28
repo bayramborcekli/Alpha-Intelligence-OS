@@ -24,6 +24,7 @@ from typing import Any, Callable
 
 import requests
 
+import binance_global_client as bgc
 import binance_tr_client as btr
 
 ROOT = Path(__file__).resolve().parent
@@ -170,6 +171,13 @@ def _signed_get(base: str, path: str, allowlist: set, key: str, secret: str,
             raise RuntimeError(f"GÜVENLİK BLOĞU: allowlist dışı GET {path}")
         except btr.BinanceTRError as exc:
             raise _tr_error_to_safe(exc)
+    if base == SPOT_BASE and path == bgc.PATH_ACCOUNT:
+        # Global SPOT tek adaptör üzerinden (trust_env=False, sunucu ts).
+        try:
+            return bgc.BinanceGlobalClient(
+                key, secret, timeout=timeout).get_spot_account()
+        except bgc.BinanceGlobalError as exc:
+            raise _global_error_to_safe(exc)
     last_err: SafeExchangeError | None = None
     for attempt in range(MAX_RETRIES + 1):
         try:
@@ -206,12 +214,45 @@ def _signed_get(base: str, path: str, allowlist: set, key: str, secret: str,
         "EXCHANGE_UNAVAILABLE", ERROR_MESSAGES["EXCHANGE_UNAVAILABLE"])
 
 
+def _global_error_to_safe(exc: "bgc.BinanceGlobalError") -> SafeExchangeError:
+    """BinanceGlobalError → SafeExchangeError; exchange code/msg korunur."""
+    if exc.kind == "NOT_CONFIGURED":
+        return SafeExchangeError("EXCHANGE_AUTH_FAILED",
+                                 "Salt-okunur anahtar yapılandırılmamış "
+                                 "(fail closed).")
+    if exc.kind == "TIMEOUT":
+        return SafeExchangeError("EXCHANGE_TIMEOUT",
+                                 ERROR_MESSAGES["EXCHANGE_TIMEOUT"])
+    if exc.kind == "NETWORK":
+        return SafeExchangeError("EXCHANGE_UNAVAILABLE",
+                                 ERROR_MESSAGES["EXCHANGE_UNAVAILABLE"])
+    if exc.kind == "EXCHANGE_ERROR":
+        if exc.http_status in (401, 403) or exc.exchange_code == -2015:
+            base = "EXCHANGE_AUTH_FAILED"
+        elif exc.http_status in (418, 429):
+            base = "EXCHANGE_RATE_LIMITED"
+        else:
+            base = "INVALID_EXCHANGE_RESPONSE"
+        return SafeExchangeError(base, ERROR_MESSAGES[base],
+                                 exchange_code=exc.exchange_code,
+                                 exchange_message=exc.exchange_message)
+    if exc.http_status is not None and exc.http_status != 200:
+        return _classify_http(exc.http_status)
+    return SafeExchangeError("INVALID_EXCHANGE_RESPONSE",
+                             ERROR_MESSAGES["INVALID_EXCHANGE_RESPONSE"])
+
+
 def _public_get(base: str, path: str, allowlist: set,
                 params: dict | None = None, timeout: int = 10) -> Any:
     """Allowlist'li, İMZASIZ, halka açık salt-okunur GET (fiyat vb.).
     Anahtar/imza/özel başlık taşımaz."""
     if ("GET", path) not in allowlist:
         raise RuntimeError(f"GÜVENLİK BLOĞU: allowlist dışı GET {path}")
+    if base == SPOT_BASE and path == bgc.PATH_TICKER:
+        try:
+            return bgc.BinanceGlobalClient(timeout=timeout).get_ticker_prices()
+        except bgc.BinanceGlobalError as exc:
+            raise _global_error_to_safe(exc)
     try:
         r = requests.get(base + path, params=dict(params or {}),
                          timeout=timeout)
@@ -409,11 +450,40 @@ def _global_creds(trading: bool = False) -> tuple[str, str]:
     if trading:
         return (os.environ.get("BINANCE_TRADING_API_KEY", ""),
                 os.environ.get("BINANCE_TRADING_API_SECRET", ""))
-    return (os.environ.get("BINANCE_API_KEY", ""),
-            os.environ.get("BINANCE_API_SECRET", ""))
+    # Kanonik adlar öncelikli; kullanıcı Secrets'ta alternatif adlarla da
+    # tanımlayabilir (yalnız okunur Spot anahtarı).
+    key = (os.environ.get("BINANCE_API_KEY", "")
+           or os.environ.get("BINANCE_GLOBAL_API_KEY", "")
+           or os.environ.get("BINANCE_GLOBAL_API_Key", ""))
+    sec = (os.environ.get("BINANCE_API_SECRET", "")
+           or os.environ.get("BINANCE_GLOBAL_API_SECRET", "")
+           or os.environ.get("BINANCE_GLOBAL_Secret_Key", ""))
+    return key, sec
+
+
+def futures_enabled() -> bool:
+    """Futures panosu yalnız açıkça etkinleştirilirse çalışır.
+
+    Varsayılan: DEVRE DIŞI (Spot-only mod). Devre dışıyken hiçbir
+    `/fapi/*` çağrısı yapılmaz ve uyarı üretilmez."""
+    return os.environ.get("ALPHA_FUTURES_ENABLED", "") == "1"
+
+
+FUTURES_DISABLED_ERROR = {"code": "FUTURES_DISABLED",
+                          "message": "Futures devre dışı (Spot-only mod)."}
+
+
+def _futures_disabled_model(source: str) -> dict:
+    return {"ok": False, "status": "DISABLED",
+            "meta": {"source": source, "retrieved_at": None,
+                     "age_seconds": None, "freshness": "DISABLED",
+                     "latency_ms": None},
+            "error": dict(FUTURES_DISABLED_ERROR)}
 
 
 def global_account() -> dict:
+    if not futures_enabled():
+        return _futures_disabled_model("BINANCE_GLOBAL_FUTURES")
     def build() -> dict:
         key, sec = _global_creds()
         if not key or not sec:
@@ -476,6 +546,8 @@ def global_account() -> dict:
 
 
 def global_positions(include_zero: bool = False) -> dict:
+    if not futures_enabled():
+        return _futures_disabled_model("BINANCE_GLOBAL_FUTURES")
     def build() -> dict:
         key, sec = _global_creds()
         if not key or not sec:
@@ -519,6 +591,8 @@ def global_positions(include_zero: bool = False) -> dict:
 
 
 def global_orders() -> dict:
+    if not futures_enabled():
+        return _futures_disabled_model("BINANCE_GLOBAL_FUTURES")
     def build() -> dict:
         key, sec = _global_creds()
         if not key or not sec:
@@ -705,6 +779,8 @@ def overview(app_info: dict) -> dict:
                     ("Binance Futures", ga), ("Pozisyonlar", gp),
                     ("Emirler", go), ("Binance TR", ta),
                     ("TR Hareketleri", tm)):
+        if m.get("status") == "DISABLED":
+            continue  # Futures devre dışı: uyarı ÜRETİLMEZ (tasarım gereği)
         if not m.get("ok"):
             warnings.append(f"{name}: "
                             f"{(m.get('error') or {}).get('message', 'kullanılamıyor')}")

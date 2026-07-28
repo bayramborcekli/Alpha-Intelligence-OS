@@ -231,6 +231,25 @@ class TestEnvPrecedence:
         finally:
             local_env.reset_for_tests()
 
+    def test_global_alias_env_overrides_stale_os_env(self, tmp_path,
+                                                     monkeypatch):
+        # Global Spot alias adları (karışık büyük/küçük harf) da
+        # Windows'ta .env > stale OS env kuralına tabidir.
+        env_file = self._write_env(
+            tmp_path,
+            "BINANCE_GLOBAL_API_Key=fresh-gkey\n"
+            "BINANCE_GLOBAL_Secret_Key=fresh-gsec\n")
+        monkeypatch.setattr(local_env, "ENV_FILE", env_file)
+        monkeypatch.setattr(local_env, "is_replit", lambda: False)
+        monkeypatch.setenv("BINANCE_GLOBAL_API_Key", "stale-os-gkey")
+        local_env.reset_for_tests()
+        try:
+            sources = local_env.load_project_env()
+            assert os.environ["BINANCE_GLOBAL_API_Key"] == "fresh-gkey"
+            assert sources["BINANCE_GLOBAL_API_Key"] == "project_env"
+        finally:
+            local_env.reset_for_tests()
+
     def test_idempotent_single_load(self, tmp_path, monkeypatch):
         env_file = self._write_env(tmp_path, "BINANCE_TR_API_KEY=v1\n")
         monkeypatch.setattr(local_env, "ENV_FILE", env_file)

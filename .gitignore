@@ -124,3 +124,6 @@ automation_state.json.lock
 alpha20_v1/operation_control_state.json
 alpha20_v1/operation_control_state.json.lock
 alpha20_v1/accounts.json
+
+# ── Windows/desktop runtime durumu (PID, launcher log) ─────────────
+runtime/

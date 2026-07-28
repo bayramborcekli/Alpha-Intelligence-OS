@@ -1,92 +1,79 @@
-# Windows Tek-Tık Başlatıcı (Mission 2400 — Agent 01)
+# Alpha Intelligence OS — Windows Masaüstü Kurulum ve Başlatma
 
-Alpha Intelligence OS'u Windows masaüstünden **tek çift tıkla**
-başlatma akışı. Uygulama mantığı, API sözleşmeleri ve Replit/Linux
-üretim yolu (gunicorn) değişmedi.
-
-## Nasıl çalışır
+## Mimari (tek akıl: `launcher_windows.py`)
 
 ```
-Masaüstü kısayolu "Alpha Intelligence OS"
-    ↓
-start_alpha.cmd  (küçültülmüş, hemen kapanır)
-    ↓
-tools\windows\launch_alpha.ps1
-    ├─ proje kökünü dinamik çözer (C: varsayımı yok; D:\AlphaIntelligenceOS olabilir)
-    ├─ temel doğrulama: app.py, serve_windows.py, Python/.venv, yazılabilir runtime\
-    ├─ /health zaten cevap veriyorsa → kopya başlatmaz, tarayıcıyı açar
-    ├─ port doluysa ama /health cevapsızsa → Türkçe hata, sayfa açılmaz
-    ├─ python serve_windows.py'yi GİZLİ başlatır, PID'i runtime\alpha.pid'e yazar
-    ├─ /health hazır olana dek bekler (≤60 sn)
-    └─ hazırsa varsayılan tarayıcıda http://127.0.0.1:5000/home açılır
+INSTALL_WINDOWS.cmd ─┐
+start_alpha.cmd ─────┼──> launcher_windows.py ──> .venv\Scripts\python.exe
+stop_alpha.cmd ──────┘         │                      └─> serve_windows.py
+                               │                          (waitress, 127.0.0.1:5000)
+                               ├─ runtime\launcher.log  (log; secret YAZILMAZ)
+                               └─ runtime\alpha.pid     (pid + root + zaman)
 ```
 
-- **Sunucu girişi:** `serve_windows.py` — waitress, tek süreç, 8 iş
-  parçacığı, yalnız `127.0.0.1` (gunicorn ve `fcntl` Windows'ta yok).
-- **Kilit uyumluluğu:** `portable_flock.py` — paylaşımlı durum
-  modülleri önce gerçek `fcntl`'i dener (Linux davranışı birebir
-  aynı), yalnız Windows'ta msvcrt tabanlı katmana düşer.
-- **Kopya koruması:** canlı `/health` denetimi + PID dosyası
-  doğrulaması. İkinci çift tık yeni sunucu/işçi başlatmaz, yalnız
-  Trading Home'u açar. Bayat PID dosyasına asla tek başına güvenilmez.
-- **Günlük:** `runtime\launcher.log` — yalnız sabit, sanitize
-  mesajlar (zaman damgası, istek, hazırlık sonucu, hata kodu).
-  API anahtarı/gizli değer/ortam içeriği asla yazılmaz.
+- Proje kökü daima `launcher_windows.py` dosyasının konumundan bulunur
+  (`%~dp0` + `Path(__file__)`); sabit sürücü/kullanıcı yolu yoktur.
+- Sunucu YALNIZ bu clone'un `.venv` python'u ile çalışır; sistem
+  Python'u sadece `.venv` oluşturmak için kullanılır.
+- Global PATH asla değiştirilmez; git gerektirmez (ZIP klonda çalışır).
 
-## Kurulum (tek sefer)
+## Temiz klonda kurulum
 
-1. Proje klasörünü istediğiniz yere kopyalayın (ör. `D:\AlphaIntelligenceOS`).
-2. [Python 3.11](https://www.python.org/downloads/) kurun ("Add to PATH" işaretli).
-3. Proje klasöründe bir kez çalıştırın:
-   ```
-   py -m venv .venv
-   .venv\Scripts\pip install -r requirements.txt
-   ```
-4. Gerekli ortam değişkenlerini **Windows kullanıcı ortam
-   değişkenleri** olarak tanımlayın (Başlat → "ortam değişkenleri").
-   Gerekenler yalnız ad olarak: `SESSION_SECRET`,
-   `ALPHA_OWNER_USERNAME`, `ALPHA_OWNER_PASSWORD_HASH` ve borsa
-   anahtarları. Başlatıcı bunları **okumaz, loglamaz, kopyalamaz**;
-   yeni düz-metin gizli dosyası oluşturulmaz.
-5. Kısayolları oluşturun:
-   ```
-   powershell -NoProfile -ExecutionPolicy Bypass -File tools\windows\create_shortcuts.ps1
-   ```
-   Masaüstüne "Alpha Intelligence OS" ve "Alpha Intelligence OS —
-   Durdur" kısayolları gelir. Yönetici hakkı gerekmez.
+1. Depoyu istediğiniz klasöre kopyalayın (git clone veya ZIP).
+2. Proje köküne `.env` koyun (bkz. `.env.example`) — yalnız salt-okunur
+   exchange anahtarları. Windows'ta `.env`, bayat OS ortam değişkenlerini
+   geçersiz kılar (tek yükleyici: `local_env.py`).
+3. `INSTALL_WINDOWS.cmd` çift tıklayın:
+   - Python 3.11+ tespiti (`py -3` tercih edilir)
+   - `.venv` oluşturma + `requirements.txt` kurulumu (idempotent)
+   - Masaüstü kısayolu ("Alpha Intelligence OS" → bu clone'un
+     `start_alpha.cmd`'ı; eski clone kısayolu otomatik düzelir)
+   - Smoke test (uygulama import edilir; sunucu açılmaz)
 
-## Durdurma
+## Başlatma / durdurma
 
-"— Durdur" kısayolu (`stop_alpha.cmd` → `tools\windows\stop_alpha.ps1`):
+- **Başlat:** masaüstü kısayolu veya `start_alpha.cmd`.
+  Sıra: bootstrap denetimi → canlı `/health` kopya koruması →
+  port 5000 teşhisi → sunucu → hazır olunca tarayıcı `/home`.
+  Hata halinde pencere açık kalır, çıkış kodu ve
+  `runtime\launcher.log` gösterilir; tarayıcı bozuk sayfaya AÇILMAZ.
+- **Durdur:** `stop_alpha.cmd`. Yalnız `runtime\alpha.pid` içindeki,
+  kimliği üç kademede doğrulanan (canlı PID + bu clone kökü + komut
+  satırında `serve_windows.py`) süreç durdurulur; ilgisiz python
+  süreçlerine ve eski clone'lara asla dokunulmaz.
 
-1. `runtime\alpha.pid`'deki PID'i okur.
-2. Sürecin yaşadığını **ve** komut satırında `serve_windows.py`
-   geçtiğini doğrular — ilgisiz python süreçlerine dokunmaz; toplu
-   `taskkill /IM python.exe` kullanılmaz.
-3. Önce kibarca (`taskkill /PID <pid> /T`), 3 sn sonra gerekirse
-   zorla durdurur. PID dosyası yalnız kapanıştan sonra silinir.
+## Port 5000 teşhisi
 
-Tarayıcıyı kapatmak uygulamayı durdurmaz (mevcut mimari); uygulama
-Durdur kısayoluna kadar arkaplanda çalışmaya devam eder.
+| Durum | Davranış |
+|---|---|
+| Alpha sağlıklı çalışıyor | Yeni kopya açılmaz; tarayıcı `/home` |
+| Eski clone Alpha'sı | Net hata: önce onu durdurun (kök yolu gösterilir) |
+| Yabancı uygulama | Net hata: "Port 5000 başka uygulama tarafından kullanılıyor" |
+| Bayat PID dosyası | Otomatik temizlenir, başlatma sürer |
 
-## Manuel kabul testi (Windows'ta koşulmalı)
+## Exchange bağlantısı (Windows yerel)
 
-1. Uygulama tamamen kapalıyken masaüstü kısayoluna çift tıkla.
-2. Hiçbir komut yazmadan uygulamanın başladığını doğrula.
-3. Trading Home'un otomatik açıldığını doğrula.
-4. PAPER modunun aktif kaldığını, canlı emrin kapalı olduğunu doğrula.
-5. Kısayola ikinci kez çift tıkla → kopya süreç/işçi başlamadığını
-   doğrula (`runtime\launcher.log`: "Zaten calisiyor").
-6. Tarayıcıyı kapat → uygulamanın çalışmaya devam ettiğini doğrula.
-7. Durdur kısayoluyla durdur; ilgisiz python süreçlerinin
-   etkilenmediğini doğrula (Görev Yöneticisi).
-8. Yeniden başlat ve normal açılışı doğrula.
+- **Binance TR:** `binance_tr_client.py` (base `https://www.binance.tr`,
+  salt-okunur allowlist, `trust_env=False`, varsayılan TLS doğrulaması).
+- **Binance Global SPOT:** `binance_global_client.py`
+  (base `https://api.binance.com`, yalnız `/api/v3/time`, `/api/v3/account`,
+  `/api/v3/ticker/price`). Ortak taşıma katmanı: `exchange_transport.py`.
+- **Futures:** tamamen devre dışı (Spot-only mod). Hiçbir `/fapi/*`
+  çağrısı yapılmaz; panelde DISABLED görünür ve uyarı üretilmez.
+  (Yalnız geliştirici bayrağı `ALPHA_FUTURES_ENABLED=1` ile açılır.)
 
-## Bilinen sınırlar
+## Linux/Replit üretim yolu
 
-- Bu ortam Linux olduğu için Windows kabul testi burada
-  KOŞULAMADI; yukarıdaki listeyle kullanıcı makinesinde koşulmalıdır.
-- Windows'ta sunucu tek süreçtir (waitress); Linux'taki 2-worker
-  gunicorn yapısı Windows'a taşınmaz (gerek de yoktur).
-- `Get-NetTCPConnection` Windows 8+ gerektirir (desteklenen tüm
-  güncel Windows sürümlerinde vardır).
+Değişmedi: `gunicorn -c gunicorn.conf.py app:app` (0.0.0.0:5000,
+2 worker). Windows girişleri (`serve_windows.py` + launcher) yalnız
+masaüstünde kullanılır; Replit'te `.env` okunmaz, process env kazanır.
+
+## Manuel Windows test matrisi (özet)
+
+1. Temiz klon + `INSTALL_WINDOWS.cmd` → kurulum tamam mesajı.
+2. Kısayoldan başlat → tarayıcı `/home` açılır.
+3. İkinci kez başlat → kopya açılmaz, mevcut sekmeye yönlenir.
+4. `stop_alpha.cmd` → süreç kapanır; ilgisiz python süreçleri yaşar.
+5. Bozuk `runtime\alpha.pid` → başlatma yine çalışır (bayat temizlik).
+6. `.env` içindeki TR + Global Spot anahtarları → panelde bakiye görünür;
+   log'larda yalnız `present/source/length` görünür, değer görünmez.

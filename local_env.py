@@ -24,8 +24,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
 
-# `.env`'in stale OS env'i açıkça geçersiz kılabildiği anahtarlar.
-OVERRIDE_KEYS = ("BINANCE_TR_API_KEY", "BINANCE_TR_API_SECRET")
+# `.env`'in stale OS env'i açıkça geçersiz kılabildiği anahtarlar
+# (yalnız salt-okunur exchange credential'ları).
+OVERRIDE_KEYS = ("BINANCE_TR_API_KEY", "BINANCE_TR_API_SECRET",
+                 "BINANCE_API_KEY", "BINANCE_API_SECRET",
+                 "BINANCE_GLOBAL_API_KEY", "BINANCE_GLOBAL_API_SECRET",
+                 "BINANCE_GLOBAL_API_Key", "BINANCE_GLOBAL_Secret_Key")
 
 _loaded = False
 _sources: dict[str, str] = {}

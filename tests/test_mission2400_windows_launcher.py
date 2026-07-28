@@ -1,10 +1,10 @@
-"""Mission 2400 — Agent 01: Windows tek-tık başlatıcı testleri.
+"""Windows tek-tık başlatıcı testleri (Mission 2400 → 2500 paketleme).
 
 Windows'a özgü davranış burada (Linux) koşulamaz; bu testler
 (1) POSIX tarafında davranışın DEĞİŞMEDİĞİNİ (portable_flock gerçek
-fcntl'e vekâlet eder), (2) başlatıcı betiklerinin sözleşmelerini
-(hazırlık denetimi tarayıcıdan önce, kopya koruması, güvenli durdurma,
-gizli değer sızıntısı yok) statik olarak kilitler.
+fcntl'e vekâlet eder), (2) launcher_windows.py + cmd betiklerinin
+sözleşmelerini (bootstrap, .venv izolasyonu, kopya koruması, güvenli
+durdurma, secret sızıntısı yok) statik ve birim düzeyde kilitler.
 """
 from __future__ import annotations
 
@@ -20,11 +20,13 @@ import portable_flock
 ROOT = Path(__file__).resolve().parent.parent
 START_CMD = (ROOT / "start_alpha.cmd").read_text(encoding="utf-8")
 STOP_CMD = (ROOT / "stop_alpha.cmd").read_text(encoding="utf-8")
-LAUNCH_PS1 = (ROOT / "tools/windows/launch_alpha.ps1").read_text(encoding="utf-8")
-STOP_PS1 = (ROOT / "tools/windows/stop_alpha.ps1").read_text(encoding="utf-8")
-SHORTCUT_PS1 = (ROOT / "tools/windows/create_shortcuts.ps1").read_text(encoding="utf-8")
+INSTALL_CMD = (ROOT / "INSTALL_WINDOWS.cmd").read_text(encoding="utf-8")
+LAUNCHER_PY = (ROOT / "launcher_windows.py").read_text(encoding="utf-8")
+SHORTCUT_PS1 = (ROOT / "tools/windows/create_desktop_shortcut.ps1"
+                ).read_text(encoding="utf-8")
 SERVE_PY = (ROOT / "serve_windows.py").read_text(encoding="utf-8")
-ALL_SCRIPTS = START_CMD + STOP_CMD + LAUNCH_PS1 + STOP_PS1 + SHORTCUT_PS1 + SERVE_PY
+ALL_SCRIPTS = (START_CMD + STOP_CMD + INSTALL_CMD + LAUNCHER_PY +
+               SHORTCUT_PS1 + SERVE_PY)
 
 
 class TestPortableFlockPosix:
@@ -44,7 +46,6 @@ class TestPortableFlockPosix:
         with tempfile.NamedTemporaryFile() as fh:
             portable_flock.flock(
                 fh, portable_flock.LOCK_EX | portable_flock.LOCK_NB)
-            # Ayrı süreçte aynı dosyaya NB kilit denemesi başarısız olmalı.
             code = subprocess.run(
                 ["python", "-c",
                  "import sys, portable_flock as p;"
@@ -67,7 +68,6 @@ class TestSharedStateModulesUnchangedOnPosix:
         src = (ROOT / module).read_text(encoding="utf-8")
         assert "import fcntl" in src
         assert "import portable_flock as fcntl" in src
-        # Gerçek fcntl önce denenir (try bloğu fallback'ten önce).
         assert src.index("import fcntl") < src.index("portable_flock")
 
     def test_modules_use_real_fcntl_here(self):
@@ -75,65 +75,118 @@ class TestSharedStateModulesUnchangedOnPosix:
         assert accounts_registry.fcntl is real_fcntl
 
 
+class TestCmdContracts:
+    def test_start_cmd_uses_own_folder_as_root(self):
+        assert 'cd /d "%~dp0"' in START_CMD
+
+    def test_start_cmd_prefers_venv_python(self):
+        assert ".venv\\Scripts\\python.exe" in START_CMD
+        # .venv varsa sistem python'a HİÇ düşülmez (guard önce gelir)
+        assert START_CMD.index(".venv\\Scripts\\python.exe") < \
+            START_CMD.index("where py")
+
+    def test_start_cmd_no_silent_failure(self):
+        assert "pause" in START_CMD
+        assert "errorlevel" in START_CMD
+
+    def test_no_hardcoded_paths_anywhere(self):
+        for banned in ("D:\\PROGRAMLAR", "C:\\Users", "D:\\Alpha",
+                       "GTHUPNEW"):
+            assert banned not in ALL_SCRIPTS, banned
+
+    def test_stop_cmd_delegates_to_launcher(self):
+        assert "launcher_windows.py" in STOP_CMD
+        assert "--stop" in STOP_CMD
+
+    def test_install_cmd_delegates_to_launcher(self):
+        assert "launcher_windows.py" in INSTALL_CMD
+        assert "--install" in INSTALL_CMD
+        assert "pause" in INSTALL_CMD
+
+
 class TestLauncherContract:
+    def test_root_resolved_from_file_not_cwd(self):
+        assert "Path(__file__).resolve().parent" in LAUNCHER_PY
+
+    def test_venv_python_only_no_system_fallback_for_runtime(self):
+        import launcher_windows as lw
+        assert str(lw.venv_python()).startswith(str(lw.ROOT))
+
     def test_readiness_checked_before_browser(self):
         # Tarayıcı yalnız /health hazırlık denetiminden SONRA açılır.
-        assert "/health" in LAUNCH_PS1
-        ready_ok = LAUNCH_PS1.index('Write-Log "Hazirlik denetimi OK')
-        browser = LAUNCH_PS1.index("Start-Process $HomeUrl", ready_ok)
-        assert browser > ready_ok
+        ready = LAUNCHER_PY.index("Hazirlik denetimi OK")
+        browser = LAUNCHER_PY.index("open_browser(HOME_URL)", ready)
+        assert browser > ready
 
-    def test_trading_home_route_used(self):
-        assert "/home" in LAUNCH_PS1  # gerçek rota, varsayım değil
+    def test_duplicate_start_uses_live_health_check(self):
+        assert "alpha_healthy()" in LAUNCHER_PY
+        assert "kopya baslatilmadi" in LAUNCHER_PY
 
-    def test_duplicate_start_prevented_by_live_check(self):
-        # Bayat PID'e değil canlı /health denetimine dayanır.
-        assert "if (Test-Ready)" in LAUNCH_PS1
-        assert "kopya baslatilmadi" in LAUNCH_PS1
+    def test_foreign_port_user_gets_clear_error(self):
+        assert "baska uygulama tarafindan kullaniliyor" in LAUNCHER_PY
 
-    def test_failure_does_not_open_broken_page(self):
-        fail_branch = LAUNCH_PS1[LAUNCH_PS1.index("if (-not $Ready)"):]
-        assert "Start-Process $HomeUrl" not in fail_branch.split("Write-Log \"Hazirlik denetimi OK")[0]
+    def test_never_kills_foreign_process(self):
+        # taskkill yalnız stop() içinde ve üç kimlik denetiminden sonra.
+        assert "pid_belongs_to_this_root" in LAUNCHER_PY
+        assert "DOKUNULMADI" in LAUNCHER_PY
 
-    def test_no_fixed_drive_assumption(self):
-        for banned in ("C:\\\\", "C:\\Users", "D:\\Alpha"):
-            assert banned not in LAUNCH_PS1
+    def test_no_path_mutation(self):
+        assert "setx" not in ALL_SCRIPTS.lower()
+        assert 'os.environ["PATH"]' not in LAUNCHER_PY
+
+    def test_pid_file_in_runtime_dir(self):
+        import launcher_windows as lw
+        assert lw.PID_FILE == lw.ROOT / "runtime" / "alpha.pid"
 
     def test_localhost_only_server(self):
         assert '"127.0.0.1"' in SERVE_PY
         assert "0.0.0.0" not in SERVE_PY
 
     def test_start_cmd_delegates_to_launcher(self):
-        assert "launch_alpha.ps1" in START_CMD
+        assert "launcher_windows.py" in START_CMD
 
 
 class TestStopSafety:
+    def test_stop_requires_identity_before_kill(self):
+        import launcher_windows as lw
+        src = LAUNCHER_PY[LAUNCHER_PY.index("def stop"):]
+        kill = src.index("taskkill")
+        for guard in ("pid_alive", "pid_belongs_to_this_root",
+                      'meta.get("root") != str(ROOT)'):
+            assert src.index(guard) < kill, guard
+
     def test_no_broad_python_kill(self):
-        # İlgisiz python süreçleri asla hedeflenmez.
-        assert "/IM" not in STOP_PS1
-        assert "Get-Process python" not in STOP_PS1
-        assert "taskkill /PID $AppPid" in STOP_PS1
+        assert "/IM" not in LAUNCHER_PY
+        assert "Get-Process python" not in ALL_SCRIPTS
 
-    def test_pid_identity_triple_check(self):
-        # PID yeniden kullanımına karşı üçlü kimlik: pid + başlama
-        # zamanı (start_ticks) + BU projenin serve_windows.py TAM yolu.
-        assert "start_ticks" in LAUNCH_PS1  # başlatıcı meta yazar
-        assert "start_ticks" in STOP_PS1    # durdurucu doğrular
-        assert "StartTime.Ticks" in STOP_PS1
-        assert "[regex]::Escape($ExpectedScript)" in STOP_PS1
-        assert "DOKUNULMADI" in STOP_PS1
+    def test_stale_pid_cleanup(self, tmp_path, monkeypatch):
+        import launcher_windows as lw
+        monkeypatch.setattr(lw, "RUNTIME", tmp_path)
+        monkeypatch.setattr(lw, "PID_FILE", tmp_path / "alpha.pid")
+        (tmp_path / "alpha.pid").write_text(
+            '{"pid": 999999, "root": "%s"}' % lw.ROOT)
+        monkeypatch.setattr(lw, "alpha_healthy", lambda: False)
+        assert lw.stop() == 0
+        assert not (tmp_path / "alpha.pid").exists()
 
-    def test_mismatch_refuses_before_any_kill(self):
-        # Tüm kimlik denetimleri ilk taskkill'den ÖNCE gelir.
-        kill = STOP_PS1.index("taskkill /PID")
-        for guard in ("start_ticks", "StartTime.Ticks",
-                      "[regex]::Escape($ExpectedScript)"):
-            assert STOP_PS1.index(guard) < kill, guard
+    def test_stop_refuses_other_clone_pid(self, tmp_path, monkeypatch):
+        import launcher_windows as lw
+        monkeypatch.setattr(lw, "PID_FILE", tmp_path / "alpha.pid")
+        (tmp_path / "alpha.pid").write_text(
+            '{"pid": 1, "root": "/eski/clone"}')
+        assert lw.stop() != 0
+        assert (tmp_path / "alpha.pid").exists()  # DOKUNULMADI
 
-    def test_lock_removed_only_after_shutdown(self):
-        kill = STOP_PS1.index("taskkill /PID")
-        cleanup = STOP_PS1.rindex("Remove-Item $PidFile")
-        assert cleanup > kill
+
+class TestShortcut:
+    def test_shortcut_targets_current_clone(self):
+        assert "$PSScriptRoot" in SHORTCUT_PS1
+        assert "start_alpha.cmd" in SHORTCUT_PS1
+        assert "WorkingDirectory = $ProjectRoot" in SHORTCUT_PS1
+
+    def test_shortcut_no_hardcoded_paths(self):
+        for banned in ("D:\\", "C:\\Users"):
+            assert banned not in SHORTCUT_PS1
 
 
 class TestNoSecretLeakage:
@@ -141,15 +194,24 @@ class TestNoSecretLeakage:
         "BINANCE_API_KEY", "BINANCE_API_SECRET", "BINANCE_TR_API_KEY",
         "BINANCE_TR_API_SECRET", "SESSION_SECRET",
         "ALPHA_OWNER_PASSWORD_HASH"])
-    def test_scripts_never_reference_secret_values(self, secret):
-        # Başlatıcı gizli değişkenleri okumaz, loglamaz, argüman yapmaz.
-        assert secret not in ALL_SCRIPTS
+    def test_cmd_scripts_never_reference_secrets(self, secret):
+        assert secret not in (START_CMD + STOP_CMD + INSTALL_CMD +
+                              SHORTCUT_PS1 + LAUNCHER_PY)
 
-    def test_log_writes_only_fixed_messages(self):
-        # Write-Log çağrılarında değişken enterpolasyonlu ortam içeriği yok.
-        for line in (LAUNCH_PS1 + STOP_PS1).splitlines():
-            if "Write-Log" in line and "$env:" in line:
-                pytest.fail(f"launcher log ortam içeriği yazıyor: {line}")
+    def test_serve_logs_metadata_not_values(self):
+        # serve_windows yalnız present/source/length loglar.
+        assert "credential_metadata" in SERVE_PY
+        assert 'meta["present"]' in SERVE_PY
+
+    def test_launcher_log_fixed_messages_only(self):
+        import ast
+        tree = ast.parse(LAUNCHER_PY)
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "log"):
+                src = ast.unparse(node)
+                assert "environ" not in src, src
 
 
 class TestLinuxProductionPathUntouched:
@@ -161,3 +223,9 @@ class TestLinuxProductionPathUntouched:
     def test_waitress_declared(self):
         req = (ROOT / "requirements.txt").read_text(encoding="utf-8")
         assert "waitress" in req
+
+    def test_gitignore_protects_local_state(self):
+        gi = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        assert ".venv/" in gi
+        assert "runtime/" in gi
+        assert "\n.env\n" in gi
