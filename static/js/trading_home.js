@@ -457,6 +457,12 @@
         var b = r[i].body;
         return b && b.ok && b.data ? b.data[key] : null;
       }
+      // Task 70: eski Binance env isim uyarıları ana panelde de
+      // banner olarak görünür (dash_base.html → showWarnings).
+      var st = r[0].body && r[0].body.ok ? r[0].body.data : null;
+      if (st && typeof showWarnings === "function") {
+        showWarnings(st.legacy_env_warnings || []);
+      }
       renderTop(r[0].body && r[0].body.ok ? r[0].body.data : null,
                 data(5, "portfolio"), data(3, "products"));
       renderTrades(data(1, "positions"));
