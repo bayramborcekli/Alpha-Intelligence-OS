@@ -235,6 +235,29 @@ def _replit_dev_bypass_active() -> bool:
                 or os.environ.get("REPLIT_DEV_DOMAIN"))
 
 
+def _local_dev_bypass_active() -> bool:
+    """GEÇİCİ geliştirme bypass'ı — SADECE Windows/lokal geliştirme.
+
+    Üç kilit birden gerekir (default KAPALI):
+    1. LOCAL_DEV_BYPASS=1 açıkça set edilmiş olmalı (.env'e yazılabilir).
+    2. Replit ortamı OLMAMALI (REPL_ID/REPLIT_DEV_DOMAIN yok) — Replit
+       tarafı kendi REPLIT_DEV_BYPASS flag'ini kullanır.
+    3. Üretim OLMAMALI: FLASK_ENV=production veya REPLIT_DEPLOYMENT
+       varsa bypass ASLA çalışmaz.
+
+    NOT: Görev ajanları tarafından "kapsam dışı" diye SİLİNMEMELİDİR —
+    kaldırma kararını yalnız operatör verir.
+    """
+    if os.environ.get("LOCAL_DEV_BYPASS") != "1":
+        return False
+    if os.environ.get("REPLIT_DEPLOYMENT"):
+        return False
+    if os.environ.get("FLASK_ENV") == "production":
+        return False
+    return not (os.environ.get("REPL_ID")
+                or os.environ.get("REPLIT_DEV_DOMAIN"))
+
+
 @app.before_request
 def _security_gate():
     """Her istekte kimlik doğrulama kontrolü. TESTING=True ise atlanır."""
@@ -248,6 +271,15 @@ def _security_gate():
                 "AUTH BYPASS AKTİF (REPLIT_DEV_BYPASS=1) — test kullanıcısı "
                 "'replit-dev-bypass' otomatik giriş yaptı. Bu yalnız Replit "
                 "geliştirme ortamı içindir; üretimde çalışmaz.")
+        return
+    if _local_dev_bypass_active():
+        if not session.get("logged_in"):
+            auth.start_session("local-dev-bypass")
+            logging.getLogger(__name__).warning(
+                "AUTH BYPASS AKTİF (LOCAL_DEV_BYPASS=1) — test kullanıcısı "
+                "'local-dev-bypass' otomatik giriş yaptı. Bu yalnız "
+                "Windows/lokal geliştirme içindir; Replit ve üretimde "
+                "çalışmaz.")
         return
     exempt = {"/login", "/logout", "/setup", "/setup/hash", "/setup/save",
               "/setup/check",

@@ -40,6 +40,17 @@ class TestReplitBypassGuard:
         assert "REPLIT_DEPLOYMENT" in src, "üretim kilidi silinmiş"
         assert "REPL_ID" in src, "Replit workspace kilidi silinmiş"
 
+    def test_local_windows_bypass_intact(self):
+        assert callable(getattr(appmod, "_local_dev_bypass_active", None)), \
+            "_local_dev_bypass_active silinmiş — Windows test bypass'ı"
+        src = inspect.getsource(appmod._local_dev_bypass_active)
+        assert "LOCAL_DEV_BYPASS" in src
+        assert "FLASK_ENV" in src, "production kilidi silinmiş"
+        assert "REPLIT_DEPLOYMENT" in src, "yayın kilidi silinmiş"
+        gate = inspect.getsource(appmod._security_gate)
+        assert "_local_dev_bypass_active()" in gate, \
+            "_security_gate lokal bypass dalını kaybetmiş"
+
 
 class TestPaperBootstrapGuard:
     """Temiz clone'da PAPER defterinin otomatik oluşturulması."""
