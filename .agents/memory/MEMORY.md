@@ -7,4 +7,5 @@
 - [Runtime config drift](runtime-config-drift.md) — bot mutates alpha20_v1 configs; platform auto-commits can bake unsafe state into HEAD, so revert against last intentional commit.
 - [Read-only summary persist](read-only-summary-persist.md) — risk_api.summary() writes a daily snapshot by default; read-only layers must pass persist=False.
 - [Operation shared state](operation-shared-state.md) — new mutable operation-service fields must join the flock/JSON shared store, or they regress to per-worker state.
+- [Spot-only architecture](spot-only-architecture.md) — Futures private API permanently removed; tombstone FUTURES_REMOVED contract + deliberate public-klines/PAPER keeps.
 - [Binance TR API quirks](binance-tr-api.md) — `data` may be list or dict; movements API omits trades so reconciliation is PARTIAL by design; transferType=1 = internal.
