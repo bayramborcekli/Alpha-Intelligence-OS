@@ -126,6 +126,15 @@ def load_project_env(force: bool = False) -> dict[str, str]:
                 _sources[key] = "process_env"
         _emit_legacy_warnings()
         return dict(_sources)
+    if not ENV_FILE.exists():
+        log.warning(
+            "İLK KURULUM: .env dosyası bulunamadı (%s). Binance hesap "
+            "bağlantısı için: cp .env.example .env yapın ve kanonik "
+            "alanları doldurun (BINANCE_GLOBAL_API_Key, "
+            "BINANCE_GLOBAL_Secret_Key, BINANCE_TR_API_KEY, "
+            "BINANCE_TR_API_SECRET, FLASK_SECRET_KEY). .env olmadan "
+            "hesaplar NOT_CONFIGURED görünür; PAPER modu etkilenmez.",
+            ENV_FILE)
     file_vals = _parse_env_file(ENV_FILE)
     for key, val in file_vals.items():
         if key in OVERRIDE_KEYS:

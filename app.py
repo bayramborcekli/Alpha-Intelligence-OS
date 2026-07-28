@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 import math
 import os
 import re
@@ -92,6 +93,54 @@ LOG_PATH    = ROOT / "alpha20_v1" / "alpha20.log"
 BOT_PATH    = ROOT / "alpha20_v1" / "alpha20.py"
 PID_PATH    = ROOT / "alpha20_v1" / ".bot.pid"
 BOT_OUTPUT  = ROOT / "alpha20_v1" / "bot_process.log"
+
+
+def _ensure_paper_state() -> None:
+    """İLK KURULUM: PAPER defteri (state.json) yoksa güvenli başlangıç
+    defterini oluşturur. Temiz clone'da bu dosya gitignore'ludur ve
+    yokluğu Kağıt Hesap kartını yanlış CONNECTION_FAILED gösteriyordu.
+
+    Kurallar:
+    - Şekil alpha20_v1/alpha20.py:initial_state ile birebir aynıdır.
+    - Bakiye config.json'daki starting_balance_usdt'den okunur; config
+      okunamazsa dosya YARATILMAZ (tahmin yasak) ve uyarı loglanır.
+    - Yalnız mode=PAPER config'inde çalışır (fail-closed).
+    - "x" (exclusive create) ile yazılır: çok worker'lı gunicorn'da
+      yarış olsa bile defter asla üzerine yazılmaz; veri taşıma yok.
+    """
+    if STATE_PATH.exists():
+        return
+    try:
+        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        if not isinstance(cfg, dict) or cfg.get("mode") != "PAPER":
+            logging.getLogger(__name__).warning(
+                "state.json yok ama config mode=PAPER değil — "
+                "başlangıç defteri oluşturulmadı (fail-closed).")
+            return
+        start = float(cfg["starting_balance_usdt"])
+        state = {
+            "balance": start,
+            "day": datetime.now(timezone.utc).date().isoformat(),
+            "day_start_balance": start,
+            "consecutive_losses": 0,
+            "position": None,
+            "trades": [],
+        }
+        with open(STATE_PATH, "x", encoding="utf-8") as fh:
+            json.dump(state, fh, ensure_ascii=False, indent=2)
+        logging.getLogger(__name__).info(
+            "İLK KURULUM: PAPER başlangıç defteri oluşturuldu "
+            "(bakiye=%s USDT).", start)
+    except FileExistsError:
+        return  # başka worker önce yazdı — dokunma
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        logging.getLogger(__name__).warning(
+            "İLK KURULUM: PAPER defteri oluşturulamadı (%s: %s) — "
+            "Kağıt Hesap kartı UNKNOWN kalabilir.",
+            type(exc).__name__, exc)
+
+
+_ensure_paper_state()
 
 CONFIG_LOCK           = threading.RLock()
 INTEGER_PATTERN       = re.compile(r"^[0-9]+$")
