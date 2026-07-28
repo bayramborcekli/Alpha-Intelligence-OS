@@ -68,6 +68,26 @@
     }).join("");
   }
 
+  function rowsGF(assets) {
+    return assets.map(function (a) {
+      var valCell;
+      if (a.value_usdt === null || a.value_usdt === undefined) {
+        valCell = '<td data-l="Değer (USDT)">— ' +
+          '<span class="st-warn" style="font-size:.75rem;border:1px solid rgba(210,153,34,.5);border-radius:6px;padding:1px 6px;white-space:nowrap" ' +
+          'title="Bu varlık için USDT fiyatı bulunamadı; değer uydurulmaz.">fiyatlanamadı</span></td>';
+      } else {
+        valCell = '<td data-l="Değer (USDT)">' + trNum(a.value_usdt) + "</td>";
+      }
+      return "<tr>" +
+        '<td data-l="Varlık">' + esc(a.asset) + "</td>" +
+        '<td data-l="Serbest">' + trNum(a.free) + "</td>" +
+        '<td data-l="Kilitli">' + trNum(a.locked) + "</td>" +
+        '<td data-l="Toplam">' + trNum(a.total) + "</td>" +
+        valCell +
+        '<td data-l="Güncelleme">' + esc(tsText(a.update_time)) + "</td></tr>";
+    }).join("");
+  }
+
   function renderSection(sec, bodyId, freshId, cols, rowFn) {
     var body = document.getElementById(bodyId);
     document.getElementById(freshId).textContent = sec.meta ? freshText(sec.meta) : "";
@@ -107,7 +127,7 @@
     var gf = data.sections.find(function (s) { return s.source === "BINANCE_GLOBAL_SPOT"; });
     var tr = data.sections.find(function (s) { return s.source === "BINANCE_TR"; });
     renderSection(gf || { ok: false }, "body-gf", "fresh-gf",
-      ["Varlık", "Serbest", "Kilitli", "Toplam", "Güncelleme"], rowsTR);
+      ["Varlık", "Serbest", "Kilitli", "Toplam", "Değer (USDT)", "Güncelleme"], rowsGF);
     renderSection(tr || { ok: false }, "body-tr", "fresh-tr",
       ["Varlık", "Serbest", "Kilitli", "Toplam", "Güncelleme"], rowsTR);
     updateExportLink();

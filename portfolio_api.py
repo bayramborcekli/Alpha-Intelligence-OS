@@ -115,21 +115,57 @@ def global_assets() -> dict:
             raise SafeExchangeError(
                 "INVALID_EXCHANGE_RESPONSE",
                 dapi.ERROR_MESSAGES["INVALID_EXCHANGE_RESPONSE"])
+        # Fiyatlama: halka açık, İMZASIZ fiyat listesi. Fiyatlanamayan
+        # varlıkta value_usdt=None kalır ve değerleme KISMİ işaretlenir
+        # (asla 0 uydurulmaz) — Genel Bakış ile aynı şeffaflık sözleşmesi.
+        prices: dict[str, Decimal] = {}
+        valuation = "FULL"
+        nonzero_non_usdt = any(
+            isinstance(a, dict) and a.get("asset") != "USDT"
+            and (_dec_val(a.get("free")) + _dec_val(a.get("locked"))) != 0
+            for a in balances)
+        if nonzero_non_usdt:
+            try:
+                ticker = dapi._public_get(dapi.SPOT_BASE,
+                                          "/api/v3/ticker/price",
+                                          dapi.SPOT_ALLOWLIST)
+                if isinstance(ticker, list):
+                    prices = {t.get("symbol"): _dec_val(t.get("price"))
+                              for t in ticker
+                              if isinstance(t, dict)
+                              and _dec_val(t.get("price")) > 0}
+                else:
+                    valuation = "PARTIAL"
+            except SafeExchangeError:
+                valuation = "PARTIAL"
         assets = []
         for a in balances:
             if not isinstance(a, dict):
                 continue
+            asset_name = str(a.get("asset") or "?")
             total = _dec_val(a.get("free")) + _dec_val(a.get("locked"))
+            if asset_name == "USDT" or total == 0:
+                value: Decimal | None = total if asset_name == "USDT" \
+                    else Decimal(0)
+            else:
+                px = prices.get(f"{asset_name}USDT")
+                if px is None:
+                    valuation = "PARTIAL"
+                    value = None
+                else:
+                    value = total * px
             assets.append({
-                "asset": str(a.get("asset") or "?"),
+                "asset": asset_name,
                 "free": _dec(a.get("free")),
                 "locked": _dec(a.get("locked")),
                 "total": _dec(total),
+                "value_usdt": str(value) if value is not None else None,
                 "update_time": None,
                 "nonzero": total != 0,
             })
         return {"_latency_ms": latency, "assets": assets[:MAX_ROWS],
                 "asset_count": len(assets),
+                "valuation": valuation,
                 "nonzero_asset_count": sum(1 for a in assets if a["nonzero"])}
     return _serve("global_assets", "BINANCE_GLOBAL_SPOT", build)
 
@@ -217,6 +253,8 @@ def portfolio(app_mode: str, include_zero: bool = False, search: str = "",
             sec["nonzero_asset_count"] = model.get("nonzero_asset_count", 0)
             if label == "BINANCE_TR":
                 sec["account_status"] = model.get("account_status")
+            if label == "BINANCE_GLOBAL_SPOT":
+                sec["valuation"] = model.get("valuation")
             if model["meta"]["freshness"] == "STALE":
                 warnings.append(f"{label}: veri eski "
                                 f"({model['meta']['age_seconds']} sn)")
