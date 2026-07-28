@@ -1,0 +1,131 @@
+ALPHA INTELLIGENCE OS — BINANCE TR CONNECTION CLEANUP / ROOT-CAUSE TASK
+
+Amaç:
+Mevcut patch zincirini büyütmeden Binance TR salt-okunur Spot bağlantısını temiz, tek kaynaklı ve test edilebilir hale getir. Canlı emir, transfer, para çekme veya Futures EKLEME. PAPER_MODE=true korunacak.
+
+ÖNEMLİ: Önce analiz et, sonra kod değiştir. Tahmin ederek patch üretme.
+
+MEVCUT BULGULAR
+1) Windows üzerinde:
+   - `requests.Session(); trust_env=False; GET https://www.binance.tr/open/v1/common/time`
+     HTTP 200 ve JSON başarı döndürüyor.
+   - Dolayısıyla Windows internet/TLS temel erişimi çalışıyor.
+2) Binance TR resmi güncel dokümanı:
+   - base endpoint: https://www.binance.tr
+   - signed Spot account: GET /open/v1/account/spot
+   - header: X-MBX-APIKEY
+   - HMAC SHA256 signature
+   - timestamp zorunlu
+   - recvWindow <= 5000 önerilir
+3) Projede stale bilgi var:
+   `.agents/memory/binance-tr-api.md` hâlâ `https://www.trbinance.com` diyor.
+   Bunu güncel resmi dokümana göre düzelt.
+4) ENV yükleme iki yerde tekrarlanıyor:
+   - local_env.py / serve_windows.py
+   - app.py içindeki `_load_local_env`
+   İkisi de `os.environ.setdefault()` kullanıyor.
+   Bu nedenle eski OS/Replit environment değerleri .env'deki yeni değerin önüne geçebiliyor.
+5) Binance TR bağlantı kodu `dashboard_api.py` içinde, ancak PATCH09/PATCH20/PATCH21/PATCH22 kalıntıları ve tanı kodları birikmiş durumda.
+6) Binance Global/Futures bu görev kapsamında DEĞİŞTİRİLMEYECEK. Binance Global Futures kapalı kalabilir.
+
+GÖREV A — CONFIG TEK KAYNAK
+- Tek bir environment loader bırak.
+- Windows'ta proje kökündeki `.env` kullanılmalı.
+- Replit'te Replit Secrets / gerçek process environment kullanılmalı.
+- Öncelik kuralını açık ve deterministik yap:
+  * Replit/production: process env wins.
+  * Windows local development: proje `.env` Binance credential değerleri için açıkça kaynak olabilsin; stale user/system env değerlerinin sessizce önüne geçmesini engelle.
+- Çalışan credential'ın DEĞERİNİ ASLA loglama.
+- Sadece güvenli metadata: source=("process_env"|"project_env"), key_present, secret_present, length, ascii olabilir.
+- `app.py` ve `serve_windows.py` iki kez env yüklememeli.
+
+GÖREV B — BINANCE TR TEK ADAPTÖR
+Binance TR kodunu tek bir sınıf/modülde topla, örneğin:
+`binance_tr_client.py`
+
+Sadece şu read-only işlevler:
+- get_server_time()
+- get_spot_account()
+
+Base:
+https://www.binance.tr
+
+Public time:
+GET /open/v1/common/time
+
+Signed account:
+GET /open/v1/account/spot
+
+Signed query:
+timestamp=<server timestamp>&recvWindow=5000
+HMAC-SHA256(secret, exact_query_string)
+signature query-string sonuna eklenecek.
+Header:
+X-MBX-APIKEY: <key>
+
+- `requests.Session()`
+- Windows'taki çalışan bağımsız teste eşit davranış:
+  `session.trust_env = False`
+- Binance TR için özel custom CA bundle / certifi+Windows CA birleştirmesi KULLANMA.
+  Varsayılan requests TLS verification kullan.
+- `verify=False` kesinlikle kullanma.
+- response body yalnız JSON parse için kullanılmalı; secret/header/signature loglanmamalı.
+
+GÖREV C — BINANCE TR HATA NORMALİZASYONU
+Binance TR cevap modeli `{code,msg,data,timestamp}`.
+- code == 0 => success
+- non-zero => güvenli hata
+- Tanınmayan code'u INVALID_EXCHANGE_RESPONSE diye gizleme:
+  UI/diagnostic'e `exchange_code` ve sanitize edilmiş `exchange_message` döndür.
+- API key/secret/signature/request URL query ASLA dönme.
+- HTTP status, endpoint path, code, msg gösterilebilir.
+- HTTP 4xx JSON body varsa code/msg'yi koru.
+
+GÖREV D — STALE DOSYALARI TEMİZLE
+- `.agents/memory/binance-tr-api.md` güncelle: eski trbinance.com bilgisini kaldır.
+- dashboard_api.py içindeki PATCH09/PATCH20/PATCH21/PATCH22 diagnostic_version kalıntılarını temizle.
+- Backend build numarasına bağımlı debug mantığını kaldır veya tek sade sürüm etiketi kullan.
+- Binance TR için eski endpoint/base URL kalan tüm referansları repo genelinde ara.
+- `grep`/search sonucu sıfır eski `trbinance.com` referansı olmalı (sadece tarihsel doküman gerekiyorsa açıkça "deprecated" diye işaretle).
+
+GÖREV E — TESTLER
+Gerçek secret gerektirmeyen unit testler:
+1) exact HMAC query imzası
+2) `/open/v1/common/time` timestamp parse
+3) signed account request header/path
+4) code=0 success response parsing
+5) code=3700 ve başka nonzero code'larda exchange_code + sanitized msg korunması
+6) Windows/local env precedence testi
+7) Replit/process env precedence testi
+8) TLS verify=False olmadığını doğrulayan test
+
+Eğer Replit Secrets bağlıysa SADECE gerçek bağlantı testi yap:
+- secret değerlerini loglama.
+- GET time
+- GET account/spot
+- sonucu yalnız:
+  HTTP status
+  Binance code
+  msg
+  key source
+  olarak raporla.
+- Hiçbir write endpoint çağırma.
+
+GÖREV F — SONUÇ RAPORU
+Değişiklik sonunda bana şu formatta rapor ver:
+1. ROOT CAUSE
+2. CHANGED FILES
+3. TEST RESULTS
+4. LIVE READ-ONLY TEST RESULT (varsa)
+5. WINDOWS RUN COMMAND
+6. REPLIT RUN COMMAND
+7. REMAINING RISK
+
+KISITLAR
+- PAPER_MODE=true
+- Canlı emir yok
+- order/transfer/withdraw çağrısı yok
+- Binance Global koduna dokunma
+- API/secret hiçbir output/log/test snapshot'ta yer almasın
+- Geçici patch ekleme; mimariyi sadeleştir
+- Önce mevcut kodu ve tüm env yükleme yollarını tara, sonra değiştir.
