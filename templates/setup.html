@@ -244,10 +244,11 @@
     </div>
 
     {% else %}
-    <!-- Windows / yerel: otomatik .env kayıt akışı -->
+    <!-- Windows / yerel: otomatik yerel kimlik dosyası kayıt akışı -->
     <div class="info-box info">
       Kullanıcı adınızı girin ve <strong>Kaydet</strong>'e tıklayın — yönetici bilgileri
-      projenizin <code>.env</code> dosyasına otomatik olarak yazılır. Yeniden başlatma gerekmez.
+      projenizin <code>data/local_admin.json</code> dosyasına güvenli biçimde yazılır
+      (yalnızca parola hash'i saklanır). Yeniden başlatma gerekmez.
     </div>
 
     <div class="field">
@@ -268,7 +269,7 @@
     <div class="btn-row">
       <button class="btn btn-secondary" onclick="goStep(1)">← Geri</button>
       <button class="btn btn-primary" id="save-btn" onclick="saveToEnv()">
-        💾 .env'e Kaydet
+        💾 Kaydet
       </button>
     </div>
     {% endif %}
@@ -424,7 +425,7 @@
         errBox.style.display = 'block';
         return;
       }
-      okBox.textContent = '✅ Bilgiler .env dosyasına kaydedildi. Giriş yapmak için 3. adıma geçin.';
+      okBox.textContent = '✅ Bilgiler yerel kimlik dosyasına (data/local_admin.json) kaydedildi. Giriş yapmak için 3. adıma geçin.';
       okBox.style.display = 'block';
       // 800ms sonra otomatik Step 3'e geç
       setTimeout(() => goStep(3), 800);
@@ -433,7 +434,7 @@
       errBox.style.display = 'block';
     } finally {
       btn.disabled = false;
-      btn.textContent = '💾 .env\'e Kaydet';
+      btn.textContent = '💾 Kaydet';
     }
   }
 
@@ -533,7 +534,11 @@
         document.getElementById('login-link').style.display = 'block';
         document.getElementById('ind-3').classList.add('done');
       } else {
+        {% if is_replit %}
         box.innerHTML = '<div class="info-box error" style="margin-top:12px;">⚠️ <code>ADMIN_PASSWORD_HASH</code> henüz algılanamadı. Secrets\'ı kaydettiğinizden ve uygulamayı yeniden başlattığınızdan emin olun.</div>';
+        {% else %}
+        box.innerHTML = '<div class="info-box error" style="margin-top:12px;">⚠️ Kurulum henüz tamamlanmadı. 2. adımda "Kaydet" düğmesine bastığınızdan emin olun ve tekrar deneyin.</div>';
+        {% endif %}
       }
     } catch(e) {
       box.innerHTML = '<div class="info-box error" style="margin-top:12px;">Sunucuya ulaşılamadı.</div>';

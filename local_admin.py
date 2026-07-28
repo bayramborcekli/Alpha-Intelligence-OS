@@ -144,8 +144,13 @@ def migrate_from_env() -> bool:
     Migration SONRASI runtime kaynağı yalnızca dosyadır; env okunmaz."""
     if not enabled():
         return False
-    if load() is not None:
-        return False  # dosya zaten var — env asla override edemez
+    if not _safe_paths_ok():
+        return False
+    if os.path.lexists(FILE):
+        # Dosya VARSA (geçerli, bozuk ya da symlink fark etmez) migration
+        # ASLA çalışmaz: bozuk dosya fail-closed kalır, env override edemez
+        # ve mevcut kayıt sessizce üzerine yazılmaz.
+        return False
     pw_hash = (os.environ.get("ALPHA_OWNER_PASSWORD_HASH")
                or os.environ.get("ADMIN_PASSWORD_HASH") or "")
     if not pw_hash.startswith(_ALLOWED_HASH_PREFIXES):

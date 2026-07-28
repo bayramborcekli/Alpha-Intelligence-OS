@@ -5,7 +5,8 @@ Parola ayarlandıktan sonra /setup ve /setup/hash endpoint'lerinin
 yetkisiz erişime kapalı kaldığını doğrular.
 
 Ayrıca Windows/yerel kurulum için /setup/save endpoint'inin
-.env'e yazma ve os.environ güncelleme akışını test eder.
+data/local_admin.json dosyasına atomic yazma akışını test eder
+(env/.env'e YAZILMAZ — Replit Secrets'tan tam ayrım).
 """
 from __future__ import annotations
 
@@ -223,11 +224,28 @@ class TestSetupHashEndpoint:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# /setup/save — Windows/yerel .env otomatik kayıt
+# Yardımcı: local_admin deposunu geçici dizine yönlendir
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _patch_local_admin(tmp_path):
+    """local_admin dosya yollarını tmp_path altına taşıyan patch context'leri."""
+    import local_admin
+    root = tmp_path
+    data_dir = root / "data"
+    file_ = data_dir / "local_admin.json"
+    return [
+        patch.object(local_admin, "ROOT", root),
+        patch.object(local_admin, "DATA_DIR", data_dir),
+        patch.object(local_admin, "FILE", file_),
+    ], file_
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# /setup/save — Windows/yerel data/local_admin.json otomatik kayıt
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestSetupSaveEndpoint:
-    """POST /setup/save yerel ortamda .env'e yazar ve os.environ'u günceller."""
+    """POST /setup/save yerel ortamda data/local_admin.json'a atomic yazar."""
 
     def _make_hash(self):
         from werkzeug.security import generate_password_hash
@@ -311,75 +329,75 @@ class TestSetupSaveEndpoint:
 
     def test_save_accepts_valid_username_charset(self, unconfigured_client, tmp_path):
         """[A-Za-z0-9_-] içindeki kullanıcı adları kabul edilmeli."""
+        import contextlib
         import local_env
-        import os
         pw_hash = self._make_hash()
-        fake_env = tmp_path / ".env"
-        fake_env.write_text("", encoding="utf-8")
+        patches, file_ = _patch_local_admin(tmp_path)
         for good in ["admin", "Test_User-01", "a", "A-B_c9"]:
-            with patch.object(local_env, "is_replit", return_value=False), \
-                 patch.object(local_env, "ENV_FILE", fake_env):
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(
+                    patch.object(local_env, "is_replit", return_value=False))
+                for p in patches:
+                    stack.enter_context(p)
                 resp = unconfigured_client.post(
                     "/setup/save",
                     data=json.dumps({"password_hash": pw_hash, "username": good}),
                     content_type="application/json",
                 )
-            assert resp.status_code == 200, f"reddedildi: {good!r}"
-            # Başarılı kayıt os.environ'u günceller ve sihirbazı kapatır;
-            # sonraki iterasyon için "yapılandırılmamış" duruma geri dön.
-            os.environ.pop("ALPHA_OWNER_PASSWORD_HASH", None)
-            os.environ.pop("ALPHA_OWNER_USERNAME", None)
+                assert resp.status_code == 200, f"reddedildi: {good!r}"
+                # Başarılı kayıt dosyayı oluşturur ve sihirbazı kapatır;
+                # sonraki iterasyon için "yapılandırılmamış" duruma geri dön.
+                file_.unlink()
 
-    def test_save_writes_env_and_updates_environ(self, unconfigured_client, tmp_path):
-        """Geçerli istek: .env dosyasına yazar ve os.environ'u hemen günceller."""
-        import local_env
+    def test_save_writes_local_admin_file(self, unconfigured_client, tmp_path):
+        """Geçerli istek: data/local_admin.json'a yazar — .env/env'e DOKUNMAZ."""
+        import contextlib
         import os
-        fake_env = tmp_path / ".env"
-        fake_env.write_text("EXISTING_KEY=existing_value\n", encoding="utf-8")
+        import local_env
         pw_hash = self._make_hash()
-        with patch.object(local_env, "is_replit", return_value=False), \
-             patch.object(local_env, "ENV_FILE", fake_env):
+        patches, file_ = _patch_local_admin(tmp_path)
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(
+                patch.object(local_env, "is_replit", return_value=False))
+            for p in patches:
+                stack.enter_context(p)
             resp = unconfigured_client.post(
                 "/setup/save",
                 data=json.dumps({"password_hash": pw_hash, "username": "testoperator"}),
                 content_type="application/json",
             )
-        assert resp.status_code == 200, resp.get_data(as_text=True)
-        body = resp.get_json()
-        assert body["ok"] is True
-        # .env dosyası yeni anahtarları içermeli
-        env_text = fake_env.read_text(encoding="utf-8")
-        assert "ALPHA_OWNER_USERNAME=testoperator" in env_text
-        assert "ALPHA_OWNER_PASSWORD_HASH=" in env_text
-        # Değerin kendisi loglanmaz/gizlenmez ama dosyada vardır
-        assert pw_hash in env_text
-        # Mevcut anahtar korunmalı
-        assert "EXISTING_KEY=existing_value" in env_text
-        # os.environ güncellenmiş olmalı
-        assert os.environ.get("ALPHA_OWNER_USERNAME") == "testoperator"
+            assert resp.status_code == 200, resp.get_data(as_text=True)
+            assert resp.get_json()["ok"] is True
+            # Dosya oluşmalı ve yalnızca izinli 4 alanı içermeli
+            rec = json.loads(file_.read_text(encoding="utf-8"))
+            assert set(rec) == {"schema_version", "username",
+                                "password_hash", "created_at"}
+            assert rec["username"] == "testoperator"
+            assert rec["password_hash"] == pw_hash
+        # env/os.environ ASLA güncellenmez (Secrets'tan tam ayrım)
+        assert os.environ.get("ALPHA_OWNER_USERNAME") != "testoperator"
 
-    def test_save_overwrites_existing_env_key(self, unconfigured_client, tmp_path):
-        """Aynı anahtar .env'de zaten varsa satır güncellenmeli (duplikasyon olmamalı)."""
+    def test_save_overwrites_existing_file(self, unconfigured_client, tmp_path):
+        """Dosya zaten varsa (ör. bozuk/yarım kurulum) yeni kayıt üzerine yazılır."""
+        import contextlib
         import local_env
-        fake_env = tmp_path / ".env"
-        fake_env.write_text(
-            "ALPHA_OWNER_USERNAME=olduser\nALPHA_OWNER_PASSWORD_HASH=oldhash\n",
-            encoding="utf-8"
-        )
         pw_hash = self._make_hash()
-        with patch.object(local_env, "is_replit", return_value=False), \
-             patch.object(local_env, "ENV_FILE", fake_env):
+        patches, file_ = _patch_local_admin(tmp_path)
+        file_.parent.mkdir(parents=True, exist_ok=True)
+        file_.write_text("{bozuk json", encoding="utf-8")  # fail-closed durum
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(
+                patch.object(local_env, "is_replit", return_value=False))
+            for p in patches:
+                stack.enter_context(p)
             resp = unconfigured_client.post(
                 "/setup/save",
                 data=json.dumps({"password_hash": pw_hash, "username": "newuser"}),
                 content_type="application/json",
             )
-        assert resp.status_code == 200
-        env_text = fake_env.read_text(encoding="utf-8")
-        # Sadece bir kez görünmeli
-        assert env_text.count("ALPHA_OWNER_USERNAME=") == 1
-        assert "ALPHA_OWNER_USERNAME=newuser" in env_text
-        assert "olduser" not in env_text
+            assert resp.status_code == 200
+            rec = json.loads(file_.read_text(encoding="utf-8"))
+            assert rec["username"] == "newuser"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -391,21 +409,30 @@ class TestSetupToLoginFlow:
     İlk kurulum sihirbazının TAM döngüsünü kapsayan entegrasyon testi:
 
         POST /setup/hash  → paroladan hash üret
-        POST /setup/save  → .env'e yaz + os.environ'u güncelle
+        POST /setup/save  → data/local_admin.json'a atomic yaz
         GET  /setup/check → kurulum tamamlandı (404 = artık ifşa yok)
         POST /login       → YENİDEN BAŞLATMA OLMADAN giriş başarılı
 
-    Windows'ta /setup/save os.environ'u anında güncellediği için restart
+    Windows'ta auth her istekte local_admin.json'ı okuduğu için restart
     gerekmez; bu test o davranışın sessizce kırılmasını önler.
     """
 
     PASSWORD = "wizard-flow-pass-2026!"
     USERNAME = "flowoperator"
 
-    def _run_wizard(self, client, tmp_path):
-        """Sihirbaz adımlarını (hash → save) çalıştırır; save yanıtını döndürür."""
+    def _patch_windows(self, monkeypatch, tmp_path):
+        """Tüm test boyunca Windows/yerel ortamı simüle et."""
+        import local_admin
         import local_env
+        monkeypatch.setattr(local_env, "is_replit", lambda: False)
+        monkeypatch.setattr(local_admin, "ROOT", tmp_path)
+        monkeypatch.setattr(local_admin, "DATA_DIR", tmp_path / "data")
+        monkeypatch.setattr(local_admin, "FILE",
+                            tmp_path / "data" / "local_admin.json")
+        return tmp_path / "data" / "local_admin.json"
 
+    def _run_wizard(self, client):
+        """Sihirbaz adımlarını (hash → save) çalıştırır; save yanıtını döndürür."""
         # Adım 1: paroladan hash üret
         resp = client.post(
             "/setup/hash",
@@ -416,43 +443,34 @@ class TestSetupToLoginFlow:
         pw_hash = resp.get_json()["password_hash"]
         assert pw_hash.startswith(("pbkdf2:", "scrypt:"))
 
-        # Adım 2: .env'e kaydet (yerel/Windows yolu)
-        fake_env = tmp_path / ".env"
-        with patch.object(local_env, "is_replit", return_value=False), \
-             patch.object(local_env, "ENV_FILE", fake_env):
-            save = client.post(
-                "/setup/save",
-                data=json.dumps({"password_hash": pw_hash,
-                                 "username": self.USERNAME}),
-                content_type="application/json",
-            )
-        return save, fake_env, pw_hash
+        # Adım 2: data/local_admin.json'a kaydet (yerel/Windows yolu)
+        save = client.post(
+            "/setup/save",
+            data=json.dumps({"password_hash": pw_hash,
+                             "username": self.USERNAME}),
+            content_type="application/json",
+        )
+        return save, pw_hash
 
     def test_full_cycle_login_without_restart(self, unconfigured_client,
                                               tmp_path, monkeypatch):
         """Kurulum → kaydet → doğrula → giriş; restart olmadan başarılı olmalı."""
-        import os
         import auth
+
+        file_ = self._patch_windows(monkeypatch, tmp_path)
 
         # Kurulumdan önce sistem kilidi: giriş sihirbaza yönlendirir
         pre = unconfigured_client.get("/login", follow_redirects=False)
         assert pre.status_code == 302 and "/setup" in pre.headers.get("Location", "")
 
-        save, fake_env, pw_hash = self._run_wizard(unconfigured_client, tmp_path)
+        save, pw_hash = self._run_wizard(unconfigured_client)
         assert save.status_code == 200, save.get_data(as_text=True)
         assert save.get_json()["ok"] is True
 
-        # os.environ ANINDA güncellenmiş olmalı (restart gerekmez)
-        assert os.environ.get("ALPHA_OWNER_USERNAME") == self.USERNAME
-        assert os.environ.get("ALPHA_OWNER_PASSWORD_HASH") == pw_hash
-        # monkeypatch temizliği: test sonunda env geri alınsın
-        monkeypatch.setenv("ALPHA_OWNER_USERNAME", self.USERNAME)
-        monkeypatch.setenv("ALPHA_OWNER_PASSWORD_HASH", pw_hash)
-
-        # .env dosyası da kalıcı kayıt içermeli
-        env_text = fake_env.read_text(encoding="utf-8")
-        assert f"ALPHA_OWNER_USERNAME={self.USERNAME}" in env_text
-        assert pw_hash in env_text
+        # Dosya kalıcı kayıt içermeli (env'e YAZILMAZ)
+        rec = json.loads(file_.read_text(encoding="utf-8"))
+        assert rec["username"] == self.USERNAME
+        assert rec["password_hash"] == pw_hash
 
         # Adım 3: /setup/check — kurulum tamamlandı, endpoint artık 404
         # (güvenlik kararı: yapılandırma durumu anonim istemciye ifşa edilmez)
@@ -483,13 +501,9 @@ class TestSetupToLoginFlow:
     def test_wrong_password_still_rejected_after_setup(self, unconfigured_client,
                                                        tmp_path, monkeypatch):
         """Kurulum sonrası YANLIŞ parola ile giriş başarısız kalmalı."""
-        import os
-
-        save, _fake_env, pw_hash = self._run_wizard(unconfigured_client, tmp_path)
+        self._patch_windows(monkeypatch, tmp_path)
+        save, pw_hash = self._run_wizard(unconfigured_client)
         assert save.status_code == 200
-        monkeypatch.setenv("ALPHA_OWNER_USERNAME",
-                           os.environ["ALPHA_OWNER_USERNAME"])
-        monkeypatch.setenv("ALPHA_OWNER_PASSWORD_HASH", pw_hash)
 
         resp = unconfigured_client.post(
             "/login",
