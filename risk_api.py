@@ -147,42 +147,61 @@ def _notional(p: dict) -> Decimal:
 
 # ── PAKET 6.2 — Maruziyet ──────────────────────────────────────────────────
 
+def _spot_account() -> dict | None:
+    """Binance Global Spot hesabı (önbellekli servis üzerinden).
+
+    Başarısızsa None döner — asla tahmin üretilmez."""
+    try:
+        model = dapi.global_spot_account()
+    except Exception:
+        return None
+    if not model.get("ok"):
+        return None
+    return model
+
+
 def exposure() -> dict:
-    positions: list[dict] = []   # Futures kaldırıldı — pozisyon verisi yok
+    """Spot-only maruziyet: Binance Global Spot bakiyeleri (USDT değerli)
+    + Binance TR bakiyeleri (yalnızca adet — kur uydurulmaz)."""
+    spot = _spot_account()
     ta = dapi.tr_account()
 
-    margin_balance = None
-    available = None
+    total_spot = None            # toplam Spot varlık değeri (USDT)
+    spot_valuation = None        # FULL / PARTIAL
+    usdt_free = None
+    usdt_locked = None
+    by_asset_raw: list[dict] = []
+    if spot is not None:
+        total_spot = _dec(spot.get("total_spot_value_usdt"))
+        spot_valuation = spot.get("valuation")
+        usdt_free = _dec(spot.get("usdt_free"))
+        usdt_locked = _dec(spot.get("usdt_locked"))
+        for h in (spot.get("top_holdings") or []):
+            if isinstance(h, dict):
+                by_asset_raw.append(
+                    {"asset": h.get("asset"),
+                     "quantity": h.get("amount"),
+                     "value_usdt": _dec(h.get("value_usdt"))})
 
-    long_notional = Decimal(0)
-    short_notional = Decimal(0)
-    by_asset: dict[str, Decimal] = {}
-    for p in positions:
-        n = _notional(p)
-        if p.get("direction") == "LONG":
-            long_notional += n
-        elif p.get("direction") == "SHORT":
-            short_notional += n
-        base = _base_asset(p.get("symbol") or "")
-        by_asset[base] = by_asset.get(base, Decimal(0)) + n
+    gross = total_spot if total_spot is not None else Decimal(0)
+    stable_value = (usdt_free or Decimal(0)) + (usdt_locked or Decimal(0)) \
+        if (usdt_free is not None or usdt_locked is not None) else None
 
-    gross = long_notional + short_notional
-    net = long_notional - short_notional
-
-    assets = [{"asset": a,
-               "exposure_value_usdt": _q2(v),
-               "exposure_pct": _pct(v, gross) if gross else None}
-              for a, v in sorted(by_asset.items(),
-                                 key=lambda kv: kv[1], reverse=True)]
+    assets = [{"asset": h["asset"],
+               "quantity": h["quantity"],
+               "exposure_value_usdt": _q2(h["value_usdt"]),
+               "exposure_pct": (_pct(h["value_usdt"], gross)
+                                if h["value_usdt"] is not None and gross
+                                else None)}
+              for h in by_asset_raw]
 
     # Binance TR: yalnızca adet; USD karşılığı ÜRETİLMEZ (kur uydurulmaz)
     tr_stables, tr_assets = [], []
     if ta.get("ok"):
-        tacc = ta.get("account") or {}
-        u_free = _dec(tacc.get("usdt_free")) or Decimal(0)
-        u_lock = _dec(tacc.get("usdt_locked")) or Decimal(0)
-        t_free = _dec(tacc.get("try_free")) or Decimal(0)
-        t_lock = _dec(tacc.get("try_locked")) or Decimal(0)
+        u_free = _dec(ta.get("usdt_free")) or Decimal(0)
+        u_lock = _dec(ta.get("usdt_locked")) or Decimal(0)
+        t_free = _dec(ta.get("try_free")) or Decimal(0)
+        t_lock = _dec(ta.get("try_locked")) or Decimal(0)
         if u_free or u_lock:
             tr_stables.append({"asset": "USDT",
                                "quantity": str(u_free + u_lock)})
@@ -193,24 +212,36 @@ def exposure() -> dict:
     return {
         "ok": True, "read_only": True, "as_of": _now_iso(),
         "universe": "SPOT_ONLY",
-        "gross_exposure_usdt": _q2(gross),
-        "net_exposure_usdt": _q2(net),
-        "long_exposure_usdt": _q2(long_notional),
-        "short_exposure_usdt": _q2(short_notional),
-        "exposure_pct_of_margin": _pct(gross, margin_balance),
-        "cash_available_usdt": _q2(available),
+        # Spot bakiye tabanlı toplam varlık değeri (doğrulanamazsa null)
+        "total_spot_value_usdt": _q2(total_spot),
+        "spot_valuation": spot_valuation,
+        "gross_exposure_usdt": _q2(total_spot) if total_spot is not None
+        else None,
+        "net_exposure_usdt": _q2(total_spot) if total_spot is not None
+        else None,
+        "long_exposure_usdt": _q2(total_spot) if total_spot is not None
+        else None,
+        "short_exposure_usdt": _q2(Decimal(0)) if total_spot is not None
+        else None,
+        "exposure_pct_of_margin": None,   # Futures marjı yok (Spot-only)
+        "cash_available_usdt": _q2(usdt_free),
+        "stablecoin_value_usdt": _q2(stable_value),
         "by_asset": assets,
         "by_direction": {
-            "long_pct": _pct(long_notional, gross) if gross else None,
-            "short_pct": _pct(short_notional, gross) if gross else None,
+            "long_pct": "100.00" if total_spot else None,
+            "short_pct": "0.00" if total_spot else None,
         },
         "by_quote_currency": [{"quote": "USDT",
-                               "exposure_value_usdt": _q2(gross),
-                               "exposure_pct": "100.00" if gross else None}],
-        "by_exchange": [],
-        "by_market": [{"market": "USDT-M FUTURES",
-                       "exposure_value_usdt": _q2(gross),
-                       "exposure_pct": "100.00" if gross else None}],
+                               "exposure_value_usdt": _q2(total_spot),
+                               "exposure_pct": "100.00" if total_spot
+                               else None}],
+        "by_exchange": ([{"exchange": "BINANCE_GLOBAL_SPOT",
+                          "exposure_value_usdt": _q2(total_spot),
+                          "exposure_pct": "100.00"}]
+                        if total_spot else []),
+        "by_market": [{"market": "SPOT",
+                       "exposure_value_usdt": _q2(total_spot),
+                       "exposure_pct": "100.00" if total_spot else None}],
         "binance_tr_holdings": {
             "note": "Yalnızca adet — USD karşılığı doğrulanamadığı için "
                     "hesaplanmaz (kur tahmini yapılmaz).",
@@ -223,13 +254,25 @@ def exposure() -> dict:
 # ── PAKET 6.3 — Konsantrasyon ──────────────────────────────────────────────
 
 def concentration() -> dict:
-    positions: list[dict] = []  # Spot-only: Futures pozisyon verisi yok
-    rows = sorted(positions, key=_notional, reverse=True)
-    gross = sum((_notional(p) for p in rows), Decimal(0))
-    top = [{"symbol": p.get("symbol"), "direction": p.get("direction"),
-            "notional_usdt": _q2(_notional(p)),
-            "share_pct": _pct(_notional(p), gross)}
-           for p in rows[:5]]
+    """Spot varlık yoğunlaşması: en büyük varlığın toplam Spot değeri
+    içindeki payı (yalnızca fiyatlanmış varlıklar)."""
+    spot = _spot_account()
+    holdings: list[tuple[str, Decimal]] = []
+    gross = Decimal(0)
+    if spot is not None:
+        total = _dec(spot.get("total_spot_value_usdt"))
+        if total is not None:
+            gross = total
+        for h in (spot.get("top_holdings") or []):
+            if isinstance(h, dict):
+                v = _dec(h.get("value_usdt"))
+                if v is not None:
+                    holdings.append((h.get("asset") or "?", v))
+    rows = sorted(holdings, key=lambda kv: kv[1], reverse=True)
+    top = [{"symbol": a, "direction": "SPOT",
+            "notional_usdt": _q2(v),
+            "share_pct": _pct(v, gross)}
+           for a, v in rows[:5]]
     largest_pct = _dec(top[0]["share_pct"]) if top and top[0]["share_pct"] \
         else None
     th = thresholds()
@@ -354,24 +397,30 @@ def health_score(exp: dict, conc: dict, acc: dict | None,
                       "reason": reason})
 
     th = thresholds()
-    margin = _dec(acc.get("usdt_margin_balance"))
-    avail = _dec(acc.get("usdt_available_balance"))
-    gross = _dec(exp.get("gross_exposure_usdt")) or Decimal(0)
+    # Spot-only: marj yerine Spot bakiye oranları kullanılır.
+    total = _dec(acc.get("total_spot_value_usdt"))
+    stable = None
+    u_free = _dec(acc.get("usdt_free"))
+    u_lock = _dec(acc.get("usdt_locked"))
+    if u_free is not None or u_lock is not None:
+        stable = (u_free or Decimal(0)) + (u_lock or Decimal(0))
 
-    # 1) Marj kullanımı
-    if margin and margin > 0 and avail is not None:
-        usage = (margin - avail) / margin * 100
-        if usage >= th["RISK_CRITICAL_MARGIN"]:
-            penalty("margin_usage", Decimal(30), f"Marj kullanımı %{_q2(usage)}")
-        elif usage >= th["RISK_HIGH_MARGIN"]:
-            penalty("margin_usage", Decimal(15), f"Marj kullanımı %{_q2(usage)}")
-    # 2) Brüt maruziyet / marj
-    if margin and margin > 0:
-        exp_pct = gross / margin * 100
-        if exp_pct >= th["HIGH_EXPOSURE_PERCENT"] * 2:
-            penalty("exposure", Decimal(25), f"Maruziyet %{_q2(exp_pct)}")
-        elif exp_pct >= th["HIGH_EXPOSURE_PERCENT"]:
-            penalty("exposure", Decimal(12), f"Maruziyet %{_q2(exp_pct)}")
+    # 1) Stabil (USDT) tampon oranı — marj kullanımı yerine Spot karşılığı:
+    #    riskli (stabil olmayan) varlıkların toplam Spot değerine oranı.
+    if total and total > 0 and stable is not None:
+        risky_pct = (total - stable) / total * 100
+        if risky_pct >= th["RISK_CRITICAL_MARGIN"]:
+            penalty("margin_usage", Decimal(30),
+                    f"Riskli varlık oranı %{_q2(risky_pct)} — stabil "
+                    f"(USDT) tampon kritik düzeyde düşük")
+        elif risky_pct >= th["RISK_HIGH_MARGIN"]:
+            penalty("margin_usage", Decimal(15),
+                    f"Riskli varlık oranı %{_q2(risky_pct)} — stabil "
+                    f"(USDT) tampon düşük")
+    # 2) Kısmi fiyatlama — toplam değer doğrulanamıyorsa küçük ceza
+    if acc.get("valuation") == "PARTIAL":
+        penalty("exposure", Decimal(5),
+                "Fiyatlama KISMİ — bazı varlıklar USDT ile değerlenemedi")
     # 3) Konsantrasyon
     sp = _dec(conc.get("single_position_pct"))
     if sp is not None:
@@ -381,12 +430,13 @@ def health_score(exp: dict, conc: dict, acc: dict | None,
             penalty("concentration", Decimal(15), f"Tek pozisyon %{sp}")
         elif sp >= th["MAX_POSITION_PERCENT"]:
             penalty("concentration", Decimal(7), f"Tek pozisyon %{sp}")
-    # 4) Kullanılabilir bakiye oranı
-    if margin and margin > 0 and avail is not None:
-        avail_pct = avail / margin * 100
+    # 4) Kullanılabilir (serbest USDT) bakiye oranı
+    if total and total > 0 and u_free is not None:
+        avail_pct = u_free / total * 100
         if avail_pct <= th["LOW_AVAILABLE_PERCENT"]:
             penalty("available_balance", Decimal(15),
-                    f"Kullanılabilir bakiye %{_q2(avail_pct)}")
+                    f"Serbest USDT bakiyesi toplam Spot değerin "
+                    f"%{_q2(avail_pct)}'i")
     # 5) Açık emir yoğunluğu
     if open_orders is not None and Decimal(open_orders) > \
             th["MAX_OPEN_ORDERS"]:
@@ -440,24 +490,31 @@ def summary(persist: bool = True) -> dict:
     ekle-yalnız anlık görüntü YAZILMAZ (Mission 1700 portföy yolu bu
     modu kullanır; varsayılan davranış mevcut çağıranlar için aynıdır).
 
-    Spot-only mimari: Futures hesap/pozisyon verisi kaldırıldı.
-    Maruziyet ve yoğunlaşma hesaplamaları pozisyon verisi olmadığından
-    her zaman boş döner.
+    Spot-only mimari: maruziyet, yoğunlaşma ve sağlık skoru Binance
+    Global Spot bakiyeleri (USDT değerli) üzerinden hesaplanır; Spot
+    hesabı doğrulanamıyorsa skor null döner (tahmin üretilmez).
     """
     exp = exposure()
     conc = concentration()
     open_orders = _open_orders_count()
+    spot = _spot_account()
 
-    # Spot-only: marj/bakiye verisi yok
-    margin: Decimal | None = None
-    avail: Decimal | None = None
+    # Spot-only: "bakiye" = toplam Spot varlık değeri (USDT)
+    total_spot = _dec(spot.get("total_spot_value_usdt")) \
+        if spot is not None else None
+    u_free = _dec(spot.get("usdt_free")) if spot is not None else None
     usage_pct = None
+    if total_spot and total_spot > 0 and u_free is not None:
+        # Stabil olmayan (riskli) varlık oranı — marj kullanımı karşılığı
+        u_lock = (_dec(spot.get("usdt_locked")) or Decimal(0)) \
+            if spot is not None else Decimal(0)
+        usage_pct = _pct(total_spot - (u_free + u_lock), total_spot)
 
-    dd_day = _drawdown(1, margin)
-    dd_week = _drawdown(7, margin)
-    dd_month = _drawdown(30, margin)
+    dd_day = _drawdown(1, total_spot)
+    dd_week = _drawdown(7, total_spot)
+    dd_month = _drawdown(30, total_spot)
 
-    hs = health_score(exp, conc, None, open_orders, dd_day)
+    hs = health_score(exp, conc, spot, open_orders, dd_day)
 
     # Günlük ekle-yalnız anlık görüntü (varsa dokunulmaz);
     # persist=False → hiç yazılmaz (salt-okunur çağıranlar için).
@@ -472,7 +529,9 @@ def summary(persist: bool = True) -> dict:
             "gross_exposure_usdt": exp.get("gross_exposure_usdt"),
             "exposure_pct_of_margin": exp.get("exposure_pct_of_margin"),
             "margin_usage_pct": usage_pct,
-            "margin_balance_usdt": None,
+            # Spot-only: geçmiş alan adı korunur; değer toplam Spot değeridir
+            "margin_balance_usdt": _q2(total_spot),
+            "total_spot_value_usdt": _q2(total_spot),
             "daily_drawdown_pct": dd_day,
         })
 
@@ -486,9 +545,13 @@ def summary(persist: bool = True) -> dict:
         "portfolio_health": hs["classification"],
         "current_exposure_usdt": exp.get("gross_exposure_usdt")
         if exp.get("ok") else None,
+        "total_spot_value_usdt": _q2(total_spot),
+        "spot_valuation": exp.get("spot_valuation")
+        if exp.get("ok") else None,
         "exposure_pct_of_margin": exp.get("exposure_pct_of_margin")
         if exp.get("ok") else None,
-        "available_margin_usdt": None,
+        "available_margin_usdt": _q2(u_free),
+        "available_usdt": _q2(u_free),
         "margin_usage_pct": usage_pct,
         "open_position_count": None,
         "open_order_count": open_orders,
