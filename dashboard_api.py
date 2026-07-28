@@ -31,7 +31,6 @@ ROOT = Path(__file__).resolve().parent
 LEDGER_PATH = ROOT / "alpha20_v1" / "mission1310b" / "ledger_events.json"
 M1310B_REPORT = ROOT / "alpha20_v1" / "mission1310b" / "mission_1310b_report.json"
 
-GLOBAL_BASE = "https://fapi.binance.com"
 SPOT_BASE = "https://api.binance.com"
 TR_BASE = "https://www.binance.tr"  # resmi güncel base (eski trbinance.com KULLANILMAZ)
 
@@ -44,14 +43,8 @@ WRITE_COUNTERS = {
     "other_exchange_write_requests": 0,
 }
 
-# Yalnızca GET; ağ isteğinden ÖNCE zorunlu.
-GLOBAL_ALLOWLIST = {
-    ("GET", "/fapi/v2/account"),
-    ("GET", "/fapi/v2/balance"),
-    ("GET", "/fapi/v2/positionRisk"),
-    ("GET", "/fapi/v1/openOrders"),
-    ("GET", "/fapi/v1/positionSide/dualSide"),
-}
+# Yalnızca GET; ağ isteğinden ÖNCE zorunlu. (Futures allowlist'i YOK —
+# Spot-only mimari.)
 SPOT_ALLOWLIST = {
     ("GET", "/api/v3/account"),        # imzalı, salt-okunur hesap
     ("GET", "/api/v3/ticker/price"),   # imzasız, halka açık fiyat
@@ -444,185 +437,51 @@ def global_spot_account() -> dict:
     return _serve("global_spot", "BINANCE_GLOBAL_SPOT", build)
 
 
-# ── Binance Global (USDT-M Futures) ─────────────────────────────────────────
+# ── Binance Global (Spot-only mimari) ───────────────────────────────────────
+# Futures KALDIRILDI: /fapi/* çağrısı, futures credential'ı, sağlık denetimi
+# ve arka plan yoklaması YOKTUR. Aşağıdaki mezar taşı (tombstone) modeller,
+# danışman katmanların (risk/intelligence/automation) genel sözleşmesini
+# ağ ve secret olmadan korur.
 
-def _global_creds(trading: bool = False) -> tuple[str, str]:
-    if trading:
-        return (os.environ.get("BINANCE_TRADING_API_KEY", ""),
-                os.environ.get("BINANCE_TRADING_API_SECRET", ""))
+def _global_creds() -> tuple[str, str]:
     # Kanonik adlar öncelikli; kullanıcı Secrets'ta alternatif adlarla da
-    # tanımlayabilir (yalnız okunur Spot anahtarı).
+    # tanımlayabilir (yalnız okunur SPOT anahtarı).
     key = (os.environ.get("BINANCE_API_KEY", "")
+           or os.environ.get("BINANCE_API_Key", "")
            or os.environ.get("BINANCE_GLOBAL_API_KEY", "")
            or os.environ.get("BINANCE_GLOBAL_API_Key", ""))
     sec = (os.environ.get("BINANCE_API_SECRET", "")
+           or os.environ.get("BINANCE_Secret_Key", "")
            or os.environ.get("BINANCE_GLOBAL_API_SECRET", "")
            or os.environ.get("BINANCE_GLOBAL_Secret_Key", ""))
     return key, sec
 
 
-def futures_enabled() -> bool:
-    """Futures panosu yalnız açıkça etkinleştirilirse çalışır.
-
-    Varsayılan: DEVRE DIŞI (Spot-only mod). Devre dışıyken hiçbir
-    `/fapi/*` çağrısı yapılmaz ve uyarı üretilmez."""
-    return os.environ.get("ALPHA_FUTURES_ENABLED", "") == "1"
+FUTURES_REMOVED_ERROR = {"code": "FUTURES_REMOVED",
+                         "message": "Futures kaldırıldı (Spot-only mimari)."}
 
 
-FUTURES_DISABLED_ERROR = {"code": "FUTURES_DISABLED",
-                          "message": "Futures devre dışı (Spot-only mod)."}
-
-
-def _futures_disabled_model(source: str) -> dict:
+def _futures_removed_model() -> dict:
     return {"ok": False, "status": "DISABLED",
-            "meta": {"source": source, "retrieved_at": None,
-                     "age_seconds": None, "freshness": "DISABLED",
-                     "latency_ms": None},
-            "error": dict(FUTURES_DISABLED_ERROR)}
+            "meta": {"source": "BINANCE_GLOBAL_FUTURES",
+                     "retrieved_at": None, "age_seconds": None,
+                     "freshness": "DISABLED", "latency_ms": None},
+            "error": dict(FUTURES_REMOVED_ERROR)}
 
 
 def global_account() -> dict:
-    if not futures_enabled():
-        return _futures_disabled_model("BINANCE_GLOBAL_FUTURES")
-    def build() -> dict:
-        key, sec = _global_creds()
-        if not key or not sec:
-            raise SafeExchangeError("EXCHANGE_AUTH_FAILED",
-                                    "Salt-okunur anahtar yapılandırılmamış "
-                                    "(fail closed).")
-        t0 = time.monotonic()
-        acc = _signed_get(GLOBAL_BASE, "/fapi/v2/account", GLOBAL_ALLOWLIST,
-                          key, sec)
-        try:
-            mode_raw = _signed_get(GLOBAL_BASE, "/fapi/v1/positionSide/dualSide",
-                                   GLOBAL_ALLOWLIST, key, sec)
-            position_mode = ("HEDGE" if mode_raw.get("dualSidePosition")
-                             else "ONE_WAY")
-        except SafeExchangeError:
-            position_mode = "UNKNOWN"
-        # İşlem anahtarı doğrulaması (yalnızca GET ile — emir yolu YOK)
-        tkey, tsec = _global_creds(trading=True)
-        trading_auth = "NOT_CONFIGURED"
-        if tkey and tsec:
-            try:
-                _signed_get(GLOBAL_BASE, "/fapi/v2/balance", GLOBAL_ALLOWLIST,
-                            tkey, tsec)
-                trading_auth = "OK"
-            except SafeExchangeError as exc:
-                trading_auth = exc.code
-        latency = int((time.monotonic() - t0) * 1000)
-        usdt = next((a for a in acc.get("assets", [])
-                     if a.get("asset") == "USDT"), {})
-        nonzero_assets = [a for a in acc.get("assets", [])
-                          if _dec_val(a.get("walletBalance")) != 0]
-        return {
-            "_latency_ms": latency,
-            "read_only_auth": "OK",
-            "trading_key_auth": trading_auth,
-            "exchange_can_trade": bool(acc.get("canTrade")),
-            "app_live_execution": False,   # uygulama canlı emir: her zaman kapalı
-            "position_mode": position_mode,
-            "usdt_wallet_balance": _dec(usdt.get("walletBalance")),
-            "usdt_available_balance": _dec(usdt.get("availableBalance")),
-            "usdt_margin_balance": _dec(usdt.get("marginBalance")),
-            "unrealized_pnl": _dec(acc.get("totalUnrealizedProfit")),
-            "asset_count": len(nonzero_assets),
-            "open_position_count": sum(
-                1 for p in acc.get("positions", [])
-                if _dec_val(p.get("positionAmt")) != 0),
-            "open_order_count": sum(
-                int(p.get("openOrderInitialMargin", "0") != "0") or 0
-                for p in []),  # ayrı openOrders çağrısından gelir (aşağıda)
-            "api_key_masked": mask(key),
-            "trading_key_masked": mask(tkey) if tkey else None,
-        }
-    model = _serve("global_account", "BINANCE_GLOBAL_FUTURES", build)
-    # Açık emir sayısını (ayrı, kendi önbellekli) emir modelinden al
-    if model.get("ok"):
-        orders = global_orders()
-        model["open_order_count"] = (orders.get("open_order_count")
-                                     if orders.get("ok") else None)
-    return model
+    """KALDIRILDI — ağ/secret yok; kalıcı sterile model döner."""
+    return _futures_removed_model()
 
 
 def global_positions(include_zero: bool = False) -> dict:
-    if not futures_enabled():
-        return _futures_disabled_model("BINANCE_GLOBAL_FUTURES")
-    def build() -> dict:
-        key, sec = _global_creds()
-        if not key or not sec:
-            raise SafeExchangeError("EXCHANGE_AUTH_FAILED",
-                                    "Salt-okunur anahtar yapılandırılmamış "
-                                    "(fail closed).")
-        t0 = time.monotonic()
-        rows = _signed_get(GLOBAL_BASE, "/fapi/v2/positionRisk",
-                           GLOBAL_ALLOWLIST, key, sec)
-        latency = int((time.monotonic() - t0) * 1000)
-        if not isinstance(rows, list):
-            raise SafeExchangeError(
-                "INVALID_EXCHANGE_RESPONSE",
-                ERROR_MESSAGES["INVALID_EXCHANGE_RESPONSE"])
-        positions = []
-        for p in rows:
-            amt = _dec_val(p.get("positionAmt"))
-            direction = "LONG" if amt > 0 else ("SHORT" if amt < 0 else "FLAT")
-            positions.append({
-                "symbol": p.get("symbol"),
-                "position_amt": _dec(p.get("positionAmt")),
-                "direction": direction,
-                "entry_price": _dec(p.get("entryPrice")),
-                "mark_price": _dec(p.get("markPrice")),
-                "unrealized_pnl": _dec(p.get("unRealizedProfit")),
-                "leverage": _dec(p.get("leverage")),
-                "liquidation_price": _dec(p.get("liquidationPrice")),
-                "margin_type": p.get("marginType"),
-                "isolated_wallet": _dec(p.get("isolatedWallet")),
-                "update_time": p.get("updateTime"),
-            })
-        return {"_latency_ms": latency, "positions_all": positions}
-    model = _serve("global_positions", "BINANCE_GLOBAL_FUTURES", build)
-    if model.get("ok"):
-        all_rows = model.pop("positions_all", [])
-        active = [p for p in all_rows if p["direction"] != "FLAT"]
-        model["positions"] = all_rows if include_zero else active
-        model["open_position_count"] = len(active)
-        model["include_zero"] = include_zero
-    return model
+    """KALDIRILDI — ağ/secret yok; kalıcı sterile model döner."""
+    return _futures_removed_model()
 
 
 def global_orders() -> dict:
-    if not futures_enabled():
-        return _futures_disabled_model("BINANCE_GLOBAL_FUTURES")
-    def build() -> dict:
-        key, sec = _global_creds()
-        if not key or not sec:
-            raise SafeExchangeError("EXCHANGE_AUTH_FAILED",
-                                    "Salt-okunur anahtar yapılandırılmamış "
-                                    "(fail closed).")
-        t0 = time.monotonic()
-        rows = _signed_get(GLOBAL_BASE, "/fapi/v1/openOrders",
-                           GLOBAL_ALLOWLIST, key, sec)
-        latency = int((time.monotonic() - t0) * 1000)
-        if not isinstance(rows, list):
-            raise SafeExchangeError(
-                "INVALID_EXCHANGE_RESPONSE",
-                ERROR_MESSAGES["INVALID_EXCHANGE_RESPONSE"])
-        orders = [{
-            "symbol": o.get("symbol"),
-            "side": o.get("side"),
-            "type": o.get("type"),
-            "status": o.get("status"),
-            "orig_qty": _dec(o.get("origQty")),
-            "executed_qty": _dec(o.get("executedQty")),
-            "price": _dec(o.get("price")),
-            "stop_price": _dec(o.get("stopPrice")),
-            "reduce_only": bool(o.get("reduceOnly")),
-            "time": o.get("time"),
-            "update_time": o.get("updateTime"),
-        } for o in rows]
-        return {"_latency_ms": latency, "orders": orders,
-                "open_order_count": len(orders)}
-    return _serve("global_orders", "BINANCE_GLOBAL_FUTURES", build)
+    """KALDIRILDI — ağ/secret yok; kalıcı sterile model döner."""
+    return _futures_removed_model()
 
 
 # ── Binance TR ──────────────────────────────────────────────────────────────
@@ -769,18 +628,12 @@ def overview(app_info: dict) -> dict:
     """Tüm kaynakların sterilize toplaması. Tek kaynak hatası diğerlerini
     ETKİLEMEZ; birleşik yanıltıcı portföy toplamı üretilmez."""
     gs = global_spot_account()
-    ga = global_account()
-    gp = global_positions()
-    go = global_orders()
     ta = tr_account()
     tm = tr_movements_summary()
     warnings: list[str] = []
     for name, m in (("Binance Global (Spot)", gs),
-                    ("Binance Futures", ga), ("Pozisyonlar", gp),
-                    ("Emirler", go), ("Binance TR", ta),
+                    ("Binance TR", ta),
                     ("TR Hareketleri", tm)):
-        if m.get("status") == "DISABLED":
-            continue  # Futures devre dışı: uyarı ÜRETİLMEZ (tasarım gereği)
         if not m.get("ok"):
             warnings.append(f"{name}: "
                             f"{(m.get('error') or {}).get('message', 'kullanılamıyor')}")
@@ -801,9 +654,6 @@ def overview(app_info: dict) -> dict:
             "server_time": _now_iso(),
         },
         "global_spot": gs,
-        "global_futures": ga,
-        "positions": gp,
-        "orders": go,
         "tr": ta,
         "tr_movements": tm,
         "system": system_status(app_info),

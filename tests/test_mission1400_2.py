@@ -46,12 +46,8 @@ def _mock_exchange(monkeypatch, account=None, positions=None, orders=None,
         if ("GET", path) not in allowlist:
             raise RuntimeError("allowlist ihlali")
         table = {
-            "/fapi/v2/account": account,
-            "/fapi/v2/positionRisk": positions,
-            "/fapi/v1/openOrders": orders,
-            "/fapi/v1/positionSide/dualSide": dual,
+            "/api/v3/account": account,
             "/open/v1/account/spot": tr,
-            "/fapi/v2/balance": balance,
         }
         val = table.get(path)
         if isinstance(val, dapi.SafeExchangeError):
@@ -60,45 +56,27 @@ def _mock_exchange(monkeypatch, account=None, positions=None, orders=None,
             raise dapi.SafeExchangeError("EXCHANGE_UNAVAILABLE", "mock yok")
         return val
     monkeypatch.setattr(dapi, "_signed_get", fake)
+    monkeypatch.setattr(dapi, "_public_get",
+                        lambda *a, **k: [{"symbol": "BTCUSDT",
+                                          "price": "50000"}])
     for k in ("BINANCE_API_KEY", "BINANCE_API_SECRET",
-              "BINANCE_TRADING_API_KEY", "BINANCE_TRADING_API_SECRET",
               "BINANCE_TR_API_KEY", "BINANCE_TR_API_SECRET"):
         monkeypatch.setenv(k, "x" * 20)
 
 
-ACC = {"canTrade": True, "totalUnrealizedProfit": "1.25",
-       "assets": [{"asset": "USDT", "walletBalance": "64442.20",
-                   "availableBalance": "64000.5", "marginBalance": "64442.9"},
-                  {"asset": "BNB", "walletBalance": "0"}],
-       "positions": [{"positionAmt": "0.5"}, {"positionAmt": "0"}]}
-POS = [{"symbol": "BTCUSDT", "positionAmt": "0.5", "entryPrice": "50000",
-        "markPrice": "51000", "unRealizedProfit": "500", "leverage": "5",
-        "liquidationPrice": "40000", "marginType": "cross",
-        "isolatedWallet": "0", "updateTime": 1},
-       {"symbol": "ETHUSDT", "positionAmt": "-2", "entryPrice": "3000",
-        "markPrice": "2900", "unRealizedProfit": "200", "leverage": "3",
-        "liquidationPrice": "4000", "marginType": "isolated",
-        "isolatedWallet": "100", "updateTime": 2},
-       {"symbol": "XRPUSDT", "positionAmt": "0", "entryPrice": "0",
-        "markPrice": "0.5", "unRealizedProfit": "0", "leverage": "10",
-        "liquidationPrice": "0", "marginType": "cross",
-        "isolatedWallet": "0", "updateTime": 3}]
-ORDERS = [{"symbol": "BTCUSDT", "side": "SELL", "type": "LIMIT",
-           "status": "NEW", "origQty": "0.5", "executedQty": "0",
-           "price": "60000", "stopPrice": "0", "reduceOnly": True,
-           "time": 1, "updateTime": 2}]
-DUAL = {"dualSidePosition": False}
+ACC = {"canTrade": True,
+       "balances": [{"asset": "USDT", "free": "64000.5", "locked": "441.7"},
+                    {"asset": "BTC", "free": "0.5", "locked": "0"},
+                    {"asset": "BNB", "free": "0", "locked": "0"}]}
 TR_OK = {"code": 0, "data": {"status": 1, "accountAssets": [
     {"asset": "TRY", "free": "1.3942", "locked": "0"},
     {"asset": "USDT", "free": "20.9685", "locked": "0"},
     {"asset": "SHIB", "free": "0", "locked": "0"}]}}
-BAL = [{"asset": "USDT", "balance": "64442.20", "availableBalance": "64000.5"}]
 
 
 # ── Kimlik doğrulama zorunluluğu ─────────────────────────────────────────────
 
-ROUTES = ["/api/v1/overview", "/api/v1/global/account",
-          "/api/v1/global/positions", "/api/v1/global/orders",
+ROUTES = ["/api/v1/overview",
           "/api/v1/tr/account", "/api/v1/tr/movements/summary",
           "/api/v1/system/status"]
 
@@ -135,64 +113,39 @@ class TestAuthRequired:
 # ── Tipli modeller ve eşlemeler ─────────────────────────────────────────────
 
 class TestGlobalMocks:
-    def test_account_mapping_and_cantrade_not_live(self, client, monkeypatch):
-        _mock_exchange(monkeypatch, account=ACC, positions=POS,
-                       orders=ORDERS, dual=DUAL, tr=TR_OK, balance=BAL)
+    def test_spot_account_mapping(self, client, monkeypatch):
+        _mock_exchange(monkeypatch, account=ACC, tr=TR_OK)
         _login(client)
-        d = client.get("/api/v1/global/account").get_json()
+        d = client.get("/api/v1/overview").get_json()["global_spot"]
         assert d["ok"] is True
         assert d["read_only_auth"] == "OK"
-        assert d["trading_key_auth"] == "OK"
-        assert d["exchange_can_trade"] is True
-        assert d["app_live_execution"] is False  # canTrade ≠ canlı emir
-        assert d["position_mode"] == "ONE_WAY"
-        assert Decimal(d["usdt_wallet_balance"]) == Decimal("64442.20")
-        assert d["open_position_count"] == 1
-        assert d["open_order_count"] == 1
+        assert d["can_trade_flag"] is True
+        assert d["has_spot_assets"] is True
+        assert Decimal(d["usdt_free"]) == Decimal("64000.5")
         assert d["api_key_masked"].count("…") == 1
         assert "x" * 20 not in json.dumps(d)
         meta = d["meta"]
-        assert meta["source"] == "BINANCE_GLOBAL_FUTURES"
+        assert meta["source"] == "BINANCE_GLOBAL_SPOT"
         assert meta["freshness"] == "FRESH"
         assert meta["retrieved_at"] and meta["age_seconds"] is not None
 
-    def test_position_direction_mapping_oneway(self, client, monkeypatch):
-        _mock_exchange(monkeypatch, positions=POS)
+    def test_futures_routes_removed(self, client):
         _login(client)
-        d = client.get("/api/v1/global/positions").get_json()
-        assert d["ok"] is True
-        dirs = {p["symbol"]: p["direction"] for p in d["positions"]}
-        assert dirs == {"BTCUSDT": "LONG", "ETHUSDT": "SHORT"}
-        assert d["open_position_count"] == 2
-        # FLAT yalnızca include_zero=true ile
-        d2 = client.get(
-            "/api/v1/global/positions?include_zero=true").get_json()
-        # önbellek: aynı model, filtre farklı
-        assert any(p["direction"] == "FLAT" for p in d2["positions"])
+        for r in ("/api/v1/global/account", "/api/v1/global/positions",
+                  "/api/v1/global/orders",
+                  "/api/v1/global/positions/export.csv",
+                  "/api/v1/global/orders/export.csv"):
+            assert client.get(r).status_code == 404, r
+        for p in ("/positions", "/orders"):
+            # Rota kaldırıldı: 404 (veya kimlik katmanının 302'si) — 200 ASLA
+            assert client.get(p).status_code in (302, 404), p
 
-    def test_orders_mapping(self, client, monkeypatch):
-        _mock_exchange(monkeypatch, orders=ORDERS)
-        _login(client)
-        d = client.get("/api/v1/global/orders").get_json()
-        assert d["ok"] and d["open_order_count"] == 1
-        o = d["orders"][0]
-        assert o["side"] == "SELL" and o["reduce_only"] is True
-        assert Decimal(o["price"]) == Decimal("60000")
-
-    def test_no_positions_empty(self, client, monkeypatch):
-        _mock_exchange(monkeypatch, positions=[])
-        _login(client)
-        d = client.get("/api/v1/global/positions").get_json()
-        assert d["ok"] and d["positions"] == []
-        assert d["open_position_count"] == 0
-
-    def test_unavailable_exchange_safe_error(self, client, monkeypatch):
-        _mock_exchange(monkeypatch)  # her yol EXCHANGE_UNAVAILABLE
-        _login(client)
-        d = client.get("/api/v1/global/positions").get_json()
-        assert d["ok"] is False
-        assert d["error"]["code"] == "EXCHANGE_UNAVAILABLE"
-        assert d["meta"]["freshness"] == "UNAVAILABLE"
+    def test_futures_tombstone_models(self):
+        for fn in (dapi.global_account, dapi.global_positions,
+                   dapi.global_orders):
+            m = fn()
+            assert m["ok"] is False
+            assert m["error"]["code"] == "FUTURES_REMOVED"
 
 
 class TestTrMocks:
@@ -234,15 +187,15 @@ class TestTrMocks:
 
 class TestOverview:
     def test_overview_aggregates(self, client, monkeypatch):
-        _mock_exchange(monkeypatch, account=ACC, positions=POS,
-                       orders=ORDERS, dual=DUAL, tr=TR_OK, balance=BAL)
+        _mock_exchange(monkeypatch, account=ACC, tr=TR_OK)
         _login(client)
         d = client.get("/api/v1/overview").get_json()
         assert d["application"]["live_trading_enabled"] is False
         assert d["application"]["transfers_enabled"] is False
         assert d["application"]["withdrawals_enabled"] is False
-        assert d["global_futures"]["ok"] is True
+        assert d["global_spot"]["ok"] is True
         assert d["tr"]["ok"] is True
+        assert "global_futures" not in d
         assert isinstance(d["warnings"], list)
 
     def test_partial_source_failure(self, client, monkeypatch):
@@ -251,12 +204,11 @@ class TestOverview:
         _login(client)
         d = client.get("/api/v1/overview").get_json()
         assert d["tr"]["ok"] is True
-        assert d["global_futures"]["ok"] is False
+        assert d["global_spot"]["ok"] is False
         assert any("Binance Global" in w for w in d["warnings"])
 
     def test_no_combined_portfolio_total(self, client, monkeypatch):
-        _mock_exchange(monkeypatch, account=ACC, positions=POS,
-                       orders=ORDERS, dual=DUAL, tr=TR_OK, balance=BAL)
+        _mock_exchange(monkeypatch, account=ACC, tr=TR_OK)
         _login(client)
         blob = client.get("/api/v1/overview").get_data(as_text=True)
         assert "total_portfolio" not in blob and "combined_total" not in blob
@@ -282,8 +234,7 @@ class TestCacheAndFreshness:
 
     def test_manual_refresh_invalidates_and_csrf_audits(self, client,
                                                         monkeypatch):
-        _mock_exchange(monkeypatch, account=ACC, positions=POS,
-                       orders=ORDERS, dual=DUAL, tr=TR_OK, balance=BAL)
+        _mock_exchange(monkeypatch, account=ACC, tr=TR_OK)
         _login(client)
         client.get("/api/v1/tr/account")
         r = client.post("/api/v1/refresh")
@@ -320,8 +271,8 @@ class TestCacheAndFreshness:
         monkeypatch.setattr(dapi.requests, "get", fake_get)
         monkeypatch.setattr(dapi.time, "sleep", lambda s: None)
         with pytest.raises(dapi.SafeExchangeError) as e:
-            dapi._signed_get(dapi.GLOBAL_BASE, "/fapi/v2/balance",
-                             dapi.GLOBAL_ALLOWLIST, "k", "s")
+            dapi._signed_get("https://example.invalid", "/x",
+                             {("GET", "/x")}, "k", "s")
         assert e.value.code == "EXCHANGE_UNAVAILABLE"
         assert attempts["n"] == dapi.MAX_RETRIES + 1  # sınır aşılmaz
 
@@ -334,8 +285,8 @@ class TestCacheAndFreshness:
                             lambda *a, **k: (attempts.__setitem__(
                                 "n", attempts["n"] + 1), FakeResp())[1])
         with pytest.raises(dapi.SafeExchangeError) as e:
-            dapi._signed_get(dapi.GLOBAL_BASE, "/fapi/v2/balance",
-                             dapi.GLOBAL_ALLOWLIST, "k", "s")
+            dapi._signed_get("https://example.invalid", "/x",
+                             {("GET", "/x")}, "k", "s")
         assert e.value.code == "EXCHANGE_RATE_LIMITED"
         assert attempts["n"] == 1  # oran sınırında tekrar deneme YOK
 
@@ -347,8 +298,8 @@ class TestCacheAndFreshness:
         monkeypatch.setattr(dapi.requests, "get", lambda *a, **k: FakeResp())
         monkeypatch.setattr(dapi.time, "sleep", lambda s: None)
         with pytest.raises(dapi.SafeExchangeError) as e:
-            dapi._signed_get(dapi.GLOBAL_BASE, "/fapi/v2/balance",
-                             dapi.GLOBAL_ALLOWLIST, "k", "s")
+            dapi._signed_get("https://example.invalid", "/x",
+                             {("GET", "/x")}, "k", "s")
         assert e.value.code == "INVALID_EXCHANGE_RESPONSE"
 
 
@@ -356,8 +307,7 @@ class TestCacheAndFreshness:
 
 class TestWriteSafety:
     def test_write_counters_zero(self, client, monkeypatch):
-        _mock_exchange(monkeypatch, account=ACC, positions=POS,
-                       orders=ORDERS, dual=DUAL, tr=TR_OK, balance=BAL)
+        _mock_exchange(monkeypatch, account=ACC, tr=TR_OK)
         _login(client)
         client.get("/api/v1/overview")
         client.post("/api/v1/refresh")
@@ -366,16 +316,14 @@ class TestWriteSafety:
 
     def test_allowlist_blocks_non_get(self):
         with pytest.raises(RuntimeError, match="GÜVENLİK BLOĞU"):
-            dapi._signed_get(dapi.GLOBAL_BASE, "/fapi/v1/order",
-                             dapi.GLOBAL_ALLOWLIST, "k", "s")
+            dapi._signed_get(dapi.SPOT_BASE, "/api/v3/order",
+                             dapi.SPOT_ALLOWLIST, "k", "s")
 
     def test_allowlist_only_get_methods(self):
-        for method, _ in dapi.GLOBAL_ALLOWLIST | dapi.TR_ALLOWLIST:
+        for method, _ in dapi.SPOT_ALLOWLIST | dapi.TR_ALLOWLIST:
             assert method == "GET"
 
-    READ_ONLY_ALLOWED = {"/api/v1/global/orders",
-                         "/api/v1/global/orders/export.csv",
-                         "/orders",
+    READ_ONLY_ALLOWED = {
                          # Mission 2200: operasyon merkezi salt-okunur
                          # emir görünümü (GET, borsa yazması yok).
                          "/api/operation-control/orders",
@@ -402,32 +350,19 @@ class TestWriteSafety:
 class TestMalformedPayloads:
     """Bozuk-ama-JSON borsa yanıtı 500'e dönüşmemeli (kaynak izolasyonu)."""
 
-    BAD_ACC = {"canTrade": True, "totalUnrealizedProfit": "??",
-               "assets": [{"asset": "USDT", "walletBalance": "not-a-number",
-                           "availableBalance": None, "marginBalance": ""}],
-               "positions": [{"positionAmt": "garbage"}]}
-    BAD_POS = [{"symbol": "BTCUSDT", "positionAmt": "NaN?", "entryPrice": "x",
-                "markPrice": None, "unRealizedProfit": "", "leverage": "y",
-                "liquidationPrice": "z", "marginType": "cross",
-                "isolatedWallet": "w", "updateTime": 1}]
+    BAD_ACC = {"canTrade": True,
+               "balances": [{"asset": "USDT", "free": "not-a-number",
+                             "locked": None}]}
     BAD_TR = {"code": 0, "data": {"accountAssets": [
         {"asset": "TRY", "free": "bozuk", "locked": None}]}}
 
-    def test_malformed_global_account_no_500(self, client, monkeypatch):
-        _mock_exchange(monkeypatch, account=self.BAD_ACC, positions=POS,
-                       orders=ORDERS, dual=DUAL, tr=TR_OK, balance=BAL)
+    def test_malformed_spot_account_no_500(self, client, monkeypatch):
+        _mock_exchange(monkeypatch, account=self.BAD_ACC, tr=TR_OK)
         _login(client)
-        r = client.get("/api/v1/global/account")
+        r = client.get("/api/v1/overview")
         assert r.status_code == 200
-        d = r.get_json()
-        assert d["ok"] is True  # güvenli ayrıştırıcı: bozuk alan → "0"
-        assert d["usdt_wallet_balance"] == "0"
-
-    def test_malformed_positions_no_500(self, client, monkeypatch):
-        _mock_exchange(monkeypatch, positions=self.BAD_POS)
-        _login(client)
-        r = client.get("/api/v1/global/positions")
-        assert r.status_code == 200 and r.get_json()["ok"] is True
+        d = r.get_json()["global_spot"]
+        assert d["ok"] is True  # güvenli ayrıştırıcı: bozuk alan → 0
 
     def test_overview_isolates_unexpected_error(self, client, monkeypatch):
         # Global tarafı beklenmedik hata fırlatsa bile TR kartı çalışır
@@ -444,8 +379,8 @@ class TestMalformedPayloads:
         assert r.status_code == 200
         d = r.get_json()
         assert d["tr"]["ok"] is True
-        assert d["global_futures"]["ok"] is False
-        assert d["global_futures"]["error"]["code"] == \
+        assert d["global_spot"]["ok"] is False
+        assert d["global_spot"]["error"]["code"] == \
             "INVALID_EXCHANGE_RESPONSE"
         assert "beklenmedik" not in json.dumps(d)  # iç hata sızmaz
 
@@ -464,7 +399,7 @@ class TestFrontend:
         r = client.get("/overview")
         assert r.status_code == 200
         body = r.get_data(as_text=True)
-        for label in ("Genel Bakış", "Tümünü Yenile", "Binance Futures",
+        for label in ("Genel Bakış", "Tümünü Yenile", "Binance Global",
                       "Binance TR", "Sistem Sağlığı",
                       "Canlı emir: DEVRE DIŞI", "GÜNCEL", "ESKİ VERİ",
                       "KULLANILAMIYOR"):
@@ -478,7 +413,7 @@ class TestFrontend:
         _login(client)
         body = client.get("/overview").get_data(as_text=True)
         for name in ("BINANCE_API_SECRET", "BINANCE_TR_API_SECRET",
-                     "BINANCE_TRADING_API_SECRET", "SESSION_SECRET"):
+                     "SESSION_SECRET"):
             v = os.environ.get(name)
             if v and len(v) > 8:
                 assert v not in body

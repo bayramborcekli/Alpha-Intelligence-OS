@@ -22,15 +22,9 @@ from typing import Any
 
 import requests
 
-GLOBAL_BASE = "https://fapi.binance.com"
 TR_BASE = "https://www.binance.tr"  # tek adaptör: binance_tr_client (eski trbinance.com KULLANILMAZ)
 
-# Yalnızca GET; ağ isteğinden önce zorunlu.
-GLOBAL_ALLOWLIST = {
-    ("GET", "/fapi/v2/balance"),
-    ("GET", "/fapi/v2/account"),
-    ("GET", "/fapi/v2/positionRisk"),
-}
+# Yalnızca GET; ağ isteğinden önce zorunlu. (Spot-only: futures YOK.)
 TR_ALLOWLIST = {
     ("GET", "/open/v1/account/spot"),
 }
@@ -81,39 +75,6 @@ def _fail_closed(source: str) -> dict:
                      "gönderilmedi)"}
 
 
-def global_futures_summary() -> dict[str, Any]:
-    """Binance Global USDT-M futures bakiye özeti (salt okunur anahtar)."""
-    key = os.environ.get("BINANCE_API_KEY", "")
-    sec = os.environ.get("BINANCE_API_SECRET", "")
-    if not key or not sec:
-        return _fail_closed("binance_global_futures")
-
-    def build() -> dict:
-        try:
-            r = _signed_get(GLOBAL_BASE, "/fapi/v2/balance",
-                            GLOBAL_ALLOWLIST, key, sec)
-            if r.status_code != 200:
-                return {"source": "binance_global_futures",
-                        "configured": True, "ok": False,
-                        "key_masked": mask(key),
-                        "error": f"HTTP {r.status_code}"}
-            rows = r.json()
-            balances = [{"asset": b["asset"],
-                         "balance": b.get("balance"),
-                         "available": b.get("availableBalance")}
-                        for b in rows
-                        if Decimal(str(b.get("balance") or 0)) != 0]
-            return {"source": "binance_global_futures", "configured": True,
-                    "ok": True, "key_masked": mask(key),
-                    "balances": balances, "read_only": True}
-        except Exception as exc:  # bozuk/beklenmedik yanıt → güvenli hata
-            return {"source": "binance_global_futures", "configured": True,
-                    "ok": False, "key_masked": mask(key),
-                    "error": f"yanıt hatası: {type(exc).__name__}"}
-
-    return _cached("global_futures", build)
-
-
 def tr_spot_summary() -> dict[str, Any]:
     """Binance TR spot bakiye özeti (salt okunur anahtar)."""
     key = os.environ.get("BINANCE_TR_API_KEY", "")
@@ -158,6 +119,5 @@ def exchange_summary() -> dict[str, Any]:
     return {
         "live_trading": False,      # Mission 1400: otomatik canlı emir YOK
         "cache_ttl_seconds": CACHE_TTL_SECONDS,
-        "global_futures": global_futures_summary(),
         "tr_spot": tr_spot_summary(),
     }

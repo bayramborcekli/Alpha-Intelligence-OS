@@ -58,7 +58,6 @@
   </div>
   <div class="xh-row xh-status" role="group" aria-label="Sistem durum çubuğu">
     <span class="xh-st">Binance Global <span id="xh-s-bg">—</span></span>
-    <span class="xh-st">Binance Futures <span id="xh-s-bf">—</span></span>
     <span class="xh-st">Binance TR <span id="xh-s-tr">—</span></span>
     <span class="xh-st">Defter <span id="xh-s-led">—</span></span>
     <span class="xh-st">Denetim <span id="xh-s-aud">—</span></span>
@@ -97,7 +96,7 @@
       ["xh-rpnl","xh-dpct","xh-tpct","xh-7d","xh-30d"].forEach(function (i) {
         setVal(i, null, "—");
       });
-      ["xh-s-bg","xh-s-bf","xh-s-tr","xh-s-led","xh-s-aud","xh-s-risk","xh-s-hp"]
+      ["xh-s-bg","xh-s-tr","xh-s-led","xh-s-aud","xh-s-risk","xh-s-hp"]
         .forEach(function (i) { setSt(i, "Bağlantı Yok"); });
     }
     function refresh() {
@@ -128,7 +127,6 @@
           setVal("xh-risk", p.risk_level, "Veri Yok");
           var s = d.status_bar || {};
           setSt("xh-s-bg", s.binance_global);
-          setSt("xh-s-bf", s.binance_futures);
           setSt("xh-s-tr", s.binance_tr);
           setSt("xh-s-led", s.ledger);
           setSt("xh-s-aud", s.audit);

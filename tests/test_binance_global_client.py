@@ -137,21 +137,30 @@ class TestTransportPolicy:
             assert status == 401 and g.call_count == 1  # 4xx retry YOK
 
 
-class TestFuturesDisabled:
-    def test_disabled_by_default_no_network(self, monkeypatch):
+class TestFuturesRemoved:
+    def test_removed_tombstone_no_network(self, monkeypatch):
         import dashboard_api as dapi
-        monkeypatch.delenv("ALPHA_FUTURES_ENABLED", raising=False)
         with mock.patch.object(dapi, "_signed_get") as g:
             for fn in (dapi.global_account, dapi.global_positions,
                        dapi.global_orders):
                 model = fn()
                 assert model["status"] == "DISABLED"
-                assert model["error"]["code"] == "FUTURES_DISABLED"
+                assert model["error"]["code"] == "FUTURES_REMOVED"
             g.assert_not_called()
 
-    def test_overview_no_warning_when_disabled(self, monkeypatch):
+    def test_no_fapi_or_flag_remnants(self):
         import dashboard_api as dapi
-        monkeypatch.delenv("ALPHA_FUTURES_ENABLED", raising=False)
+        from pathlib import Path
+        assert not hasattr(dapi, "futures_enabled")
+        assert not hasattr(dapi, "GLOBAL_BASE")
+        assert not hasattr(dapi, "GLOBAL_ALLOWLIST")
+        src = (Path(__file__).resolve().parent.parent
+               / "dashboard_api.py").read_text()
+        assert "fapi.binance.com" not in src
+        assert "ALPHA_FUTURES_ENABLED" not in src
+
+    def test_overview_no_warning_when_removed(self, monkeypatch):
+        import dashboard_api as dapi
         dapi.invalidate_caches()
         boom = dapi.SafeExchangeError("EXCHANGE_UNAVAILABLE", "mock")
 
@@ -171,11 +180,6 @@ class TestFuturesDisabled:
         assert "Pozisyonlar" not in joined
         dapi.invalidate_caches()
 
-    def test_enabled_flag_restores_futures(self, monkeypatch):
-        import dashboard_api as dapi
-        monkeypatch.setenv("ALPHA_FUTURES_ENABLED", "1")
-        assert dapi.futures_enabled() is True
-
 
 class TestGlobalCredAliases:
     def test_alias_names_accepted(self, monkeypatch):
@@ -185,6 +189,16 @@ class TestGlobalCredAliases:
         monkeypatch.setenv("BINANCE_GLOBAL_API_Key", "aliaskey")
         monkeypatch.setenv("BINANCE_GLOBAL_Secret_Key", "aliassec")
         assert dapi._global_creds() == ("aliaskey", "aliassec")
+
+    def test_mixed_case_short_alias_accepted(self, monkeypatch):
+        import dashboard_api as dapi
+        for k in ("BINANCE_API_KEY", "BINANCE_API_SECRET",
+                  "BINANCE_GLOBAL_API_KEY", "BINANCE_GLOBAL_API_SECRET",
+                  "BINANCE_GLOBAL_API_Key", "BINANCE_GLOBAL_Secret_Key"):
+            monkeypatch.delenv(k, raising=False)
+        monkeypatch.setenv("BINANCE_API_Key", "shortkey")
+        monkeypatch.setenv("BINANCE_Secret_Key", "shortsec")
+        assert dapi._global_creds() == ("shortkey", "shortsec")
 
     def test_canonical_wins(self, monkeypatch):
         import dashboard_api as dapi

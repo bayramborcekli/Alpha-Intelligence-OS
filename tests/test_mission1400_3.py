@@ -39,37 +39,10 @@ def _login(c):
                   json={"username": "sahip", "password": PASSWORD})
 
 
-ACC = {"canTrade": True, "totalUnrealizedProfit": "1.25", "assets": [
-    {"asset": "USDT", "walletBalance": "64442.20",
-     "availableBalance": "64000.5", "marginBalance": "64442.9",
-     "unrealizedProfit": "0.7", "initialMargin": "10", "maintMargin": "5",
-     "openOrderInitialMargin": "2", "positionInitialMargin": "8",
-     "updateTime": 111},
-    {"asset": "BNB", "walletBalance": "0", "availableBalance": "0",
-     "marginBalance": "0", "unrealizedProfit": "0", "updateTime": 0},
-    {"asset": "=EVIL", "walletBalance": "1", "availableBalance": "1",
-     "marginBalance": "1", "unrealizedProfit": "0", "updateTime": 0}],
-    "positions": []}
-POS = [{"symbol": "BTCUSDT", "positionAmt": "0.5", "entryPrice": "50000",
-        "markPrice": "51000", "unRealizedProfit": "500.5", "leverage": "5",
-        "liquidationPrice": "40000", "marginType": "cross",
-        "isolatedWallet": "0", "updateTime": 1},
-       {"symbol": "ETHUSDT", "positionAmt": "-2", "entryPrice": "3000",
-        "markPrice": "2900", "unRealizedProfit": "-100.2", "leverage": "3",
-        "liquidationPrice": "4000", "marginType": "isolated",
-        "isolatedWallet": "100", "updateTime": 2},
-       {"symbol": "XRPUSDT", "positionAmt": "0", "entryPrice": "0",
-        "markPrice": "0.5", "unRealizedProfit": "0", "leverage": "10",
-        "liquidationPrice": "0", "marginType": "cross",
-        "isolatedWallet": "0", "updateTime": 3}]
-ORDERS = [{"symbol": "BTCUSDT", "side": "SELL", "type": "LIMIT",
-           "status": "PARTIALLY_FILLED", "origQty": "0.5",
-           "executedQty": "0.2", "price": "60000", "stopPrice": "0",
-           "reduceOnly": True, "time": 10, "updateTime": 20},
-          {"symbol": "ETHUSDT", "side": "BUY", "type": "STOP_MARKET",
-           "status": "NEW", "origQty": "1", "executedQty": "0",
-           "price": "0", "stopPrice": "2500", "reduceOnly": False,
-           "time": 5, "updateTime": 6}]
+ACC = {"canTrade": True, "balances": [
+    {"asset": "USDT", "free": "64442.20", "locked": "0"},
+    {"asset": "BNB", "free": "0", "locked": "0"},
+    {"asset": "=EVIL", "free": "1", "locked": "0"}]}
 TR_OK = {"code": 0, "data": {"status": 1, "accountAssets": [
     {"asset": "TRY", "free": "1.3942", "locked": "0.5", "updateTime": 9},
     {"asset": "USDT", "free": "20.9685", "locked": "0"},
@@ -77,16 +50,12 @@ TR_OK = {"code": 0, "data": {"status": 1, "accountAssets": [
     {"asset": "SHIB", "free": "0", "locked": "0"}]}}
 
 
-def _mock(monkeypatch, account=ACC, positions=POS, orders=ORDERS, tr=TR_OK):
+def _mock(monkeypatch, account=ACC, tr=TR_OK):
     def fake(base, path, allowlist, key, secret, params=None, timeout=10):
         if ("GET", path) not in allowlist:
             raise RuntimeError("allowlist ihlali")
-        table = {"/fapi/v2/account": account,
-                 "/fapi/v2/positionRisk": positions,
-                 "/fapi/v1/openOrders": orders,
-                 "/fapi/v1/positionSide/dualSide": {"dualSidePosition": False},
-                 "/open/v1/account/spot": tr,
-                 "/fapi/v2/balance": []}
+        table = {"/api/v3/account": account,
+                 "/open/v1/account/spot": tr}
         val = table.get(path)
         if val is None:
             raise dapi.SafeExchangeError("EXCHANGE_UNAVAILABLE", "mock yok")
@@ -98,10 +67,8 @@ def _mock(monkeypatch, account=ACC, positions=POS, orders=ORDERS, tr=TR_OK):
         monkeypatch.setenv(k, "x" * 20)
 
 
-PAGES = ["/portfolio", "/positions", "/orders"]
-APIS = ["/api/v1/portfolio", "/api/v1/portfolio/export.csv",
-        "/api/v1/global/positions/export.csv",
-        "/api/v1/global/orders/export.csv"]
+PAGES = ["/portfolio"]
+APIS = ["/api/v1/portfolio", "/api/v1/portfolio/export.csv"]
 
 
 class TestAuth:
@@ -122,12 +89,11 @@ class TestPortfolioBackend:
         d = client.get("/api/v1/portfolio?include_zero=true").get_json()
         assert d["live_execution_enabled"] is False
         srcs = [s["source"] for s in d["sections"]]
-        assert srcs == ["BINANCE_GLOBAL_FUTURES", "BINANCE_TR"]
+        assert srcs == ["BINANCE_GLOBAL_SPOT", "BINANCE_TR"]
         gf = d["sections"][0]
         usdt = next(a for a in gf["assets"] if a["asset"] == "USDT")
-        assert Decimal(usdt["wallet_balance"]) == Decimal("64442.20")
-        assert usdt["margin_balance"] == "64442.9"
-        assert usdt["initial_margin"] == "10"
+        assert Decimal(usdt["free"]) == Decimal("64442.20")
+        assert Decimal(usdt["total"]) == Decimal("64442.20")
         tr = d["sections"][1]
         try_row = next(a for a in tr["assets"] if a["asset"] == "TRY")
         assert Decimal(try_row["total"]) == Decimal("1.8942")  # Decimal toplam
@@ -180,28 +146,27 @@ class TestPortfolioBackend:
         gf, tr = d["sections"]
         assert gf["ok"] is False and gf["assets"] == []
         assert tr["ok"] is True and len(tr["assets"]) >= 1
-        assert any("BINANCE_GLOBAL_FUTURES" in w for w in d["warnings"])
+        assert any("BINANCE_GLOBAL_SPOT" in w for w in d["warnings"])
 
     def test_malformed_asset_isolation(self, client, monkeypatch):
-        bad = {"canTrade": True, "assets": [
-            {"asset": "USDT", "walletBalance": "not-a-number"}, "çöp", None],
-            "positions": []}
+        bad = {"canTrade": True, "balances": [
+            {"asset": "USDT", "free": "not-a-number"}, "çöp", None]}
         _mock(monkeypatch, account=bad)
         _login(client)
         r = client.get("/api/v1/portfolio?include_zero=true")
         assert r.status_code == 200
         gf = r.get_json()["sections"][0]
         assert gf["ok"] is True
-        assert gf["assets"][0]["wallet_balance"] == "0"
+        assert gf["assets"][0]["free"] == "0"
 
     def test_empty_assets_with_sort_no_500(self, client, monkeypatch):
         # Boş varlık listesi + sort parametresi 500 üretmemeli
-        empty_acc = {"canTrade": True, "assets": [], "positions": []}
+        empty_acc = {"canTrade": True, "balances": []}
         empty_tr = {"code": 0, "data": {"accountAssets": []}}
         _mock(monkeypatch, account=empty_acc, tr=empty_tr)
         _login(client)
         for qs in ("?sort=asset", "?sort=total&order=desc",
-                   "?sort=wallet_balance&include_zero=true"):
+                   "?sort=free&include_zero=true"):
             r = client.get("/api/v1/portfolio" + qs)
             assert r.status_code == 200, qs
             d = r.get_json()
@@ -216,78 +181,36 @@ class TestPortfolioBackend:
         _login(client)
         r = client.get("/api/v1/portfolio?sort=total&include_zero=true")
         assert r.status_code == 200
-        r2 = client.get("/api/v1/portfolio?sort=wallet_balance")
+        r2 = client.get("/api/v1/portfolio?sort=free")
         assert r2.status_code == 200
 
     def test_limit_bounded(self, client, monkeypatch):
-        big = {"canTrade": True, "positions": [], "assets": [
-            {"asset": f"A{i}", "walletBalance": "1"} for i in range(700)]}
+        big = {"canTrade": True, "balances": [
+            {"asset": f"A{i}", "free": "1", "locked": "0"}
+            for i in range(700)]}
         _mock(monkeypatch, account=big)
         _login(client)
         d = client.get("/api/v1/portfolio?limit=500").get_json()
         assert len(d["sections"][0]["assets"]) <= 500
 
 
-class TestPositionsBackend:
-    def test_direction_and_summary(self, client, monkeypatch):
+class TestFuturesSurfacesRemoved:
+    def test_positions_orders_apis_gone(self, client, monkeypatch):
         _mock(monkeypatch)
         _login(client)
-        d = client.get("/api/v1/global/positions").get_json()
-        assert d["ok"] is True
-        dirs = {p["symbol"]: p["direction"] for p in d["positions"]}
-        assert dirs == {"BTCUSDT": "LONG", "ETHUSDT": "SHORT"}
-        btc = next(p for p in d["positions"] if p["symbol"] == "BTCUSDT")
-        eth = next(p for p in d["positions"] if p["symbol"] == "ETHUSDT")
-        assert btc["position_amt"] == "0.5" and btc["abs_quantity"] == "0.5"
-        assert eth["position_amt"] == "-2" and eth["abs_quantity"] == "2"
-        s = d["summary"]
-        assert s["active_count"] == 2
-        assert s["long_count"] == 1 and s["short_count"] == 1
-        # Decimal toplama: 500.5 + (-100.2) = 400.3 (float sapması yok)
-        assert Decimal(s["total_unrealized_pnl"]) == Decimal("400.3")
-        assert "Gerçekleşmemiş" in s["pnl_note"]
+        for u in ("/api/v1/global/positions", "/api/v1/global/orders",
+                  "/api/v1/global/positions/export.csv",
+                  "/api/v1/global/orders/export.csv"):
+            assert client.get(u).status_code == 404, u
 
-    def test_include_zero_flat(self, client, monkeypatch):
-        _mock(monkeypatch)
-        _login(client)
-        d = client.get(
-            "/api/v1/global/positions?include_zero=true").get_json()
-        flat = [p for p in d["positions"] if p["direction"] == "FLAT"]
-        assert len(flat) == 1 and flat[0]["symbol"] == "XRPUSDT"
-        # TEK YÖN: aynı sembolde eşzamanlı LONG+SHORT üretilmez
-        symbols = [p["symbol"] for p in d["positions"]]
-        assert len(symbols) == len(set(symbols))
-
-    def test_invalid_include_zero(self, client, monkeypatch):
-        _mock(monkeypatch)
-        _login(client)
-        r = client.get("/api/v1/global/positions?include_zero=belki")
-        assert r.status_code == 400
-
-    def test_malformed_row_isolation(self, client, monkeypatch):
-        _mock(monkeypatch, positions=[{"symbol": "BTCUSDT",
-                                       "positionAmt": "çöp"}])
-        _login(client)
-        r = client.get("/api/v1/global/positions")
-        assert r.status_code == 200 and r.get_json()["ok"] is True
-
-
-class TestOrdersBackend:
-    def test_mapping_and_remaining(self, client, monkeypatch):
-        _mock(monkeypatch)
-        _login(client)
-        d = client.get("/api/v1/global/orders").get_json()
-        assert d["ok"] is True
-        btc = next(o for o in d["orders"] if o["symbol"] == "BTCUSDT")
-        assert Decimal(btc["remaining_qty"]) == Decimal("0.3")  # Decimal fark
-        assert btc["status"] == "PARTIALLY_FILLED"  # durumdan türetilmez
-        s = d["summary"]
-        assert s == {"open_count": 2, "buy_count": 1, "sell_count": 1,
-                     "reduce_only_count": 1}
+    def test_views_pass_through_tombstone(self):
+        for view in (pf.positions_view, pf.orders_view):
+            m = view()
+            assert m["ok"] is False
+            assert m["error"]["code"] == "FUTURES_REMOVED"
 
     def test_no_write_routes(self):
-        allowed = {"/api/v1/global/orders", "/api/v1/global/orders/export.csv",
-                   "/orders"}  # /orders sayfası: salt-okunur GET görünümü
+        allowed = set()
         for rule in flask_app.app.url_map.iter_rules():
             p = str(rule).lower()
             # Mission 2200 bilinçli genişletme: operasyon merkezi
@@ -301,14 +224,6 @@ class TestOrdersBackend:
                 assert p in allowed, f"yasak rota: {rule}"
                 methods = (rule.methods or set()) - {"HEAD", "OPTIONS"}
                 assert methods == {"GET"}, f"yazma metodu: {rule}"
-
-    def test_malformed_order_isolation(self, client, monkeypatch):
-        _mock(monkeypatch, orders=[{"symbol": "X", "origQty": "abc",
-                                    "executedQty": None}])
-        _login(client)
-        r = client.get("/api/v1/global/orders")
-        assert r.status_code == 200 and r.get_json()["ok"] is True
-        assert r.get_json()["orders"][0]["remaining_qty"] == "0"
 
 
 class TestCsvExport:
@@ -333,22 +248,6 @@ class TestCsvExport:
         assert any("'+HACK" in ln for ln in lines)
         assert "x" * 20 not in text
 
-    def test_positions_csv_negative_preserved(self, client, monkeypatch):
-        _mock(monkeypatch)
-        _login(client)
-        text = self._csv(client, "/api/v1/global/positions/export.csv")
-        assert "-2" in text          # negatif Decimal DEĞİŞMEZ
-        assert "-100.2" in text
-        assert "'-2" not in text     # sayısal sütun tırnaklanmaz
-
-    def test_orders_csv(self, client, monkeypatch):
-        _mock(monkeypatch)
-        _login(client)
-        text = self._csv(client, "/api/v1/global/orders/export.csv")
-        lines = text.strip().splitlines()
-        assert lines[0].startswith("symbol,side,type,status,")
-        assert any(",0.3," in ln for ln in lines)  # remaining_qty
-
     def test_csv_invalid_param(self, client, monkeypatch):
         _mock(monkeypatch)
         _login(client)
@@ -367,10 +266,7 @@ class TestWriteSafety:
     def test_counters_zero_after_all(self, client, monkeypatch):
         _mock(monkeypatch)
         _login(client)
-        for u in ["/api/v1/portfolio", "/api/v1/global/positions",
-                  "/api/v1/global/orders", "/api/v1/portfolio/export.csv",
-                  "/api/v1/global/positions/export.csv",
-                  "/api/v1/global/orders/export.csv"]:
+        for u in ["/api/v1/portfolio", "/api/v1/portfolio/export.csv"]:
             client.get(u)
         client.post("/api/v1/refresh")
         d = client.get("/api/v1/system/status").get_json()
@@ -378,7 +274,7 @@ class TestWriteSafety:
 
     def test_no_action_strings_in_templates(self):
         from pathlib import Path
-        for name in ("portfolio.html", "positions.html", "orders.html"):
+        for name in ("portfolio.html",):
             body = Path("templates", name).read_text().lower()
             for banned in ("emri iptal", "pozisyonu kapat", "emir gönder",
                            "cancelorder", "closeposition", "submitorder"):
@@ -393,10 +289,6 @@ class TestFrontend:
             "/portfolio": ["Portföy", "Sıfır Bakiyeleri Göster",
                            "CSV Dışa Aktar", "Canlı emir: DEVRE DIŞI",
                            "birleşik toplam gösterilmez"],
-            "/positions": ["Pozisyonlar", "Sıfır Pozisyonları Göster",
-                           "Toplam Gerçekleşmemiş PnL", "TEK YÖN"],
-            "/orders": ["Emirler", "Reduce-Only", "iptal/düzenleme/gönderme "
-                        "yoktur"],
         }
         for url, labels in checks.items():
             body = client.get(url).get_data(as_text=True)
@@ -408,10 +300,10 @@ class TestFrontend:
     def test_nav_links_active(self, client):
         _login(client)
         shell = client.get("/start").get_data(as_text=True)
-        for href in ('href="/portfolio"', 'href="/positions"',
-                     'href="/orders"'):
-            assert href in shell
-        assert "Sonraki sprint\">Portföy" not in shell
+        assert 'href="/portfolio"' in shell
+        # Spot-only: Futures sayfa bağlantıları kaldırıldı
+        assert 'href="/positions"' not in shell
+        assert 'href="/orders"' not in shell
 
     def test_no_secrets_in_pages(self, client, monkeypatch):
         import os

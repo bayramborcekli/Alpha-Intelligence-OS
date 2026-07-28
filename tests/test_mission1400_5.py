@@ -42,7 +42,7 @@ def _login(c):
                   json={"username": "sahip", "password": PASSWORD})
 
 
-ALL_PAGES = ["/", "/overview", "/portfolio", "/positions", "/orders",
+ALL_PAGES = ["/", "/overview", "/portfolio",
              "/ledger", "/audit", "/reports"]
 
 
@@ -74,9 +74,11 @@ class TestSummaryModel:
         # 1400.6 sonrası: risk_level doğrulanmış deterministik motor
         # skorundan gelir (veya kaynak yoksa null) — asla tahmin değildir.
         assert p["risk_level"] is None or "/100" in p["risk_level"]
-        assert p["portfolio_total_label"] == "Global Futures (USDT)"
+        assert p["portfolio_total_label"] in (
+            "Global Spot (USDT)", "Global Spot (USDT, kısmi)")
         s = d["status_bar"]
-        for k in ("binance_global", "binance_futures", "binance_tr",
+        assert "binance_futures" not in s  # Spot-only: kalıntı yok
+        for k in ("binance_global", "binance_tr",
                   "ledger", "audit", "risk_engine", "health"):
             assert s[k] in ("Bağlı", "Kısmi", "Bağlantı Yok"), k
         assert s["health"] == "Bağlı"
@@ -85,9 +87,7 @@ class TestSummaryModel:
         # Borsa kaynakları çökse bile özet ayakta kalır, değerler null olur
         def boom(*a, **k):
             return {"ok": False, "error": {"code": "X", "message": "y"}}
-        monkeypatch.setattr(xa.dapi, "global_account", boom)
-        monkeypatch.setattr(xa.pf, "positions_view", boom)
-        monkeypatch.setattr(xa.pf, "orders_view", boom)
+        monkeypatch.setattr(xa.dapi, "global_spot_account", boom)
         monkeypatch.setattr(xa.dapi, "tr_account", boom)
         _login(client)
         d = client.get("/api/v1/executive/summary").get_json()
@@ -128,10 +128,11 @@ class TestTopbarEverywhere:
         for label in ("Toplam Portföy", "Gerçekleşmemiş PnL",
                       "Gerçekleşmiş PnL", "Günlük K/Z %", "Toplam K/Z %",
                       "7 Günlük", "30 Günlük", "Açık Pozisyon", "Açık Emir",
-                      "Risk Seviyesi", "Binance Global", "Binance Futures",
+                      "Risk Seviyesi", "Binance Global",
                       "Binance TR", "Defter", "Denetim", "Risk Motoru",
                       "Sağlık", "Son Güncelleme"):
             assert label in html, label
+        assert "Binance Futures" not in html  # Spot-only
 
     def test_no_action_controls_in_topbar(self, client):
         _login(client)
@@ -150,9 +151,11 @@ class TestQuickActions:
         _login(client)
         html = client.get("/overview").get_data(as_text=True)
         assert "Hızlı Erişim" in html
-        for href in ("/portfolio", "/positions", "/orders", "/ledger",
+        for href in ("/portfolio", "/ledger",
                      "/audit", "/reports", "/risk"):   # /risk 1400.6'da aktif
             assert f'class="quick-card" href="{href}"' in html, href
+        for gone in ("/positions", "/orders"):  # Spot-only: kaldırıldı
+            assert f'href="{gone}"' not in html, gone
         for disabled in ("Dry Run", "Sistem Sağlığı", "Ayarlar"):
             assert disabled in html, disabled
         assert html.count('aria-disabled="true"') >= 3

@@ -1579,28 +1579,6 @@ def api_v1_overview():
     return _dash_json(dapi.overview(_dashboard_app_info()))
 
 
-@app.get("/api/v1/global/account")
-def api_v1_global_account():
-    import dashboard_api as dapi
-    return _dash_json(dapi.global_account())
-
-
-@app.get("/api/v1/global/positions")
-def api_v1_global_positions():
-    import portfolio_api as pf
-    try:
-        include_zero = pf._parse_bool(request.args.get("include_zero"))
-    except pf.InvalidParameter as e:
-        return _invalid_param(e.name)
-    return _dash_json(pf.positions_view(include_zero=include_zero))
-
-
-@app.get("/api/v1/global/orders")
-def api_v1_global_orders():
-    import portfolio_api as pf
-    return _dash_json(pf.orders_view())
-
-
 @app.get("/api/v1/tr/account")
 def api_v1_tr_account():
     import dashboard_api as dapi
@@ -1710,40 +1688,6 @@ def api_v1_portfolio_export():
                  "Cache-Control": "no-store, private"})
 
 
-@app.get("/api/v1/global/positions/export.csv")
-def api_v1_positions_export():
-    import portfolio_api as pf
-    try:
-        include_zero = pf._parse_bool(request.args.get("include_zero"))
-    except pf.InvalidParameter as e:
-        return _invalid_param(e.name)
-    try:
-        body, fname = pf.positions_csv(include_zero)
-    except Exception:
-        return _api_error("CSV üretimi başarısız oldu.", 500)
-    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
-                   detail="csv export: positions")
-    return app.response_class(
-        body, mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={fname}",
-                 "Cache-Control": "no-store, private"})
-
-
-@app.get("/api/v1/global/orders/export.csv")
-def api_v1_orders_export():
-    import portfolio_api as pf
-    try:
-        body, fname = pf.orders_csv()
-    except Exception:
-        return _api_error("CSV üretimi başarısız oldu.", 500)
-    slog.log_event(slog.STARTUP, ip=auth.get_client_ip(),
-                   detail="csv export: orders")
-    return app.response_class(
-        body, mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={fname}",
-                 "Cache-Control": "no-store, private"})
-
-
 def _render_workspace(template: str, page: str):
     from version import get_version
     import alpha_platform as ap
@@ -1761,16 +1705,6 @@ def _render_workspace(template: str, page: str):
 @app.get("/portfolio")
 def portfolio_page():
     return _render_workspace("portfolio.html", "portfolio")
-
-
-@app.get("/positions")
-def positions_page():
-    return _render_workspace("positions.html", "positions")
-
-
-@app.get("/orders")
-def orders_page():
-    return _render_workspace("orders.html", "orders")
 
 
 # ── Mission 1400.4 — Defter / Denetim / Raporlar (salt okunur) ──────────────
@@ -3132,24 +3066,32 @@ def _account_snapshot(exchange: str) -> dict:
                              "balance": bal, "available": bal,
                              "currency": "USDT"}]}
     if exchange == "BINANCE_GLOBAL":
-        acc = dapi.global_account()
+        # Spot-only mimari: Global hesap SPOT bakiyeleriyle gösterilir.
+        acc = dapi.global_spot_account()
         if not acc.get("ok"):
             return {"status": (acc.get("meta") or {}).get(
                         "freshness", "UNKNOWN"),
                     "value_usdt": "UNKNOWN", "wallets": [],
                     "last_sync_at": (acc.get("meta") or {}).get(
                         "retrieved_at") or "UNKNOWN"}
+        wallets = [{"name": f"Spot Cüzdanı ({h.get('asset')})",
+                    "balance": h.get("amount"),
+                    "available": h.get("amount"),
+                    "currency": h.get("asset")}
+                   for h in (acc.get("top_holdings") or [])]
+        if not wallets:
+            wallets = [{"name": "Spot Cüzdanı (USDT)",
+                        "balance": acc.get("usdt_free") or "0",
+                        "available": acc.get("usdt_free") or "0",
+                        "currency": "USDT"}]
+        total = acc.get("total_spot_value_usdt") or "UNKNOWN"
+        if acc.get("valuation") == "PARTIAL" and total != "UNKNOWN":
+            total = f"{total} (kısmi)"
         return {"status": "OK",
-                "value_usdt": acc.get("usdt_wallet_balance",
-                                      "UNKNOWN"),
+                "value_usdt": total,
                 "last_sync_at": (acc.get("meta") or {}).get(
                     "retrieved_at") or "UNKNOWN",
-                "wallets": [{"name": "Vadeli Cüzdanı (USDT-M)",
-                             "balance": acc.get("usdt_wallet_balance",
-                                                "UNKNOWN"),
-                             "available": acc.get(
-                                 "usdt_available_balance", "UNKNOWN"),
-                             "currency": "USDT"}]}
+                "wallets": wallets}
     if exchange == "BINANCE_TR":
         acc = dapi.tr_account()
         if not acc.get("ok"):
@@ -3264,7 +3206,6 @@ def api_accounts_test(account_id: str):
     conn = reg.CONNECTORS[acc["exchange"]]
     checks = {"connected": "UNKNOWN", "authentication": "UNKNOWN",
               "wallet_access": "UNKNOWN", "spot_permission": "UNKNOWN",
-              "futures_permission": "UNKNOWN",
               "trading_permission": "UNKNOWN",
               "synchronization": "UNKNOWN"}
     if not conn.supported:
@@ -3282,14 +3223,12 @@ def api_accounts_test(account_id: str):
             "overall": "HEALTHY" if ok else "UNKNOWN",
             "checks": checks})
     if acc["exchange"] == "BINANCE_GLOBAL":
-        res = dapi.global_account()
+        # Spot-only mimari: sağlık testi SPOT hesabıyla yapılır.
+        res = dapi.global_spot_account()
         if res.get("ok"):
             checks.update(connected="OK", authentication="OK",
-                          wallet_access="OK",
-                          futures_permission="OK",
-                          trading_permission=(
-                              "OK" if res.get("trading_key_auth") ==
-                              "OK" else "NOT_CONFIGURED"),
+                          wallet_access="OK", spot_permission="OK",
+                          trading_permission="NOT_CONFIGURED",
                           synchronization="OK")
         overall = "HEALTHY" if res.get("ok") else "FAILED"
     else:  # BINANCE_TR
@@ -3297,7 +3236,6 @@ def api_accounts_test(account_id: str):
         if res.get("ok"):
             checks.update(connected="OK", authentication="OK",
                           wallet_access="OK", spot_permission="OK",
-                          futures_permission="NOT_SUPPORTED",
                           synchronization="OK")
         overall = "HEALTHY" if res.get("ok") else "FAILED"
     return _accounts_json(True, {"account_id": account_id,

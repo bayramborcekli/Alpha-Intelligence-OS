@@ -231,7 +231,7 @@ class TestAccountsApi:
         assert body["data"]["overall"] in ("HEALTHY", "UNKNOWN")
         assert set(body["data"]["checks"]) == {
             "connected", "authentication", "wallet_access",
-            "spot_permission", "futures_permission",
+            "spot_permission",
             "trading_permission", "synchronization"}
 
     def test_unready_test_is_honest(self, client):
@@ -268,7 +268,7 @@ class TestUiContract:
             not in BASE
 
     @pytest.mark.parametrize("field", [
-        "API Anahtarı", "Gizli Anahtar", "Ortam", "Spot", "Vadeli",
+        "API Anahtarı", "Gizli Anahtar", "Ortam", "Spot",
         "Cüzdan Sayısı", "Portföy Değeri (USDT)", "Son Eşitleme"])
     def test_card_fields(self, field):
         assert field in JS

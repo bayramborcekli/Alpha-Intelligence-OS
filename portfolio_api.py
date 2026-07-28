@@ -16,8 +16,7 @@ from typing import Any
 
 import dashboard_api as dapi
 from dashboard_api import (SafeExchangeError, _dec, _dec_val, _serve,
-                           _signed_get, GLOBAL_ALLOWLIST, TR_ALLOWLIST,
-                           GLOBAL_BASE, TR_BASE)
+                           _signed_get, TR_ALLOWLIST, TR_BASE)
 
 # Yeni önbellek türleri (merkezî politikaya kayıt)
 dapi.CACHE_TTL.setdefault("global_assets", 15)
@@ -99,40 +98,42 @@ def _sort_rows(rows: list[dict], key: str, numeric: bool,
 # ── Varlık listeleri ────────────────────────────────────────────────────────
 
 def global_assets() -> dict:
-    """Binance Global Futures hesap varlıkları (tam liste, tipli)."""
+    """Binance Global SPOT hesap varlıkları (tam liste, tipli).
+
+    Spot-only mimari: /fapi çağrısı YOK; GET /api/v3/account kullanılır."""
     def build() -> dict:
-        import os, time
-        key = os.environ.get("BINANCE_API_KEY", "")
-        sec = os.environ.get("BINANCE_API_SECRET", "")
+        import time
+        key, sec = dapi._global_creds()
         if not key or not sec:
             raise SafeExchangeError("EXCHANGE_AUTH_FAILED",
                                     "Salt-okunur anahtar yapılandırılmamış "
                                     "(fail closed).")
         t0 = time.monotonic()
-        acc = _signed_get(GLOBAL_BASE, "/fapi/v2/account", GLOBAL_ALLOWLIST,
-                          key, sec)
+        acc = _signed_get(dapi.SPOT_BASE, "/api/v3/account",
+                          dapi.SPOT_ALLOWLIST, key, sec)
         latency = int((time.monotonic() - t0) * 1000)
+        balances = acc.get("balances", [])
+        if not isinstance(balances, list):
+            raise SafeExchangeError(
+                "INVALID_EXCHANGE_RESPONSE",
+                dapi.ERROR_MESSAGES["INVALID_EXCHANGE_RESPONSE"])
         assets = []
-        for a in acc.get("assets", []):
+        for a in balances:
             if not isinstance(a, dict):
                 continue
+            total = _dec_val(a.get("free")) + _dec_val(a.get("locked"))
             assets.append({
                 "asset": str(a.get("asset") or "?"),
-                "wallet_balance": _dec(a.get("walletBalance")),
-                "available_balance": _dec(a.get("availableBalance")),
-                "margin_balance": _dec(a.get("marginBalance")),
-                "unrealized_pnl": _dec(a.get("unrealizedProfit")),
-                "initial_margin": _dec(a.get("initialMargin")),
-                "maint_margin": _dec(a.get("maintMargin")),
-                "order_margin": _dec(a.get("openOrderInitialMargin")),
-                "position_margin": _dec(a.get("positionInitialMargin")),
-                "update_time": a.get("updateTime"),
-                "nonzero": _dec_val(a.get("walletBalance")) != 0,
+                "free": _dec(a.get("free")),
+                "locked": _dec(a.get("locked")),
+                "total": _dec(total),
+                "update_time": None,
+                "nonzero": total != 0,
             })
         return {"_latency_ms": latency, "assets": assets[:MAX_ROWS],
                 "asset_count": len(assets),
                 "nonzero_asset_count": sum(1 for a in assets if a["nonzero"])}
-    return _serve("global_assets", "BINANCE_GLOBAL_FUTURES", build)
+    return _serve("global_assets", "BINANCE_GLOBAL_SPOT", build)
 
 
 def tr_assets() -> dict:
@@ -206,7 +207,7 @@ def portfolio(app_mode: str, include_zero: bool = False, search: str = "",
     ga, ta = global_assets(), tr_assets()
     sections, warnings = [], []
     for label, model, num_default in (
-            ("BINANCE_GLOBAL_FUTURES", ga, "wallet_balance"),
+            ("BINANCE_GLOBAL_SPOT", ga, "total"),
             ("BINANCE_TR", ta, "total")):
         sec: dict[str, Any] = {"source": label, "meta": model.get("meta"),
                                "ok": model.get("ok", False)}
@@ -320,19 +321,10 @@ def portfolio_csv(include_zero: bool, search: str, sort: str | None,
     for sec in data["sections"]:
         meta = sec.get("meta") or {}
         for a in sec.get("assets", []):
-            if sec["source"] == "BINANCE_GLOBAL_FUTURES":
-                rows.append([_csv_text(sec["source"]), _csv_text(a["asset"]),
-                             _csv_num(a["wallet_balance"]),
-                             _csv_num(a["available_balance"]),
-                             _csv_num(a["margin_balance"]),
-                             _csv_num(a["unrealized_pnl"]), "",
-                             _csv_text(meta.get("retrieved_at")),
-                             _csv_text(meta.get("freshness"))])
-            else:
-                rows.append([_csv_text(sec["source"]), _csv_text(a["asset"]),
-                             _csv_num(a["free"]), _csv_num(a["locked"]),
-                             "", "", _csv_num(a["total"]),
-                             _csv_text(meta.get("retrieved_at")),
+            rows.append([_csv_text(sec["source"]), _csv_text(a["asset"]),
+                         _csv_num(a["free"]), _csv_num(a["locked"]),
+                         "", "", _csv_num(a["total"]),
+                         _csv_text(meta.get("retrieved_at")),
                              _csv_text(meta.get("freshness"))])
     return (_csv_response_body(header, rows),
             f"alpha-portfolio-{_stamp()}.csv")

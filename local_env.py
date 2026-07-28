@@ -29,7 +29,8 @@ ENV_FILE = ROOT / ".env"
 OVERRIDE_KEYS = ("BINANCE_TR_API_KEY", "BINANCE_TR_API_SECRET",
                  "BINANCE_API_KEY", "BINANCE_API_SECRET",
                  "BINANCE_GLOBAL_API_KEY", "BINANCE_GLOBAL_API_SECRET",
-                 "BINANCE_GLOBAL_API_Key", "BINANCE_GLOBAL_Secret_Key")
+                 "BINANCE_GLOBAL_API_Key", "BINANCE_GLOBAL_Secret_Key",
+                 "BINANCE_API_Key", "BINANCE_Secret_Key")
 
 _loaded = False
 _sources: dict[str, str] = {}

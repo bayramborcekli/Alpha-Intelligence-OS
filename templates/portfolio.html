@@ -1,7 +1,7 @@
 {% extends "dash_base.html" %}
 {% block title %}Portföy{% endblock %}
 {% block heading %}Portföy{% endblock %}
-{% block subheading %}Binance Global Futures ve Binance TR varlıkları — ayrı hesaplar, birleşik toplam gösterilmez{% endblock %}
+{% block subheading %}Binance Global Spot ve Binance TR varlıkları — ayrı hesaplar, birleşik toplam gösterilmez{% endblock %}
 {% block header_extra %}
   <a class="export-btn" id="export-link" href="/api/v1/portfolio/export.csv"
      role="button" style="display:inline-flex;align-items:center;padding:7px 12px;border:1px solid var(--accent);border-radius:8px;font-size:.84rem">
@@ -27,7 +27,7 @@
   <p class="sub" style="margin-top:-4px">CSV dışa aktarımı geçerli "sıfır bakiye" ve arama filtrelerini içerir.</p>
 
   <section class="section" aria-labelledby="h-gf">
-    <h2 id="h-gf">Binance Global Futures</h2>
+    <h2 id="h-gf">Binance Global Spot</h2>
     <p class="fresh-line" id="fresh-gf"></p>
     <div id="body-gf"><p class="skeleton">Yükleniyor…</p></div>
   </section>
@@ -57,17 +57,6 @@
       "/api/v1/portfolio/export.csv" + (p.toString() ? "?" + p : "");
   }
 
-  function rowsGF(assets) {
-    return assets.map(function (a) {
-      return "<tr>" +
-        '<td data-l="Varlık">' + esc(a.asset) + "</td>" +
-        '<td data-l="Cüzdan Bakiyesi">' + trNum(a.wallet_balance) + "</td>" +
-        '<td data-l="Kullanılabilir">' + trNum(a.available_balance) + "</td>" +
-        '<td data-l="Marjin Bakiyesi">' + trNum(a.margin_balance) + "</td>" +
-        '<td data-l="Gerçekleşmemiş PnL">' + pnlCell(a.unrealized_pnl) + "</td>" +
-        '<td data-l="Güncelleme">' + esc(tsText(a.update_time)) + "</td></tr>";
-    }).join("");
-  }
   function rowsTR(assets) {
     return assets.map(function (a) {
       return "<tr>" +
@@ -109,18 +98,16 @@
     var sortSel = document.getElementById("pf-sort").value;
     var desc = document.getElementById("pf-order").value === "desc";
     if (sortSel === "asset") return sortRows(out, "asset", false, desc);
-    var key = out.length && out[0].wallet_balance !== undefined ? "wallet_balance" : "total";
-    return sortRows(out, key, true, desc);
+    return sortRows(out, "total", true, desc);
   }
 
   function render() {
     if (!data) return;
     showWarnings(data.warnings);
-    var gf = data.sections.find(function (s) { return s.source === "BINANCE_GLOBAL_FUTURES"; });
+    var gf = data.sections.find(function (s) { return s.source === "BINANCE_GLOBAL_SPOT"; });
     var tr = data.sections.find(function (s) { return s.source === "BINANCE_TR"; });
     renderSection(gf || { ok: false }, "body-gf", "fresh-gf",
-      ["Varlık", "Cüzdan Bakiyesi", "Kullanılabilir", "Marjin Bakiyesi",
-       "Gerçekleşmemiş PnL", "Güncelleme"], rowsGF);
+      ["Varlık", "Serbest", "Kilitli", "Toplam", "Güncelleme"], rowsTR);
     renderSection(tr || { ok: false }, "body-tr", "fresh-tr",
       ["Varlık", "Serbest", "Kilitli", "Toplam", "Güncelleme"], rowsTR);
     updateExportLink();

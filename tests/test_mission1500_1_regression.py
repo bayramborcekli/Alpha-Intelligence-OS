@@ -126,6 +126,9 @@ class TestRouteSurface:
         "/api/v1/refresh", "/api/v1/risk/simulator", "/bot/start",
         "/bot/stop", "/coins/add", "/coins/delete", "/coins/move",
         "/coins/preset", "/login", "/settings", "/setup/hash",
+        # Kurulum sihirbazı (görev #43/#48/#49): parola hash kaydı,
+        # auth öncesi tek seferlik kurulum — bilinçli genişletme.
+        "/setup/save",
         "/smart/analyze", "/smart/apply", "/smart/coin-action",
         "/smart/mode", "/smart/pin", "/smart/restore", "/smart/settings",
         # Mission 1600 / Agent 04: Automation manuel tetik (CSRF+auth

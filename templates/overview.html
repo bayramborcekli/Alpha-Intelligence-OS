@@ -85,8 +85,6 @@
       <a href="/overview" class="active" aria-current="page">📊 Genel Bakış</a>
       <a href="/panel">🤖 Bot Kontrol</a>
       <a href="/portfolio">💼 Portföy</a>
-      <a href="/positions">📈 Pozisyonlar</a>
-      <a href="/orders">🧾 Emirler</a>
       <a href="/ledger">📒 Defter</a>
       <a href="/audit">🛡️ Denetim</a>
       <a href="/risk">⚖️ Risk</a>
@@ -122,8 +120,6 @@
         <div class="quick-grid" style="display:grid;gap:8px;
              grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
           <a class="quick-card" href="/portfolio">💼 Portföy</a>
-          <a class="quick-card" href="/positions">📈 Pozisyonlar</a>
-          <a class="quick-card" href="/orders">🧾 Emirler</a>
           <a class="quick-card" href="/ledger">📒 Defter</a>
           <a class="quick-card" href="/audit">🛡️ Denetim</a>
           <a class="quick-card" href="/reports">📄 Raporlar</a>
@@ -150,12 +146,6 @@
           <h2 id="h-global"><span class="dot n" id="dot-global" aria-hidden="true"></span>Binance Global</h2>
           <div id="body-global"><p class="skeleton">Yükleniyor…</p></div>
           <p class="fresh-line" id="fresh-global"></p>
-        </section>
-
-        <section class="card" aria-labelledby="h-fut">
-          <h2 id="h-fut"><span class="dot n" id="dot-fut" aria-hidden="true"></span>Binance Futures</h2>
-          <div id="body-fut"><p class="skeleton">Yükleniyor…</p></div>
-          <p class="fresh-line" id="fresh-fut"></p>
         </section>
 
         <section class="card" aria-labelledby="h-tr">
@@ -247,7 +237,6 @@
         d.warnings.map(function (w) { return "<li>" + w + "</li>"; }).join("") + "</ul>";
     } else { wb.style.display = "none"; }
 
-    var ga = d.global_futures || {};
     var gs = d.global_spot || {};
     // Kart 1: Binance Global — SPOT hesabı (HOTFIX 2100-HF-001)
     if (gs.ok) {
@@ -273,23 +262,7 @@
       setCard("global", gs, spotBody);
     } else { setCard("global", gs, errHtml(gs, "Binance Global (Spot)")); }
 
-    // Kart 2: Binance Futures (hesap)
-    if (ga.ok) {
-      setCard("fut", ga,
-        kv("Trading API doğrulama", okTxt(ga.trading_key_auth === "OK", "Doğrulandı",
-            ga.trading_key_auth === "NOT_CONFIGURED" ? "Yapılandırılmamış" : "Hata",
-            "st-ok", ga.trading_key_auth === "NOT_CONFIGURED" ? "st-neutral" : "st-err")) +
-        kv("Exchange canTrade", okTxt(ga.exchange_can_trade, "true", "false", "st-warn", "st-neutral")) +
-        kv("Uygulama canlı emir", '<span class="st-ok">DEVRE DIŞI</span>') +
-        kv("Pozisyon modu", '<span class="st-neutral">' + (ga.position_mode || "—") + "</span>") +
-        kv("USDT cüzdan", trNum(ga.usdt_wallet_balance, " USDT")) +
-        kv("Kullanılabilir", trNum(ga.usdt_available_balance, " USDT")) +
-        kv("Gerçekleşmemiş PnL", trNum(ga.unrealized_pnl, " USDT")) +
-        kv("Açık pozisyon", (d.positions && d.positions.ok) ? d.positions.open_position_count : "—") +
-        kv("Açık emir", (d.orders && d.orders.ok) ? d.orders.open_order_count : "—"));
-    } else { setCard("fut", ga, errHtml(ga, "Binance Futures")); }
-
-    // Kart 3: Binance TR
+    // Kart: Binance TR
     var tr = d.tr || {}, tm = d.tr_movements || {};
     if (tr.ok) {
       var recon = tm.ok ? tm.reconciliation : "—";

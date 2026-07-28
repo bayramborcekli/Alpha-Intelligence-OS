@@ -58,7 +58,8 @@ CONNECTORS: dict[str, Connector] = {
     "BINANCE_GLOBAL": Connector(
         exchange="BINANCE_GLOBAL", display_name="Binance Global",
         logo="🟡", supported=True, spot_capable=True,
-        futures_capable=True, credential_source="ENV",
+        futures_capable=False,  # Spot-only mimari: Futures kaldırıldı
+        credential_source="ENV",
         env_key_name="BINANCE_API_KEY"),
     "BINANCE_TR": Connector(
         exchange="BINANCE_TR", display_name="Binance TR",
@@ -105,7 +106,7 @@ def _default_accounts() -> list[dict[str, Any]]:
         {"account_id": "binance-global", "exchange": "BINANCE_GLOBAL",
          "nickname": "Binance Global", "connected": True,
          "primary": False, "environment": "MAINNET",
-         "spot_enabled": True, "futures_enabled": True,
+         "spot_enabled": True, "futures_enabled": False,
          "created_at": now, "updated_at": now,
          "last_sync_at": "UNKNOWN"},
         {"account_id": "binance-tr", "exchange": "BINANCE_TR",

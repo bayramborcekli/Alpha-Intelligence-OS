@@ -6,14 +6,13 @@ Tek uç nokta besler: GET /api/v1/executive/summary
   (UI "Veri Yok" / "—" gösterir). Tahmin, projeksiyon, uydurma yüzde YOK.
 - Durum çubuğu: kaynak tazeliği / bütünlük / süreç durumundan türetilir.
 - Borsa yazma yolu YOK; bu modül hiçbir POST/PUT/PATCH/DELETE üretmez.
-- Para birimleri BİRLEŞTİRİLMEZ: "Toplam Portföy" Global Futures cüzdanının
-  USDT marj bakiyesidir ve öyle etiketlenir. TR varlıkları dönüştürülmez.
+- Para birimleri BİRLEŞTİRİLMEZ: "Toplam Portföy" Global SPOT hesabının
+  USDT değeridir ve öyle etiketlenir. TR varlıkları dönüştürülmez.
 """
 
 from __future__ import annotations
 
 import dashboard_api as dapi
-import portfolio_api as pf
 import ledger_api as la
 
 
@@ -33,9 +32,8 @@ def _conn_status(model: dict) -> str:
 
 
 def executive_summary(bot_is_running: bool, app_mode: str) -> dict:
-    ga = dapi.global_account()
-    gp = pf.positions_view()
-    go = pf.orders_view()
+    # Spot-only mimari: Global kaynak SPOT hesabıdır (futures kaldırıldı).
+    gs = dapi.global_spot_account()
     ta = dapi.tr_account()
     integ = la.ledger_integrity()
     aud = la.audit_summary()
@@ -54,19 +52,14 @@ def executive_summary(bot_is_running: bool, app_mode: str) -> dict:
     except Exception:
         risk_engine_status = "Bağlantı Yok"
 
-    acc = ga.get("account") or {} if ga.get("ok") else {}
-
     # ── Performans şeridi (doğrulanmış veri; yoksa null) ──────────────────
-    portfolio_total = acc.get("usdt_margin_balance") if ga.get("ok") else None
-    unrealized = None
-    if gp.get("ok"):
-        unrealized = (gp.get("summary") or {}).get("total_unrealized_pnl")
-    elif ga.get("ok"):
-        unrealized = acc.get("unrealized_pnl")
-    open_positions = ((gp.get("summary") or {}).get("active_count")
-                      if gp.get("ok") else None)
-    open_orders = ((go.get("summary") or {}).get("open_count")
-                   if go.get("ok") else None)
+    # Spot hesabında marj/futures kavramı yok; toplam SPOT değeri kullanılır.
+    portfolio_total = (gs.get("total_spot_value_usdt")
+                       if gs.get("ok") else None)
+    partial_valuation = gs.get("ok") and gs.get("valuation") == "PARTIAL"
+    unrealized = None            # Spot'ta doğrulanmış uPnL kaynağı yok
+    open_positions = None        # Futures kaldırıldı — pozisyon kavramı yok
+    open_orders = None
 
     ledger_status = {"PASS": "Bağlı", "PARTIAL": "Kısmi"}.get(
         integ.get("status"), "Bağlantı Yok")
@@ -79,7 +72,9 @@ def executive_summary(bot_is_running: bool, app_mode: str) -> dict:
         "performance": {
             # Tek para birimi; çapraz kur birleştirme YAPILMAZ.
             "portfolio_total_usdt": portfolio_total,
-            "portfolio_total_label": "Global Futures (USDT)",
+            "portfolio_total_label": ("Global Spot (USDT, kısmi)"
+                                      if partial_valuation
+                                      else "Global Spot (USDT)"),
             "unrealized_pnl_usdt": unrealized,
             # Doğrulanmış gerçekleşmiş PnL kaynağı yok → null (asla tahmin yok)
             "realized_pnl_usdt": None,
@@ -93,8 +88,7 @@ def executive_summary(bot_is_running: bool, app_mode: str) -> dict:
             "risk_level": risk_level,
         },
         "status_bar": {
-            "binance_global": _conn_status(ga),
-            "binance_futures": _conn_status(gp),
+            "binance_global": _conn_status(gs),
             "binance_tr": _conn_status(ta),
             "ledger": ledger_status,
             "audit": "Bağlı" if aud.get("ok") else "Bağlantı Yok",

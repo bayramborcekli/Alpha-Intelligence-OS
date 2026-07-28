@@ -260,47 +260,26 @@ class TestUiBinding:
         assert d["global_spot"]["meta"]["source"] == \
             "BINANCE_GLOBAL_SPOT"
 
-    def test_template_binds_spot_not_futures_for_global_card(self):
+    def test_template_binds_spot_for_global_card(self):
         html = open("templates/overview.html", encoding="utf-8").read()
         assert "d.global_spot" in html
         assert "Spot Varlık Yok" in html
-        idx_card = html.index("Kart 1: Binance Global")
-        idx_end = html.index("Kart 2:")
-        card1 = html[idx_card:idx_end]
-        assert "gs." in card1
-        assert "usdt_wallet_balance" not in card1
-
-    def test_futures_card_unchanged_fields(self):
-        html = open("templates/overview.html", encoding="utf-8").read()
-        card2 = html[html.index("Kart 2:"):html.index("Kart 3:")]
-        for token in ("usdt_wallet_balance", "usdt_available_balance",
-                      "unrealized_pnl", "open_position_count",
-                      "open_order_count", "position_mode"):
-            assert token in card2
+        assert "usdt_wallet_balance" not in html
 
 
-class TestFuturesUnchanged:
-    def test_futures_model_source_unchanged(self):
-        import inspect
-        src = inspect.getsource(dapi.global_account)
-        assert "/fapi/v2/account" in src
-        assert "BINANCE_GLOBAL_FUTURES" in src
-        assert "/api/v3/account" not in src
+class TestFuturesRemovedFromOverview:
+    def test_no_fapi_in_dashboard_api_source(self):
+        src = open("dashboard_api.py", encoding="utf-8").read()
+        assert "fapi.binance.com" not in src
+        assert not hasattr(dapi, "GLOBAL_ALLOWLIST")
 
-    def test_global_allowlist_unchanged(self):
-        assert dapi.GLOBAL_ALLOWLIST == {
-            ("GET", "/fapi/v2/account"),
-            ("GET", "/fapi/v2/balance"),
-            ("GET", "/fapi/v2/positionRisk"),
-            ("GET", "/fapi/v1/openOrders"),
-            ("GET", "/fapi/v1/positionSide/dualSide")}
-
-    def test_overview_keeps_global_futures_key(self, client,
-                                               monkeypatch):
+    def test_overview_has_no_futures_keys(self, client, monkeypatch):
         _mock_spot(monkeypatch)
         _login(client)
         d = client.get("/api/v1/overview").get_json()
-        assert "global_futures" in d
+        assert "global_futures" not in d
+        assert "positions" not in d
+        assert "orders" not in d
         assert "global_spot" in d
 
 

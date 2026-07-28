@@ -81,8 +81,6 @@
       row("Ortam", a.environment) +
       row("Spot", a.spot_enabled ? "Etkin" :
           a.spot_capable ? "Kapalı" : "Desteklenmiyor") +
-      row("Vadeli", a.futures_enabled ? "Etkin" :
-          a.futures_capable ? "Kapalı" : "Desteklenmiyor") +
       row("Cüzdan Sayısı", w ? w.wallet_count : null) +
       row("Portföy Değeri (USDT)", w ? w.value_usdt : null,
           w && w.value_usdt !== "UNKNOWN" ? "" : "ma-unknown") +
@@ -152,7 +150,6 @@
     if (!el) return;
     var LABELS = { connected: "Bağlantı", authentication: "Kimlik",
       wallet_access: "Cüzdan Erişimi", spot_permission: "Spot İzni",
-      futures_permission: "Vadeli İzni",
       trading_permission: "İşlem İzni",
       synchronization: "Eşitleme" };
     var out = "<b>Sonuç: " + esc(data.overall) + "</b><br>";
@@ -196,17 +193,14 @@
     if (!a || !dlg) return;
     document.getElementById("ma-edit-nickname").value = a.nickname;
     var spot = document.getElementById("ma-edit-spot");
-    var fut = document.getElementById("ma-edit-futures");
     spot.checked = a.spot_enabled; spot.disabled = !a.spot_capable;
-    fut.checked = a.futures_enabled; fut.disabled = !a.futures_capable;
     dlg.returnValue = "cancel";
     dlg.showModal();
     dlg.onclose = function () {
       if (dlg.returnValue !== "ok") return;
       api("/api/accounts/" + encodeURIComponent(id) + "/edit", "POST", {
         nickname: document.getElementById("ma-edit-nickname").value,
-        spot_enabled: spot.disabled ? null : spot.checked,
-        futures_enabled: fut.disabled ? null : fut.checked
+        spot_enabled: spot.disabled ? null : spot.checked
       }).then(function (r) {
         if (!r.ok && r.message) window.alert(r.message);
         refresh();
