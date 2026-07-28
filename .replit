@@ -37,3 +37,8 @@ timeoutMs = 60000
 
 [deployment]
 deploymentTarget = "cloudrun"
+
+[userenv]
+
+[userenv.development]
+REPLIT_DEV_BYPASS = "1"
