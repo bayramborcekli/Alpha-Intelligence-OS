@@ -212,3 +212,76 @@ class TestReviewFixes:
         summary = s.get_summary(UTC)
         assert s.get_insights(summary=summary) == summary["insights"]
         assert s.get_recommendations(summary=summary) ==             summary["recommendations"]
+
+
+class TestSpotOnlyDefaults:
+    """Task 55: varsayılan (tombstone) sağlayıcılarla doğru çalışma.
+
+    Spot-only mimaride global_account/global_positions kalıcı olarak
+    NOT_AVAILABLE döner; bu kalıcı yokluk geçici arıza gibi raporlanmaz.
+    """
+
+    def _svc(self, rs=None, al=None):
+        return IntelligenceService(
+            risk_provider=lambda: rs if rs is not None else _rs(),
+            alerts_provider=lambda: al if al is not None else _al())
+
+    def test_summary_no_exception_and_ok(self):
+        out = self._svc().get_summary(UTC)
+        assert out["ok"] is True
+        # Kaldırılmış kaynaklar durumu PARTIAL'a düşürmez
+        assert out["status"] == "OK" and out["partial"] is False
+        json.dumps(out)                              # JSON-hazır
+
+    def test_removed_sources_not_in_freshness_or_errors(self):
+        out = self._svc().get_summary(UTC)
+        srcs = {f["source"] for f in out["freshness"]}
+        assert "global_account" not in srcs
+        assert "global_positions" not in srcs
+        assert "global_account" not in out["source_errors"]
+        assert "global_positions" not in out["source_errors"]
+
+    def test_healthy_risk_yields_no_action_needed(self):
+        # Futures girdileri null iken DATA_REFRESH değil NO_ACTION_NEEDED
+        out = self._svc().get_summary(UTC)
+        codes = [r["code"] for r in out["recommendations"]]
+        assert "DATA_REFRESH" not in codes
+        assert "NO_ACTION_NEEDED" in codes
+
+    def test_status_endpoint_consistent(self):
+        s = self._svc()
+        assert s.get_summary(UTC)["status"] == s.get_status()["status"]
+        st = s.get_status()
+        assert st["status"] == "OK" and st["partial"] is False
+        assert {x["source"] for x in st["sources"]} == \
+            {"risk_engine", "risk_engine_alerts"}
+
+    def test_risk_down_all_null_unavailable_no_exception(self):
+        # Tüm girdiler null: risk de yoksa UNAVAILABLE + DATA_REFRESH
+        s = self._svc(rs={"ok": False}, al={"ok": False})
+        out = s.get_summary(UTC)
+        assert out["status"] == "UNAVAILABLE"
+        codes = [r["code"] for r in out["recommendations"]]
+        assert "DATA_REFRESH" in codes and "NO_ACTION_NEEDED" not in codes
+        assert s.get_status()["status"] == "UNAVAILABLE"
+
+    def test_transient_failure_still_reported(self):
+        # NOT_AVAILABLE dışındaki hatalar tombstone SAYILMAZ:
+        # geçici arıza görünür kalır ve durumu düşürür.
+        s = IntelligenceService(
+            account_provider=lambda: _ga(ok=False),
+            positions_provider=lambda: _gp(),
+            risk_provider=lambda: _rs(),
+            alerts_provider=lambda: _al())
+        out = s.get_summary(UTC)
+        assert out["status"] == "PARTIAL"
+        assert out["source_errors"]["global_account"]["code"] == \
+            "EXCHANGE_TIMEOUT"
+
+    def test_core_summary_none_inputs_no_exception(self):
+        # build_intelligence_summary null hesap/pozisyonla hata fırlatmaz
+        import intelligence_api as icore
+        summary = icore.build_intelligence_summary(
+            account=None, positions=None, risk_summary=None,
+            freshness_list=[], generated_at=UTC)
+        assert summary is not None

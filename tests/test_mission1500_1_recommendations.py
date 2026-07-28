@@ -166,6 +166,38 @@ class TestNoOrderLanguage:
             assert banned not in src, banned
 
 
+class TestSpotOnlyNullInputs:
+    """Task 55: Futures girdileri (account/positions) kalıcı olarak null."""
+
+    def test_null_futures_inputs_healthy_risk_no_action_needed(self):
+        # Kaldırılmış kaynaklar tazelik listesinde yer almaz; sağlıklı
+        # risk verisiyle DATA_REFRESH değil NO_ACTION_NEEDED üretilir.
+        r = rec.build_recommendations(
+            account=None, positions=None, risk_summary=RISK_GOOD,
+            alerts=[], freshness_list=[_f("risk_engine"),
+                                       _f("risk_engine_alerts")],
+            generated_at=UTC)
+        codes = [x["code"] for x in r["recommendations"]]
+        assert codes == ["NO_ACTION_NEEDED"]
+        assert "DATA_REFRESH" not in codes
+
+    def test_null_futures_inputs_with_findings_no_data_refresh(self):
+        r = rec.build_recommendations(
+            account=None, positions=None, risk_summary=RISK_BAD,
+            alerts=ALERTS, freshness_list=[_f("risk_engine")],
+            generated_at=UTC)
+        codes = [x["code"] for x in r["recommendations"]]
+        assert "DATA_REFRESH" not in codes
+        assert "RISK_ALERT_REVIEW" in codes
+
+    def test_deterministic_with_null_inputs(self):
+        kw = dict(account=None, positions=None, risk_summary=RISK_GOOD,
+                  alerts=[], freshness_list=[_f("risk_engine")],
+                  generated_at=UTC)
+        assert json.dumps(rec.build_recommendations(**kw), sort_keys=True) \
+            == json.dumps(rec.build_recommendations(**kw), sort_keys=True)
+
+
 class TestPerSourceConfidence:
     def test_no_freshness_metadata_never_high(self):
         # Tazelik kanıtı olmadan HIGH güven verilmez

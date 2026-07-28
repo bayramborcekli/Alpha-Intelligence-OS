@@ -222,6 +222,44 @@ def test_no_flask_routes_or_network_imports():
         assert word not in src, word
 
 
+# ── Task 55: boş Futures verisiyle sağlık sondası ─────────────────────
+
+def _spot_only_service(risk_ok=True):
+    """Gerçek IntelligenceService, varsayılan (tombstone) Futures
+    sağlayıcıları + stub risk sağlayıcılarıyla."""
+    import intelligence_service
+    rs = ({"ok": True, "single_position_pct": "10.00",
+           "exposure_pct_of_margin": "20.00"} if risk_ok else {"ok": False})
+    return intelligence_service.IntelligenceService(
+        risk_provider=lambda: rs,
+        alerts_provider=lambda: {"ok": True, "alerts": []})
+
+
+def test_health_probe_ok_with_empty_futures_data():
+    # Boş Futures verisi (account/positions NOT_AVAILABLE) sondayı
+    # PARTIAL/FAILED yapmaz: durum OK'dir ve exception fırlamaz.
+    snap = asv.execute_intelligence_run(_spot_only_service())
+    assert snap["status"] == "OK"
+    assert snap["advisory_only"] is True
+    codes = [r["code"] for r in snap["recommendations"]]
+    assert "DATA_REFRESH" not in codes
+    assert "NO_ACTION_NEEDED" in codes
+
+
+def test_run_appends_with_empty_futures_data(paths):
+    state, hist = paths
+    out = asv.run_automation(service=_spot_only_service(), config=ENABLED,
+                             state_path=state, history_path=hist)
+    assert out["appended"] is True and out["final_state"] == "succeeded"
+    rec = json.loads(hist.read_text().splitlines()[0])
+    assert rec["status"] == "OK"
+
+
+def test_risk_down_gives_unavailable_not_crash():
+    snap = asv.execute_intelligence_run(_spot_only_service(risk_ok=False))
+    assert snap["status"] == "UNAVAILABLE"
+
+
 def test_default_service_uses_existing_providers():
     # Spot-only: global_account/global_positions kaldırıldı;
     # _default_service varsayılan intelligence_service sağlayıcılarını kullanır.

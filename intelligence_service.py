@@ -33,6 +33,17 @@ from intelligence_models import DataFreshness, IntelligenceStatus, to_json
 _FRESHNESS_MAP = {"FRESH": IntelligenceStatus.OK,
                   "STALE": IntelligenceStatus.STALE}
 
+# Spot-only mimaride kalıcı olarak KALDIRILMIŞ kaynakların hata kodu.
+# Bu kaynaklar geçici arıza değildir: tazelik/eksik-veri hesabına girmez,
+# DATA_REFRESH tetiklemez ve durumun PARTIAL'a düşmesine yol açmaz.
+_REMOVED_SOURCE_CODE = "NOT_AVAILABLE"
+
+
+def _is_removed(payload: dict | None) -> bool:
+    """Kaynak kalıcı olarak kaldırılmış mı (tombstone)?"""
+    err = (payload or {}).get("error")
+    return isinstance(err, dict) and err.get("code") == _REMOVED_SOURCE_CODE
+
 
 def _default_account():
     """Spot-only: Futures global_account kaldırıldı — boş model döner."""
@@ -147,18 +158,47 @@ class IntelligenceService:
         positions = (gp.get("positions") if gp and gp.get("ok") else None)
         risk = rs if rs and rs.get("ok") else None
         alerts = (al.get("alerts") if al and al.get("ok") else None)
-        freshness = [self._freshness("global_account", ga),
-                     self._freshness("global_positions", gp),
-                     self._freshness("risk_engine", rs),
-                     self._freshness("risk_engine_alerts", al)]
-        errors = {src: e for src, e in (
-            ("global_account", _sterile_error(ga)),
-            ("global_positions", _sterile_error(gp)),
-            ("risk_engine", _sterile_error(rs)),
-            ("risk_engine_alerts", _sterile_error(al))) if e}
+        sources = (("global_account", ga), ("global_positions", gp),
+                   ("risk_engine", rs), ("risk_engine_alerts", al))
+        removed = [src for src, p in sources if _is_removed(p)]
+        # Kaldırılmış (tombstone) kaynaklar tazelik/hata listesine girmez:
+        # kalıcı yokluk, geçici arıza gibi raporlanmaz.
+        freshness = [self._freshness(src, p) for src, p in sources
+                     if src not in removed]
+        errors = {src: e for src, p in sources
+                  if src not in removed and (e := _sterile_error(p))}
         return {"account": account, "positions": positions,
                 "risk_summary": risk, "alerts": alerts,
-                "freshness": freshness, "errors": errors}
+                "freshness": freshness, "errors": errors,
+                "removed_sources": removed}
+
+    @staticmethod
+    def _overall_status(snap: dict) -> IntelligenceStatus:
+        """get_summary ve get_status için TEK durum kuralı.
+
+        Kalıcı olarak kaldırılmış (tombstone) kaynaklar eksik sayılmaz:
+        tüm ana kaynaklar yok → UNAVAILABLE; herhangi biri yok → PARTIAL;
+        bayat/ulaşılamayan kaynak → STALE; aksi halde OK.
+        """
+        removed = snap.get("removed_sources") or []
+        core = {"account": snap["account"], "positions": snap["positions"],
+                "risk": snap["risk_summary"]}
+        if "global_account" in removed:
+            core.pop("account")
+        if "global_positions" in removed:
+            core.pop("positions")
+        missing = [k for k, v in core.items()
+                   if v is None or (k != "positions" and not v)]
+        stale = any(f.status in (IntelligenceStatus.STALE,
+                                 IntelligenceStatus.UNAVAILABLE)
+                    for f in snap["freshness"])
+        if core and len(missing) == len(core):
+            return IntelligenceStatus.UNAVAILABLE
+        if missing:
+            return IntelligenceStatus.PARTIAL
+        if stale:
+            return IntelligenceStatus.STALE
+        return IntelligenceStatus.OK
 
     # ── Birleşik çıktılar ───────────────────────────────────────────────
     def get_summary(self, generated_at: datetime | None = None) -> dict:
@@ -180,6 +220,9 @@ class IntelligenceService:
         payload["risk_explanations"] = [i.to_dict() for i in explanations]
         payload["recommendations"] = recs["recommendations"]
         payload["source_errors"] = snap["errors"]
+        # Kaldırılmış kaynaklar durum hesabına girmez (tek kural:
+        # _overall_status) — icore çıktısındaki status buna göre düzeltilir.
+        payload["status"] = self._overall_status(snap).value
         payload["partial"] = payload["status"] != "OK"
         payload["ok"] = True
         payload["read_only"] = True
@@ -202,23 +245,8 @@ class IntelligenceService:
                   "age_seconds": (str(f.age_seconds)
                                   if f.age_seconds is not None else None)}
                  for f in snap["freshness"]]
-        # get_summary() ile AYNI kural: tüm ana kaynaklar yok →
-        # UNAVAILABLE; herhangi biri yok → PARTIAL; bayat → STALE.
-        core = {"account": snap["account"], "positions": snap["positions"],
-                "risk": snap["risk_summary"]}
-        missing = [k for k, v in core.items()
-                   if v is None or (k != "positions" and not v)]
-        stale = any(f.status in (IntelligenceStatus.STALE,
-                                 IntelligenceStatus.UNAVAILABLE)
-                    for f in snap["freshness"])
-        if len(missing) == len(core):
-            overall = IntelligenceStatus.UNAVAILABLE
-        elif missing:
-            overall = IntelligenceStatus.PARTIAL
-        elif stale:
-            overall = IntelligenceStatus.STALE
-        else:
-            overall = IntelligenceStatus.OK
+        # get_summary() ile AYNI kural (tek nokta): _overall_status.
+        overall = self._overall_status(snap)
         return {"ok": True, "read_only": True, "advisory_only": True,
                 "status": overall.value, "partial":
                 overall is not IntelligenceStatus.OK,
