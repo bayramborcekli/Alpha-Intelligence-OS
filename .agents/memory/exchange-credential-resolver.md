@@ -34,3 +34,5 @@ taşımalı, yoksa /setup rotaları 404 döner.
 `connection_state` damgalar. Hesaplarım kartı, Genel Bakış ve yönetici
 şeridi bu alanı OKUR — hiçbir ekran kendi credential/health türetimi
 yapamaz; UI alan eksikse "Bağlı" değil "Durum Bilinmiyor" gösterir.
+
+**Windows .env kodlama tuzağı:** Notepad UTF-8'i BOM ile kaydeder (ilk anahtar `\ufeffKEY` olur), PowerShell `Set-Content` varsayılanı UTF-16'dır — ikisi de "GLOBAL=False/TR=False" belirtisi üretir. `.env` ayrıştırıcısı utf-8-sig + utf-16 fallback ile okumalı; bozuk dosyada fail-closed boş dict.
