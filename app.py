@@ -3122,10 +3122,13 @@ def api_accounts_credentials(account_id: str):
 
 
 def _paper_balance() -> str:
-    """PAPER defter bakiyesi (Decimal-str) veya UNKNOWN."""
+    """PAPER simülasyon defteri bakiyesi (Decimal-str) veya UNKNOWN.
+
+    ROOT'a bağlı STATE_PATH kullanılır — Windows'ta servis farklı çalışma
+    dizininden başlatıldığında göreli yol yüzünden yanlış UNKNOWN
+    üretilmez (gerçek Windows bug'ının kök nedeni)."""
     try:
-        state = json.loads(
-            Path("alpha20_v1/state.json").read_text(encoding="utf-8"))
+        state = json.loads(STATE_PATH.read_text(encoding="utf-8"))
         bal = state.get("balance")
         if bal is None:
             return "UNKNOWN"
@@ -3163,10 +3166,9 @@ def _account_snapshot(exchange: str) -> dict:
         acc = dapi.global_spot_account()
         if not acc.get("ok"):
             state = _connection_state(acc)
-            return {"status": ("NOT_CONFIGURED"
-                               if state == "NOT_CONFIGURED"
-                               else (acc.get("meta") or {}).get(
-                                   "freshness", "UNKNOWN")),
+            # Durum etiketi de KANONİK state'tir — tazelik etiketi
+            # (UNAVAILABLE/UNKNOWN) ekranlara sızmaz (ROOT BUG).
+            return {"status": state,
                     "connection_state": state,
                     "value_usdt": "UNKNOWN", "wallets": [],
                     "last_sync_at": (acc.get("meta") or {}).get(
@@ -3194,10 +3196,9 @@ def _account_snapshot(exchange: str) -> dict:
         acc = dapi.tr_account()
         if not acc.get("ok"):
             state = _connection_state(acc)
-            return {"status": ("NOT_CONFIGURED"
-                               if state == "NOT_CONFIGURED"
-                               else (acc.get("meta") or {}).get(
-                                   "freshness", "UNKNOWN")),
+            # Durum etiketi de KANONİK state'tir — tazelik etiketi
+            # (UNAVAILABLE/UNKNOWN) ekranlara sızmaz (ROOT BUG).
+            return {"status": state,
                     "connection_state": state,
                     "value_usdt": "UNKNOWN", "wallets": [],
                     "last_sync_at": (acc.get("meta") or {}).get(
@@ -3247,15 +3248,19 @@ def api_accounts_wallets():
     for acc in accounts:
         if not acc["connected"]:
             continue
+        # KANONİK snapshot'a delegasyon: bu endpoint kendi exchange
+        # health/balance hesaplamasını YAPMAZ (tek doğruluk kaynağı).
         snap = _account_snapshot(acc["exchange"])
         card = reg.card_view(acc)
+        state = snap["connection_state"]
         out.append({
             "account_id": acc["account_id"],
             "nickname": acc["nickname"],
             "display_name": card["display_name"],
             "logo": card["logo"],
             "primary": acc["primary"],
-            "status": snap["status"],
+            "connection_state": state,
+            "status": "OK" if state in ("HEALTHY", "STALE") else state,
             "value_usdt": snap["value_usdt"],
             "wallet_count": len(snap["wallets"]),
             "wallets": snap["wallets"],
@@ -3278,10 +3283,14 @@ def api_accounts_portfolio():
     for acc in accounts:
         if not acc["connected"]:
             continue
+        # Aynı KANONİK snapshot — bağımsız exchange fetch YOK; bir
+        # hesabın NOT_CONFIGURED olması diğerlerinin (ör. PAPER)
+        # değerini etkilemez, yalnız toplamı UNKNOWN bırakır.
         snap = _account_snapshot(acc["exchange"])
         value = snap["value_usdt"]
         components.append({"account_id": acc["account_id"],
                            "nickname": acc["nickname"],
+                           "connection_state": snap["connection_state"],
                            "value_usdt": value})
         if value == "UNKNOWN":
             unknown = True
@@ -3766,10 +3775,10 @@ def _workspace_equity_raw() -> list[dict[str, Any]]:
 
 def _workspace_account_raw() -> dict[str, Any]:
     """Bot muhasebe durumundan (state.json) bakiye — PAPER
-    defteridir; yoksa alanlar UNKNOWN kalır."""
-    path = Path("alpha20_v1/state.json")
+    defteridir; yoksa alanlar UNKNOWN kalır. ROOT'a bağlı STATE_PATH
+    kullanılır (Windows çalışma dizini bağımsızlığı)."""
     try:
-        state = json.loads(path.read_text())
+        state = json.loads(STATE_PATH.read_text())
     except (OSError, ValueError):
         return {}
     if not isinstance(state, dict):

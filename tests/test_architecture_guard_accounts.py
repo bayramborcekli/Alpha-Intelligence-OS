@@ -110,3 +110,25 @@ def test_no_authenticated_futures_endpoints():
                 offenders.append(f"{p.name}:{i}: {line.strip()}")
     assert not offenders, ("İmzalı Futures endpoint yasak:\n"
                            + "\n".join(offenders))
+
+
+def test_no_cwd_relative_paper_ledger_read():
+    # PAPER defteri ROOT'a bağlı STATE_PATH ile okunur; göreli
+    # Path("alpha20_v1/state.json") Windows'ta yanlış UNKNOWN üretir.
+    src = (ROOT / "app.py").read_text(encoding="utf-8")
+    assert 'Path("alpha20_v1/state.json")' not in src, (
+        "PAPER defteri göreli yolla okunamaz — STATE_PATH kullanın")
+
+
+def test_wallets_portfolio_delegate_to_snapshot():
+    # /api/accounts/wallets ve /portfolio kendi exchange fetch /
+    # health hesaplaması yapamaz; kanonik _account_snapshot'a delege eder.
+    src = (ROOT / "app.py").read_text(encoding="utf-8")
+    for fn in ("def api_accounts_wallets", "def api_accounts_portfolio"):
+        body = src.split(fn)[1].split("\n@app.")[0]
+        assert "_account_snapshot(" in body, f"{fn} delege etmeli"
+        for banned in ("global_spot_account(", "tr_account(",
+                       "BinanceGlobalClient", "BinanceTRClient",
+                       "os.environ", "credentials("):
+            assert banned not in body, (
+                f"{fn}: ikinci hesap fetch/health yolu yasak ({banned})")
