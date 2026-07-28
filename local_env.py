@@ -18,8 +18,11 @@ metadata (source, present, length, ascii) raporlanır.
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+
+log = logging.getLogger("local_env")
 
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
@@ -32,8 +35,40 @@ OVERRIDE_KEYS = ("BINANCE_TR_API_KEY", "BINANCE_TR_API_SECRET",
                  "BINANCE_GLOBAL_API_Key", "BINANCE_GLOBAL_Secret_Key",
                  "BINANCE_API_Key", "BINANCE_Secret_Key")
 
+# Kanonik isim → o ismin yerine geçen eski (legacy) isimler.
+# exchange_credentials.LEGACY ile hizalıdır; yalnız uyarı üretimi için.
+_CANONICAL_TO_LEGACY = {
+    "BINANCE_GLOBAL_API_Key": ("BINANCE_GLOBAL_API_KEY",
+                               "BINANCE_API_KEY", "BINANCE_API_Key"),
+    "BINANCE_GLOBAL_Secret_Key": ("BINANCE_GLOBAL_API_SECRET",
+                                  "BINANCE_API_SECRET",
+                                  "BINANCE_Secret_Key"),
+}
+
 _loaded = False
 _sources: dict[str, str] = {}
+
+
+def legacy_name_warnings() -> list[str]:
+    """Eski Binance env isimleri dolu + kanonik isim boşsa Türkçe uyarı
+    metinleri üretir. Sır DEĞERİ asla içermez; yalnız isimler raporlanır."""
+    warnings: list[str] = []
+    for canonical, legacies in _CANONICAL_TO_LEGACY.items():
+        if os.environ.get(canonical, "").strip():
+            continue  # kanonik dolu → uyarı yok
+        filled = [n for n in legacies if os.environ.get(n, "").strip()]
+        if filled:
+            warnings.append(
+                "UYARI: Eski Binance env ismi tespit edildi: "
+                f"{', '.join(filled)}. Kanonik isim '{canonical}' boş. "
+                f"Lütfen değeri .env/Secrets içinde '{canonical}' adına "
+                "taşıyın; eski isimler yalnız geçici uyumluluk içindir.")
+    return warnings
+
+
+def _emit_legacy_warnings() -> None:
+    for msg in legacy_name_warnings():
+        log.warning(msg)
 
 
 def is_replit() -> bool:
@@ -89,6 +124,7 @@ def load_project_env(force: bool = False) -> dict[str, str]:
         for key in OVERRIDE_KEYS:
             if os.environ.get(key):
                 _sources[key] = "process_env"
+        _emit_legacy_warnings()
         return dict(_sources)
     file_vals = _parse_env_file(ENV_FILE)
     for key, val in file_vals.items():
@@ -106,6 +142,7 @@ def load_project_env(force: bool = False) -> dict[str, str]:
     for key in OVERRIDE_KEYS:
         if key not in _sources and os.environ.get(key):
             _sources[key] = "process_env"
+    _emit_legacy_warnings()
     return dict(_sources)
 
 

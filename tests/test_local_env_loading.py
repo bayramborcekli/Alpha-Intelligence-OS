@@ -65,3 +65,57 @@ class TestWindowsEnvEncodings:
              patch.object(xc, "_store_entry", return_value=None):
             local_env.load_project_env(force=True)
             assert xc.configured("BINANCE_GLOBAL") is False
+
+
+LEGACY_ONLY = ("BINANCE_API_KEY=LEGK1234\n"
+               "BINANCE_API_SECRET=LEGS1234\n")
+
+
+class TestLegacyNameWarning:
+    """Task: eski Binance isimleri dolu + kanonik boşsa net Türkçe uyarı."""
+
+    def _load_env(self, tmp_path, payload: str, caplog):
+        f = tmp_path / ".env"
+        f.write_text(payload, encoding="utf-8")
+        with patch.object(local_env, "ENV_FILE", f), \
+             caplog.at_level("WARNING", logger="local_env"):
+            local_env.load_project_env(force=True)
+        return caplog.text
+
+    def test_legacy_only_warns_in_turkish(self, tmp_path, clean_env, caplog):
+        text = self._load_env(tmp_path, LEGACY_ONLY, caplog)
+        assert "Eski Binance env ismi tespit edildi" in text
+        assert "BINANCE_API_KEY" in text
+        assert "BINANCE_GLOBAL_API_Key" in text  # kanonik hedef gösterilir
+        # Sır değeri ASLA loglanmaz
+        assert "LEGK1234" not in text
+        assert "LEGS1234" not in text
+
+    def test_canonical_filled_no_warning(self, tmp_path, clean_env, caplog):
+        text = self._load_env(tmp_path, PAIRS, caplog)
+        assert "Eski Binance env ismi" not in text
+
+    def test_canonical_plus_legacy_no_warning(self, tmp_path, clean_env,
+                                              caplog):
+        text = self._load_env(tmp_path, PAIRS + LEGACY_ONLY, caplog)
+        assert "Eski Binance env ismi" not in text
+
+    def test_empty_env_no_warning(self, tmp_path, clean_env, caplog):
+        text = self._load_env(tmp_path, "", caplog)
+        assert "Eski Binance env ismi" not in text
+
+    def test_replit_process_env_legacy_warns(self, monkeypatch, clean_env,
+                                             caplog):
+        monkeypatch.setenv("REPL_ID", "x")
+        monkeypatch.setenv("BINANCE_API_KEY", "LEGK1234")
+        monkeypatch.setenv("BINANCE_API_SECRET", "LEGS1234")
+        with caplog.at_level("WARNING", logger="local_env"):
+            local_env.load_project_env(force=True)
+        assert "Eski Binance env ismi tespit edildi" in caplog.text
+        assert "LEGK1234" not in caplog.text
+
+    def test_warning_lists_only_filled_legacy_names(self, tmp_path,
+                                                    clean_env, caplog):
+        text = self._load_env(tmp_path, "BINANCE_API_Key=LK1\n", caplog)
+        assert "BINANCE_API_Key" in text
+        assert "BINANCE_GLOBAL_API_KEY," not in text
