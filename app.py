@@ -214,11 +214,36 @@ def _api_error(message: str, status: int):
                     "request_id": getattr(g, "request_id", "")}), status
 
 
+def _replit_dev_bypass_active() -> bool:
+    """GEÇİCİ geliştirme bypass'ı — SADECE Replit çalışma alanında.
+
+    Üç kilit birden gerekir (default KAPALI):
+    1. REPLIT_DEV_BYPASS=1 açıkça set edilmiş olmalı.
+    2. Replit workspace belirteci (REPL_ID / REPLIT_DEV_DOMAIN) olmalı —
+       Windows/local'de flag set edilse bile bypass ÇALIŞMAZ.
+    3. REPLIT_DEPLOYMENT (yayınlanmış üretim) varsa bypass ASLA çalışmaz.
+    """
+    if os.environ.get("REPLIT_DEV_BYPASS") != "1":
+        return False
+    if os.environ.get("REPLIT_DEPLOYMENT"):
+        return False
+    return bool(os.environ.get("REPL_ID")
+                or os.environ.get("REPLIT_DEV_DOMAIN"))
+
+
 @app.before_request
 def _security_gate():
     """Her istekte kimlik doğrulama kontrolü. TESTING=True ise atlanır."""
     if app.config.get("TESTING"):
         app.config["WTF_CSRF_ENABLED"] = False
+        return
+    if _replit_dev_bypass_active():
+        if not session.get("logged_in"):
+            auth.start_session("replit-dev-bypass")
+            logging.getLogger(__name__).warning(
+                "AUTH BYPASS AKTİF (REPLIT_DEV_BYPASS=1) — test kullanıcısı "
+                "'replit-dev-bypass' otomatik giriş yaptı. Bu yalnız Replit "
+                "geliştirme ortamı içindir; üretimde çalışmaz.")
         return
     exempt = {"/login", "/logout", "/setup", "/setup/hash", "/setup/save",
               "/setup/check",
