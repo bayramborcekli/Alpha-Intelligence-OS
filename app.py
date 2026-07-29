@@ -1015,6 +1015,19 @@ def health():
     }, 200
 
 
+def _read_paper_reconcile_result():
+    """serve_windows startup reconcile sonucunu okur (yoksa None).
+
+    Dosyayı serve_windows._record_reconcile_result yazar; secret içermez."""
+    try:
+        p = Path(__file__).resolve().parent / "data" / \
+            "paper_reconcile_last.json"
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
 @app.get("/health/runtime")
 def health_runtime():
     """Windows Runtime Control Bridge — SALT OKUNUR runtime durumu.
@@ -1082,6 +1095,7 @@ def health_runtime():
         "paper_balance": state.get("balance"),
         "last_trade": last_trade,
         "last_error": last_error,
+        "paper_reconcile": _read_paper_reconcile_result(),
         "git_head": _RUNTIME_GIT_HEAD,
         "code_stale": _runtime_code_stale(),
         "entrypoint": _runtime_entrypoint(),

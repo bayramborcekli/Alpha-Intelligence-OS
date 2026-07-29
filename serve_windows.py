@@ -16,6 +16,7 @@ Startup logu güvenlidir: Python yolu, proje kökü, port ve config kaynak
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -320,6 +321,9 @@ def _reconcile_paper_desired_state(_app) -> None:
     - Kayıtlı tercih STOPPED ise otomatik başlatma YAPILMAZ.
     - Live Trading hiçbir durumda açılmaz (LIVE ORDERS: DISABLED).
     - Replit ortamında tam no-op (yerel Windows state'e dokunulmaz).
+
+    Sonuç, windows_runtime_recovery raporu ve /health/runtime için
+    data/paper_reconcile_last.json dosyasına yazılır (secret içermez).
     """
     try:
         if not _reconcile_env_ok():
@@ -334,13 +338,15 @@ def _reconcile_paper_desired_state(_app) -> None:
         if est.get("environment") == "LIVE":
             log.warning("PAPER RECONCILE: LIVE mod — hicbir otomasyon "
                         "baslatilmaz (fail-closed).")
+            _record_reconcile_result("LIVE_FAIL_CLOSED")
             return
         if est["active"]:
+            reason = est.get("reason_code") or "UNKNOWN_LEGACY_STATE"
             log.warning("PAPER RECONCILE: EMERGENCY/RISK STOP ACTIVE "
                         "(reason=%s) — kayitli otomasyon tercihi geri "
                         "YUKLENMEDI; tercih SILINMEDI. Guvenli kaldirma: "
-                        "Operation Center > Acil Durdurma karti.",
-                        est.get("reason_code") or "UNKNOWN_LEGACY_STATE")
+                        "Operation Center > Acil Durdurma karti.", reason)
+            _record_reconcile_result("BLOCKED_EMERGENCY", detail=reason)
             return
         svc = _app.get_operation_service()
         state = svc.automation_state.value
@@ -349,15 +355,52 @@ def _reconcile_paper_desired_state(_app) -> None:
             log.info("PAPER RECONCILE: kayitli tercih automation=%s — "
                      "otomatik baslatma YOK (kullanicinin STOP tercihi "
                      "korunur). Semboller: %s", state, symbols or "{}")
+            _record_reconcile_result("PRESERVED_STOPPED",
+                                     automation=state, symbols=symbols)
             return
         started = _app.ac.start_controller_loop()
-        log.info("PAPER PREFERENCE RESTORED: automation=RUNNING, "
-                 "semboller=%s, controller=%s. LIVE ORDERS: DISABLED.",
-                 symbols or "{}",
-                 "STARTED" if started else "ALREADY_RUNNING")
+        log.warning(
+            "*** PAPER PREFERENCE RESTORED ***: automation=RUNNING, "
+            "semboller=%s, controller=%s. LIVE ORDERS: DISABLED.",
+            symbols or "{}",
+            "STARTED" if started else "ALREADY_RUNNING",
+        )
+        _record_reconcile_result("RESTORED_RUNNING", automation="RUNNING",
+                                 symbols=symbols,
+                                 detail=("STARTED" if started
+                                         else "ALREADY_RUNNING"))
     except Exception as exc:
         log.warning("PAPER RECONCILE basarisiz (tercih dosyasi korunur): "
                     "%s", exc)
+        _record_reconcile_result("ERROR", detail=str(exc)[:200])
+
+
+RECONCILE_RESULT_PATH = (Path(__file__).resolve().parent / "data" /
+                         "paper_reconcile_last.json")
+
+
+def _record_reconcile_result(result: str, *, automation: str | None = None,
+                             symbols: dict | None = None,
+                             detail: str | None = None) -> None:
+    """Reconcile sonucunu diske yazar (best-effort; secret içermez).
+
+    /health/runtime ve windows_runtime_recovery snapshot'ı bu dosyayı
+    okuyarak son startup reconcile kararını raporlar."""
+    from datetime import datetime, timezone
+    snap = {
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "result": result,
+        "automation": automation,
+        "symbols": symbols or {},
+        "detail": detail,
+    }
+    try:
+        RECONCILE_RESULT_PATH.parent.mkdir(exist_ok=True)
+        RECONCILE_RESULT_PATH.write_text(
+            json.dumps(snap, ensure_ascii=False, indent=2),
+            encoding="utf-8")
+    except OSError as exc:
+        log.warning("PAPER RECONCILE sonucu diske yazilamadi: %s", exc)
 
 
 if __name__ == "__main__":

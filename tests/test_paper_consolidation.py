@@ -193,6 +193,32 @@ class TestStartupReconciliation:
                                                          started))
         assert started == []
 
+    def test_running_restore_records_result(self, sw, monkeypatch,
+                                             tmp_path):
+        from services import emergency_stop as es
+        monkeypatch.setattr(es, "status", lambda: {
+            "active": False, "environment": "PAPER",
+            "reason_code": ""})
+        out = tmp_path / "paper_reconcile_last.json"
+        monkeypatch.setattr(sw, "RECONCILE_RESULT_PATH", out)
+        sw._reconcile_paper_desired_state(self._fake_app("RUNNING", []))
+        data = json.loads(out.read_text(encoding="utf-8"))
+        assert data["result"] == "RESTORED_RUNNING"
+        assert data["automation"] == "RUNNING"
+
+    def test_emergency_block_records_result(self, sw, monkeypatch,
+                                            tmp_path):
+        from services import emergency_stop as es
+        monkeypatch.setattr(es, "status", lambda: {
+            "active": True, "environment": "PAPER",
+            "reason_code": "MANUAL_STOP"})
+        out = tmp_path / "paper_reconcile_last.json"
+        monkeypatch.setattr(sw, "RECONCILE_RESULT_PATH", out)
+        sw._reconcile_paper_desired_state(self._fake_app("RUNNING", []))
+        data = json.loads(out.read_text(encoding="utf-8"))
+        assert data["result"] == "BLOCKED_EMERGENCY"
+        assert data["detail"] == "MANUAL_STOP"
+
     def test_replit_is_noop(self, monkeypatch):
         import serve_windows as sw
         monkeypatch.setattr(sw, "_reconcile_env_ok", lambda: False)

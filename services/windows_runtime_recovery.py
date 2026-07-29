@@ -47,6 +47,7 @@ def record_report(report: dict, health: dict) -> None:
         "paper": str(health.get("paper", "disabled")).upper(),
         "cycle_count": int(health.get("cycle_count") or 0),
         "git_head": health.get("git_head"),
+        "paper_reconcile": health.get("paper_reconcile"),
         "runtime_card": ("green" if wsf.health_ok(health)
                          else "yellow" if health else "red"),
         "root_cause": report.get("ROOT CAUSE"),
