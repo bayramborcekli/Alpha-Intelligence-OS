@@ -5,10 +5,16 @@ import json
 import logging
 import math
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+try:
+    import fcntl  # POSIX (Linux/Replit) — davranış değişmez
+except ImportError:  # Windows: msvcrt tabanlı uyumluluk katmanı
+    import portable_flock as fcntl  # type: ignore
 
 import pandas as pd
 import requests
@@ -278,6 +284,10 @@ def diagnose_network_error(exc: Exception) -> str:
             "duvarı/proxy ayarlarını kontrol edin. "
             f"Teknik ayrıntı: {exc}")
 
+def _rate_limit_state_path() -> Path:
+    # Çağrı anında çözülür (test izolasyonu için monkeypatch edilebilir).
+    return Path(RATE_LIMIT_STATE_PATH)
+
 
 # ── Rate-limit geri çekilme (429/418) ────────────────────────────────────────
 # Binance 429 (çok fazla istek) gelince tempo otomatik düşürülür; istekler
@@ -294,28 +304,10 @@ _rate_limit_state: dict[str, Any] = {
     "consecutive_429": 0,      # artan bekleme için ardışık 429 sayacı
 }
 
-# Panelin (ayrı süreç — gunicorn) geri çekilmeyi görebilmesi için durum
-# geçişlerinde diske yazılır. Yalnız geçişlerde yazılır (her istek değil).
+# Paylaşımlı geri çekilme dosyası: hem panel (gunicorn worker'ları) hem
+# bot süreci aynı dosyayı flock + atomik yazma ile okur-yazar. Süreç içi
+# sözlük yalnızca dosya okunamadığında devreye giren yedektir.
 RATE_LIMIT_STATE_PATH = ROOT / "rate_limit_state.json"
-
-
-def _persist_rate_limit_state() -> None:
-    """Geri çekilme durumunu panel için diske yazar (atomik).
-
-    Yazma hatası taramayı durdurmaz; yalnız log'a düşer (görünürlük
-    yardımcı özelliktir, ticaret akışını asla bloklamamalı)."""
-    payload = {
-        "blocked_until": float(_rate_limit_state["blocked_until"]),
-        "reason": str(_rate_limit_state["reason"]),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    try:
-        temp = RATE_LIMIT_STATE_PATH.with_suffix(".tmp")
-        with temp.open("w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        temp.replace(RATE_LIMIT_STATE_PATH)
-    except OSError as exc:
-        log.warning("GERİ ÇEKİLME | durum dosyası yazılamadı: %s", exc)
 
 
 def read_rate_limit_file(now: float | None = None,
@@ -346,17 +338,25 @@ def reset_rate_limit_state() -> None:
     _rate_limit_state["blocked_until"] = 0.0
     _rate_limit_state["reason"] = ""
     _rate_limit_state["consecutive_429"] = 0
-    _persist_rate_limit_state()
+    with _rate_limit_file_lock() as locked:
+        if locked:
+            _write_shared_rate_limit(_rate_limit_state)
 
 
 def rate_limit_remaining(now: float | None = None) -> float:
-    """Geri çekilme bitimine kalan saniye (0 → istek atılabilir)."""
+    """Geri çekilme bitimine kalan saniye (0 → istek atılabilir).
+
+    Paylaşımlı dosyadan okur: başka bir sürecin gördüğü 429/418 yasağı
+    bu süreçte de geçerlidir.
+    """
     if now is None:
         now = time.time()
+    _sync_from_shared()
     return max(0.0, float(_rate_limit_state["blocked_until"]) - now)
 
 
 def rate_limit_reason() -> str:
+    _sync_from_shared()
     return str(_rate_limit_state.get("reason", ""))
 
 
@@ -386,40 +386,61 @@ def register_rate_limit(status: int, response: Any = None,
     """
     if now is None:
         now = time.time()
-    retry_after = _parse_retry_after(response)
-    if status == 418:
-        wait = retry_after if retry_after is not None else RATE_LIMIT_BAN_BACKOFF
-        _rate_limit_state["consecutive_429"] = 0
-        reason = (f"Binance IP yasağı (418): IP'niz geçici olarak engellendi. "
-                  f"Yeni istekler {wait:.0f} saniye boyunca durduruldu; yasak "
-                  "süresi dolunca tarama kendiliğinden devam eder. Aynı IP'den "
-                  "yoğun istek atan diğer uygulamaları kapatın.")
-    elif status == 429:
-        count = int(_rate_limit_state["consecutive_429"]) + 1
-        _rate_limit_state["consecutive_429"] = count
-        if retry_after is not None:
-            wait = retry_after
-        else:
-            wait = min(RATE_LIMIT_MAX_BACKOFF,
-                       RATE_LIMIT_DEFAULT_BACKOFF * (2 ** (count - 1)))
-        reason = (f"Binance istek limiti (429 — çok fazla istek): istek temposu otomatik "
-                  f"düşürüldü — tarama {wait:.0f} saniye duraklatıldı "
-                  "(IP yasağına dönüşmemesi için). Bekleme bitince "
-                  "kendiliğinden devam eder.")
-    else:
+    if status not in (418, 429):
         return 0.0
-    blocked_until = now + wait
-    if blocked_until > float(_rate_limit_state["blocked_until"]):
-        _rate_limit_state["blocked_until"] = blocked_until
-        _rate_limit_state["reason"] = reason
-        _persist_rate_limit_state()
+    retry_after = _parse_retry_after(response)
+    with _rate_limit_file_lock() as locked:
+        if locked:
+            _sync_from_shared()
+        if status == 418:
+            wait = (retry_after if retry_after is not None
+                    else RATE_LIMIT_BAN_BACKOFF)
+            _rate_limit_state["consecutive_429"] = 0
+            reason = (f"Binance IP yasağı (418): IP'niz geçici olarak engellendi. "
+                      f"Yeni istekler {wait:.0f} saniye boyunca durduruldu; yasak "
+                      "süresi dolunca tarama kendiliğinden devam eder. Aynı IP'den "
+                      "yoğun istek atan diğer uygulamaları kapatın.")
+        else:  # 429
+            count = int(_rate_limit_state["consecutive_429"]) + 1
+            _rate_limit_state["consecutive_429"] = count
+            if retry_after is not None:
+                wait = retry_after
+            else:
+                wait = min(RATE_LIMIT_MAX_BACKOFF,
+                           RATE_LIMIT_DEFAULT_BACKOFF * (2 ** (count - 1)))
+            reason = (f"Binance istek limiti (429 — çok fazla istek): istek temposu otomatik "
+                      f"düşürüldü — tarama {wait:.0f} saniye duraklatıldı "
+                      "(IP yasağına dönüşmemesi için). Bekleme bitince "
+                      "kendiliğinden devam eder.")
+        blocked_until = now + wait
+        if blocked_until > float(_rate_limit_state["blocked_until"]):
+            _rate_limit_state["blocked_until"] = blocked_until
+            _rate_limit_state["reason"] = reason
+        if locked:
+            _write_shared_rate_limit(_rate_limit_state)
     log.warning("GERİ ÇEKİLME | %s", reason)
     return wait
 
 
 def note_rate_limit_success() -> None:
-    """Başarılı istek sonrası ardışık 429 sayacını sıfırlar."""
+    """Başarılı istek sonrası ardışık 429 sayacını sıfırlar.
+
+    Sayaç paylaşımlı dosyada da sıfırlanır ki diğer süreçler artan
+    beklemeyi gereksiz yere büyütmesin. Dosyaya yalnız değişiklik
+    gerekiyorsa yazılır (her başarılı istekte disk yazımı olmaz).
+    """
     _rate_limit_state["consecutive_429"] = 0
+    shared = _read_shared_rate_limit()
+    if shared is None or int(shared["consecutive_429"]) == 0:
+        return
+    with _rate_limit_file_lock() as locked:
+        if not locked:
+            return
+        shared = _read_shared_rate_limit()
+        if shared is None or int(shared["consecutive_429"]) == 0:
+            return
+        shared["consecutive_429"] = 0
+        _write_shared_rate_limit(shared)
 
 
 def diagnose_http_error(exc: Exception) -> str:
@@ -882,3 +903,90 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+@contextmanager
+def _rate_limit_file_lock():
+    """Süreçler arası münhasır kilit (flock). Dosya açılamazsa None verir."""
+    path = _rate_limit_state_path()
+    lock_path = Path(f"{path}.lock")
+    lock_file = None
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = lock_path.open("a+")
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+    except OSError as exc:
+        if lock_file is not None:
+            try:
+                lock_file.close()
+            except OSError:
+                pass
+        log.warning(
+            "GERİ ÇEKİLME | Paylaşımlı durum kilidi alınamadı (%s) — "
+            "yalnız süreç içi durum kullanılacak.", exc)
+        yield False
+        return
+    try:
+        yield True
+    finally:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        try:
+            lock_file.close()
+        except OSError:
+            pass
+
+def _write_shared_rate_limit(state: dict[str, Any]) -> None:
+    """Durumu atomik olarak (tmp + replace) paylaşımlı dosyaya yazar."""
+    path = _rate_limit_state_path()
+    try:
+        temp = path.with_suffix(".tmp")
+        with temp.open("w", encoding="utf-8") as f:
+            json.dump({
+                "blocked_until": float(state["blocked_until"]),
+                "reason": str(state["reason"]),
+                "consecutive_429": int(state["consecutive_429"]),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }, f, ensure_ascii=False)
+            f.flush()
+        temp.replace(path)
+    except OSError as exc:
+        log.warning(
+            "GERİ ÇEKİLME | Paylaşımlı durum dosyası yazılamadı (%s) — "
+            "diğer süreçler bu geri çekilmeyi göremeyebilir!", exc)
+
+def _read_shared_rate_limit() -> dict[str, Any] | None:
+    """Paylaşımlı dosyadaki durumu okur; yoksa/bozuksa None."""
+    path = _rate_limit_state_path()
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning(
+            "GERİ ÇEKİLME | Paylaşımlı durum dosyası okunamadı (%s) — "
+            "süreç içi durum kullanılacak.", exc)
+        return None
+    if not isinstance(data, dict):
+        return None
+    try:
+        return {
+            "blocked_until": float(data.get("blocked_until", 0.0)),
+            "reason": str(data.get("reason", "")),
+            "consecutive_429": int(data.get("consecutive_429", 0)),
+        }
+    except (TypeError, ValueError):
+        return None
+
+def _sync_from_shared() -> None:
+    """Paylaşımlı dosyadaki daha güncel yasağı süreç içi duruma taşır."""
+    shared = _read_shared_rate_limit()
+    if shared is None:
+        return
+    if shared["blocked_until"] > float(_rate_limit_state["blocked_until"]):
+        _rate_limit_state["blocked_until"] = shared["blocked_until"]
+        _rate_limit_state["reason"] = shared["reason"]
+    if shared["consecutive_429"] > int(_rate_limit_state["consecutive_429"]):
+        _rate_limit_state["consecutive_429"] = shared["consecutive_429"]

@@ -73,11 +73,16 @@ def _sanitize_real_creds(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _reset_rate_limit_state():
-    # 429/418 geri çekilme durumu paylaşılan modül durumu — testler arası
-    # sızıntı olmasın diye her testten önce/sonra sıfırlanır.
+def _reset_rate_limit_state(tmp_path, monkeypatch):
+    # 429/418 geri çekilme durumu paylaşılan modül durumu + paylaşımlı
+    # dosya — testler arası sızıntı olmasın diye her testten önce/sonra
+    # sıfırlanır ve dosya geçici dizine yönlendirilir (gerçek
+    # rate_limit_state.json dosyasına dokunulmaz).
     try:
         import alpha20
+        monkeypatch.setattr(
+            alpha20, "RATE_LIMIT_STATE_PATH",
+            tmp_path / "rate_limit_state.json", raising=False)
         alpha20.reset_rate_limit_state()
     except Exception:
         pass
