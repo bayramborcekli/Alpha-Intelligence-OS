@@ -91,6 +91,14 @@ def _mock_global_account(monkeypatch, account):
 
         def get_spot_account(self):
             return account
+
+        def get_api_restrictions(self):
+            # canTrade hesap-durum alanı artık izin kararı vermez;
+            # anahtar izni kanonik apiRestrictions'tan gelir.
+            return {"enableReading": True, "enableWithdrawals": False,
+                    "enableSpotAndMarginTrading":
+                        bool(account.get("canTrade")),
+                    "enableFutures": False}
     monkeypatch.setattr(bgc, "BinanceGlobalClient", FakeClient)
 
 

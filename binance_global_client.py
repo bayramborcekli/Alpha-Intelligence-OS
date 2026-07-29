@@ -28,11 +28,14 @@ GLOBAL_SPOT_BASE = "https://api.binance.com"
 PATH_TIME = "/api/v3/time"
 PATH_ACCOUNT = "/api/v3/account"
 PATH_TICKER = "/api/v3/ticker/price"
+# API anahtarı izinlerinin KANONİK kaynağı (salt-okunur sorgu):
+PATH_API_RESTRICTIONS = "/sapi/v1/account/apiRestrictions"
 RECV_WINDOW = 5000
 DEFAULT_TIMEOUT = 10
 
 # Salt-okunur allowlist — /fapi/* ASLA burada yer alamaz.
-READ_ONLY_PATHS = frozenset({PATH_TIME, PATH_ACCOUNT, PATH_TICKER})
+READ_ONLY_PATHS = frozenset({PATH_TIME, PATH_ACCOUNT, PATH_TICKER,
+                             PATH_API_RESTRICTIONS})
 
 
 class BinanceGlobalError(Exception):
@@ -121,6 +124,25 @@ class BinanceGlobalClient:
         except BinanceGlobalError:
             ts = int(time.time() * 1000)
         return self._get(PATH_ACCOUNT, self.signed_query(ts), signed=True)
+
+    def get_api_restrictions(self) -> dict:
+        """API anahtarının gerçek izinleri (kanonik kaynak).
+
+        /api/v3/account içindeki canTrade/canWithdraw hesap DURUMU'dur,
+        anahtar izni değildir; izin kararı yalnız bu endpoint'e dayanır."""
+        if not self._key or not self._secret:
+            raise BinanceGlobalError("NOT_CONFIGURED",
+                                     path=PATH_API_RESTRICTIONS)
+        try:
+            ts = self.get_server_time()
+        except BinanceGlobalError:
+            ts = int(time.time() * 1000)
+        body = self._get(PATH_API_RESTRICTIONS, self.signed_query(ts),
+                         signed=True)
+        if not isinstance(body, dict):
+            raise BinanceGlobalError("INVALID_RESPONSE", http_status=200,
+                                     path=PATH_API_RESTRICTIONS)
+        return body
 
     def get_ticker_prices(self) -> list:
         body = self._get(PATH_TICKER)

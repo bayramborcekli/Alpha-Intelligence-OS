@@ -20,7 +20,18 @@ def iso(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _client_mock(monkeypatch, account=None, exc=None, server_time=1000):
+SAFE_RESTRICTIONS = {"enableReading": True, "enableWithdrawals": False,
+                     "enableSpotAndMarginTrading": False,
+                     "enableMargin": False, "enableFutures": False,
+                     "enableVanillaOptions": False,
+                     "enablePortfolioMarginTrading": False,
+                     "permitsUniversalTransfer": False,
+                     "enableInternalTransfer": False,
+                     "enableFixApiTrade": False}
+
+
+def _client_mock(monkeypatch, account=None, exc=None, server_time=1000,
+                 restrictions=SAFE_RESTRICTIONS, restrictions_exc=None):
     class FakeClient:
         def __init__(self, *a, **k):
             pass
@@ -32,6 +43,11 @@ def _client_mock(monkeypatch, account=None, exc=None, server_time=1000):
             if exc is not None:
                 raise exc
             return account
+
+        def get_api_restrictions(self):
+            if restrictions_exc is not None:
+                raise restrictions_exc
+            return restrictions
     monkeypatch.setattr(bgc, "BinanceGlobalClient", FakeClient)
 
 
@@ -43,14 +59,44 @@ def test_global_read_only_success(iso, monkeypatch):
     assert r["futures"] == "NOT_TESTED"  # spot-only mimari
 
 
-@pytest.mark.parametrize("acct", [
-    {"canTrade": True, "canWithdraw": False},
-    {"canTrade": False, "canWithdraw": True},
-])
-def test_global_trade_or_withdraw_rejected(iso, monkeypatch, acct):
-    _client_mock(monkeypatch, acct)
+@pytest.mark.parametrize("flag", ["enableSpotAndMarginTrading",
+                                  "enableWithdrawals", "enableFutures",
+                                  "enableMargin",
+                                  "permitsUniversalTransfer"])
+def test_global_dangerous_restriction_rejected(iso, monkeypatch, flag):
+    """Tehlikeli API KEY izni → kesin RED (kanonik apiRestrictions)."""
+    bad = dict(SAFE_RESTRICTIONS)
+    bad[flag] = True
+    _client_mock(monkeypatch, {"canTrade": False, "canWithdraw": False},
+                 restrictions=bad)
     r = bc.test_global("k" * 20, "s" * 20)
     assert r["status"] == "PERMISSION_DENIED"
+    assert flag in r.get("guidance", "")
+
+
+def test_account_status_flags_do_not_reject(iso, monkeypatch):
+    """canTrade/canWithdraw HESAP durumudur; anahtar izni değildir —
+    apiRestrictions güvenliyse bağlantı kabul edilir (yanlış ret fix)."""
+    _client_mock(monkeypatch, {"canTrade": True, "canWithdraw": True,
+                               "accountType": "SPOT"},
+                 restrictions=SAFE_RESTRICTIONS)
+    r = bc.test_global("k" * 20, "s" * 20)
+    assert r["status"] == "CONNECTED_READ_ONLY"
+
+
+def test_restrictions_unavailable_yields_unverified(iso, monkeypatch):
+    """apiRestrictions geçici hata verirse yanlış ret YOK → sarı."""
+    _client_mock(monkeypatch, {"canTrade": True, "canWithdraw": False},
+                 restrictions_exc=bgc.BinanceGlobalError(
+                     "HTTP_ERROR", http_status=503))
+    r = bc.test_global("k" * 20, "s" * 20)
+    assert r["status"] == "CONNECTED_PERMISSIONS_UNVERIFIED"
+
+
+def test_restrictions_missing_fields_unverified(iso, monkeypatch):
+    _client_mock(monkeypatch, {"canTrade": False}, restrictions={})
+    r = bc.test_global("k" * 20, "s" * 20)
+    assert r["status"] == "CONNECTED_PERMISSIONS_UNVERIFIED"
 
 
 def test_invalid_key_classified(iso, monkeypatch):
@@ -88,6 +134,9 @@ def test_timestamp_drift_retries_then_ok(iso, monkeypatch):
                     "EXCHANGE_ERROR", http_status=400,
                     exchange_code=-1021, exchange_message="Timestamp...")
             return {"canTrade": False, "canWithdraw": False}
+
+        def get_api_restrictions(self):
+            return dict(SAFE_RESTRICTIONS)
     monkeypatch.setattr(bgc, "BinanceGlobalClient", FakeClient)
     r = bc.test_global("k" * 20, "s" * 20)
     assert r["status"] == "CONNECTED_READ_ONLY"
@@ -112,7 +161,8 @@ def test_tr_missing_permission_fields_unverified(iso, monkeypatch):
 
 
 def test_connect_does_not_store_on_failure(iso, monkeypatch):
-    _client_mock(monkeypatch, {"canTrade": True})
+    bad = dict(SAFE_RESTRICTIONS); bad["enableWithdrawals"] = True
+    _client_mock(monkeypatch, {"canTrade": False}, restrictions=bad)
     import exchange_credentials as xc
     saved = []
     monkeypatch.setattr(xc, "save_local", lambda *a: saved.append(a))

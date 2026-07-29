@@ -150,22 +150,38 @@ def classify_error(exc: Exception) -> str:
     return "ERROR"
 
 
-def _global_permission_review(acct: dict) -> tuple[str, dict]:
-    """Global hesap yanıtından izin politikası kararı.
+# API anahtarında true olması KESİN REDDE yol açan tehlikeli izinler.
+DANGEROUS_RESTRICTION_FLAGS = (
+    "enableWithdrawals", "enableSpotAndMarginTrading", "enableMargin",
+    "enableFutures", "enableVanillaOptions",
+    "enablePortfolioMarginTrading", "permitsUniversalTransfer",
+    "enableInternalTransfer", "enableFixApiTrade",
+)
 
-    canWithdraw=true → REDDET. canTrade=true → REDDET (salt-okunur hedef;
-    kullanıcı Binance panelinden yetkiyi kapatmalı). Alanlar hiç yoksa
-    UNVERIFIED."""
-    fields = {k: acct.get(k) for k in
-              ("canTrade", "canWithdraw", "canDeposit", "brokered",
-               "permissions", "accountType") if k in acct}
-    if "canWithdraw" not in acct and "canTrade" not in acct:
+
+def _global_permission_review(restrictions: dict) -> tuple[str, dict]:
+    """API KEY izin kararı — KANONİK kaynak: /sapi/v1/account/apiRestrictions.
+
+    Hesap (spot account) yanıtındaki canTrade/canWithdraw/canDeposit hesap
+    DURUMU'dur; anahtar izni değildir ve karar için KULLANILMAZ.
+    Kural: enableReading=true VE tüm tehlikeli izinler false →
+    CONNECTED_READ_ONLY. Tehlikeli izin true → PERMISSION_DENIED.
+    İzin alanları hiç yoksa → UNVERIFIED (yanlış ret yok).
+    enableFixReadOnly güvenli sayılır."""
+    fields = {k: restrictions.get(k) for k in
+              (("enableReading", "enableFixReadOnly")
+               + DANGEROUS_RESTRICTION_FLAGS) if k in restrictions}
+    dangerous = [k for k in DANGEROUS_RESTRICTION_FLAGS
+                 if bool(restrictions.get(k))]
+    if dangerous:
+        return "PERMISSION_DENIED", fields
+    known = [k for k in DANGEROUS_RESTRICTION_FLAGS if k in restrictions]
+    if "enableReading" in restrictions and known:
+        if bool(restrictions.get("enableReading")):
+            return "CONNECTED_READ_ONLY", fields
+        # okuma bile kapalı: imzalı çağrı çalıştıysa tutarsız — dürüst sarı
         return "CONNECTED_PERMISSIONS_UNVERIFIED", fields
-    if bool(acct.get("canWithdraw")):
-        return "PERMISSION_DENIED", fields
-    if bool(acct.get("canTrade")):
-        return "PERMISSION_DENIED", fields
-    return "CONNECTED_READ_ONLY", fields
+    return "CONNECTED_PERMISSIONS_UNVERIFIED", fields
 
 
 def test_global(api_key: str, api_secret: str) -> dict:
@@ -189,18 +205,31 @@ def test_global(api_key: str, api_secret: str) -> dict:
     last_exc: Exception | None = None
     for attempt in range(2):  # drift durumunda taze sunucu zamanıyla tekrar
         try:
+            # 1) credential doğrulama (hesap DURUMU — izin kararı değil)
             acct = client.get_spot_account()
-            status, fields = _global_permission_review(
-                acct if isinstance(acct, dict) else {})
+            acct = acct if isinstance(acct, dict) else {}
+            result["account_type"] = acct.get("accountType")
+            result["account_status_fields"] = sorted(
+                k for k in ("canTrade", "canWithdraw", "canDeposit")
+                if k in acct)
+            # 2) KANONİK izin kaynağı: apiRestrictions. Geçici hata /
+            # eksik yanıt → yanlış ret YOK, dürüst sarı UNVERIFIED.
+            try:
+                restrictions = client.get_api_restrictions()
+            except Exception:
+                restrictions = {}
+            status, fields = _global_permission_review(restrictions)
             result["status"] = status
-            result["account_type"] = (acct or {}).get("accountType")
             result["permission_fields"] = sorted(fields.keys())
             if status == "PERMISSION_DENIED":
                 result["error_code"] = "PERMISSION_DENIED"
+                bad = [k for k in DANGEROUS_RESTRICTION_FLAGS
+                       if bool(restrictions.get(k))]
                 result["guidance"] = (
-                    "Anahtar işlem/çekim yetkisi taşıyor. Binance API "
-                    "yönetiminden yalnız 'Enable Reading' yetkili anahtar "
-                    "kullanın; bu anahtar KAYDEDİLMEDİ.")
+                    "API anahtarı tehlikeli izin taşıyor "
+                    f"({', '.join(bad)}). Binance API yönetiminden yalnız "
+                    "'Enable Reading' yetkili anahtar kullanın; bu anahtar "
+                    "KAYDEDİLMEDİ.")
             return result
         except Exception as exc:
             last_exc = exc
