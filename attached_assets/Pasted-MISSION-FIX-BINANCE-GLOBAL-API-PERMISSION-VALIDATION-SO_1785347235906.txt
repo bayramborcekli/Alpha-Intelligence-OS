@@ -1,0 +1,180 @@
+MISSION — FIX BINANCE GLOBAL API PERMISSION VALIDATION
+
+SORUN
+
+Gerçek Windows testinde Binance Global bağlantısı şu mesajla reddedildi:
+
+“Yetki reddedildi — Anahtar işlem/çekim yetkisi taşıyor.”
+
+Mevcut doğrulama muhtemelen:
+
+GET /api/v3/account
+
+cevabındaki:
+
+- canTrade
+- canWithdraw
+- canDeposit
+
+alanlarını API KEY izni gibi değerlendiriyor.
+
+Bu yanlıştır. Bu alanlar hesap durumudur; API anahtarı izinlerinin kanonik kaynağı değildir.
+
+Binance API anahtarı izinleri yalnız şu resmi endpoint üzerinden doğrulanmalıdır:
+
+GET /sapi/v1/account/apiRestrictions
+
+============================================================
+1) KANONİK İZİN KONTROLÜ
+============================================================
+
+Binance Global bağlantısında:
+
+1. server time al
+2. imzalı GET /api/v3/account ile credential doğrula
+3. imzalı GET /sapi/v1/account/apiRestrictions ile gerçek API KEY izinlerini al
+4. bağlantı kararını yalnız apiRestrictions cevabına göre ver
+
+/api/v3/account içindeki:
+
+- canTrade
+- canWithdraw
+- canDeposit
+
+alanlarını API key izin reddi için KULLANMA.
+
+Bu alanlar yalnız hesap bilgi/status alanı olarak saklanabilir.
+
+============================================================
+2) READ-ONLY KABUL POLİTİKASI
+============================================================
+
+Bağlantı yalnız şu durumda CONNECTED_READ_ONLY olsun:
+
+enableReading = true
+
+ve aşağıdaki tüm tehlikeli izinler false:
+
+enableWithdrawals
+enableSpotAndMarginTrading
+enableMargin
+enableFutures
+enableVanillaOptions
+enablePortfolioMarginTrading
+permitsUniversalTransfer
+enableInternalTransfer
+enableFixApiTrade
+
+Alanlardan biri true ise:
+
+PERMISSION_DENIED
+
+ve credential saklanmasın.
+
+enableFixReadOnly=true güvenli read-only izin olarak kabul edilebilir.
+
+============================================================
+3) UNVERIFIED DAVRANIŞI
+============================================================
+
+Credential doğrulaması başarılı fakat:
+
+- apiRestrictions endpointi desteklenmiyorsa
+- izin cevabı eksikse
+- Binance geçici olarak endpointi döndürmüyorsa
+
+anahtarı yanlış biçimde reddetme.
+
+Durum:
+
+CONNECTED_PERMISSIONS_UNVERIFIED
+
+olsun ve dashboard sarı göstersin.
+
+Ancak gerçek trading/withdrawal izni açıkça true görülürse kesin REDDET.
+
+============================================================
+4) KRİTİK REGRESYON TESTLERİ
+============================================================
+
+Şu testleri ekle:
+
+A)
+api/v3/account:
+canTrade=true
+canWithdraw=true
+
+apiRestrictions:
+enableReading=true
+enableWithdrawals=false
+enableSpotAndMarginTrading=false
+enableFutures=false
+
+Beklenen:
+CONNECTED_READ_ONLY
+
+B)
+apiRestrictions:
+enableSpotAndMarginTrading=true
+
+Beklenen:
+PERMISSION_DENIED
+credential kaydedilmez
+
+C)
+apiRestrictions:
+enableWithdrawals=true
+
+Beklenen:
+PERMISSION_DENIED
+credential kaydedilmez
+
+D)
+apiRestrictions endpointi geçici hata veriyor,
+account credential testi başarılı
+
+Beklenen:
+CONNECTED_PERMISSIONS_UNVERIFIED
+
+E)
+Secret hiçbir log, response, audit veya exception içinde görünmez.
+
+============================================================
+5) KORUNACAKLAR
+============================================================
+
+Değiştirme:
+
+- Windows Runtime Agent
+- SETUP_AND_START_WINDOWS.cmd
+- Paper controller
+- public market data
+- DPAPI credential store
+- Binance TR bağlantısı
+- route guard
+- LIVE TRADING kilidi
+
+LIVE ORDERS her durumda DISABLED kalacak.
+
+============================================================
+6) TESLİM
+============================================================
+
+Önce ilgili Binance agent testlerini çalıştır.
+Sonra tüm test paketini çalıştır.
+
+Tek temiz commit ve main’e push.
+
+Teslim raporu:
+
+COMMIT:
+PERMISSION ENDPOINT:
+ACCOUNT STATUS FALSE-REJECTION FIX:
+READ-ONLY TEST:
+TRADING PERMISSION REJECTION:
+WITHDRAWAL PERMISSION REJECTION:
+UNVERIFIED FALLBACK:
+SECRET LEAK TEST:
+LIVE ORDERS: DISABLED
+TESTS:
+PUSH:
