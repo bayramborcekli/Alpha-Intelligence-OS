@@ -232,6 +232,146 @@ class TestStartupReconciliation:
         assert called == []
 
 
+class TestReconcileEndToEnd:
+    """Görev 119) ENABLED sembollerle dolu GERÇEK Operation Service ile
+    reconcile controller'ı gerçekten başlatır + WARNING logu yazar."""
+
+    @pytest.fixture()
+    def sw(self, monkeypatch):
+        import serve_windows as sw
+        monkeypatch.setattr(sw, "_reconcile_env_ok", lambda: True)
+        return sw
+
+    def _real_app(self, svc, started: list):
+        class _AC:
+            @staticmethod
+            def start_controller_loop():
+                started.append(True)
+                return True
+
+        class _App:
+            ac = _AC()
+
+            @staticmethod
+            def get_operation_service():
+                return svc
+        return _App
+
+    def test_enabled_symbols_running_starts_controller_and_logs(
+            self, sw, monkeypatch, tmp_path, caplog):
+        import logging
+        from services import emergency_stop as es
+        monkeypatch.setattr(es, "status", lambda: {
+            "active": False, "environment": "PAPER",
+            "reason_code": ""})
+        out = tmp_path / "paper_reconcile_last.json"
+        monkeypatch.setattr(sw, "RECONCILE_RESULT_PATH", out)
+        # GERÇEK servis: RUNNING + tüm semboller ENABLED (fake yok).
+        state = tmp_path / "operation_control_state.json"
+        svc = make_service(state)
+        _start(svc)
+        for i, sym in enumerate(SYMBOLS):
+            svc.execute_symbol_command(
+                sym, SymbolCommand.ENABLE, "operator",
+                idempotency_key=f"k-{i}")
+        assert {s: st.value for s, st in svc.symbol_states().items()} \
+            == {s: "ENABLED" for s in SYMBOLS}
+        started: list = []
+        with caplog.at_level(logging.WARNING, logger="alpha.serve"):
+            sw._reconcile_paper_desired_state(self._real_app(svc,
+                                                             started))
+        # Controller GERÇEKTEN başlatıldı (UI state'inden bağımsız).
+        assert started == [True]
+        # "PAPER PREFERENCE RESTORED" WARNING logu görünür ve
+        # ENABLED sembolleri içerir.
+        warnings = [r for r in caplog.records
+                    if r.levelno == logging.WARNING
+                    and "PAPER PREFERENCE RESTORED" in r.getMessage()]
+        assert len(warnings) == 1
+        msg = warnings[0].getMessage()
+        assert "automation=RUNNING" in msg
+        assert "controller=STARTED" in msg
+        for sym in SYMBOLS:
+            assert sym in msg and "ENABLED" in msg
+        # Sonuç dosyası da aynı kararı raporlar.
+        data = json.loads(out.read_text(encoding="utf-8"))
+        assert data["result"] == "RESTORED_RUNNING"
+        assert data["detail"] == "STARTED"
+        assert data["symbols"] == {s: "ENABLED" for s in SYMBOLS}
+
+
+class TestHealthRuntimeReconcileConsistency:
+    """Görev 119) /health/runtime paper_reconcile + controller alanları
+    tutarlı: reconcile sonucu dosyadan aynen raporlanır, controller
+    alanı gerçek controller durumundan türetilir."""
+
+    @pytest.fixture()
+    def client(self):
+        import app as app_module
+        app_module.app.config["TESTING"] = True
+        app_module.app.config["WTF_CSRF_ENABLED"] = False
+        with app_module.app.test_client() as c:
+            with c.session_transaction() as s:
+                s["username"] = "test-operator"
+                s["last_active"] = 9999999999
+            yield c
+
+    @pytest.fixture()
+    def reconcile_file(self):
+        """ROOT/data/paper_reconcile_last.json — yaz, testte kullan,
+        sonra eski içeriği aynen geri koy (yan etki yok)."""
+        p = ROOT / "data" / "paper_reconcile_last.json"
+        p.parent.mkdir(exist_ok=True)
+        backup = p.read_text(encoding="utf-8") if p.exists() else None
+        snap = {"ts": "2026-07-29T00:00:00+00:00",
+                "result": "RESTORED_RUNNING",
+                "automation": "RUNNING",
+                "symbols": {s: "ENABLED" for s in SYMBOLS},
+                "detail": "STARTED"}
+        p.write_text(json.dumps(snap, ensure_ascii=False),
+                     encoding="utf-8")
+        yield snap
+        if backup is None:
+            p.unlink(missing_ok=True)
+        else:
+            p.write_text(backup, encoding="utf-8")
+
+    def test_health_runtime_reports_reconcile_and_controller(
+            self, client, reconcile_file):
+        import app as app_module
+        r = client.get("/health/runtime")
+        assert r.status_code == 200
+        data = r.get_json()
+        # paper_reconcile dosyadaki son kararı AYNEN raporlar.
+        assert data["paper_reconcile"] == reconcile_file
+        # controller alanı gerçek controller durumundan türetilir —
+        # reconcile dosyası tek başına "running" göstermeye YETMEZ.
+        try:
+            actually_running = bool(
+                (app_module.ac.get_status() or {}).get("running"))
+        except Exception:
+            actually_running = False
+        assert data["controller"] == (
+            "running" if actually_running else "stopped")
+        # UI state ↔ controller tutarlılığı: paper=active yalnız
+        # controller gerçekten çalışırken mümkündür.
+        if data["controller"] == "stopped":
+            assert data["paper"] in ("starting", "disabled")
+        else:
+            assert data["paper"] == "active"
+
+    def test_health_runtime_missing_reconcile_is_null(self, client):
+        p = ROOT / "data" / "paper_reconcile_last.json"
+        backup = p.read_text(encoding="utf-8") if p.exists() else None
+        try:
+            p.unlink(missing_ok=True)
+            data = client.get("/health/runtime").get_json()
+            assert data["paper_reconcile"] is None
+        finally:
+            if backup is not None:
+                p.write_text(backup, encoding="utf-8")
+
+
 class TestConsolidatedState:
     """13) /api/paper/state — tek doğruluk kaynağı."""
 
