@@ -208,6 +208,8 @@
   </div>
   <div id="th-winrt-note" style="margin-top:6px; font-size:.72rem;
        color:var(--muted,#8b949e)"></div>
+  <div id="th-winrt-version" style="margin-top:4px; font-size:.68rem;
+       color:var(--muted,#8b949e)"></div>
 </section>
 <script>
 (function () {
@@ -243,6 +245,12 @@
     if (d.last_error && d.last_error.message)
       notes.push("Son hata: " + d.last_error.message);
     set("th-winrt-note", notes.join(" • "));
+    var ver = [];
+    ver.push("sürüm: " + (d.git_head || "bilinmiyor"));
+    if (d.entrypoint) ver.push("başlatma: " + d.entrypoint);
+    if (d.started_at)
+      ver.push("başlangıç: " + new Date(d.started_at).toLocaleString("tr-TR"));
+    set("th-winrt-version", ver.join(" • "));
   }
   function refresh() {
     fetch("/health/runtime", { credentials: "same-origin" })

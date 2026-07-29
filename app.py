@@ -949,6 +949,42 @@ def _build_daily_report(config: dict | None) -> dict[str, Any]:
 # ══════════════════════════════════════════════════════════════════════════════
 
 _APP_START_TIME = time.time()
+_APP_STARTED_AT = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _runtime_git_head():
+    """Çalışan kodun git HEAD kısa özeti; alınamazsa None (salt okunur)."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=3,
+            cwd=os.path.dirname(os.path.abspath(__file__)) or ".",
+        )
+        head = (out.stdout or "").strip()
+        return head if out.returncode == 0 and head else None
+    except Exception:
+        return None
+
+
+_RUNTIME_GIT_HEAD = _runtime_git_head()
+
+
+def _runtime_entrypoint():
+    """Sürecin başlatılma yolu — sys.argv özetinden (dosya içeriği dönmez)."""
+    try:
+        argv0 = os.path.basename(sys.argv[0] or "").lower()
+        joined = " ".join(sys.argv).lower()
+        if "serve_windows" in joined:
+            return "serve_windows"
+        if "gunicorn" in argv0 or "gunicorn" in joined:
+            return "gunicorn"
+        if "pytest" in argv0 or "pytest" in joined:
+            return "pytest"
+        if "flask" in argv0:
+            return "flask"
+        return argv0 or "unknown"
+    except Exception:
+        return "unknown"
 
 
 @app.get("/health")
@@ -1032,6 +1068,10 @@ def health_runtime():
         "paper_balance": state.get("balance"),
         "last_trade": last_trade,
         "last_error": last_error,
+        "git_head": _RUNTIME_GIT_HEAD,
+        "entrypoint": _runtime_entrypoint(),
+        "started_at": _APP_STARTED_AT,
+        "uptime_s": round(time.time() - _APP_START_TIME, 1),
     }, 200
 
 

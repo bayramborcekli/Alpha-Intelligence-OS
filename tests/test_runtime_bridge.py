@@ -53,11 +53,35 @@ def test_payload_fields_and_read_only(client):
     d = r.get_json()
     for key in ("app", "paper", "controller", "auto_loop", "cycle_count",
                 "last_cycle", "positions", "paper_balance", "last_trade",
-                "last_error", "runtime_override", "safe_mode"):
+                "last_error", "runtime_override", "safe_mode",
+                "git_head", "entrypoint", "started_at"):
         assert key in d
     assert d["app"] == "running"
     assert d["controller"] in ("running", "stopped")
     assert d["paper"] in ("active", "starting", "disabled")
+
+
+def test_version_fields(client):
+    """git_head kısa hash veya None; entrypoint sys.argv özetinden;
+    started_at ISO-8601 tarih."""
+    d = client.get("/health/runtime").get_json()
+    gh = d["git_head"]
+    assert gh is None or (isinstance(gh, str) and 4 <= len(gh) <= 40
+                          and all(c in "0123456789abcdef" for c in gh))
+    assert isinstance(d["entrypoint"], str) and d["entrypoint"]
+    # Test koşusunda pytest ile başlatıldı
+    assert d["entrypoint"] == "pytest"
+    from datetime import datetime
+    datetime.fromisoformat(d["started_at"])  # geçerli ISO değilse raise
+
+
+def test_git_head_null_on_failure(monkeypatch):
+    """git komutu başarısızsa None döner (hata fırlatmaz)."""
+    import app as m
+    def boom(*a, **k):
+        raise OSError("git yok")
+    monkeypatch.setattr(m.subprocess, "run", boom)
+    assert m._runtime_git_head() is None
 
 
 def test_no_secrets_in_payload(client):
@@ -84,5 +108,6 @@ def test_dashboard_card_present():
     assert "WINDOWS RUNTIME" in src
     assert "/health/runtime" in src
     for el in ("th-winrt-controller", "th-winrt-cycle",
-               "th-winrt-balance", "th-winrt-pos"):
+               "th-winrt-balance", "th-winrt-pos", "th-winrt-version"):
         assert el in src
+    assert "sürüm:" in src
