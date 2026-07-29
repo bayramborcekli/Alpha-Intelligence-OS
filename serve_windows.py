@@ -62,6 +62,82 @@ def main() -> None:
 # (waitress tek süreç; ikinci çağrı çift scheduler oluşturamaz).
 _BOOTSTRAP_DONE = False
 
+CONFIG_PATH = ROOT / "alpha20_v1" / "config.json"
+
+# PAPER test bayrakları — yalnız Windows local development'ta uygulanır.
+_PAPER_TEST_FLAGS = {"enabled": True, "auto_paper_enabled": True,
+                     "mode": "AUTO", "kill_switch": False}
+
+
+def _enable_paper_test_mode() -> None:
+    """Windows local PAPER test modu: adaptive_system bayraklarını açar.
+
+    KAPSAM SINIRLARI (Mission — Paper Auto Safe Enablement):
+    - YALNIZ os.name == 'nt' ve FLASK_ENV != 'production' iken çalışır;
+      Linux/Replit ve production'da config'e DOKUNMAZ.
+    - ALPHA_WINDOWS_PAPER_AUTO="false" ile kapatılabilir (opt-out).
+    - ALPHA_ENABLE_LIVE_TRADING / canlı emir yolu ASLA değiştirilmez;
+      üst düzey mode "PAPER" kalır — yalnız adaptive_system alt bayrakları
+      Paper otomasyon testine geçirilir.
+    """
+    import json
+
+    if os.name != "nt":
+        return  # Linux/Replit: hiçbir şey yapılmaz
+    if os.environ.get("FLASK_ENV", "").lower() == "production":
+        log.info("PAPER TEST MODE ATLANDI (production ortamı)")
+        return
+    if os.environ.get("ALPHA_WINDOWS_PAPER_AUTO", "").lower() == "false":
+        log.info("PAPER TEST MODE ATLANDI (ALPHA_WINDOWS_PAPER_AUTO=false)")
+        return
+    try:
+        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        adaptive = cfg.setdefault("adaptive_system", {})
+        changed = {k: v for k, v in _PAPER_TEST_FLAGS.items()
+                   if adaptive.get(k) != v}
+        if not changed:
+            log.info("PAPER TEST MODE zaten aktif (bayraklar uygun).")
+            return
+        adaptive.update(_PAPER_TEST_FLAGS)
+        CONFIG_PATH.write_text(
+            json.dumps(cfg, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8")
+        log.info("PAPER TEST MODE ACTIVE (Windows local) — değişen: %s; "
+                 "canlı emir yolu KAPALI kalır (ALPHA_ENABLE_LIVE_TRADING "
+                 "dokunulmadı).", changed)
+    except Exception as exc:
+        log.warning("PAPER TEST MODE uygulanamadı: %s", exc)
+
+
+def _watch_first_cycle() -> None:
+    """İlk çevrim tamamlanınca 'FIRST CYCLE COMPLETED' logu üretir."""
+    import threading
+    import time
+
+    def _watch() -> None:
+        sys.path.insert(0, str(ROOT / "alpha20_v1"))
+        try:
+            import auto_controller as _ac
+        except Exception:
+            return
+        deadline = time.monotonic() + 300  # en fazla 5 dk bekle
+        while time.monotonic() < deadline:
+            try:
+                st = _ac.get_status()
+                if int(st.get("cycle_count") or 0) >= 1:
+                    log.info("FIRST CYCLE COMPLETED — cycle_count=%s "
+                             "last_cycle=%s", st.get("cycle_count"),
+                             st.get("last_cycle") or st.get("updated_at"))
+                    return
+            except Exception:
+                pass
+            time.sleep(5)
+        log.warning("FIRST CYCLE bekleniyor — 5 dk içinde tamamlanmadı; "
+                    "panelden Son Çevrim alanını kontrol edin.")
+
+    threading.Thread(target=_watch, daemon=True,
+                     name="first_cycle_watch").start()
+
 
 def _bootstrap_background_services() -> None:
     """Gunicorn post_fork PARİTESİ (bkz. gunicorn.conf.py) — Windows'ta
@@ -80,6 +156,9 @@ def _bootstrap_background_services() -> None:
 
     import threading
     import app as _app
+
+    # 0. PAPER TEST MODU — yalnız Windows local development.
+    _enable_paper_test_mode()
 
     # 1-2. Başlangıç güvenlik kontrolleri (post_fork ile aynı sıra)
     try:
@@ -108,12 +187,14 @@ def _bootstrap_background_services() -> None:
             started = _app.ac.start_controller_loop()
             log.info("CONTROLLER STARTED" if started
                      else "CONTROLLER zaten çalışıyor — tekrar başlatılmadı.")
+            if started:
+                _watch_first_cycle()
         else:
             log.info("CONTROLLER DISABLED (adaptive_system.enabled=false)")
     except Exception as exc:
         log.warning("CONTROLLER başlatılamadı: %s", exc)
 
-    # 5. Automation scheduler — yalnız ALPHA_AUTOMATION_ENABLED="true" ise
+    # 4b. Automation scheduler — yalnız ALPHA_AUTOMATION_ENABLED="true" ise
     #    (start_automation_scheduler kendi tekil guard'ını içerir).
     try:
         th = _app.start_automation_scheduler()
