@@ -1,0 +1,175 @@
+MISSION — PAPER AUTO SAFE ENABLEMENT (WINDOWS TEST MODE)
+
+AMAÇ:
+Windows lokal geliştirme ortamında yalnız PAPER otomasyonunu güvenli şekilde aktif et.
+Gerçek Binance emirleri kesinlikle gönderilmeyecek.
+
+ÖN KOŞUL (tamamlandı):
+- Windows bootstrap Linux ile eşitlendi.
+- Background thread'ler başlıyor.
+- Executive API çalışıyor.
+- Ledger / Risk / Audit / Health çalışıyor.
+
+BU GÖREVİN AMACI:
+Kod mimarisini değiştirmek değil.
+Sadece mevcut bayrakları Paper test moduna geçirmek.
+
+YAPILACAKLAR:
+
+1)
+
+Windows local başlangıcında (yalnız development)
+
+Aşağıdaki runtime bayraklarını Paper test için etkinleştir:
+
+adaptive_system.enabled = true
+auto_paper_enabled = true
+mode = AUTO
+kill_switch = false
+
+Bunu yalnız Windows local test ortamında uygula.
+
+Production ve Replit davranışı değişmeyecek.
+
+2)
+
+Kesinlikle değiştirme:
+
+ALPHA_ENABLE_LIVE_TRADING
+Live Trading
+Binance Order Sender
+Gerçek emir endpointleri
+
+Canlı emir daima DEVRE DIŞI kalacak.
+
+3)
+
+İlk çevrim doğrulaması
+
+Uygulama açıldıktan sonra raporla:
+
+- controller started
+- scheduler started
+- first cycle executed
+- cycle_count
+- last_cycle
+
+4)
+
+Signal Engine
+
+İlk sinyal üretildi mi?
+
+Raporla:
+
+- symbol
+- direction
+- score
+- reason
+
+5)
+
+Paper Engine
+
+Sinyal oluşursa:
+
+_open_paper_trade()
+
+çağrılıyor mu?
+
+Çağrılıyorsa:
+
+- symbol
+- quantity
+- entry
+- trade_id
+
+raporla.
+
+6)
+
+Position Management
+
+manage_position()
+
+aynı çevrim zincirinde çalışıyor mu?
+
+SL/TP kontrolü aktif mi?
+
+7)
+
+Ledger
+
+İlk Paper trade oluşursa:
+
+ledger_events.json
+
+içine kayıt düştüğünü doğrula.
+
+8)
+
+LOG
+
+Windows başlangıcında aşağıdaki loglar görülmeli:
+
+AUTO LOOP STARTED
+CONTROLLER STARTED
+AUTOMATION SCHEDULER STARTED
+FIRST CYCLE COMPLETED
+
+9)
+
+KORU
+
+Dokunma:
+
+- Binance adapter
+- Live trading
+- Auth
+- Dashboard
+- Executive API
+- Risk Engine
+- Session
+- Windows/Replit bypass
+
+TESTLER
+
+A)
+
+Windows açılışı
+
+Controller STARTED
+
+B)
+
+Scheduler STARTED
+
+C)
+
+_run_single_cycle() çalıştı.
+
+D)
+
+Paper trade oluştuysa
+ledger güncellendi.
+
+E)
+
+Gerçek Binance emri gönderilmedi.
+
+F)
+
+Linux/Replit davranışı değişmedi.
+
+ÇIKTI
+
+- Değişen dosyalar
+- Runtime logları
+- İlk çevrim zamanı
+- İlk signal
+- İlk paper trade (varsa)
+- Ledger kanıtı
+- Gerçek emir gönderilmediğinin kanıtı
+
+Tek küçük commit.
+Merge guard uyumlu.
