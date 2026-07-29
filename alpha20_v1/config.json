@@ -18,9 +18,9 @@
   "fee_safety_factor": 2.0,
   "max_open_positions": 1,
   "adaptive_system": {
-    "enabled": true,
-    "mode": "AUTO",
-    "auto_paper_enabled": true,
+    "enabled": false,
+    "mode": "MONITOR",
+    "auto_paper_enabled": false,
     "regime_min_confidence": 65.0,
     "final_decision_threshold": 78.0,
     "base_risk_pct": 0.25,
@@ -37,6 +37,6 @@
     "break_even_enabled": false,
     "trailing_stop_enabled": false,
     "partial_take_profit_enabled": false,
-    "kill_switch": false
+    "kill_switch": true
   }
 }

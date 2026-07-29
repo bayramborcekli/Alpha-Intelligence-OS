@@ -64,49 +64,40 @@ _BOOTSTRAP_DONE = False
 
 CONFIG_PATH = ROOT / "alpha20_v1" / "config.json"
 
-# PAPER test bayrakları — yalnız Windows local development'ta uygulanır.
+# PAPER test bayrakları — YALNIZ BELLEKTE uygulanır; config.json'a yazılmaz.
 _PAPER_TEST_FLAGS = {"enabled": True, "auto_paper_enabled": True,
                      "mode": "AUTO", "kill_switch": False}
 
 
-def _enable_paper_test_mode() -> None:
-    """Windows local PAPER test modu: adaptive_system bayraklarını açar.
+def _apply_paper_runtime_override() -> bool:
+    """Windows local PAPER otomasyonu — SALT BELLEK override'ı.
 
-    KAPSAM SINIRLARI (Mission — Paper Auto Safe Enablement):
-    - YALNIZ os.name == 'nt' ve FLASK_ENV != 'production' iken çalışır;
-      Linux/Replit ve production'da config'e DOKUNMAZ.
-    - ALPHA_WINDOWS_PAPER_AUTO="false" ile kapatılabilir (opt-out).
-    - ALPHA_ENABLE_LIVE_TRADING / canlı emir yolu ASLA değiştirilmez;
-      üst düzey mode "PAPER" kalır — yalnız adaptive_system alt bayrakları
-      Paper otomasyon testine geçirilir.
+    Reviewer kararı (Mission — Safe Paper Auto Runtime Override):
+    - Startup HİÇBİR dosyayı değiştirmez; config.json byte-byte aynı kalır.
+    - OPT-IN: yalnız .env'de ALPHA_WINDOWS_PAPER_AUTO=true ise uygulanır;
+      yoksa varsayılan davranış tamamen değişmez.
+    - Yalnız os.name == 'nt' ve FLASK_ENV != 'production'.
+    - ALPHA_ENABLE_LIVE_TRADING / canlı emir yolu ASLA değişmez.
+    Döndürür: override uygulandı mı (controller startup bunu kullanır).
     """
-    import json
-
     if os.name != "nt":
-        return  # Linux/Replit: hiçbir şey yapılmaz
+        return False  # Linux/Replit: hiçbir şey yapılmaz
+    if os.environ.get("ALPHA_WINDOWS_PAPER_AUTO", "").strip().lower() != "true":
+        return False  # opt-in yoksa varsayılan davranış aynen korunur
     if os.environ.get("FLASK_ENV", "").lower() == "production":
-        log.info("PAPER TEST MODE ATLANDI (production ortamı)")
-        return
-    if os.environ.get("ALPHA_WINDOWS_PAPER_AUTO", "").lower() == "false":
-        log.info("PAPER TEST MODE ATLANDI (ALPHA_WINDOWS_PAPER_AUTO=false)")
-        return
+        log.info("PAPER AUTO override ATLANDI (production ortamı)")
+        return False
     try:
-        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        adaptive = cfg.setdefault("adaptive_system", {})
-        changed = {k: v for k, v in _PAPER_TEST_FLAGS.items()
-                   if adaptive.get(k) != v}
-        if not changed:
-            log.info("PAPER TEST MODE zaten aktif (bayraklar uygun).")
-            return
-        adaptive.update(_PAPER_TEST_FLAGS)
-        CONFIG_PATH.write_text(
-            json.dumps(cfg, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8")
-        log.info("PAPER TEST MODE ACTIVE (Windows local) — değişen: %s; "
-                 "canlı emir yolu KAPALI kalır (ALPHA_ENABLE_LIVE_TRADING "
-                 "dokunulmadı).", changed)
+        sys.path.insert(0, str(ROOT / "alpha20_v1"))
+        import auto_controller as _ac
+        _ac.set_runtime_adaptive_override(dict(_PAPER_TEST_FLAGS))
+        log.info("WINDOWS PAPER AUTO ENABLED (RUNTIME) — config.json "
+                 "DEĞİŞMEDİ; canlı emir yolu KAPALI "
+                 "(ALPHA_ENABLE_LIVE_TRADING dokunulmadı).")
+        return True
     except Exception as exc:
-        log.warning("PAPER TEST MODE uygulanamadı: %s", exc)
+        log.warning("PAPER AUTO runtime override uygulanamadı: %s", exc)
+        return False
 
 
 def _watch_first_cycle() -> None:
@@ -157,6 +148,10 @@ def _bootstrap_background_services() -> None:
     import threading
     import app as _app
 
+    # 0. PAPER AUTO runtime override — yalnız Windows local + opt-in env.
+    #    SALT BELLEK: hiçbir dosya değişmez.
+    paper_override = _apply_paper_runtime_override()
+
     # 1-2. Başlangıç güvenlik kontrolleri (post_fork ile aynı sıra, fail-fast)
     # NOT: try/except YOK — gunicorn.conf.py post_fork ile tam pari;
     # bu iki kontrol başarısız olursa sunucu başlamamalıdır.
@@ -179,7 +174,8 @@ def _bootstrap_background_services() -> None:
     #    (start_controller_loop kendi tekil kilidini içerir).
     try:
         cfg0 = _app._get_main_config()
-        if cfg0.get("adaptive_system", {}).get("enabled", False):
+        if paper_override or cfg0.get("adaptive_system", {}).get(
+                "enabled", False):
             started = _app.ac.start_controller_loop()
             log.info("CONTROLLER STARTED" if started
                      else "CONTROLLER zaten çalışıyor — tekrar başlatılmadı.")

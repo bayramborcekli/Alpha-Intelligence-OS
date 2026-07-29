@@ -61,14 +61,32 @@ def _update_status(**kwargs: Any) -> None:
 # Config yardımcıları
 # ══════════════════════════════════════════════════════════════════════════════
 
+# Yalnız BELLEKTE tutulan adaptive_system override'ı (Windows local PAPER
+# testi). config.json'a ASLA yazılmaz; süreç kapanınca kaybolur.
+RUNTIME_ADAPTIVE_OVERRIDE: dict[str, Any] = {}
+
+
+def set_runtime_adaptive_override(flags: dict[str, Any]) -> None:
+    """Bellek-içi adaptive_system override'ını ayarla (dosyaya yazmaz)."""
+    RUNTIME_ADAPTIVE_OVERRIDE.clear()
+    RUNTIME_ADAPTIVE_OVERRIDE.update(flags)
+    log.info("Runtime adaptive override aktif (yalnız bellek): %s", flags)
+
+
 def _load_config() -> dict[str, Any] | None:
     if not CONFIG_PATH.exists():
         return None
     try:
         with CONFIG_PATH.open("r", encoding="utf-8") as f:
-            return json.load(f)
+            cfg = json.load(f)
     except Exception:
         return None
+    if RUNTIME_ADAPTIVE_OVERRIDE and isinstance(cfg, dict):
+        merged = dict(cfg.get("adaptive_system") or {})
+        merged.update(RUNTIME_ADAPTIVE_OVERRIDE)
+        cfg = dict(cfg)
+        cfg["adaptive_system"] = merged
+    return cfg
 
 
 def _load_state() -> dict[str, Any] | None:
