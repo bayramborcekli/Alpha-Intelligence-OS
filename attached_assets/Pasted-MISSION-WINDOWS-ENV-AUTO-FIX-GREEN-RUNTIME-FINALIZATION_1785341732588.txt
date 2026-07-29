@@ -1,0 +1,133 @@
+MISSION — WINDOWS .ENV AUTO-FIX & GREEN RUNTIME FINALIZATION
+
+AMAÇ:
+Gerçek Windows ortamında eksik/yanlış `.env` yapılandırmasını otomatik düzelt, Paper AUTO’yu başlat ve Runtime kartını 🟢 duruma getir.
+
+ARTIK RAPORLA YETİNME.
+GÜVENLİ YEREL DÜZELTMEYİ UYGULA.
+KOD DEĞİŞİKLİĞİ YAPMA.
+COMMIT/PUSH YAPMA.
+
+MEVCUT KÖK NEDEN:
+Runtime yalnız `.env` dosyasını okuyor.
+`.env.example` yüklenmiyor.
+Gerçek `.env` içinde `ALPHA_WINDOWS_PAPER_AUTO=true` eksik veya `.env` hiç yok.
+
+YAPILACAKLAR:
+
+1) Proje kökünde kontrol et:
+
+- `.env` var mı?
+- `.env.example` var mı?
+- Runtime hangi dosyayı yüklüyor?
+
+2) `.env` YOKSA:
+
+Yeni `.env` oluştur.
+
+İçine yalnız şu yerel ayarları yaz:
+
+FLASK_ENV=development
+LOCAL_DEV_BYPASS=1
+PAPER_MODE=true
+ALPHA_WINDOWS_PAPER_AUTO=true
+
+Mevcut yerel auth/session değerleri başka güvenli dosyada varsa koru.
+Secret üretme veya değiştirme.
+Binance anahtarlarına dokunma.
+
+3) `.env` VARSA:
+
+Dosyayı silme.
+Mevcut secret, parola hash ve session değerlerini değiştirme.
+
+Yalnız:
+
+- `ALPHA_WINDOWS_PAPER_AUTO=true` ekle veya düzelt.
+- Birden fazla `FLASK_ENV` varsa teke indir:
+  `FLASK_ENV=development`
+
+Değişiklik öncesi `.env` yedeği al:
+
+.env.backup_<timestamp>
+
+4) Teşhis çalıştır:
+
+.venv\Scripts\python.exe windows_diagnose.py
+
+Beklenen:
+
+PAPER_AUTO env : true
+ENV PAPER_AUTO : PASS
+
+SSL testleri aralıklı hata verirse retry sonucunu raporla; `.env` düzeltmesini geri alma.
+
+5) Temiz restart:
+
+- Eski Alpha Python süreçlerini kapat.
+- `.venv\Scripts\python.exe serve_windows.py` ile tek instance başlat.
+
+6) Log doğrulaması:
+
+WINDOWS PAPER AUTO ENABLED (RUNTIME)
+AUTO LOOP STARTED
+CONTROLLER STARTED
+FIRST CYCLE COMPLETED
+
+7) Health doğrulaması:
+
+GET http://127.0.0.1:5000/health/runtime
+
+Beklenen:
+
+entrypoint = serve_windows
+runtime_override = true
+paper = active
+auto_loop = running
+controller = running
+cycle_count >= 1
+last_cycle dolu
+
+8) Güvenlik:
+
+- `.env` Git’e eklenmeyecek.
+- `.env.example` değişmeyecek.
+- `config.json` değişmeyecek.
+- Live trading açılmayacak.
+- Binance order endpoint çağrılmayacak.
+- SSL doğrulaması kapatılmayacak.
+
+FINAL RAPOR:
+
+ENV FILE:
+FOUND / CREATED
+
+BACKUP:
+<dosya veya yok>
+
+PAPER_AUTO:
+PASS / FAIL
+
+FLASK_ENV:
+development
+
+BOOT:
+PASS / FAIL
+
+CONTROLLER:
+RUNNING / STOPPED
+
+PAPER:
+ACTIVE / DISABLED
+
+RUNTIME CARD:
+🟢 / 🟡 / 🔴
+
+ROOT CAUSE:
+Gerçek `.env` dosyasının eksik veya yanlış yapılandırılmış olması
+
+FINAL ACTION:
+Sorun kaldıysa yalnız tek gerekli işlem.
+
+Bu görev sonunda yeni araştırma başlatma.
+Ya kartı yeşile getir ya da gerçek Windows çıktısındaki tek kalan engeli raporla.
