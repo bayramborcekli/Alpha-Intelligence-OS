@@ -4,17 +4,26 @@ Kullanım (Windows, proje klasöründe):
     python windows_diagnose.py
 
 Ne yapar: FAZ 1-5 kontrollerini sırayla koşar ve tek bir PASS/FAIL final
-raporu basar. Hiçbir dosyayı DEĞİŞTİRMEZ, hiçbir emir GÖNDERMEZ, hiçbir
-secret OKUMAZ/BASMAZ. SSL doğrulaması asla kapatılmaz.
+raporu basar. Hiçbir emir GÖNDERMEZ, hiçbir secret OKUMAZ/BASMAZ. SSL
+doğrulaması asla kapatılmaz.
+
+Tek istisna (operatör ONAYIYLA): .env'de ALPHA_WINDOWS_PAPER_AUTO satırı
+eksikse teşhis sorar ve 'E' yanıtında .env sonuna YALNIZ bu satırı ekler
+(önce yedek alınır). Mevcut satırlara ve secret'lara ASLA dokunulmaz.
 """
 from __future__ import annotations
 
 import os
+import shutil
 import socket
 import ssl
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
+
+PAPER_AUTO_KEY = "ALPHA_WINDOWS_PAPER_AUTO"
+PAPER_AUTO_LINE = f"{PAPER_AUTO_KEY}=true"
 
 URLS = [
     ("BINANCE ANA", "https://fapi.binance.com/fapi/v1/ping"),
@@ -45,6 +54,88 @@ def classify_ssl(msg: str) -> str:
     return "Sınıflandırılamadı — mesajı operatöre iletin."
 
 
+def paper_auto_status(env_path: Path) -> str:
+    """`.env` içinde ALPHA_WINDOWS_PAPER_AUTO satırının durumunu döndürür.
+
+    Dönüş: "missing_file" | "missing_line" | "present".
+    Dosya asla DEĞİŞTİRİLMEZ; yalnız okunur.
+    """
+    try:
+        raw = env_path.read_bytes()
+    except OSError:
+        return "missing_file"
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("utf-16")
+        except UnicodeError:
+            return "missing_line"
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, _ = stripped.partition("=")
+        if key.strip() == PAPER_AUTO_KEY:
+            return "present"
+    return "missing_line"
+
+
+def add_paper_auto_line(env_path: Path) -> str:
+    """`.env` sonuna YALNIZ `ALPHA_WINDOWS_PAPER_AUTO=true` satırını ekler.
+
+    - Anahtar zaten varsa (değeri ne olursa olsun) HİÇBİR ŞEY değiştirilmez
+      → "already_present" döner.
+    - Mevcut satırlar (secret'lar dahil) bayt bayt korunur; yalnız sona
+      tek satır eklenir.
+    - Yazmadan önce `.env.bak` yedeği alınır (dosya varsa).
+    - Dönüş: "added" | "already_present".
+    """
+    status = paper_auto_status(env_path)
+    if status == "present":
+        return "already_present"
+    if status == "missing_file":
+        env_path.write_text(PAPER_AUTO_LINE + "\n", encoding="utf-8")
+        return "added"
+    # Yedek al, sonra sona ekle (mevcut baytlara dokunma)
+    shutil.copy2(env_path, env_path.with_suffix(env_path.suffix + ".bak"))
+    raw = env_path.read_bytes()
+    suffix = b"" if (not raw or raw.endswith((b"\n", b"\r"))) else b"\r\n" if b"\r\n" in raw else b"\n"
+    newline = b"\r\n" if b"\r\n" in raw else b"\n"
+    with env_path.open("ab") as fh:
+        fh.write(suffix + PAPER_AUTO_LINE.encode("ascii") + newline)
+    return "added"
+
+
+def offer_paper_auto_fix(env_path: Path,
+                         ask=input) -> str:
+    """Eksik PAPER_AUTO için operatöre sorar; onayda satırı ekler.
+
+    Dönüş: "present" | "added" | "declined" | "no_tty".
+    """
+    if paper_auto_status(env_path) == "present":
+        return "present"
+    p()
+    p(f"{PAPER_AUTO_KEY} .env'de eksik — controller bu satir olmadan")
+    p("ASLA baslamaz. Teshis bu satiri sizin onayinizla ekleyebilir.")
+    p(f"Eklenecek TEK satir: {PAPER_AUTO_LINE}")
+    p("Mevcut satirlara ve secret'lara DOKUNULMAZ; once .env.bak yedegi alinir.")
+    try:
+        answer = ask(f"{env_path} sonuna eklensin mi? (E/H): ")
+    except (EOFError, OSError):
+        p("Etkilesimli girdi yok — satiri elle ekleyin: " + PAPER_AUTO_LINE)
+        return "no_tty"
+    if str(answer).strip().lower() in ("e", "evet", "y", "yes"):
+        result = add_paper_auto_line(env_path)
+        if result == "added":
+            os.environ[PAPER_AUTO_KEY] = "true"
+            p("EKLENDI: " + PAPER_AUTO_LINE + "  (yedek: .env.bak)")
+        return result
+    p("Eklenmedi. Elle eklemek icin .env sonuna su satiri yazin: "
+      + PAPER_AUTO_LINE)
+    return "declined"
+
+
 def main() -> int:
     p("=" * 62)
     p("ALPHA INTELLIGENCE OS — WINDOWS OTOMATIK TESHIS (salt okunur)")
@@ -70,6 +161,14 @@ def main() -> int:
             pass
     p(f"PAPER_AUTO env : {env_auto or 'YOK'}  ('true' beklenir)")
     results["ENV"] = "PASS" if env_auto.strip().lower() == "true" else "FAIL"
+    if results["ENV"] == "FAIL":
+        env_path = Path(__file__).resolve().parent / ".env"
+        if paper_auto_status(env_path) != "present":
+            outcome = offer_paper_auto_fix(env_path)
+            if outcome == "added":
+                results["ENV"] = "PASS"
+                p("PAPER_AUTO env : true  (.env'e eklendi — sunucuyu "
+                  "yeniden baslatin)")
     p(f"saat (UTC)     : {datetime.now(timezone.utc).isoformat(timespec='seconds')}"
       "  (gercek saatten sapma varsa SSL bozulur)")
 
