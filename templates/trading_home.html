@@ -205,7 +205,12 @@
     <span><b style="color:var(--muted,#8b949e); font-size:.65rem;
       text-transform:uppercase">Açık Pozisyon</b>
       <span id="th-winrt-pos" class="th-unknown">—</span></span>
+    <span><b style="color:var(--muted,#8b949e); font-size:.65rem;
+      text-transform:uppercase">Son Reconcile</b>
+      <span id="th-winrt-reconcile" class="th-unknown">—</span></span>
   </div>
+  <div id="th-winrt-reconcile-detail" style="margin-top:4px; font-size:.7rem;
+       color:var(--muted,#8b949e)"></div>
   <div id="th-winrt-note" style="margin-top:6px; font-size:.72rem;
        color:var(--muted,#8b949e)"></div>
   <div id="th-winrt-version" style="margin-top:4px; font-size:.68rem;
@@ -247,6 +252,32 @@
     if (d.last_error && d.last_error.message)
       notes.push("Son hata: " + d.last_error.message);
     set("th-winrt-note", notes.join(" • "));
+    var rc = d.paper_reconcile;
+    if (rc && rc.result) {
+      var rcMap = {
+        "RESTORED_RUNNING": "\uD83D\uDFE2 Geri yüklendi (çalışıyor)",
+        "BLOCKED_EMERGENCY": "\uD83D\uDD34 Engellendi (acil durum)",
+        "PRESERVED_STOPPED": "\uD83D\uDFE1 Korundu (durdurulmuş)",
+        "LIVE_FAIL_CLOSED": "\uD83D\uDD34 LIVE — güvenli kapalı",
+        "ERROR": "\uD83D\uDD34 Reconcile hatası"
+      };
+      set("th-winrt-reconcile", rcMap[rc.result] || rc.result);
+      var det = [];
+      if (rc.ts)
+        det.push("zaman: " + new Date(rc.ts).toLocaleString("tr-TR"));
+      var syms = rc.symbols ? Object.keys(rc.symbols) : [];
+      if (syms.length) {
+        det.push("semboller: " + syms.map(function (s) {
+          return s + "=" + rc.symbols[s];
+        }).join(", "));
+      }
+      if (rc.detail) det.push(rc.detail);
+      set("th-winrt-reconcile-detail",
+          det.length ? ("Son restart reconcile — " + det.join(" • ")) : "");
+    } else {
+      set("th-winrt-reconcile", "kayıt yok");
+      set("th-winrt-reconcile-detail", "");
+    }
     var ver = [];
     ver.push("sürüm: " + (d.git_head || "bilinmiyor"));
     if (d.entrypoint) ver.push("başlatma: " + d.entrypoint);
