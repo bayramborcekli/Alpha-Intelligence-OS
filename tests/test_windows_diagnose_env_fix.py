@@ -147,6 +147,43 @@ def test_guidance_none_when_missing(tmp_path):
     assert wd.paper_auto_present_guidance(tmp_path / "yok.env") is None
 
 
+# ---------- paper_auto_env_conflict_guidance ----------
+
+def test_conflict_env_false_dotenv_true(tmp_path):
+    content = SECRET_ENV + "ALPHA_WINDOWS_PAPER_AUTO=true\n"
+    p = _env(tmp_path, content)
+    msg = wd.paper_auto_env_conflict_guidance(p, "false")
+    assert msg is not None
+    assert "'false'" in msg
+    assert "ORTAM DEGISKENINDEN" in msg
+    assert "KALDIRIN" in msg
+    # Dosya degismez
+    assert p.read_text(encoding="utf-8") == content
+    assert not (tmp_path / ".env.bak").exists()
+
+
+def test_conflict_env_empty_dotenv_true(tmp_path):
+    p = _env(tmp_path, "ALPHA_WINDOWS_PAPER_AUTO=true\n")
+    msg = wd.paper_auto_env_conflict_guidance(p, "")
+    assert msg is not None and "(bos)" in msg
+
+
+def test_conflict_none_when_env_true(tmp_path):
+    p = _env(tmp_path, "ALPHA_WINDOWS_PAPER_AUTO=true\n")
+    assert wd.paper_auto_env_conflict_guidance(p, "true") is None
+    assert wd.paper_auto_env_conflict_guidance(p, " TRUE ") is None
+
+
+def test_conflict_none_when_dotenv_not_true(tmp_path):
+    p = _env(tmp_path, "ALPHA_WINDOWS_PAPER_AUTO=false\n")
+    assert wd.paper_auto_env_conflict_guidance(p, "false") is None
+
+
+def test_conflict_none_when_line_missing(tmp_path):
+    assert wd.paper_auto_env_conflict_guidance(_env(tmp_path), "false") is None
+    assert wd.paper_auto_env_conflict_guidance(tmp_path / "yok.env", "false") is None
+
+
 # ---------- offer_paper_auto_fix ----------
 
 def test_offer_accept_adds_and_sets_env(tmp_path, monkeypatch):

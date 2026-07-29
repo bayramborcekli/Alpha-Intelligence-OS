@@ -141,6 +141,43 @@ def paper_auto_present_guidance(env_path: Path) -> str | None:
     return None
 
 
+def paper_auto_env_conflict_guidance(env_path: Path, env_value: str) -> str | None:
+    """.env'de deger 'true' iken islem ortaminda true-olmayan deger varsa uyar.
+
+    Bu durumda deger .env'den DEGIL, sistem/kullanici ortam degiskeninden
+    geliyor demektir. Dosyaya asla dokunulmaz. Celiski yoksa None.
+    """
+    if env_value.strip().lower() == "true":
+        return None
+    try:
+        raw = env_path.read_bytes()
+    except OSError:
+        return None
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("utf-16")
+        except UnicodeError:
+            return None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        if key.strip() == PAPER_AUTO_KEY and value.strip().lower() == "true":
+            shown = env_value.strip() if env_value.strip() else "(bos)"
+            return (f"{PAPER_AUTO_KEY} .env'de 'true' AMA islem ortaminda "
+                    f"degeri '{shown}' — deger .env'den degil, sistem/"
+                    "kullanici ORTAM DEGISKENINDEN geliyor ve .env'i eziyor. "
+                    "Duzeltme: Windows'ta 'Ortam degiskenlerini duzenle' "
+                    f"ekranindan {PAPER_AUTO_KEY} degiskenini KALDIRIN veya "
+                    "'true' yapin; PowerShell gecici cozum: "
+                    f"Remove-Item Env:{PAPER_AUTO_KEY}  (sonra sunucuyu "
+                    "yeniden baslatin)")
+    return None
+
+
 def offer_paper_auto_fix(env_path: Path,
                          ask=input) -> str:
     """Eksik PAPER_AUTO için operatöre sorar; onayda satırı ekler.
@@ -205,6 +242,8 @@ def main() -> int:
                   "yeniden baslatin)")
         else:
             guidance = paper_auto_present_guidance(env_path)
+            if guidance is None:
+                guidance = paper_auto_env_conflict_guidance(env_path, env_auto)
             if guidance:
                 p("ONARIM         : " + guidance)
     p(f"saat (UTC)     : {datetime.now(timezone.utc).isoformat(timespec='seconds')}"
