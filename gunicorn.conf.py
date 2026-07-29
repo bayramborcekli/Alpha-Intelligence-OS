@@ -43,6 +43,15 @@ def post_fork(server, worker):
 
     _app.validate_startup_config()
     _app.enforce_paper_mode_lock()
+    # MASTER INTEGRATION: kalıcı kullanıcı tercihlerini (risk profili
+    # + tarama aralığı) GERÇEK motorlara uygula — controller
+    # başlamadan ÖNCE, doğru limitlerle açılsın (serve_windows ile
+    # parite). Hata worker'ı çökertmez.
+    try:
+        from services import system_runtime_orchestrator as _sro
+        _sro.start(_app)
+    except Exception as exc:  # pragma: no cover
+        worker.log.warning("Orchestrator başlangıcı başarısız: %s", exc)
     _app.um.start_auto_loop(_app._get_main_config)
     cfg0 = _app._get_main_config()
     if cfg0.get("adaptive_system", {}).get("enabled", False):

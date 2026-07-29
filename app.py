@@ -3874,7 +3874,12 @@ def api_risk_profile_set():
 def api_decision_trace():
     """Decision Trace — 'neden işlem açılmadı?' kanıtı (salt-okunur)."""
     from services import system_runtime_orchestrator as sro
-    n = min(max(int(request.args.get("n", 50)), 1), 200)
+    try:
+        n = min(max(int(request.args.get("n", 50)), 1), 200)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": {
+            "code": "INVALID_PARAM",
+            "message": "n sayısal olmalı (1-200)"}}), 400
     symbol = request.args.get("symbol")
     rows = sro.recent_decisions(200)
     if symbol:

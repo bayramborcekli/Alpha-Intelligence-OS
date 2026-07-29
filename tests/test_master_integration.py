@@ -250,6 +250,18 @@ class TestSnapshotAndTrace:
         assert r.status_code == 200
         assert r.get_json()["ok"] is True
 
+    def test_decision_trace_invalid_n_is_400(self, client):
+        r = client.get("/api/decision-trace?n=abc")
+        assert r.status_code == 400
+        assert r.get_json()["error"]["code"] == "INVALID_PARAM"
+
+    def test_gunicorn_post_fork_starts_orchestrator(self):
+        """Üretim workflow'u gunicorn — orchestrator orada da başlar."""
+        src = (ROOT / "gunicorn.conf.py").read_text(encoding="utf-8")
+        assert "system_runtime_orchestrator" in src
+        assert src.index("system_runtime_orchestrator") < \
+            src.index("start_controller_loop")
+
 
 class TestPipelineTest:
     """24) PAPER PIPELINE TEST — sentetik, güvenli, izole."""
