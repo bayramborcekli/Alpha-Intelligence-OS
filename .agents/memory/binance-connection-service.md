@@ -18,5 +18,11 @@ description: Kanonik bağlantı servisi kuralları, route-guard genişletme dese
 - `exchange_credentials.py` Windows'ta DPAPI (`enc:"dpapi"`) ile yazar;
   çözülemeyen giriş fail-closed None döner. Linux/Replit testleri yalnız
   fail-closed'u doğrulayabilir; gerçek DPAPI doğrulaması Windows ister.
+- İzin kararı KANONİK olarak imzalı `apiRestrictions` yanıtına dayanır;
+  spot-account `canTrade/canWithdraw` HESAP durumudur, anahtar izni
+  değildir — gerçek Windows'ta yanlış RED üretti. Endpoint geçici hata
+  verirse yanlış ret yerine UNVERIFIED (sarı) dönülür.
+- Guard, kanonik hesap-path literallerini yorum/docstring'de bile yakalar;
+  dokümantasyonda literal path yazma.
 - Futures durumu her zaman NOT_TESTED (spot-only tombstone); guard'a
   public `/fapi/v1/ping` bilinçli istisna olarak eklendi.
