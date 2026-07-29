@@ -462,6 +462,54 @@ class TestUniverseRuntimeStore:
         assert len(syms) == um.HARD_MAX_COINS
         assert syms[:3] == ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 
+    def test_save_smart_config_stores_only_diff(self, tmp_path,
+                                                monkeypatch):
+        """Seed önceliği: overlay yalnız FARKLI alanları saklar;
+        seed'de sonradan yapılan düzenleme maskelenmez."""
+        import universe_manager as um
+        self._iso(um, tmp_path, monkeypatch)
+        (tmp_path / "smart_config.json").write_text(
+            json.dumps({"mode": "ONERI", "eval_interval_hours": 6}),
+            encoding="utf-8")
+        cfg = um.get_smart_config()
+        cfg["candidate_count"] = 9  # yalnız bu alan değişti
+        um.save_smart_config(cfg)
+        overlay = um._load_runtime()["smart"]
+        assert "mode" not in overlay  # seed alanı overlay'e kopyalanmadı
+        assert overlay["candidate_count"] == 9
+        # seed sonradan elle düzenlenirse görünür kalır
+        (tmp_path / "smart_config.json").write_text(
+            json.dumps({"mode": "OTOMATIK", "eval_interval_hours": 6}),
+            encoding="utf-8")
+        assert um.get_smart_config()["mode"] == "OTOMATIK"
+
+    def test_concurrent_runtime_updates_no_lost_writes(
+            self, tmp_path, monkeypatch):
+        """flock'lu _update_runtime eşzamanlı yazımda kayıt kaybetmez."""
+        import threading as th
+        import universe_manager as um
+        self._iso(um, tmp_path, monkeypatch)
+        n, per = 8, 25
+
+        def worker(i):
+            for j in range(per):
+                um._append_smart_log({"w": i, "j": j})
+
+        ts = [th.Thread(target=worker, args=(i,)) for i in range(n)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        # LOG_MAX kırpması olabilir; toplam yazım kaybı yok say:
+        assert len(um.get_smart_log()) == min(n * per, um.LOG_MAX)
+
+    def test_bot_and_routes_use_effective_symbols(self):
+        """alpha20.py botu ve smart rotaları tek kanonik yükleyiciden
+        (effective_symbols) geçer."""
+        bot = (ROOT / "alpha20_v1/alpha20.py").read_text(
+            encoding="utf-8")
+        assert "effective_symbols" in bot
+        appsrc = (ROOT / "app.py").read_text(encoding="utf-8")
+        assert appsrc.count("um.effective_symbols") >= 3
+
     def test_runtime_store_gitignored(self):
         gi = (ROOT / ".gitignore").read_text(encoding="utf-8")
         assert "alpha20_v1/universe_runtime.json" in gi

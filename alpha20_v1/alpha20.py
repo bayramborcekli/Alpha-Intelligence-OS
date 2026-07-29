@@ -878,6 +878,15 @@ def main() -> None:
     args = parser.parse_args()
 
     config = load_json(CONFIG_PATH, {})
+    # Etkin evren: config.json tabanı + git dışı runtime dinamik ekler
+    # (universe_runtime.json) — dinamik seçilen coin'ler bot tarafından
+    # da GERÇEKTEN taranır.
+    try:
+        import universe_manager as _um
+        if isinstance(config.get("symbols"), list):
+            config["symbols"] = _um.effective_symbols(config["symbols"])
+    except Exception as _exc:
+        log.warning("Dinamik evren birleştirilemedi: %s", _exc)
     validate_startup_config(config)
 
     if args.reset or not STATE_PATH.exists():

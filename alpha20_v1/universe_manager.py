@@ -13,6 +13,11 @@ import math
 import os
 import threading
 import time
+
+try:
+    import fcntl  # POSIX — davranış değişmez
+except ImportError:  # Windows
+    import portable_flock as fcntl  # type: ignore
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -78,7 +83,10 @@ _status_lock = threading.Lock()
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _atomic_write(path: Path, data: Any) -> None:
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    # pid + thread id: aynı süreçteki eşzamanlı thread'ler tmp adında
+    # çakışamaz (scheduler thread + web istekleri)
+    tmp = path.with_name(
+        f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
         with tmp.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -130,14 +138,34 @@ def _enforce_universe_contract(cfg: dict[str, Any]) -> dict[str, Any]:
     return cfg
 
 
+def _read_seed() -> dict[str, Any]:
+    try:
+        if SMART_CONFIG_PATH.exists():
+            with SMART_CONFIG_PATH.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {}
+
+
 def save_smart_config(cfg: dict[str, Any]) -> None:
     """Runtime smart-config yazımı GIT DIŞI kanonik store'a gider.
 
     smart_config.json artık yalnız SEED (izlenen, elle düzenlenen
-    varsayılan); normal çalışma onu ASLA yazmaz → git status temiz."""
-    rt = _load_runtime()
-    rt["smart"] = cfg
-    _save_runtime(rt)
+    varsayılan); normal çalışma onu ASLA yazmaz → git status temiz.
+
+    Seed önceliği: overlay'e yalnız seed/varsayılandan FARKLI alanlar
+    yazılır — seed'de sonradan yapılan elle düzenlemeler, üzerine
+    kaydedilmemiş alanlarda görünür kalır (sessiz maskeleme yok)."""
+    seed = {**SMART_DEFAULTS, **_read_seed()}
+
+    def _mut(rt: dict[str, Any]) -> None:
+        rt["smart"] = {k: v for k, v in cfg.items()
+                       if k not in seed or seed[k] != v}
+
+    _update_runtime(_mut)
 
 
 def load_main_config() -> dict[str, Any]:
@@ -188,6 +216,24 @@ def _save_runtime(data: dict[str, Any]) -> None:
     _atomic_write(RUNTIME_STORE_PATH, data)
 
 
+def _update_runtime(mutator: Any) -> dict[str, Any]:
+    """Süreçler-arası kilitli oku-değiştir-yaz (lost update yok).
+
+    Gunicorn worker'ları + controller/scheduler thread'leri + web
+    rotaları aynı JSON store'a yazar; flock ile TEK transaksiyonel
+    güncelleme noktası budur."""
+    lock_path = RUNTIME_STORE_PATH.with_suffix(".lock")
+    with lock_path.open("a+") as lk:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+        try:
+            data = _load_runtime()
+            mutator(data)
+            _save_runtime(data)
+            return data
+        finally:
+            fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
+
+
 def get_smart_log() -> list[dict]:
     """Runtime log (git dışı) + legacy smart_changes.json (salt okur)."""
     entries = list(_load_runtime().get("log", []))
@@ -204,11 +250,12 @@ def get_smart_log() -> list[dict]:
 
 def _append_smart_log(entry: dict) -> None:
     """Yeni log kayıtları YALNIZ git dışı runtime store'a yazılır."""
-    rt = _load_runtime()
-    log_entries = list(rt.get("log", []))
-    log_entries.insert(0, entry)
-    rt["log"] = log_entries[:LOG_MAX]
-    _save_runtime(rt)
+    def _mut(rt: dict[str, Any]) -> None:
+        log_entries = list(rt.get("log", []))
+        log_entries.insert(0, entry)
+        rt["log"] = log_entries[:LOG_MAX]
+
+    _update_runtime(_mut)
 
 
 def _load_trades() -> list[dict]:
@@ -701,13 +748,14 @@ def apply_auto_changes(
     except (OSError, json.JSONDecodeError):
         base_syms = []
     try:
-        rt = _load_runtime()
-        rt["dynamic_symbols"] = [s for s in current
-                                 if s not in base_syms]
-        rt["removed_symbols"] = [s for s in base_syms
-                                 if s not in current
-                                 and s not in BASE_SYMBOLS]
-        _save_runtime(rt)
+        def _mut(rt: dict[str, Any]) -> None:
+            rt["dynamic_symbols"] = [s for s in current
+                                     if s not in base_syms]
+            rt["removed_symbols"] = [s for s in base_syms
+                                     if s not in current
+                                     and s not in BASE_SYMBOLS]
+
+        _update_runtime(_mut)
     except OSError as exc:
         return False, f"universe_runtime.json kaydedilemedi: {exc}"
 

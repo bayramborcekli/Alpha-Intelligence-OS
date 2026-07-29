@@ -1599,7 +1599,8 @@ def set_smart_mode():
     cfg = um.get_smart_config()
     main_cfg, _ = load_config()
     if cfg.get("mode") == "MANUEL" and main_cfg and mode != "MANUEL":
-        cfg["manual_list"] = list(main_cfg.get("symbols", []))
+        cfg["manual_list"] = um.effective_symbols(
+            list(main_cfg.get("symbols", [])))
     cfg["mode"] = mode
     um.save_smart_config(cfg)
     label = {"MANUEL": "Manuel", "ONERI": "Öneri", "OTOMATIK": "Otomatik"}[mode]
@@ -1638,7 +1639,9 @@ def trigger_analyze():
     if um.analysis_status["running"] or um.get_smart_config().get("analysis_running"):
         return render_dashboard("Analiz zaten çalışıyor.", "error")
     main_cfg, _ = load_config()
-    current   = list((main_cfg or DEFAULT_CONFIG).get("symbols", []))
+    # Etkin evren: taban + runtime dinamik ekler (tek kanonik yükleyici)
+    current   = um.effective_symbols(
+        list((main_cfg or DEFAULT_CONFIG).get("symbols", [])))
     smart_cfg = um.get_smart_config()
     started   = um.trigger_analysis(current, smart_cfg, apply_if_auto=False)
     if started:
@@ -1655,7 +1658,9 @@ def apply_smart_suggestions():
     main_cfg, err = load_config()
     if err or main_cfg is None:
         return render_dashboard(err or "Ayar dosyası okunamadı.", "error")
-    current     = list(main_cfg.get("symbols", []))
+    # Etkin evren üzerinden hesapla — runtime ekleri yok sayılırsa
+    # ikinci uygulama tekrar/yanlış değişiklik üretir
+    current     = um.effective_symbols(list(main_cfg.get("symbols", [])))
     to_add, to_remove = um.compute_auto_changes(suggestions, current, smart_cfg)
     if not to_add and not to_remove:
         return render_dashboard("Değişiklik gerekmedi.", "success")
