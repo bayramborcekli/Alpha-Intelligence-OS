@@ -1,0 +1,198 @@
+MISSION — WINDOWS FULL STACK RECOVERY & AUTO DIAGNOSIS
+
+AMAÇ:
+Alpha Intelligence OS Windows local çalışmasını kesin olarak yeşile getir.
+Controller neden başlamıyor ise otomatik tespit et.
+Gerekiyorsa minimum güvenli düzeltmeyi uygula.
+
+ARTIK SADECE RAPOR YAZMA.
+GERÇEK SORUNU BUL VE KAPAT.
+
+KOD DEĞİŞİKLİĞİ YAPMADAN ÖNCE TEŞHİS ET.
+Gereksiz commit üretme.
+
+---
+
+MEVCUT DURUM:
+
+Windows:
+
+app = running
+entrypoint = serve_windows
+auto_loop = çalışıyor
+
+Sorun:
+
+controller = stopped
+
+Hata:
+
+SOLUSDT Kline alınamadı
+HTTPSConnectionPool(host='fapi.binance.com', port=443)
+SSLError
+
+
+---
+
+FAZ 1 — RUNTIME DOĞRULAMA
+
+Kontrol et:
+
+- çalışan commit
+- entrypoint
+- environment
+- runtime_override
+- controller start zinciri
+
+
+Rapor:
+
+git_head:
+entrypoint:
+runtime_override:
+
+
+---
+
+FAZ 2 — SSL SORUNUNU GENİŞ ANALİZ ET
+
+Sadece certifi varsayımı yapma.
+
+Aşağıdakilerin tamamını kontrol et:
+
+1) Python SSL
+
+ssl.OPENSSL_VERSION
+
+
+2) requests CA kullanımı
+
+
+3) certifi yolu
+
+
+4) truststore gerçekten aktif mi?
+
+
+5) Windows sertifika deposu erişimi
+
+
+6) Sistem saati
+
+
+7) DNS çözümü
+
+
+8) Proxy/VPN
+
+
+9) Antivirüs HTTPS inspection ihtimali
+
+
+---
+
+FAZ 3 — DOĞRUDAN TEST
+
+Aşağıdaki bağlantıları test et:
+
+https://fapi.binance.com
+
+https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=10
+
+https://fapi.binance.com/fapi/v1/klines?symbol=SOLUSDT&interval=1h&limit=10
+
+
+Her biri için:
+
+PASS/FAIL
+hata mesajı
+
+
+---
+
+FAZ 4 — ALTERNATİF ÇÖZÜM DEĞERLENDİR
+
+Eğer Binance SSL engeli devam ediyorsa:
+
+Aşağıdaki seçenekleri değerlendir:
+
+A)
+requests session SSL altyapısını Windows truststore ile başlatmak
+
+B)
+urllib3 / requests sürüm uyumluluğu kontrolü
+
+C)
+launcher'ın doğru Python environment kullandığını kontrol etmek
+
+D)
+venv ile global Python farkını kontrol etmek
+
+E)
+firewall/proxy durumunu raporlamak
+
+
+---
+
+FAZ 5 — CONTROLLER TEST
+
+SSL düzeldikten sonra:
+
+manuel cycle çalıştır.
+
+Kontrol:
+
+cycle_count artıyor mu?
+last_cycle doluyor mu?
+controller running oluyor mu?
+
+
+---
+
+GÜVENLİK:
+
+KESİNLİKLE:
+
+- verify=False kullanma
+- SSL kapatma
+- Binance canlı emir yoluna dokunma
+- API key isteme
+- trading logic değiştirme
+
+
+---
+
+FINAL RAPOR:
+
+WINDOWS:
+PASS/FAIL
+
+ENTRYPOINT:
+
+GIT:
+
+SSL:
+
+BINANCE BTC:
+
+BINANCE SOL:
+
+CONTROLLER:
+
+ROOT CAUSE:
+(Tek gerçek sebep)
+
+FIX:
+(Yapılan tek işlem)
+
+SON DURUM:
+
+runtime_override:
+controller:
+cycle_count:
+last_cycle:
+
+
+HEDEF:
+WINDOWS RUNTIME kartı 🟢 Çalışıyor olmalı.
+Bu görev sonunda "daha fazla araştırma" değil, kesin sonuç ver.
