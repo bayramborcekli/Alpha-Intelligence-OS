@@ -98,14 +98,14 @@ class TestLayout:
         assert "@media" in TEMPLATE  # dar ekranda tek sütun
 
     @pytest.mark.parametrize("heading", [
-        "Aktif İşlemler", "Sıradaki İşlemler", "Son Hareketler",
+        "Aktif İşlemler", "İzlenen Piyasalar", "Son Hareketler",
         "AI Durumu"])
     def test_section_headings(self, heading):
         assert heading in TEMPLATE
 
     @pytest.mark.parametrize("label", [
         "Alpha Intelligence OS", "Portföy", "Bugünkü Kazanç",
-        "Aktif İşlemler", "Sıradaki İşlemler", "Otomasyon Modu",
+        "Aktif İşlemler", "İzlenen Piyasalar", "Otomasyon Modu",
         "Sistem Durumu", "Son Güncelleme"])
     def test_topbar_labels(self, label):
         assert label in TEMPLATE
@@ -286,7 +286,9 @@ class TestTrades:
 
 class TestQueue:
     @pytest.mark.parametrize("label", [
-        "Hazır", "Bekliyor", "Hazırlanıyor", "Yürütülüyor",
+        # Dürüst etiketler: sinyal beklerken "Sinyal bekliyor"/"İzleniyor";
+        # yalnız gerçek emir niyeti "Emir niyeti oluştu"dur.
+        "Sinyal bekliyor", "İzleniyor", "Emir niyeti oluştu", "Yürütülüyor",
         "Kapanıyor"])
     def test_queue_states(self, label):
         assert label in JS

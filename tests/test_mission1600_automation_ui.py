@@ -65,7 +65,9 @@ class TestAuth:
 
     def test_authenticated_renders(self, client):
         html = _page(client)
-        assert "Intelligence Automation" in html
+        # Konsolidasyon misyonu: sayfa "Analiz Zamanlayıcısı"dır ve
+        # trading botunu temsil etmediği açıkça yazılıdır.
+        assert "Analiz Zamanlayıcısı" in html
 
 
 class TestLayout:

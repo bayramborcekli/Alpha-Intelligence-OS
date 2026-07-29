@@ -36,8 +36,27 @@ if ($git) {
         Write-Host "UYARI: Kaynak kodda yerel degisiklik var - git pull ATLANDI (uzerine yazilmadi)."
         Write-Host "Detay: git status ile bakin. Mevcut kodla devam ediliyor."
     } else {
-        & $git -C $Root pull
-        if ($LASTEXITCODE -ne 0) { Write-Host "UYARI: git pull basarisiz - mevcut kodla devam." }
+        # Pack-lock duzeltmesi: GIT_ASK_YESNO=false interaktif
+        # "Should I try again? (y/n)" dongusunu KAPATIR; --ff-only +
+        # auto-gc/maintenance kapali gereksiz pack yeniden yazimini
+        # engeller. Eski pack silinemezse bu yalniz temizlik uyarisidir;
+        # HEAD guncellendiyse kurulum DURMAZ. Pack dosyalari asla zorla
+        # silinmez, Git butunlugu bozulmaz.
+        $env:GIT_ASK_YESNO = "false"
+        $headBefore = (& $git -C $Root rev-parse HEAD 2>$null)
+        & $git -C $Root -c gc.auto=0 -c maintenance.auto=false pull --ff-only
+        $pullRc = $LASTEXITCODE
+        $headAfter = (& $git -C $Root rev-parse HEAD 2>$null)
+        if ($pullRc -eq 0) {
+            Write-Host "GIT UPDATE: PASS"
+            Write-Host "GIT CLEANUP: PASS"
+        } elseif ($headAfter -and ($headAfter -ne $headBefore)) {
+            Write-Host "GIT UPDATE: PASS (HEAD guncellendi)"
+            Write-Host "GIT CLEANUP: WARNING - eski pack dosyasi kilitli olabilir; kod guncel, kuruluma devam."
+        } else {
+            Write-Host "GIT UPDATE: WARNING - git pull basarisiz, mevcut kodla devam."
+            Write-Host "GIT CLEANUP: SKIPPED"
+        }
     }
     $head = (& $git -C $Root rev-parse --short HEAD 2>$null)
     Write-Host "HEAD: $head"

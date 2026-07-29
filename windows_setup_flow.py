@@ -313,6 +313,31 @@ def connect_accounts() -> None:
             report[labels[exchange]] = f"PRESERVED ({status})"
     if len(existing) == len(labels):
         return  # her iki hesap da kayıtlı — yeniden bağlantı sorulmaz
+    port = os.environ.get("ALPHA_PORT", "5000").strip() or "5000"
+    settings_url = f"http://127.0.0.1:{port}/settings/binance"
+    if "BINANCE_GLOBAL" in existing:
+        # Global ZATEN bağlı: genel "yapılandırılsın mı?" sorusu
+        # TEKRARLANMAZ, Global credential girişi YENİDEN AÇILMAZ.
+        p("BINANCE GLOBAL: CONNECTED_READ_ONLY (kayitli; soru "
+          "tekrarlanmaz, anahtar yeniden istenmez).")
+        try:
+            ans = input("Binance TR baglanti sayfasi acilsin mi? (E/H): ")
+        except (EOFError, OSError):
+            return
+        if str(ans).strip().lower() in ("e", "evet", "y", "yes"):
+            try:
+                import webbrowser
+                if webbrowser.open(settings_url):
+                    p(f"BINANCE TR   : tarayicida acildi → {settings_url}")
+                    return
+            except Exception:
+                pass
+            p(f"BINANCE TR   : tarayici acilamadi — {settings_url} "
+              "adresini elle acin.")
+        else:
+            p("BINANCE TR   : atlandi — istediginizde panelden "
+              "baglayabilirsiniz.")
+        return
     try:
         ans = input("Binance hesap baglantisi yapilandirilsin mi? "
                     "(salt okunur; E/H): ")
@@ -322,8 +347,7 @@ def connect_accounts() -> None:
         p("HESAP        : atlandi — Paper sistem baglanti olmadan calisir.")
         return
     # Tercih edilen yol: guvenli maskeli form (secret terminale girilmez).
-    port = os.environ.get("ALPHA_PORT", "5000").strip() or "5000"
-    url = f"http://127.0.0.1:{port}/settings/binance"
+    url = settings_url
     try:
         import webbrowser
         if webbrowser.open(url):

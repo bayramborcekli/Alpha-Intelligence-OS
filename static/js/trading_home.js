@@ -247,32 +247,40 @@
       items.push(queueRow(symbol, sides[symbol], cls, label));
     }
     var openSymbols = {};
+    var realPending = 0; // gerçek emir/niyet — yalnız bunlar "sıradaki işlem"
     (positions || []).forEach(function (p) {
       openSymbols[p.symbol] = true;
       if (p.position_status === "CLOSE_REQUESTED") {
-        push(p.symbol, "close", "Kapanıyor");
+        push(p.symbol, "close", "Kapanıyor"); realPending++;
       }
     });
     (orders || []).forEach(function (o) {
       if (o.status && ["FILLED", "CANCELLED", "REJECTED",
                        "EXPIRED"].indexOf(o.status) === -1) {
-        push(o.symbol, "exec", "Yürütülüyor");
+        push(o.symbol, "exec", "Yürütülüyor"); realPending++;
       }
     });
     (signals || []).forEach(function (s) {
       if (s.execution_result === "SUBMITTED") {
-        push(s.symbol, "prep", "Hazırlanıyor");
+        push(s.symbol, "prep", "Emir niyeti oluştu"); realPending++;
       }
     });
     (products || []).forEach(function (pr) {
       if (openSymbols[pr.symbol]) return;
       if (pr.entry_eligible) {
-        push(pr.symbol, "wait", "Hazır");
+        push(pr.symbol, "wait", "Sinyal bekliyor");
       } else if (pr.automation_state === "ENABLED") {
-        push(pr.symbol, "gray", "Bekliyor");
+        push(pr.symbol, "gray", "İzleniyor");
       }
     });
-    setText("th-queued-count", items.length);
+    // Dürüst etiket: gerçek emir/niyet yoksa "Sıradaki İşlemler" denmez —
+    // yalnız analiz/sinyal bekleyen semboller "İzlenen Piyasalar"dır.
+    var queueLabel = realPending > 0 ? "Sıradaki İşlemler"
+                                     : "İzlenen Piyasalar";
+    setText("th-h-queue", queueLabel);
+    setText("th-queue-cell-label", queueLabel);
+    setText("th-queued-count",
+            realPending > 0 ? realPending : items.length);
     el.innerHTML = items.length ? items.join("") :
       "<tr><td colspan=\"3\" class=\"th-empty\">Sırada bekleyen " +
       "işlem yok. Piyasalar izlenmeye devam ediyor.</td></tr>";

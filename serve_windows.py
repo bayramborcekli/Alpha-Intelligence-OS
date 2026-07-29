@@ -281,6 +281,9 @@ def _bootstrap_background_services() -> None:
     except Exception as exc:
         log.warning("CONTROLLER başlatılamadı: %s", exc)
 
+    # 4a2. Desired-state reconciliation — kayıtlı Paper tercihini geri yükle.
+    _reconcile_paper_desired_state(_app)
+
     # 4b. Automation scheduler — yalnız ALPHA_AUTOMATION_ENABLED="true" ise
     #    (start_automation_scheduler kendi tekil guard'ını içerir).
     try:
@@ -292,6 +295,69 @@ def _bootstrap_background_services() -> None:
                      "(ALPHA_AUTOMATION_ENABLED != 'true')")
     except Exception as exc:
         log.warning("AUTOMATION SCHEDULER başlatılamadı: %s", exc)
+
+
+def _reconcile_env_ok() -> bool:
+    """Reconcile ortam kapısı: yalnız yerel Windows (Replit'te no-op).
+
+    Ayrı fonksiyon: testler os.name'i GLOBAL patch'lemeden (pathlib'i
+    bozmadan) bu kapıyı taklit edebilir."""
+    import local_env
+    return (not local_env.is_replit()) and os.name == "nt"
+
+
+def _reconcile_paper_desired_state(_app) -> None:
+    """Startup desired-state reconciliation — YALNIZ yerel Windows + PAPER.
+
+    Kanonik kalıcı tercih kaynağı: alpha20_v1/operation_control_state.json
+    (git dışı, flock'lu paylaşımlı depo — Operation Center servisi yazar).
+    Kullanıcının açık tercihi (automation RUNNING/STOPPED + sembol
+    ENABLED/DISABLED) yeniden başlatmada korunur:
+
+    - Emergency Stop veya risk kilidi aktifse HİÇBİR ŞEY başlatılmaz;
+      kayıtlı tercih SİLİNMEZ, açık blocker loglanır.
+    - Kayıtlı tercih RUNNING ise controller'ın çalıştığı doğrulanır.
+    - Kayıtlı tercih STOPPED ise otomatik başlatma YAPILMAZ.
+    - Live Trading hiçbir durumda açılmaz (LIVE ORDERS: DISABLED).
+    - Replit ortamında tam no-op (yerel Windows state'e dokunulmaz).
+    """
+    try:
+        if not _reconcile_env_ok():
+            log.info("PAPER RECONCILE atlandi (yalniz yerel Windows).")
+            return
+    except Exception as exc:
+        log.warning("PAPER RECONCILE ortam kontrolu yapilamadi: %s", exc)
+        return
+    try:
+        from services import emergency_stop as _es
+        est = _es.status()
+        if est.get("environment") == "LIVE":
+            log.warning("PAPER RECONCILE: LIVE mod — hicbir otomasyon "
+                        "baslatilmaz (fail-closed).")
+            return
+        if est["active"]:
+            log.warning("PAPER RECONCILE: EMERGENCY/RISK STOP ACTIVE "
+                        "(reason=%s) — kayitli otomasyon tercihi geri "
+                        "YUKLENMEDI; tercih SILINMEDI. Guvenli kaldirma: "
+                        "Operation Center > Acil Durdurma karti.",
+                        est.get("reason_code") or "UNKNOWN_LEGACY_STATE")
+            return
+        svc = _app.get_operation_service()
+        state = svc.automation_state.value
+        symbols = {s: st.value for s, st in svc.symbol_states().items()}
+        if state != "RUNNING":
+            log.info("PAPER RECONCILE: kayitli tercih automation=%s — "
+                     "otomatik baslatma YOK (kullanicinin STOP tercihi "
+                     "korunur). Semboller: %s", state, symbols or "{}")
+            return
+        started = _app.ac.start_controller_loop()
+        log.info("PAPER PREFERENCE RESTORED: automation=RUNNING, "
+                 "semboller=%s, controller=%s. LIVE ORDERS: DISABLED.",
+                 symbols or "{}",
+                 "STARTED" if started else "ALREADY_RUNNING")
+    except Exception as exc:
+        log.warning("PAPER RECONCILE basarisiz (tercih dosyasi korunur): "
+                    "%s", exc)
 
 
 if __name__ == "__main__":

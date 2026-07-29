@@ -287,9 +287,20 @@
          true);
   }
 
+  function actorLabel(actor) {
+    // local-dev-bypass teknik oturum kimliğidir, kullanıcı adı değil.
+    // UI'da "Yerel Windows Oturumu" gösterilir (auth davranışı değişmez);
+    // gerçek admin girişinde gerçek kullanıcı adı aynen görünür.
+    if (actor === "local-dev-bypass" || actor === "replit-dev-bypass") {
+      return "Yerel Windows Oturumu (auth_mode=" + actor + ")";
+    }
+    return actor;
+  }
+
   function renderAudit(rows) {
     fillTable("oc-audit", rows, function (a) {
-      return "<tr><td>" + esc(a.timestamp) + "</td><td>" + esc(a.actor) +
+      return "<tr><td>" + esc(a.timestamp) + "</td><td>" +
+        esc(actorLabel(a.actor)) +
         "</td><td>" + esc(a.action) + "</td><td>" + esc(a.target) +
         "</td><td>" + esc(a.previous_state) + "</td><td>" +
         esc(a.requested_state) + "</td><td>" + esc(a.result) + "</td><td>" +

@@ -3660,6 +3660,93 @@ def api_paper_emergency_stop_clear():
                     "data": es.status()})
 
 
+def _strategy_states() -> list[dict[str, Any]]:
+    """6) Tek kanonik sembol durum modeli — Trading Home, Operation
+    Center ve controller aynı kaynaktan okur (operation service +
+    kill-switch). Alanlar sabittir: symbol/enabled/run_state/
+    entry_allowed/last_signal/last_error/updated_at."""
+    svc = get_operation_service()
+    auto_running = svc.automation_state.value == "RUNNING"
+    try:
+        cfg = _get_main_config()
+    except Exception:
+        cfg = {}
+    ks_active = _operation_kill_switch_active(cfg)
+    out: list[dict[str, Any]] = []
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for symbol in _operation_symbols(cfg):
+        sym_state = svc.symbol_state(symbol).value
+        enabled = sym_state == "ENABLED"
+        if ks_active:
+            run_state = "BLOCKED"
+        elif not auto_running:
+            run_state = "STOPPED"
+        elif sym_state == "PAUSED":
+            run_state = "PAUSED"
+        elif enabled:
+            run_state = "RUNNING"
+        else:
+            run_state = "DISABLED"
+        out.append({
+            "symbol": symbol,
+            "enabled": enabled,
+            "run_state": run_state,
+            "entry_allowed": bool(enabled and auto_running
+                                  and not svc.stop_new_entries
+                                  and not ks_active),
+            "last_signal": "UNKNOWN",
+            "last_error": None,
+            "updated_at": now_iso,
+        })
+    return out
+
+
+@app.get("/api/paper/state")
+def api_paper_state():
+    """13) Dashboard tek doğruluk kaynağı — konsolide durum snapshot'ı.
+
+    Trading Home ve Operation Center'ın gösterdiği nihai durum bu tek
+    anlık görüntüden türetilebilir; alanlar arası çelişki üretilmez.
+    Salt-okunur; secret içermez; LIVE ORDERS her zaman DISABLED."""
+    from services import emergency_stop as es
+    from services import binance_connection as bcn
+    est = es.status()
+    try:
+        controller = ("RUNNING" if ac.get_status().get("running")
+                      else "STOPPED")
+    except Exception:
+        controller = "UNKNOWN"
+    strategies = _strategy_states()
+    try:
+        bg = (bcn.status().get("BINANCE_GLOBAL") or {}).get(
+            "status", "NOT_CONFIGURED")
+    except Exception:
+        bg = "UNKNOWN"
+    n_enabled = sum(1 for s in strategies if s["enabled"])
+    n_running = sum(1 for s in strategies
+                    if s["run_state"] == "RUNNING")
+    payload = {
+        "windows_runtime": "RUNNING",  # bu süreç yanıt veriyor
+        "paper": ("ACTIVE" if est.get("environment") != "LIVE"
+                  and not est["active"] else
+                  ("BLOCKED" if est["active"] else "UNKNOWN")),
+        "controller": controller,
+        "automation_mode": ("OTONOM" if est["automation_mode"] ==
+                            "AUTOMATIC" else "DANIŞMAN"),
+        "emergency_stop": "ACTIVE" if est["active"] else "CLEAR",
+        "emergency_reason_code": est["reason_code"] or None,
+        "strategies": strategies,
+        "strategies_summary": f"{n_enabled} ENABLED / "
+                              f"{n_running} RUNNING",
+        "binance_global": bg,
+        "live_orders": "DISABLED",
+        "generated_at": int(time.time()),
+    }
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = "no-store, private"
+    return resp
+
+
 @app.get("/settings/binance")
 def binance_settings_page():
     return _render_workspace("binance_settings.html", "binance_settings")
