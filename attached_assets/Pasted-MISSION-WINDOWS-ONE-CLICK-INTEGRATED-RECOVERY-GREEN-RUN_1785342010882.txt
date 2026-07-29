@@ -1,0 +1,253 @@
+MISSION — WINDOWS ONE-CLICK INTEGRATED RECOVERY & GREEN RUNTIME
+
+AMAÇ:
+Windows kurulum, .env onarımı, SSL testi, eski süreç temizliği, sunucu başlatma ve Runtime doğrulamasını TEK AKIŞTA tamamla.
+
+Kullanıcı yalnızca:
+
+.\RECOVER_WINDOWS.cmd
+
+çalıştıracak.
+
+Betik yarıda durmayacak, ikinci kez çalıştırma istemeyecek ve kullanıcıyı farklı komutlara yönlendirmeyecek.
+
+============================================================
+1) TEK AKIŞ
+============================================================
+
+RECOVER_WINDOWS.cmd sırasıyla şunları otomatik yapmalı:
+
+1. Proje kökünü doğrula.
+2. Git kullanılabiliyorsa git pull çalıştır.
+3. Doğru .venv ortamını kur/doğrula.
+4. certifi + truststore güncelle.
+5. Gerçek .env dosyasını kontrol et ve güvenli biçimde onar.
+6. Windows SSL/Binance testlerini çalıştır.
+7. Eski Alpha Python süreçlerini temizle.
+8. serve_windows.py ile tek instance başlat.
+9. /health/runtime endpoint’ini belirli süre boyunca bekle.
+10. Controller ve ilk çevrimi doğrula.
+11. Tek FINAL PASS/FAIL raporu göster.
+
+============================================================
+2) .ENV OTOMATİK ONARIMI
+============================================================
+
+Gerçek runtime yalnız .env dosyasını kullanır.
+
+.env yoksa güvenli yerel dosya oluştur:
+
+FLASK_ENV=development
+LOCAL_DEV_BYPASS=1
+PAPER_MODE=true
+ALPHA_WINDOWS_PAPER_AUTO=true
+
+.env varsa:
+
+- silme
+- secret/parola/hash/session değerlerini değiştirme
+- Binance anahtarlarına dokunma
+- önce .env.backup_<timestamp> yedeği al
+- ALPHA_WINDOWS_PAPER_AUTO satırını ekle veya true yap
+- birden fazla FLASK_ENV varsa tek satıra indir:
+  FLASK_ENV=development
+
+Kullanıcıdan ikinci çalıştırma isteme.
+Onarım sonrası aynı akış otomatik devam etsin.
+
+============================================================
+3) GIT DAYANIKLILIĞI
+============================================================
+
+Git komutu bulunamazsa:
+
+- C:\Program Files\Git\cmd\git.exe
+- C:\Program Files (x86)\Git\cmd\git.exe
+
+yollarını kontrol et.
+
+Bulunursa o tam yolu kullan.
+
+Hiç bulunamazsa:
+
+- açık ve kısa uyarı ver
+- mevcut kodla diğer adımlara devam et
+- sistemi gereksiz yere durdurma
+
+============================================================
+4) SSL / BINANCE DAYANIKLILIĞI
+============================================================
+
+Truststore, Windows sertifika deposuna bağlansın.
+
+Kesinlikle kullanma:
+
+- verify=False
+- CERT_NONE
+- SSL doğrulamasını kapatma
+
+Testler:
+
+- Binance ana endpoint
+- BTCUSDT kline
+- ETHUSDT kline
+- SOLUSDT kline
+
+Geçici TLS hatalarında:
+
+- en az 3 deneme
+- artan bekleme
+- her denemede yeni bağlantı/session
+- tek sembol hatası tüm kurtarma akışını hemen durdurmasın
+
+Sonuçları ayrı raporla:
+
+BTC: PASS/FAIL
+ETH: PASS/FAIL
+SOL: PASS/FAIL
+
+En az iki sembol çalışıyorsa sunucuyu başlat ve controller’ın diğer sembollerle çevrim yapmasını doğrula.
+
+Tüm semboller başarısızsa tek gerçek ağ/sertifika nedenini raporla ve güvenli biçimde dur.
+
+============================================================
+5) TEMİZ SÜREÇ YÖNETİMİ
+============================================================
+
+Tüm sistemdeki rastgele python.exe süreçlerini körlemesine öldürme.
+
+Yalnız Alpha Intelligence OS’a ait süreçleri:
+
+- PID dosyası
+- command line
+- çalışma dizini
+
+üzerinden tespit edip kapat.
+
+Sonra tek instance başlat:
+
+.venv\Scripts\python.exe serve_windows.py
+
+Başlatılan PID’yi kaydet.
+
+============================================================
+6) OTOMATİK HEALTH BEKLEME
+============================================================
+
+Sunucu başlatıldıktan sonra:
+
+http://127.0.0.1:5000/health/runtime
+
+endpoint’ini en fazla 120 saniye boyunca periyodik kontrol et.
+
+Beklenen:
+
+entrypoint = serve_windows
+runtime_override = true
+paper = active
+auto_loop = running
+controller = running
+cycle_count >= 1
+last_cycle dolu
+
+İlk çevrim gecikirse hemen FAIL verme; bekleme süresi içinde tekrar kontrol et.
+
+============================================================
+7) GÜVENLİK
+============================================================
+
+KORU:
+
+- config.json varsayılan kilitleri
+- auth/parola sistemi
+- session secret
+- Paper ledger/state
+- trading logic
+- risk motoru
+- position management
+
+KESİNLİKLE AÇMA:
+
+- ALPHA_ENABLE_LIVE_TRADING
+- gerçek Binance emir yolu
+- imzalı emir endpointleri
+
+.env Git’e eklenmeyecek.
+.env.example içine secret yazılmayacak.
+
+============================================================
+8) FINAL ÇIKTI
+============================================================
+
+Betik yalnız en sonda tek özet göstermeli:
+
+WINDOWS INTEGRATED RECOVERY
+
+GIT:
+PASS / SKIPPED / FAIL
+
+ENV:
+PASS / FAIL
+
+TRUSTSTORE:
+PASS / FAIL
+
+BINANCE BTC:
+PASS / FAIL
+
+BINANCE ETH:
+PASS / FAIL
+
+BINANCE SOL:
+PASS / FAIL
+
+SERVER:
+RUNNING / STOPPED
+
+RUNTIME OVERRIDE:
+TRUE / FALSE
+
+AUTO LOOP:
+RUNNING / STOPPED
+
+CONTROLLER:
+RUNNING / STOPPED
+
+PAPER:
+ACTIVE / DISABLED
+
+CYCLE COUNT:
+N
+
+LAST CYCLE:
+timestamp
+
+RUNTIME CARD:
+🟢 / 🟡 / 🔴
+
+ROOT CAUSE:
+Yalnız başarısızsa tek gerçek neden
+
+FINAL ACTION:
+Yalnız sistem dışında kullanıcı müdahalesi gerçekten gerekiyorsa tek işlem
+
+============================================================
+9) BAŞARI KRİTERİ
+============================================================
+
+Görev ancak şu durumda PASS sayılacak:
+
+- .env otomatik ve güvenli biçimde doğru
+- ikinci çalıştırma gerekmiyor
+- sunucu otomatik başladı
+- runtime_override=true
+- controller=running
+- paper=active
+- cycle_count>=1
+- Runtime kartı 🟢
+
+Değişiklikleri minimum tut.
+Tek commit.
+Merge sonrası Windows kullanım talimatı yalnız:
+
+.\RECOVER_WINDOWS.cmd
