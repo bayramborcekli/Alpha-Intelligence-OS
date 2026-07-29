@@ -336,6 +336,9 @@
     {# ── Ayarlar ── #}
     <section class="card col-12" id="ayarlar">
       <h2>Ayarlar</h2>
+      {% if main_settings_ovr %}
+        <p class="ovr-note" style="margin:0 0 12px">⚡ Dikkat: bu bölümdeki bazı ayarlar şu an bellek override'ı tarafından eziliyor ({{ main_settings_ovr.keys() | join(', ') }}). Kaydedilen değerler dosyaya yazılır ama süreç yeniden başlatılana kadar etkisiz kalır.</p>
+      {% endif %}
       <form method="post" action="/settings">
         <div class="setting-grid">
           {% for f in setting_fields %}
@@ -344,6 +347,9 @@
               <input id="{{ f.name }}" name="{{ f.name }}" type="{{ f.input_type }}"
                 min="{{ f.min }}" max="{{ f.max }}" step="{{ f.step }}" value="{{ f.value }}" required>
               <small>{{ f.min }} – {{ f.max }}</small>
+              {% if f.name in main_settings_ovr %}
+                <span class="ovr-note" title="Bellek override'ı: {{ f.name }}={{ main_settings_ovr[f.name] }}">⚡ bellek override'ı tarafından eziliyor (etkin: {{ main_settings_ovr[f.name] }})</span>
+              {% endif %}
             </div>
           {% endfor %}
         </div>
@@ -474,6 +480,9 @@
       </div>
 
       {# Akıllı ayarlar (Manuel modda gizli) #}
+      {% if smart_settings_ovr %}
+        <p class="ovr-note" style="margin:0 0 12px">⚡ Dikkat: bazı akıllı seçim ayarları şu an bellek override'ı tarafından eziliyor ({{ smart_settings_ovr.keys() | join(', ') }}). Kaydedilen değerler dosyaya yazılır ama süreç yeniden başlatılana kadar etkisiz kalır.</p>
+      {% endif %}
       {% if smart.mode != 'MANUEL' %}
         <details style="margin-bottom:18px">
           <summary style="cursor:pointer;font-weight:700;padding:10px 0;border-top:1px solid var(--border)">

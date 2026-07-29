@@ -1305,6 +1305,13 @@ def render_dashboard(message: str | None = None, message_type: str = "success"):
     safe_config          = config or DEFAULT_CONFIG
     smart, perf          = build_smart_context(safe_config)
     adaptive_ctx         = build_adaptive_context(safe_config)
+    # Task 85: runtime override sözlüğü adaptive dışı anahtarları da
+    # kapsarsa, klasik Ayarlar ve Akıllı Coin formları da yanıltmasın.
+    _ovr = getattr(ac, "RUNTIME_ADAPTIVE_OVERRIDE", None) or {}
+    main_settings_ovr = {k: _ovr[k] for k in SETTING_RULES if k in _ovr}
+    smart_settings_ovr = {k: _ovr[k]
+                          for k in list(SMART_SETTING_RULES) + ["anchor_symbol"]
+                          if k in _ovr}
     return render_template(
         "dashboard.html",
         config=safe_config, status=status,
@@ -1321,6 +1328,8 @@ def render_dashboard(message: str | None = None, message_type: str = "success"):
         message=message, message_type=message_type,
         smart=smart, perf=perf,
         adaptive=adaptive_ctx,
+        main_settings_ovr=main_settings_ovr,
+        smart_settings_ovr=smart_settings_ovr,
         security=slog.get_security_summary(),
         app_version=get_version(),
     )
@@ -1377,6 +1386,7 @@ def save_settings():
     if ok and bot_running():
         msg += " Değişikliklerin etkili olması için botu yeniden başlatın."
     if ok:
+        msg += _runtime_override_note(*updates.keys())
         ms.append_system_error(component="settings", error_type="SETTINGS_CHANGE",
                                message=f"Ayarlar güncellendi: {list(updates.keys())}")
         slog.log_event(slog.SETTINGS_CHANGE,
@@ -1548,7 +1558,10 @@ def save_smart_settings():
     if anchor:
         cfg["anchor_symbol"] = anchor
     um.save_smart_config(cfg)
-    return render_dashboard("Akıllı seçim ayarları kaydedildi.", "success")
+    posted = [k for k in list(SMART_SETTING_RULES) + ["anchor_symbol"]
+              if request.form.get(k) is not None]
+    note = _runtime_override_note(*posted)
+    return render_dashboard("Akıllı seçim ayarları kaydedildi." + note, "success")
 
 
 @app.post("/smart/analyze")
