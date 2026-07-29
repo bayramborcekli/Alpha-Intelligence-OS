@@ -82,6 +82,111 @@ class TestDiagnoseNetworkError:
         assert "weird network failure" in msg
 
 
+def _http_error(status: int) -> requests.exceptions.HTTPError:
+    resp = requests.models.Response()
+    resp.status_code = status
+    return requests.exceptions.HTTPError(
+        f"{status} Error for url", response=resp)
+
+
+class TestDiagnoseHttpError:
+    def test_429_points_to_rate_limit(self):
+        msg = alpha20.diagnose_http_error(_http_error(429))
+        assert "429" in msg
+        assert "çok fazla istek" in msg.lower()
+        assert "sıklığı" in msg or "bekle" in msg.lower()
+
+    def test_418_points_to_ip_ban(self):
+        msg = alpha20.diagnose_http_error(_http_error(418))
+        assert "418" in msg
+        assert "IP" in msg
+        assert "yasak" in msg.lower() or "engellendi" in msg.lower()
+
+    def test_5xx_points_to_binance_side(self):
+        for status in (500, 502, 503):
+            msg = alpha20.diagnose_http_error(_http_error(status))
+            assert str(status) in msg
+            assert "Binance" in msg
+            assert "geçici" in msg.lower()
+
+    def test_other_status_has_generic_turkish_guidance(self):
+        msg = alpha20.diagnose_http_error(_http_error(403))
+        assert "403" in msg
+        assert "Binance hatası" in msg
+
+    def test_missing_response_still_turkish(self):
+        msg = alpha20.diagnose_http_error(
+            requests.exceptions.HTTPError("no response attached"))
+        assert "Binance hatası" in msg
+        assert "no response attached" in msg
+
+
+class TestFetchKlinesHttpHandling:
+    def _mock_status(self, monkeypatch, status: int):
+        class FakeResponse:
+            status_code = status
+
+            def raise_for_status(self):
+                raise _http_error(status)
+
+        monkeypatch.setattr(
+            alpha20.requests, "get", lambda *a, **kw: FakeResponse())
+
+    def test_429_raises_turkish_runtime_error(self, monkeypatch):
+        self._mock_status(monkeypatch, 429)
+        with pytest.raises(RuntimeError) as ei:
+            alpha20.fetch_klines("SOLUSDT", "15m")
+        assert "çok fazla istek" in str(ei.value).lower()
+
+    def test_418_raises_turkish_runtime_error(self, monkeypatch):
+        self._mock_status(monkeypatch, 418)
+        with pytest.raises(RuntimeError) as ei:
+            alpha20.fetch_klines("SOLUSDT", "15m")
+        assert "IP" in str(ei.value)
+
+    def test_503_raises_turkish_runtime_error(self, monkeypatch):
+        self._mock_status(monkeypatch, 503)
+        with pytest.raises(RuntimeError) as ei:
+            alpha20.fetch_klines("SOLUSDT", "15m")
+        assert "geçici" in str(ei.value).lower()
+
+    def test_fetch_klines_safe_returns_none_on_http_error(self, monkeypatch):
+        self._mock_status(monkeypatch, 429)
+        state: dict = {}
+        assert alpha20.fetch_klines_safe("SOLUSDT", "15m", state=state) is None
+        assert state["network_errors"] == 1
+
+
+class TestMarketRegimeHttpHandling:
+    def _mock_status(self, monkeypatch, status: int):
+        import market_regime
+
+        class FakeResponse:
+            status_code = status
+
+            def raise_for_status(self):
+                raise _http_error(status)
+
+        monkeypatch.setattr(
+            market_regime.requests, "get", lambda *a, **kw: FakeResponse())
+        monkeypatch.setattr(market_regime.time, "sleep", lambda *_: None)
+
+    def test_429_logs_turkish_message(self, monkeypatch, caplog):
+        import market_regime
+        self._mock_status(monkeypatch, 429)
+        with caplog.at_level("WARNING", logger="market_regime"):
+            assert market_regime._fetch_klines("SOLUSDT", "15m") is None
+        assert any("çok fazla istek" in r.message.lower()
+                   for r in caplog.records)
+
+    def test_503_logs_turkish_message(self, monkeypatch, caplog):
+        import market_regime
+        self._mock_status(monkeypatch, 503)
+        with caplog.at_level("WARNING", logger="market_regime"):
+            assert market_regime._fetch_klines("SOLUSDT", "15m") is None
+        assert any("geçici" in r.message.lower() for r in caplog.records)
+
+
 class TestFetchKlinesNetworkHandling:
     def test_dns_error_raises_turkish_runtime_error(self, monkeypatch):
         def boom(*a, **kw):

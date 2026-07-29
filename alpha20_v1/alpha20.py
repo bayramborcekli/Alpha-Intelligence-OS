@@ -279,6 +279,43 @@ def diagnose_network_error(exc: Exception) -> str:
             f"Teknik ayrıntı: {exc}")
 
 
+def diagnose_http_error(exc: Exception) -> str:
+    """HTTP durum hatasının (429/418/5xx...) olası nedenini Türkçe açıklar.
+
+    Binance rate-limit ve sunucu hataları operatöre anlaşılır kılavuz
+    mesajla gösterilir; ham İngilizce HTTPError metni yerine kullanılır.
+    """
+    status: int | None = None
+    response = getattr(exc, "response", None)
+    if response is not None:
+        try:
+            status = int(response.status_code)
+        except (TypeError, ValueError):
+            status = None
+    if status == 429:
+        return ("Binance hatası (429 — çok fazla istek): istek sıklığı limiti "
+                "aşıldı. Bot bir süre bekleyip otomatik yeniden dener; başka "
+                "botlar/uygulamalar aynı IP'den Binance'e istek atıyorsa "
+                "kapatın. Kalıcıysa istek sıklığını (tarama aralığını) düşürün.")
+    if status == 418:
+        return ("Binance hatası (418 — IP geçici olarak yasaklandı): 429 "
+                "uyarılarına rağmen istekler sürdüğü için IP'niz Binance "
+                "tarafından geçici olarak engellendi. Botu bir süre durdurun; "
+                "yasak süresi dolunca kendiliğinden açılır. Aynı IP'den "
+                "yoğun istek atan diğer uygulamaları kapatın.")
+    if status is not None and 500 <= status < 600:
+        return (f"Binance hatası ({status} — sunucu tarafı geçici sorun): "
+                "sorun sizin bağlantınızda değil, Binance sunucularında. "
+                "Genellikle birkaç dakika içinde kendiliğinden düzelir; "
+                "bot otomatik yeniden dener, bir işlem yapmanız gerekmez.")
+    if status is not None:
+        return (f"Binance hatası (HTTP {status}): beklenmeyen durum kodu. "
+                "Sorun sürerse Binance durum sayfasını kontrol edin. "
+                f"Teknik ayrıntı: {exc}")
+    return ("Binance hatası (HTTP durum kodu okunamadı): beklenmeyen yanıt. "
+            f"Teknik ayrıntı: {exc}")
+
+
 def fetch_klines(symbol: str, interval: str, limit: int = 300) -> pd.DataFrame:
     try:
         response = requests.get(
@@ -294,7 +331,12 @@ def fetch_klines(symbol: str, interval: str, limit: int = 300) -> pd.DataFrame:
         detail = diagnose_network_error(exc)
         log.warning("AĞ HATASI | %s %s | %s", symbol, interval, detail)
         raise RuntimeError(detail) from exc
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as exc:
+        detail = diagnose_http_error(exc)
+        log.warning("HTTP HATASI | %s %s | %s", symbol, interval, detail)
+        raise RuntimeError(detail) from exc
     rows = response.json()
     columns = [
         "open_time", "open", "high", "low", "close", "volume",
