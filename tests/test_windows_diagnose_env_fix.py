@@ -184,6 +184,76 @@ def test_conflict_none_when_line_missing(tmp_path):
     assert wd.paper_auto_env_conflict_guidance(tmp_path / "yok.env", "false") is None
 
 
+# ---------- main() uçtan uca: ENV FAIL + .env çelişkisi ----------
+
+def test_main_prints_conflict_guidance_end_to_end(tmp_path, monkeypatch, capsys):
+    """os.environ'da false, .env'de true → main() ONARIM satirini basar.
+
+    Agsiz: requests/socket/subprocess sahte; gercek .env'e dokunulmaz
+    (wd.__file__ tmp_path'e yonlendirilir)."""
+    import types
+
+    # Sahte .env: deger true → celiski kaynagi ortam degiskeni
+    _env(tmp_path, SECRET_ENV + "ALPHA_WINDOWS_PAPER_AUTO=true\n")
+    monkeypatch.setattr(wd, "__file__", str(tmp_path / "windows_diagnose.py"))
+
+    # Islem ortaminda false → ENV FAIL dali
+    monkeypatch.setenv("ALPHA_WINDOWS_PAPER_AUTO", "false")
+
+    # Ag/subprocess tamamen kapali
+    monkeypatch.setattr(wd.subprocess, "run",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("no git")))
+    monkeypatch.setattr(wd.socket, "gethostbyname",
+                        lambda host: (_ for _ in ()).throw(OSError("no dns")))
+
+    class _FakeSSLError(Exception):
+        pass
+
+    fake_requests = types.ModuleType("requests")
+    fake_requests.exceptions = types.SimpleNamespace(SSLError=_FakeSSLError)
+    fake_requests.get = lambda *a, **k: (_ for _ in ()).throw(
+        ConnectionError("network disabled in test"))
+    monkeypatch.setitem(sys.modules, "requests", fake_requests)
+
+    original = (tmp_path / ".env").read_text(encoding="utf-8")
+    rc = wd.main()
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "ONARIM" in out
+    assert "ORTAM DEGISKENINDEN" in out
+    assert "'false'" in out
+    assert "ENV PAPER_AUTO : FAIL" in out
+    # Dosya degismez, yedek olusmaz
+    assert (tmp_path / ".env").read_text(encoding="utf-8") == original
+    assert not (tmp_path / ".env.bak").exists()
+
+
+def test_main_no_conflict_when_env_true(tmp_path, monkeypatch, capsys):
+    """Ortam degiskeni true → ENV PASS, ONARIM satiri yok."""
+    import types
+
+    _env(tmp_path, SECRET_ENV + "ALPHA_WINDOWS_PAPER_AUTO=true\n")
+    monkeypatch.setattr(wd, "__file__", str(tmp_path / "windows_diagnose.py"))
+    monkeypatch.setenv("ALPHA_WINDOWS_PAPER_AUTO", "true")
+
+    monkeypatch.setattr(wd.subprocess, "run",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("no git")))
+    monkeypatch.setattr(wd.socket, "gethostbyname",
+                        lambda host: (_ for _ in ()).throw(OSError("no dns")))
+
+    fake_requests = types.ModuleType("requests")
+    fake_requests.exceptions = types.SimpleNamespace(SSLError=Exception)
+    fake_requests.get = lambda *a, **k: (_ for _ in ()).throw(
+        ConnectionError("network disabled in test"))
+    monkeypatch.setitem(sys.modules, "requests", fake_requests)
+
+    wd.main()
+    out = capsys.readouterr().out
+    assert "ONARIM" not in out
+    assert "ENV PAPER_AUTO : PASS" in out
+
+
 # ---------- offer_paper_auto_fix ----------
 
 def test_offer_accept_adds_and_sets_env(tmp_path, monkeypatch):
