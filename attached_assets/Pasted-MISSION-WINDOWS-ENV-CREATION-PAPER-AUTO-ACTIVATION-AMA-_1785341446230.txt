@@ -1,0 +1,116 @@
+MISSION — WINDOWS .ENV CREATION & PAPER AUTO ACTIVATION
+
+AMAÇ:
+Windows proje klasöründe gerçek `.env` dosyasını doğrula, yoksa güvenli biçimde oluştur ve Paper AUTO opt-in ayarını aktif et.
+
+MEVCUT BULGU:
+Kullanıcıda görülen dosya `.env.example`.
+İçinde iki farklı `FLASK_ENV` satırı var:
+
+FLASK_ENV=production
+FLASK_ENV=development
+
+Bu dosya doğrudan runtime ayarı olarak kullanılmamalı.
+
+YAP:
+
+1) Proje kökünde kontrol et:
+
+dir -Force .env*
+
+Kesin olarak raporla:
+
+- `.env` var mı?
+- `.env.example` var mı?
+- hangisi runtime tarafından yükleniyor?
+
+2) Eğer `.env` yoksa:
+
+`.env.example` dosyasını doğrudan olduğu gibi kopyalama.
+
+Yeni temiz `.env` oluştur.
+
+İçerikte yalnız gerekli Windows local ayarları olsun:
+
+FLASK_ENV=development
+LOCAL_DEV_BYPASS=1
+PAPER_MODE=true
+ALPHA_WINDOWS_PAPER_AUTO=true
+
+Mevcut çalışan auth/session sistemi başka değer gerektiriyorsa onları mevcut yerel kurulumdan koru.
+
+3) Eğer `.env` varsa:
+
+- dosyayı silme
+- mevcut secret/parola/hash değerlerini değiştirme
+- yalnız şu ayarı ekle veya düzelt:
+
+ALPHA_WINDOWS_PAPER_AUTO=true
+
+Ayrıca birden fazla `FLASK_ENV` satırı varsa tek değere indir:
+
+FLASK_ENV=development
+
+4) Kesinlikle yapma:
+
+- `.env` dosyasını Git'e ekleme
+- `.env.example` içine gerçek secret yazma
+- Binance anahtarlarını değiştirme
+- auth/parola sistemine dokunma
+- config.json değiştirme
+- canlı emir açma
+
+5) Doğrulama:
+
+Windows teşhisini çalıştır:
+
+.venv\Scripts\python.exe windows_diagnose.py
+
+Beklenen:
+
+PAPER_AUTO env : true
+ENV PAPER_AUTO : PASS
+
+6) Sonra temiz başlat:
+
+.venv\Scripts\python.exe serve_windows.py
+
+Beklenen loglar:
+
+WINDOWS PAPER AUTO ENABLED (RUNTIME)
+AUTO LOOP STARTED
+CONTROLLER STARTED
+FIRST CYCLE COMPLETED
+
+7) Son kontrol:
+
+GET /health/runtime
+
+Beklenen:
+
+entrypoint = serve_windows
+runtime_override = true
+paper = active
+controller = running
+cycle_count >= 1
+
+ÇIKTI:
+
+ENV FILE:
+FOUND / CREATED
+
+PAPER_AUTO:
+PASS / FAIL
+
+FLASK_ENV:
+development
+
+CONTROLLER:
+RUNNING / STOPPED
+
+ROOT CAUSE:
+Gerçek `.env` dosyasının eksik veya yanlış yapılandırılmış olması
+
+Değişiklik yalnız yerel `.env` üzerinde.
+Commit yok.
+Push yok.
