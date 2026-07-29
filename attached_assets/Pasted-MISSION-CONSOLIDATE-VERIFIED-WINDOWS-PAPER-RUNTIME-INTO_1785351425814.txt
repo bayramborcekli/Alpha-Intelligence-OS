@@ -1,0 +1,478 @@
+MISSION — CONSOLIDATE VERIFIED WINDOWS PAPER RUNTIME INTO MAIN SYSTEM
+
+AMAÇ
+
+Gerçek Windows kabul testinde doğrulanan son çalışan durumu, geçici ekran tıklamalarına veya dağınık state dosyalarına bağımlı bırakmadan ana sisteme kalıcı biçimde işle.
+
+Doğrulanmış hedef durum:
+
+- Windows Runtime: RUNNING
+- Paper: ACTIVE
+- Controller: RUNNING
+- Emergency Stop: CLEAR
+- Operation Center Automation: RUNNING / AUTONOMOUS
+- BTCUSDT: ENABLED
+- ETHUSDT: ENABLED
+- SOLUSDT: ENABLED
+- Her sembol: Entry Eligible / Giriş Uygun
+- Binance Global: CONNECTED_READ_ONLY
+- Binance credential: Windows DPAPI
+- Live Orders: DISABLED
+- Tek sembol geçici SSL hatası: NON-BLOCKING
+
+Yeni mimari kurma. Mevcut servisleri ve state modellerini tek kanonik davranışta birleştir.
+
+============================================================
+1) ÖNCE MEVCUT DURUM KAYNAKLARINI DENETLE
+============================================================
+
+Aşağıdaki durumların hangi dosya veya servislerden okunduğunu kesin olarak belirle:
+
+- Paper active
+- controller running
+- emergency stop
+- Operation Center automation state
+- Trading Home OTONOM/DANIŞMAN görünümü
+- BTCUSDT/ETHUSDT/SOLUSDT enabled/stopped/disabled durumu
+- entry eligible / giriş uygun
+- Binance Global bağlantı durumu
+- analysis scheduler ALPHA_AUTOMATION_ENABLED
+- local-dev-bypass oturum etiketi
+
+Aynı durumun birden fazla çelişkili kaynağı varsa mevcut kanonik servis etrafında birleştir.
+
+Repository’ye kullanıcı runtime state’i hard-code etme.
+
+============================================================
+2) PAPER ÇALIŞMA TERCİHİNİ KALICI HALE GETİR
+============================================================
+
+Operation Center üzerinden kullanıcının açıkça verdiği şu tercihler yeniden başlatmada korunmalı:
+
+- automation RUNNING / STOPPED
+- autonomous/advisor tercihi
+- sembol bazında ENABLED / DISABLED
+- sembol bazında RUNNING / PAUSED
+
+Bu tercihler:
+
+- Git tarafından takip edilmeyen yerel runtime state içinde saklansın
+- git pull ile silinmesin
+- SETUP_AND_START_WINDOWS.cmd tekrarında korunmalı
+- sunucu yeniden başladığında geri yüklenmeli
+- dashboard ile Operation Center aynı kaynağı okumalı
+
+Önerilen kanonik yerel state:
+
+data/paper_runtime_preferences.json
+
+Mevcut güvenilir state servisi varsa yeni dosya oluşturmak yerine onu kullan.
+
+Dosyada secret bulunmayacak.
+
+============================================================
+3) STARTUP DESIRED-STATE RECONCILIATION
+============================================================
+
+serve_windows.py başlangıcında, yalnız Windows + PAPER ortamında:
+
+1. Live Trading’in kapalı olduğunu doğrula
+2. Emergency Stop durumunu kontrol et
+3. Risk stop kontrolü yap
+4. Kayıtlı Paper çalışma tercihini oku
+5. Güvenliyse Operation Center durumunu geri yükle
+6. Kayıtlı sembol durumlarını geri yükle
+7. Controller’ın çalıştığını doğrula
+8. İlk çevrimi bekle
+9. Dashboard durumunu tek kaynaktan güncelle
+
+Emergency Stop veya risk kilidi aktifse:
+
+- automation/stratejileri otomatik başlatma
+- kayıtlı tercihi silme
+- açık blocker göster
+
+Live Trading hiçbir durumda açılmayacak.
+
+============================================================
+4) MEVCUT WINDOWS DURUMU İÇİN MİGRASYON
+============================================================
+
+Mevcut Windows kurulumunda kullanıcı manuel olarak şu duruma geçti:
+
+- Operation Center automation RUNNING
+- BTCUSDT ENABLED
+- ETHUSDT ENABLED
+- SOLUSDT ENABLED
+
+İlk çalıştırmada mevcut state kaynaklarından bu durum güvenli biçimde okunabiliyorsa yeni kanonik local preference store’a migrate et.
+
+Kullanıcıya sembolleri tekrar tekrar etkinleştirtme.
+
+Migration:
+
+- idempotent
+- secret içermeyen
+- yedekli
+- Git dışı
+
+olsun.
+
+============================================================
+5) EMERGENCY STOP KORUMASI
+============================================================
+
+Mevcut düzeltmeleri aynen koru:
+
+- alpha20_v1/config.json taban çizgisi kill_switch=false
+- safety state ve config birlikte değerlendirilir
+- risk kaynaklı stop sessizce temizlenmez
+- stale test state tekrar oluşmaz
+- testler gerçek config dosyasını byte-byte geri yükler
+
+Startup sırasında acil durdurma kapalıysa:
+
+EMERGENCY STOP: CLEAR
+
+Aktifse:
+
+- otomasyon başlatılmaz
+- nedeni panelde gösterilir
+- mevcut güvenli clear akışı kullanılır
+
+============================================================
+6) STRATEJİ DURUMLARINI ANA SİSTEME BAĞLA
+============================================================
+
+BTCUSDT, ETHUSDT ve SOLUSDT ayrı strateji birimleri olarak kalacak.
+
+Ancak durumları şu tek model üzerinden yönetilsin:
+
+- symbol
+- enabled
+- run_state
+- entry_allowed
+- last_signal
+- last_error
+- updated_at
+
+Trading Home, Operation Center ve controller aynı durumu kullansın.
+
+Şu çelişkiler oluşmasın:
+
+- Operation Center ENABLED gösterirken Trading Home hazır değil
+- Ana automation RUNNING iken semboller sebepsiz DISABLED
+- Yeniden başlatmada semboller varsayılan STOPPED’a dönüyor
+- Bir sembol SSL hatası alınca diğer semboller kapanıyor
+
+============================================================
+7) SSL HATASI NON-BLOCKING KALSIN
+============================================================
+
+Gerçek Windows testinde BTC/ETH/SOL isteklerinin bazen ikinci veya üçüncü denemede geçtiği doğrulandı.
+
+Tek sembol geçici SSL/TLS hatası:
+
+- warning/degraded olarak kaydedilsin
+- controller’ı durdurmasın
+- emergency stop açmasın
+- sembolün kalıcı preference durumunu DISABLED yapmasın
+- diğer sembolleri etkilemesin
+
+Başarılı sonraki çevrimde sembol tekrar normal duruma dönsün.
+
+SSL doğrulaması kesinlikle kapatılmayacak.
+
+============================================================
+8) BINANCE GLOBAL KALICILIĞI
+============================================================
+
+Mevcut çalışan davranışı koru:
+
+- Binance Global Windows DPAPI’de
+- CONNECTED_READ_ONLY
+- yeniden başlatmada otomatik test
+- git pull ile silinmiyor
+- SETUP tekrarında korunuyor
+- API Key/Secret yeniden istenmiyor
+
+SETUP akışında Global zaten bağlıysa genel olarak:
+
+“Binance hesap bağlantısı yapılandırılsın mı?”
+
+sorusunu tekrar sorma.
+
+Bunun yerine:
+
+BINANCE GLOBAL: CONNECTED_READ_ONLY
+
+göster.
+
+Binance TR yapılandırılmamışsa yalnız ayrı ve açık seçenek göster:
+
+“Binance TR bağlantı sayfası açılsın mı? E/H”
+
+Global credential girişini tekrar açma.
+
+============================================================
+9) SETUP GIT PACK LOCK DÜZELTMESİ
+============================================================
+
+Gerçek Windows testinde git pull sonrası eski .git/objects/pack dosyaları kilitli olduğu için şu interaktif soru oluştu:
+
+“Unlink of file ... failed. Should I try again? (y/n)”
+
+SETUP akışı kullanıcıyı tekrar tekrar y/n sorusuna bırakmasın.
+
+Güvenli biçimde:
+
+- git pull --ff-only kullan
+- setup içindeki pull sırasında gereksiz auto-gc/maintenance çalışmasını engelle
+- HEAD başarıyla güncellendiyse eski pack temizleme hatasını WARNING olarak raporla
+- kaynak güncellemesi başarısız olmadıkça kurulumu durdurma
+- .git pack dosyalarını zorla silme
+- Git bütünlüğünü bozma
+
+Final raporda:
+
+GIT UPDATE: PASS
+GIT CLEANUP: WARNING
+
+gibi ayrı göster.
+
+============================================================
+10) OTOMASYON SAYFALARINDAKİ KARIŞIKLIĞI GİDER
+============================================================
+
+Mevcut iki kavramı açıkça ayır:
+
+A) /automation:
+“Analiz Zamanlayıcısı”
+
+ALPHA_AUTOMATION_ENABLED durumunu gösterir.
+Trading botunun çalışıp çalışmadığını temsil etmez.
+
+B) /operation-center:
+“Paper Ticaret Otomasyonu”
+
+Operation Center ve sembol kontrolünü yönetir.
+
+Menü ve açıklamalarda bu fark net yazılsın.
+
+Trading Home’daki OTONOM/DANIŞMAN durumu yalnız Operation Center state’inden gelsin.
+
+============================================================
+11) “SIRADAKİ İŞLEMLER” ETİKETİNİ DÜZELT
+============================================================
+
+BTCUSDT, ETHUSDT ve SOLUSDT yalnız analiz/sinyal bekleme durumundaysa bunları gerçek emir kuyruğu gibi:
+
+“Sıradaki İşlemler: 3”
+
+diye gösterme.
+
+Gerçekte emir oluşturulmadıysa alan adı:
+
+“Hazır Stratejiler”
+veya
+“İzlenen Piyasalar”
+
+olsun.
+
+Gerçek pending order/intent varsa ancak o zaman “Sıradaki İşlemler” kullanılsın.
+
+Her satır için durum açık gösterilsin:
+
+- İzleniyor
+- Sinyal bekliyor
+- Aday
+- Emir niyeti oluştu
+- Paper işlem açıldı
+
+============================================================
+12) LOCAL DEV BYPASS GÖRÜNÜMÜ
+============================================================
+
+local-dev-bypass teknik bir oturum kimliğidir, kullanıcı adı değildir.
+
+Kimlik doğrulama davranışını değiştirmeden UI’da bunu kullanıcı adı gibi gösterme.
+
+Yerine:
+
+“Yerel Windows Oturumu”
+
+göster.
+
+İsteğe bağlı teknik ayrıntıda:
+
+auth_mode=local-dev-bypass
+
+yazılabilir.
+
+Gerçek admin hesabıyla giriş yapıldığında gerçek kullanıcı adı gösterilmeye devam etsin.
+
+============================================================
+13) DASHBOARD TEK DOĞRULUK KAYNAĞI
+============================================================
+
+Trading Home şu nihai durumu aynı state snapshot’ından göstermeli:
+
+WINDOWS RUNTIME:
+ÇALIŞIYOR
+
+PAPER:
+ACTIVE
+
+CONTROLLER:
+RUNNING
+
+AUTOMATION MODE:
+OTONOM / DANIŞMAN
+
+EMERGENCY STOP:
+CLEAR / ACTIVE
+
+STRATEGIES:
+3 ENABLED / N RUNNING
+
+BINANCE GLOBAL:
+CONNECTED_READ_ONLY
+
+LIVE ORDERS:
+DISABLED
+
+Bir bölümde RUNNING, başka bölümde STOPPED gibi çelişki oluşmamalı.
+
+============================================================
+14) KORUNACAKLAR
+============================================================
+
+Bozma veya değiştirme:
+
+- Paper bakiye
+- Paper ledger
+- trade history
+- Binance Global DPAPI credential
+- Binance permission validation
+- Binance TR altyapısı
+- risk motoru
+- emergency stop güvenliği
+- route guard
+- local admin güvenliği
+- SETUP_AND_START_WINDOWS.cmd tek tık davranışı
+- public market retry sistemi
+
+Kesinlikle açma:
+
+- Live Trading
+- gerçek emir rotaları
+- withdrawal
+- transfer
+- leverage/margin değişikliği
+
+LIVE ORDERS: DISABLED
+
+============================================================
+15) TESTLER
+============================================================
+
+Şu gerçek kabul senaryolarını ekle:
+
+1. Paper autonomous seçimi restart sonrası korunur
+2. BTC/ETH/SOL enabled durumu restart sonrası korunur
+3. Kullanıcı STOP seçerse restart sonrası otomatik tekrar açılmaz
+4. Emergency Stop aktifse kayıtlı autonomous tercih restore edilmez
+5. Risk stop aktifse semboller otomatik başlatılmaz
+6. Tek sembol geçici SSL hatası sembolü kalıcı DISABLED yapmaz
+7. Diğer semboller çalışmaya devam eder
+8. Binance Global credential yeniden istenmez
+9. SETUP bağlı Global hesabı tekrar yapılandırmayı sormaz
+10. Git pack cleanup hatası kurulumu interaktif döngüye sokmaz
+11. Analysis Scheduler ile Paper Trading Automation UI’da ayrıdır
+12. “Sıradaki İşlemler” gerçek emir yokken kullanılmaz
+13. local-dev-bypass kullanıcı adı olarak gösterilmez
+14. Dashboard ve Operation Center aynı state’i gösterir
+15. Paper ledger ve bakiye korunur
+16. Live Orders her durumda DISABLED
+17. Replit deployment Windows local state işlemlerini başlatmaz
+18. Mevcut tüm testler yeşil kalır
+
+============================================================
+16) TESLİM RAPORU
+============================================================
+
+COMMIT:
+PUSH:
+
+CANONICAL PAPER STATE SOURCE:
+dosya/servis
+
+AUTONOMOUS MODE PERSISTENCE:
+PASS/FAIL
+
+BTC/ETH/SOL STATE PERSISTENCE:
+PASS/FAIL
+
+EMERGENCY STOP OVERRIDE:
+PASS/FAIL
+
+SSL SYMBOL ISOLATION:
+PASS/FAIL
+
+BINANCE GLOBAL PERSISTENCE:
+PASS/FAIL
+
+SETUP RECONFIGURATION PROMPT:
+FIXED/FAIL
+
+GIT PACK LOCK HANDLING:
+PASS/FAIL
+
+AUTOMATION PAGE CLARITY:
+PASS/FAIL
+
+QUEUE LABEL FIX:
+PASS/FAIL
+
+LOCAL SESSION LABEL:
+PASS/FAIL
+
+DASHBOARD CONSISTENCY:
+PASS/FAIL
+
+LEDGER PRESERVED:
+PASS/FAIL
+
+LIVE ORDERS:
+DISABLED
+
+TESTS:
+passed/failed
+
+WINDOWS USER ACTION:
+git pull
+SETUP_AND_START_WINDOWS.cmd
+
+============================================================
+17) BAŞARI KRİTERİ
+============================================================
+
+Görev yalnız şu durumda PASS:
+
+- Gerçek Windows’ta ulaşılan çalışan Paper durumu yeniden başlatmada korunuyor
+- Kullanıcının manuel STOP tercihi de korunuyor
+- Emergency/risk kilitleri restore işleminden üstün
+- BTC/ETH/SOL sebepsiz yere tekrar DISABLED olmuyor
+- Binance Global yeniden anahtar istemiyor
+- Git pack kilidi interaktif döngü oluşturmuyor
+- analiz otomasyonu ile ticaret otomasyonu karışmıyor
+- sahte “sıradaki işlem” sayısı gösterilmiyor
+- local-dev-bypass kullanıcı adı gibi görünmüyor
+- dashboard tek ve tutarlı durum gösteriyor
+- Paper ledger korunuyor
+- Live Trading kapalı
+- tüm testler yeşil
+- GitHub main’e push edilmiş
+
+Yeni genel sistem kurma.
+Yalnız gerçek Windows testinde doğrulanan davranışları ana sisteme kalıcı ve izlenebilir biçimde işle.
