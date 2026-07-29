@@ -8,6 +8,7 @@ diye kaldıramaz.
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path as _RealPath
@@ -180,7 +181,9 @@ def test_linux_pid_alive_matches_reality():
     assert app_module._pid_alive(2**22 + 12345) is False
     assert app_module._pid_alive(0) is False
 
-
+class _FakeBotProc:
+    def __init__(self, pid):
+        self.pid = pid
 def test_executive_summary_returns_200_on_windows_sim(monkeypatch):
     """B) Windows simülasyonunda /api/v1/executive/summary → HTTP 200."""
     monkeypatch.setattr(app_module, "os", _OsNtProxy())
@@ -194,3 +197,76 @@ def test_executive_summary_returns_200_on_windows_sim(monkeypatch):
     body = r.get_json()
     assert body.get("ok") is True
     assert "status_bar" in body  # D) servis durumları gerçek değerlerle döner
+
+class _SubprocessNtProxy:
+    """subprocess taklidi: Windows bayrakları var; Popen kwargs'ı yakalar."""
+    CREATE_NEW_PROCESS_GROUP = 0x00000200
+    DETACHED_PROCESS = 0x00000008
+
+    def __init__(self):
+        self.calls = []
+
+    def Popen(self, args, **kwargs):
+        self.calls.append((args, kwargs))
+        return _FakeBotProc(pid=42424)
+
+    def __getattr__(self, attr):
+        import subprocess as _real
+        return getattr(_real, attr)
+
+def test_windows_start_bot_uses_detached_flags(monkeypatch, tmp_path):
+    """F) Windows'ta start_bot DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    bayraklarını KULLANMALI ve POSIX'e özgü start_new_session'ı KULLANMAMALI.
+
+    Bu bayraklar panel süreci kapansa da botun yaşamasını sağlar; kaldırılması
+    sessiz bir regresyondur (manuel protokol adım 6)."""
+    fake_sub = _SubprocessNtProxy()
+    bot_path = tmp_path / "alpha20.py"
+    bot_path.write_text("pass", encoding="utf-8")
+    monkeypatch.setattr(app_module, "os", _OsNtProxy())
+    monkeypatch.setattr(app_module, "subprocess", fake_sub)
+    monkeypatch.setattr(app_module, "BOT_PATH", bot_path)
+    monkeypatch.setattr(app_module, "PID_PATH", tmp_path / ".bot.pid")
+    monkeypatch.setattr(app_module, "BOT_OUTPUT", tmp_path / "bot.log")
+
+    ok, msg = app_module.start_bot()
+    assert ok is True, msg
+    assert len(fake_sub.calls) == 1
+    _args, kwargs = fake_sub.calls[0]
+    expected = (_SubprocessNtProxy.CREATE_NEW_PROCESS_GROUP
+                | _SubprocessNtProxy.DETACHED_PROCESS)
+    assert kwargs.get("creationflags") == expected
+    assert "start_new_session" not in kwargs
+    # PID dosyası yazıldı → panel yeniden açıldığında botu bulabilir
+    assert app_module.read_pid() == 42424
+
+def test_bot_survives_parent_death(tmp_path):
+    """F) Gerçek süreç testi: botu başlatan 'panel' süreci ölür, bot
+    _pid_alive kalır. (Linux'ta start_new_session=True aynı garantiyi
+    sağlar; Windows'taki DETACHED_PROCESS davranışının POSIX karşılığı.)"""
+    import subprocess as real_subprocess
+
+    bot = tmp_path / "fake_bot.py"
+    bot.write_text("import time\ntime.sleep(60)\n", encoding="utf-8")
+    pidfile = tmp_path / ".bot.pid"
+
+    script = _PARENT_LAUNCHER.format(
+        root=str(ROOT), bot=str(bot), pidfile=str(pidfile),
+        out=str(tmp_path / "bot.log"))
+    # 'Panel' süreci: botu başlatır ve hemen ölür (crash/kapanma simülasyonu).
+    result = real_subprocess.run(
+        [sys.executable, "-c", script], capture_output=True,
+        text=True, timeout=60)
+    assert result.returncode == 0, (
+        f"panel süreci başarısız: {result.stdout} {result.stderr}")
+
+    # Panel öldü — bot PID'i dosyadan okunur ve hâlâ canlı olmalı.
+    pid = json.loads(pidfile.read_text(encoding="utf-8"))["pid"]
+    try:
+        assert app_module._pid_alive(pid) is True, (
+            "Bot, panel süreci öldükten sonra yaşamıyor — detach regresyonu!")
+    finally:
+        try:
+            os.kill(pid, 9)
+        except OSError:
+            pass
