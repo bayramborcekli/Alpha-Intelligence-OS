@@ -206,7 +206,17 @@ def offer_paper_auto_fix(env_path: Path,
       + PAPER_AUTO_LINE)
     return "declined"
 
+def repair_notice(outcome: str) -> str:
+    """Onarım sonucunu FINAL raporda basılacak tek satıra çevirir.
 
+    Yalnız "added" için mesaj döner; diğer durumlarda boş string.
+    RECOVER_WINDOWS.cmd akışı kesintisizdir: satır eklendiyse yeniden
+    başlatma GEREKMEZ, sunucu bir sonraki adımda zaten başlatılır.
+    """
+    if outcome == "added":
+        return ("ENV ONARIMI    : " + PAPER_AUTO_LINE + " .env'e eklendi "
+                "(yedek: .env.bak) — sunucu simdi baslatiliyor, ek islem gerekmez.")
+    return ""
 def main() -> int:
     p("=" * 62)
     p("ALPHA INTELLIGENCE OS — WINDOWS OTOMATIK TESHIS (salt okunur)")
@@ -232,14 +242,15 @@ def main() -> int:
             pass
     p(f"PAPER_AUTO env : {env_auto or 'YOK'}  ('true' beklenir)")
     results["ENV"] = "PASS" if env_auto.strip().lower() == "true" else "FAIL"
+    env_fix_outcome = ""
     if results["ENV"] == "FAIL":
         env_path = Path(__file__).resolve().parent / ".env"
         if paper_auto_status(env_path) != "present":
-            outcome = offer_paper_auto_fix(env_path)
-            if outcome == "added":
+            env_fix_outcome = offer_paper_auto_fix(env_path)
+            if env_fix_outcome == "added":
                 results["ENV"] = "PASS"
-                p("PAPER_AUTO env : true  (.env'e eklendi — sunucuyu "
-                  "yeniden baslatin)")
+                p("PAPER_AUTO env : true  (.env'e eklendi — akis kesintisiz "
+                  "devam eder, yeniden baslatma gerekmez)")
         else:
             guidance = paper_auto_present_guidance(env_path)
             if guidance is None:
@@ -327,6 +338,9 @@ def main() -> int:
     p(f"TRUSTSTORE     : {results.get('TRUSTSTORE')}")
     p(f"ENV PAPER_AUTO : {results.get('ENV')}")
     p(f"CONTROLLER     : {results.get('CONTROLLER', 'SUNUCU KAPALI')}")
+    notice = repair_notice(env_fix_outcome)
+    if notice:
+        p(notice)
     if not all_binance and ssl_fail_msg:
         p("ROOT CAUSE     : " + classify_ssl(ssl_fail_msg))
     elif all_binance:

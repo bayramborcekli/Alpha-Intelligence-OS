@@ -32,6 +32,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo TESHIS PASS. Teshis .env onarimi yaptiysa yukarida "ENV ONARIMI" satirinda
+echo gorulur; onarim sonrasi akis kesintisizdir, ek islem gerekmez.
+echo.
 echo [5/5] Sunucu baslatiliyor (serve_windows)...
 echo Beklenen loglar: WINDOWS PAPER AUTO ENABLED / AUTO LOOP STARTED /
 echo CONTROLLER STARTED / FIRST CYCLE COMPLETED

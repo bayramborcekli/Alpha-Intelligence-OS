@@ -210,7 +210,11 @@ def test_offer_present_short_circuits(tmp_path):
 
     assert wd.offer_paper_auto_fix(p, ask=boom) == "present"
 
-
+def test_repair_notice_added_mentions_seamless_continue():
+    msg = wd.repair_notice("added")
+    assert "ENV ONARIMI" in msg
+    assert "ALPHA_WINDOWS_PAPER_AUTO=true" in msg
+    assert "baslatiliyor" in msg
 def test_offer_no_tty(tmp_path):
     def eof(_):
         raise EOFError
@@ -218,3 +222,7 @@ def test_offer_no_tty(tmp_path):
     p = _env(tmp_path)
     assert wd.offer_paper_auto_fix(p, ask=eof) == "no_tty"
     assert p.read_text(encoding="utf-8") == SECRET_ENV
+
+def test_repair_notice_silent_for_other_outcomes():
+    for outcome in ("", "declined", "no_tty", "present", "already_present"):
+        assert wd.repair_notice(outcome) == ""
