@@ -1,0 +1,167 @@
+MISSION — PAPER AUTOMATION RUNTIME HEALTH TRACE (NO FEATURE WORK)
+
+AMAÇ:
+Windows'ta Paper hesabı HEALTHY olmasına rağmen otomasyon neden hiç çalışmıyor kesin kök nedeni bul.
+
+SEMPTOMLAR:
+
+- Paper Account = HEALTHY
+- Ledger = Bağlı
+- Risk = Bağlı
+- Audit = Bağlı
+- Health = Bağlı
+- Executive Summary = OK
+- Açık Pozisyon = Veri Yok
+- Açık Emir = Veri Yok
+- Günlük PnL = Veri Yok
+- Toplam PnL = Veri Yok
+- Son çevrim görünmüyor
+- Paper trade oluşmuyor
+
+KOD DEĞİŞİKLİĞİ YAPMA.
+
+YAPILACAKLAR:
+
+1)
+
+Windows local runtime'da aşağıdaki servislerin gerçekten başlatılıp başlatılmadığını doğrula:
+
+- auto_controller
+- automation_scheduler
+- universe_manager
+
+Her biri için raporla:
+
+- başlatılıyor mu
+- hangi dosya başlatıyor
+- hangi thread/task içinde çalışıyor
+- gerçekten çalışıyor mu
+- en son çevrim zamanı
+
+2)
+
+Paper runtime zincirini çıkar:
+
+serve_windows.py
+        ↓
+...
+        ↓
+automation_scheduler
+        ↓
+auto_controller
+        ↓
+_run_single_cycle()
+        ↓
+signal generation
+        ↓
+_open_paper_trade()
+        ↓
+manage_position()
+
+Hangi halkada durduğunu kesin belirle.
+
+3)
+
+Aşağıdaki bayrakların gerçek runtime değerlerini raporla:
+
+adaptive_system.enabled
+kill_switch
+auto_paper_enabled
+paper_enabled
+paper_trading
+live_trading
+
+Yalnız config dosyasını değil,
+runtime'daki etkin değeri göster.
+
+4)
+
+_run_single_cycle()
+
+Son 24 saatte hiç çalışmış mı?
+
+Raporla:
+
+- son çağrı zamanı
+- çağrı sayısı
+- hiç çağrılmadıysa neden
+
+5)
+
+Signal Engine
+
+Son üretilen:
+
+- signal
+- score
+- symbol
+- timestamp
+
+var mı?
+
+Yoksa neden?
+
+6)
+
+Paper Ledger
+
+Son oluşturulan trade:
+
+- timestamp
+- symbol
+- reason
+
+raporla.
+
+Hiç yoksa neden oluşmadığını belirt.
+
+7)
+
+Scheduler
+
+Windows'ta scheduler thread gerçekten aktif mi?
+
+Yoksa yalnız UI mı çalışıyor?
+
+8)
+
+KESİN KÖK NEDEN
+
+Aşağıdakilerden hangisi?
+
+A)
+Thread hiç başlamıyor.
+
+B)
+Scheduler durmuş.
+
+C)
+Kill switch.
+
+D)
+Automation disabled.
+
+E)
+Signal hiç oluşmuyor.
+
+F)
+Paper trade fonksiyonu çağrılmıyor.
+
+G)
+Başka tek bir kök neden.
+
+ÇIKTI:
+
+- Dosya
+- Satır
+- Runtime kanıtı
+- Traceback (varsa)
+- Kesin kök neden
+
+KOD DEĞİŞTİRME.
+
+SADECE TEŞHİS VE KANIT.
+
+Yeni özellik ekleme.
+Yeni refactor yapma.
+Tek amaç: Paper otomasyonunun neden hiç çalışmadığını kesin olarak ortaya çıkarmak.
