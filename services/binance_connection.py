@@ -304,6 +304,74 @@ def test_stored(provider: str) -> dict:
     return result
 
 
+STARTUP_LOCK_PATH = DATA_DIR / "startup_connection_test.lock"
+
+
+def run_startup_tests() -> dict[str, str]:
+    """Kayıtlı sağlayıcıları açılışta test eder (senkron gövde).
+
+    Sadece credential'ı kayıtlı sağlayıcılar test edilir; sonuç snapshot'a
+    yazılır. Her tür hata yutulur — açılış asla bu yüzden durmaz ve secret
+    loglanmaz. Dönüş: provider → status (test edilmeyenler atlanır)."""
+    import exchange_credentials as xc
+    outcomes: dict[str, str] = {}
+    for provider in PROVIDERS:
+        try:
+            if not xc.configured(provider):
+                continue
+            result = test_stored(provider)
+            outcomes[provider] = str(result.get("status"))
+        except Exception as exc:  # açılış hiçbir koşulda bloklanmaz
+            outcomes[provider] = "ERROR"
+            audit("connection_failure", provider, "",
+                  f"STARTUP_TEST_ERROR:{type(exc).__name__}")
+    return outcomes
+
+
+def start_startup_tests_async(min_interval_s: int = 60) -> bool:
+    """Açılış bağlantı testini arka plan thread'inde başlatır.
+
+    Çok worker'lı gunicorn'da flock + zaman damgasıyla süreçler arası tek
+    koşu garantisi verir. Başlatma başarısızsa sessizce False döner;
+    uygulama ve Paper controller etkilenmez."""
+    import threading
+
+    def _runner() -> None:
+        try:
+            DATA_DIR.mkdir(exist_ok=True)
+            fh = open(STARTUP_LOCK_PATH, "a+", encoding="utf-8")
+            try:
+                try:
+                    import fcntl
+                    fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except (ImportError, OSError):
+                    if os.name != "nt":
+                        return  # başka worker koşuyor
+                fh.seek(0)
+                try:
+                    last = float((fh.read() or "0").strip() or 0)
+                except ValueError:
+                    last = 0.0
+                if time.time() - last < min_interval_s:
+                    return  # yakın zamanda koşuldu (worker recycle vb.)
+                fh.seek(0)
+                fh.truncate()
+                fh.write(str(time.time()))
+                fh.flush()
+                run_startup_tests()
+            finally:
+                fh.close()
+        except Exception:
+            pass  # açılış testi hiçbir koşulda süreci düşürmez
+
+    try:
+        threading.Thread(target=_runner, daemon=True,
+                         name="binance-startup-test").start()
+        return True
+    except Exception:
+        return False
+
+
 def disconnect(provider: str) -> dict:
     import exchange_credentials as xc
     if provider not in PROVIDERS:

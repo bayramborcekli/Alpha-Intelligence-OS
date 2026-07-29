@@ -4480,6 +4480,9 @@ if __name__ == "__main__":
     enforce_paper_mode_lock()
     # Akıllı seçim otomatik döngüsü
     um.start_auto_loop(_get_main_config)
+    # Task 109: kayıtlı anahtar varsa açılışta arka planda bağlantı testi
+    from services import binance_connection as _bc_startup
+    _bc_startup.start_startup_tests_async()
     # Uyarlanabilir motor — yalnızca config'de enabled=true ise
     cfg0 = _get_main_config()
     if cfg0.get("adaptive_system", {}).get("enabled", False):

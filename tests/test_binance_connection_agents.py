@@ -188,6 +188,58 @@ def test_dpapi_entry_fail_closed(tmp_path, monkeypatch):
     assert xc._store_entry("BINANCE_GLOBAL") is None
 
 
+def test_startup_tests_run_only_for_configured(iso, monkeypatch):
+    """Açılış testi yalnız kayıtlı sağlayıcıyı test eder; snapshot yazılır."""
+    import exchange_credentials as xc
+    _client_mock(monkeypatch, {"canTrade": False, "canWithdraw": False,
+                               "accountType": "SPOT"})
+    monkeypatch.setattr(xc, "configured",
+                        lambda ex: ex == "BINANCE_GLOBAL")
+    monkeypatch.setattr(xc, "credentials",
+                        lambda ex: ("k" * 20, "s" * 20))
+    out = bc.run_startup_tests()
+    assert out == {"BINANCE_GLOBAL": "CONNECTED_READ_ONLY"}
+    snap = json.loads((iso / "snap.json").read_text())
+    assert snap["BINANCE_GLOBAL"]["status"] == "CONNECTED_READ_ONLY"
+    text = (iso / "snap.json").read_text() + (iso / "audit.jsonl").read_text()
+    assert "s" * 20 not in text and "k" * 20 not in text
+
+
+def test_startup_tests_failure_does_not_raise(iso, monkeypatch):
+    """Test patlasa bile açılış fonksiyonu istisna fırlatmaz, secret sızmaz."""
+    import exchange_credentials as xc
+    monkeypatch.setattr(xc, "configured", lambda ex: True)
+    monkeypatch.setattr(xc, "credentials",
+                        lambda ex: ("k" * 20, "s" * 20))
+    def boom(*a, **k):
+        raise RuntimeError("s" * 20)  # secret içeren istisna bile sızmamalı
+    monkeypatch.setattr(bc, "test_stored", boom)
+    out = bc.run_startup_tests()
+    assert out == {"BINANCE_GLOBAL": "ERROR", "BINANCE_TR": "ERROR"}
+    audit = (iso / "audit.jsonl").read_text()
+    assert "STARTUP_TEST_ERROR:RuntimeError" in audit
+    assert "s" * 20 not in audit
+
+
+def test_startup_async_single_run_and_interval(iso, monkeypatch):
+    """Arka plan koşusu flock/zaman damgasıyla tekrarı engeller."""
+    import time as _t
+    monkeypatch.setattr(bc, "STARTUP_LOCK_PATH", iso / "startup.lock")
+    calls = []
+    monkeypatch.setattr(bc, "run_startup_tests",
+                        lambda: calls.append(1) or {})
+    assert bc.start_startup_tests_async(min_interval_s=60) is True
+    for _ in range(50):
+        if calls:
+            break
+        _t.sleep(0.05)
+    assert calls == [1]
+    # İkinci çağrı (worker recycle senaryosu) aralık içinde koşmaz
+    bc.start_startup_tests_async(min_interval_s=60)
+    _t.sleep(0.3)
+    assert calls == [1]
+
+
 def test_no_verify_false_in_new_sources():
     for name in ("services/binance_connection.py",
                  "services/windows_runtime_recovery.py",

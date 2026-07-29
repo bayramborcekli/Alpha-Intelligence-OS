@@ -52,6 +52,11 @@ def post_fork(server, worker):
     # başlar. Başlatma hatası worker'ı çökertmez; süreçler-arası tek
     # koşu garantisi Core'daki flock kilidindedir.
     _app.start_automation_scheduler()
+    # Task 109: kayıtlı Binance anahtarı varsa açılışta arka planda
+    # read-only bağlantı testi (flock ile süreçler arası tek koşu;
+    # başarısızlık açılışı ve Paper controller'ı asla etkilemez).
+    from services import binance_connection as _bc
+    _bc.start_startup_tests_async()
 
 
 def worker_exit(server, worker):
