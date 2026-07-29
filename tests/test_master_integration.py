@@ -267,6 +267,36 @@ class TestCanonicalScheduler:
         assert sr["last_result"] == "FAILED"
         assert sr["last_error_code"] == "UNIVERSE_REFRESH_FAILED"
 
+    def test_scheduled_refresh_apply_failure_not_silent(
+            self, tmp_path, monkeypatch):
+        """Uygulama (apply) başarısızsa COMPLETED denmez."""
+        import universe_manager as um
+        monkeypatch.setattr(um, "SMART_CONFIG_PATH",
+                            tmp_path / "smart_config.json")
+        monkeypatch.setattr(um, "run_analysis",
+                            lambda cur, cfg: [{"symbol": "XRPUSDT"}])
+        monkeypatch.setattr(um, "compute_auto_changes",
+                            lambda s, c, cfg: (["XRPUSDT"], []))
+        monkeypatch.setattr(um, "apply_auto_changes",
+                            lambda a, r, cfg, mode: (False, "yazılamadı"))
+        assert um.scheduled_refresh(["BTCUSDT"]) == "FAILED"
+        sr = um.get_scheduler_refresh_status()
+        assert sr["last_error_code"] == "UNIVERSE_APPLY_FAILED"
+
+    def test_panel_analysis_cannot_mask_not_run_yet(
+            self, tmp_path, monkeypatch):
+        """Panelden tetiklenen analiz last_analysis_time yazsa bile
+        scheduler yenilemesi koşmadıysa NOT_RUN_YET kalır."""
+        import universe_manager as um
+        from services import system_runtime_orchestrator as sro
+        monkeypatch.setattr(um, "SMART_CONFIG_PATH",
+                            tmp_path / "smart_config.json")
+        um.save_smart_config({**um.SMART_DEFAULTS,
+                              "last_analysis_time":
+                              "2026-07-29T10:00:00+00:00",
+                              "candidate_count": 7})
+        assert sro.universe_reason_code(3) == "NOT_RUN_YET"
+
     def test_controller_cycle_calls_universe_refresh(self):
         """FIX 1: zamanlayıcı çevrimi refresh'i GERÇEKTEN çağırır."""
         src = (ROOT / "alpha20_v1/auto_controller.py").read_text(

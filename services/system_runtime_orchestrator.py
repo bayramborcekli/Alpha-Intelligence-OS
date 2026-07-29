@@ -191,10 +191,12 @@ def universe_reason_code(universe_size: int) -> str | None:
             return None  # gerçekten genişlemiş
         cfg = um.get_smart_config()
         sr = cfg.get("scheduler_refresh") or {}
+        # Kanonik kaynak: scheduler_refresh sonucu — panel-tetikli
+        # analizler NOT_RUN_YET'i maskeleyemez.
         if sr.get("last_result") == "FAILED":
             return sr.get("last_error_code") or "UNIVERSE_REFRESH_FAILED"
-        if not cfg.get("last_analysis_time"):
-            return "NOT_RUN_YET"  # hiç uygun çevrim koşmadı
+        if sr.get("last_result") != "COMPLETED":
+            return "NOT_RUN_YET"  # scheduler yenilemesi hiç koşmadı
         if int(cfg.get("candidate_count") or 0) <= 0:
             return "INSUFFICIENT_ELIGIBLE_SYMBOLS"
         # Aday vardı ama evrene eklenmedi (filtre/limit/mod)

@@ -196,7 +196,8 @@ def check_snapshot(s: dict) -> list[str]:
                 "INSUFFICIENT_ELIGIBLE_SYMBOLS", "FILTERS_EXCLUDED_ALL"):
             print(f"  - yenileme KOŞTU (COMPLETED), evren {usize} "
                   f"sembolde, dürüst neden kodu {ucode}  {OK}")
-        elif uresult == "FAILED" or ucode == "UNIVERSE_REFRESH_FAILED":
+        elif uresult == "FAILED" or ucode in (
+                "UNIVERSE_REFRESH_FAILED", "UNIVERSE_APPLY_FAILED"):
             fails.append("Evren yenilemesi FAILED "
                          f"(reason_code={ucode!r}) — açık hata")
         elif ucode not in HONEST_REASON_CODES:

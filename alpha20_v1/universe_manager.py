@@ -728,7 +728,14 @@ def scheduled_refresh(current_symbols: list[str]) -> str:
         to_add, to_remove = compute_auto_changes(
             suggestions, current_symbols, cfg)
         if to_add or to_remove:
-            apply_auto_changes(to_add, to_remove, cfg, "SCHEDULER")
+            ok, msg = apply_auto_changes(
+                to_add, to_remove, cfg, "SCHEDULER")
+            # apply, cfg'yi (coin_history, last_auto_change) mutasyona
+            # uğratır ama kaydetmez — scheduler yolunda burada kalıcıla
+            save_smart_config(cfg)
+            if not ok:
+                log.error("Evren değişikliği uygulanamadı: %s", msg)
+                return _record("FAILED", "UNIVERSE_APPLY_FAILED")
         return _record("COMPLETED", None)
     except Exception as exc:  # açık hata kodu — sessiz geçilmez
         log.error("Scheduler evren yenilemesi hatası: %s", exc)
