@@ -80,6 +80,42 @@
     }
   }
 
+  /* Düşük frekanslı otomatik tazeleme: sunucu saatlik arka plan testinin
+     sonuçlarını sayfa açıkken elle yenileme olmadan yansıtır.
+     - Sekme gizliyken duraklar (visibilitychange).
+     - Kullanıcı bir formu açıkken kartlar yeniden çizilmez (girdi kaybolmasın).
+     - Ağ/HTTP hatası sessizce yutulur; mevcut kart durumu bozulmaz. */
+  const AUTO_REFRESH_MS = 5 * 60 * 1000;
+  let autoTimer = null;
+
+  function formOpen() {
+    return Array.prototype.some.call(
+      grid.querySelectorAll(".bc-form"),
+      f => f.style.display === "block");
+  }
+
+  async function autoRefresh() {
+    if (document.hidden || formOpen()) return;
+    try {
+      const res = await api("/api/integrations/binance/status");
+      if (!res || res.ok === false) return;
+      const d = res.data || {};
+      grid.innerHTML = PROVIDERS.map(p => card(p, d[p.id])).join("");
+    } catch (e) { /* sessiz: mevcut kartlar korunur */ }
+  }
+
+  function startAuto() {
+    if (autoTimer === null) autoTimer = setInterval(autoRefresh, AUTO_REFRESH_MS);
+  }
+  function stopAuto() {
+    if (autoTimer !== null) { clearInterval(autoTimer); autoTimer = null; }
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { stopAuto(); }
+    else { startAuto(); autoRefresh(); }
+  });
+
   function msgFor(res) {
     const d = (res && res.data) || {};
     const st = d.status || "ERROR";
@@ -128,4 +164,5 @@
   });
 
   refresh();
+  startAuto();
 })();
