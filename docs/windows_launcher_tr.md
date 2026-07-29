@@ -68,6 +68,38 @@ Değişmedi: `gunicorn -c gunicorn.conf.py app:app` (0.0.0.0:5000,
 2 worker). Windows girişleri (`serve_windows.py` + launcher) yalnız
 masaüstünde kullanılır; Replit'te `.env` okunmaz, process env kazanır.
 
+## Bot başlat/durdur manuel test protokolü (panelden, gerçek Windows)
+
+Bot süreç yönetimi platform-bağımsızdır: PID dosyası
+(`alpha20_v1\.bot.pid`) + ctypes `OpenProcess` canlılık kontrolü;
+Windows'ta başlatma `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` ile,
+durdurma `os.kill(pid, SIGTERM)` (Windows'ta `TerminateProcess`) ile
+yapılır. Linux simülasyon testleri `tests/test_windows_proc_compat.py`
+içindedir; gerçek makine doğrulaması için aşağıdaki adımları izleyin:
+
+1. **Başlat:** Panel açıkken bot "Başlat" düğmesine basın.
+   - Beklenen: "Bot başlatıldı." mesajı; durum kısa sürede "çalışıyor".
+   - Kontrol: `alpha20_v1\.bot.pid` dosyası oluşur ve
+     `{"pid": <N>, "started_at": ...}` içerir; Görev Yöneticisi'nde
+     bu PID'li bir `python.exe` görünür.
+2. **Durum kalıcılığı:** Sayfayı yenileyin → durum yine "çalışıyor"
+   (canlılık `OpenProcess` ile doğrulanır, `/proc` gerekmez).
+3. **Çifte başlatma koruması:** Bot çalışırken tekrar "Başlat" →
+   "Bot zaten çalışıyor." mesajı; ikinci süreç AÇILMAZ.
+4. **Durdur:** "Durdur" düğmesine basın.
+   - Beklenen: "Bot durduruldu."; durum "durdu"; `.bot.pid` SİLİNİR;
+     Görev Yöneticisi'nde PID kaybolur. (Windows'ta durdurma
+     koşulsuzdur — `TerminateProcess`; nazik kapanış beklenmez.)
+5. **Bayat PID temizliği:** Bot kapalıyken `.bot.pid` içine ölü bir PID
+   yazın (örn. `{"pid": 999999}`) → panel "durdu" gösterir; "Durdur"
+   "çalışan bot bulunamadı" der ve bayat dosyayı siler.
+6. **Panel bağımsızlığı:** Bot çalışırken paneli (`stop_alpha.cmd`)
+   kapatın → bot süreci YAŞAMAYA devam eder (detached); panel tekrar
+   açıldığında durum yine "çalışıyor" görünür.
+
+Herhangi bir adım beklenenden saparsa `runtime\launcher.log` ve
+`alpha20_v1\bot_process.log` dosyalarını kaydedip bildirin.
+
 ## Manuel Windows test matrisi (özet)
 
 1. Temiz klon + `INSTALL_WINDOWS.cmd` → kurulum tamam mesajı.

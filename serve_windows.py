@@ -157,15 +157,11 @@ def _bootstrap_background_services() -> None:
     import threading
     import app as _app
 
-    # 0. PAPER TEST MODU — yalnız Windows local development.
-    _enable_paper_test_mode()
-
-    # 1-2. Başlangıç güvenlik kontrolleri (post_fork ile aynı sıra)
-    try:
-        _app.validate_startup_config()
-        _app.enforce_paper_mode_lock()
-    except Exception as exc:
-        log.warning("startup kontrol hatası (devam ediliyor): %s", exc)
+    # 1-2. Başlangıç güvenlik kontrolleri (post_fork ile aynı sıra, fail-fast)
+    # NOT: try/except YOK — gunicorn.conf.py post_fork ile tam pari;
+    # bu iki kontrol başarısız olursa sunucu başlamamalıdır.
+    _app.validate_startup_config()
+    _app.enforce_paper_mode_lock()
 
     # 3. Universe manager — koşulsuz (post_fork paritesi).
     #    İkinci instance koruması: aynı adlı thread yaşıyorsa başlatma.
