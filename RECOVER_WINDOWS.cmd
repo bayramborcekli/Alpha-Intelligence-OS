@@ -30,9 +30,14 @@ if defined GIT_EXE (
 
 echo [2/6] Kurulum/guncelleme (certifi + truststore dahil)...
 call INSTALL_WINDOWS.cmd
+if errorlevel 1 (
+    echo HATA: Kurulum basarisiz - devam edilemiyor. Yukaridaki hatayi giderin.
+    pause
+    exit /b 1
+)
 
-echo [3/6] Eski Alpha surecleri kapatiliyor (yalniz bu projeye ait olanlar)...
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.CommandLine -match 'serve_windows|launcher_windows' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
+echo [3/6] Eski Alpha surecleri kapatiliyor (yalniz BU klasordeki proje)...
+powershell -NoProfile -Command "$root=[regex]::Escape('%~dp0'); Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.CommandLine -match ($root+'.*(serve_windows|launcher_windows)') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
 timeout /t 2 /nobreak >nul
 
 echo [4/6] Otomatik teshis + .env onarimi calisiyor...
@@ -57,6 +62,13 @@ echo AUTO LOOP STARTED / CONTROLLER STARTED / FIRST CYCLE COMPLETED
 
 echo [6/6] Runtime dogrulaniyor (ilk cevrim icin en fazla 120 sn beklenir)...
 "%VENV_PY%" windows_diagnose.py --wait-health 120
+if errorlevel 1 (
+    echo.
+    echo SONUC: FINAL rapor yesil DEGIL - yukaridaki ROOT CAUSE satiri tek
+    echo gercek nedeni soyluyor. Engel kalkinca bu dosyayi tekrar calistirin.
+    pause
+    exit /b 1
+)
 echo.
-echo Panel: http://127.0.0.1:5000  (kart FINAL rapordaki renktedir)
+echo SONUC: PASS - kart 🟢. Panel: http://127.0.0.1:5000
 pause

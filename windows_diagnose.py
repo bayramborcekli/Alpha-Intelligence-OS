@@ -327,7 +327,8 @@ def main() -> int:
     # FAZ 5 — çalışan sunucu varsa runtime durumu
     p("-" * 62)
     try:
-        r = requests.get("http://127.0.0.1:5000/health/runtime", timeout=5)
+        port = os.environ.get("ALPHA_PORT", "5000").strip() or "5000"
+        r = requests.get(f"http://127.0.0.1:{port}/health/runtime", timeout=5)
         if r.status_code == 200:
             d = r.json()
             for k in ("entrypoint", "git_head", "runtime_override", "paper",
@@ -378,11 +379,13 @@ def wait_health(timeout_s: int = 120) -> int:
     import time as _time
 
     import requests
+    port = os.environ.get("ALPHA_PORT", "5000").strip() or "5000"
+    url = f"http://127.0.0.1:{port}/health/runtime"
     deadline = _time.time() + timeout_s
     last: dict = {}
     while _time.time() < deadline:
         try:
-            r = requests.get("http://127.0.0.1:5000/health/runtime", timeout=5)
+            r = requests.get(url, timeout=5)
             if r.status_code == 200:
                 last = r.json()
                 if (last.get("controller") == "running"
