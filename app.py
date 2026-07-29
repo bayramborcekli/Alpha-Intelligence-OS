@@ -965,6 +965,76 @@ def health():
     }, 200
 
 
+@app.get("/health/runtime")
+def health_runtime():
+    """Windows Runtime Control Bridge — SALT OKUNUR runtime durumu.
+
+    Oturum korumalıdır (before_request exempt listesinde DEĞİL).
+    Güvenlik sözleşmesi: hiçbir API anahtarı, parola, secret veya dosya
+    içeriği döndürülmez; yalnız durum alanları.
+    """
+    ctrl = {}
+    try:
+        ctrl = ac.get_status() or {}
+    except Exception:
+        pass
+    auto_loop_alive = any(t.name == "auto_analysis" and t.is_alive()
+                          for t in threading.enumerate())
+    state, _ = read_json(STATE_PATH)
+    state = state or {}
+    pos = state.get("position")
+    trades = state.get("trades") or []
+    last_trade = None
+    if trades:
+        t = trades[-1]
+        last_trade = {k: t.get(k) for k in
+                      ("symbol", "side", "entry", "exit", "close_reason",
+                       "pnl", "result", "opened_at", "closed_at")}
+    last_error = None
+    try:
+        errs = ms.get_recent_errors(1)
+        if errs:
+            e = errs[0]
+            last_error = {"ts": e.get("ts") or e.get("timestamp"),
+                          "component": e.get("component"),
+                          "error_type": e.get("error_type"),
+                          "message": (e.get("message") or "")[:200]}
+    except Exception:
+        pass
+    try:
+        override_active = bool(ac.RUNTIME_ADAPTIVE_OVERRIDE)
+    except Exception:
+        override_active = False
+    cfg0 = _get_main_config()
+    adaptive_enabled = bool(cfg0.get("adaptive_system", {})
+                            .get("enabled", False)) or override_active
+    controller_running = bool(ctrl.get("running"))
+    if controller_running:
+        paper = "active"
+    elif adaptive_enabled:
+        paper = "starting"
+    else:
+        paper = "disabled"
+    return {
+        "app": "running",
+        "paper": paper,
+        "controller": "running" if controller_running else "stopped",
+        "auto_loop": "running" if auto_loop_alive else "stopped",
+        "runtime_override": override_active,
+        "cycle_count": ctrl.get("cycle_count") or 0,
+        "last_cycle": ctrl.get("last_cycle_time") or ctrl.get("last_cycle"),
+        "safe_mode": bool(ctrl.get("safe_mode")),
+        "safe_mode_reason": ctrl.get("safe_mode_reason") or None,
+        "positions": 1 if pos else 0,
+        "open_position": ({"symbol": pos.get("symbol"),
+                           "side": pos.get("side"),
+                           "entry": pos.get("entry")} if pos else None),
+        "paper_balance": state.get("balance"),
+        "last_trade": last_trade,
+        "last_error": last_error,
+    }, 200
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # İlk kurulum sihirbazı
 # ══════════════════════════════════════════════════════════════════════════════

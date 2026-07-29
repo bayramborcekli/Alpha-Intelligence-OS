@@ -187,6 +187,79 @@
   </section>
 </div>
 
+<!-- ── WINDOWS RUNTIME (Runtime Control Bridge — salt okunur) ────── -->
+<section class="th-card" style="margin-top:10px" id="th-winrt"
+         aria-labelledby="th-h-winrt">
+  <h2 id="th-h-winrt">WINDOWS RUNTIME</h2>
+  <div style="display:flex; flex-wrap:wrap; gap:18px; align-items:center">
+    <span id="th-winrt-badge" style="font-weight:800">⏳ Yükleniyor…</span>
+    <span><b style="color:var(--muted,#8b949e); font-size:.65rem;
+      text-transform:uppercase">Controller</b>
+      <span id="th-winrt-controller" class="th-unknown">—</span></span>
+    <span><b style="color:var(--muted,#8b949e); font-size:.65rem;
+      text-transform:uppercase">Son Çevrim</b>
+      <span id="th-winrt-cycle" class="th-unknown">—</span></span>
+    <span><b style="color:var(--muted,#8b949e); font-size:.65rem;
+      text-transform:uppercase">Paper Bakiye</b>
+      <span id="th-winrt-balance" class="th-unknown">—</span></span>
+    <span><b style="color:var(--muted,#8b949e); font-size:.65rem;
+      text-transform:uppercase">Açık Pozisyon</b>
+      <span id="th-winrt-pos" class="th-unknown">—</span></span>
+  </div>
+  <div id="th-winrt-note" style="margin-top:6px; font-size:.72rem;
+       color:var(--muted,#8b949e)"></div>
+</section>
+<script>
+(function () {
+  function set(id, v) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = v;
+  }
+  function render(d) {
+    var badge;
+    if (d.controller === "running" && !d.safe_mode) {
+      badge = "\uD83D\uDFE2 Çalışıyor";
+    } else if (d.app === "running" &&
+               (d.controller !== "running" || d.safe_mode)) {
+      badge = d.last_error ? "\uD83D\uDD34 Hata" : "\uD83D\uDFE1 Bekliyor";
+    } else {
+      badge = "\uD83D\uDD34 Hata";
+    }
+    set("th-winrt-badge", badge);
+    set("th-winrt-controller", d.controller === "running"
+        ? ("çalışıyor (çevrim " + (d.cycle_count || 0) + ")") : "durdu");
+    set("th-winrt-cycle", d.last_cycle
+        ? new Date(d.last_cycle).toLocaleString("tr-TR") : "henüz yok");
+    set("th-winrt-balance", (d.paper_balance != null)
+        ? (Number(d.paper_balance).toFixed(2) + " USDT") : "—");
+    set("th-winrt-pos", d.open_position
+        ? (d.open_position.symbol + " " + d.open_position.side +
+           " @ " + d.open_position.entry) : "yok");
+    var notes = [];
+    if (d.runtime_override) notes.push("Runtime override aktif (yalnız bellek)");
+    if (d.safe_mode && d.safe_mode_reason)
+      notes.push("Güvenlik: " + d.safe_mode_reason);
+    if (d.last_error && d.last_error.message)
+      notes.push("Son hata: " + d.last_error.message);
+    set("th-winrt-note", notes.join(" • "));
+  }
+  function refresh() {
+    fetch("/health/runtime", { credentials: "same-origin" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(render)
+      .catch(function () {
+        set("th-winrt-badge", "\uD83D\uDD34 Hata");
+        set("th-winrt-note", "Runtime durumu alınamadı.");
+      });
+  }
+  refresh();
+  setInterval(refresh, 30000);
+})();
+</script>
+
 <!-- ── SON HAREKETLER: tam genişlik tablo ───────────────────────── -->
 <section class="th-card" style="margin-top:10px"
          aria-labelledby="th-h-activity">
