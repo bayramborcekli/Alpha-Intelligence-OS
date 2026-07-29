@@ -84,9 +84,18 @@ def _apply_paper_runtime_override() -> bool:
         return False  # Linux/Replit: hiçbir şey yapılmaz
     if os.environ.get("ALPHA_WINDOWS_PAPER_AUTO", "").strip().lower() != "true":
         return False  # opt-in yoksa varsayılan davranış aynen korunur
-    if os.environ.get("FLASK_ENV", "").lower() == "production":
-        log.info("PAPER AUTO override ATLANDI (production ortamı)")
+    if os.environ.get("REPLIT_DEPLOYMENT"):
+        log.info("PAPER AUTO override ATLANDI (yayınlanmış üretim ortamı)")
         return False
+    if os.environ.get("FLASK_ENV", "").lower() == "production":
+        # KÖK NEDEN DÜZELTMESİ (Mission — Override Activation Fix):
+        # .env.example şablonu güvenli çerez ayarı için FLASK_ENV=production
+        # içerir; Windows local masaüstü (127.0.0.1, waitress) hiçbir zaman
+        # gerçek üretim değildir. Operatör ALPHA_WINDOWS_PAPER_AUTO=true ile
+        # AÇIKÇA opt-in yaptıysa şablon varsayılanı bunu engellemez.
+        log.info("NOT: FLASK_ENV=production (.env şablon varsayılanı) — "
+                 "ALPHA_WINDOWS_PAPER_AUTO=true açık opt-in olduğu için "
+                 "PAPER override yine uygulanıyor (canlı emir yolu KAPALI).")
     try:
         sys.path.insert(0, str(ROOT / "alpha20_v1"))
         import auto_controller as _ac

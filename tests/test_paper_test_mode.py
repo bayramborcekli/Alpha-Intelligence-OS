@@ -55,12 +55,30 @@ def test_opt_in_required(monkeypatch):
     assert ac.RUNTIME_ADAPTIVE_OVERRIDE == {}
 
 
-def test_production_skips(monkeypatch):
+def test_deployment_skips(monkeypatch):
+    """Gerçek yayınlanmış üretim (REPLIT_DEPLOYMENT): override ASLA uygulanmaz."""
+    monkeypatch.setattr(sw, "os", _OsNtProxy())
+    monkeypatch.setenv("ALPHA_WINDOWS_PAPER_AUTO", "true")
+    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
+    assert sw._apply_paper_runtime_override() is False
+    assert ac.RUNTIME_ADAPTIVE_OVERRIDE == {}
+
+
+def test_flask_env_production_does_not_block_explicit_optin(monkeypatch,
+                                                            caplog):
+    """KÖK NEDEN DÜZELTMESİ: .env.example şablonu FLASK_ENV=production
+    içerir; açık opt-in (ALPHA_WINDOWS_PAPER_AUTO=true) bunu ezer.
+    Windows local hiçbir zaman gerçek üretim değildir (127.0.0.1)."""
     monkeypatch.setattr(sw, "os", _OsNtProxy())
     monkeypatch.setenv("ALPHA_WINDOWS_PAPER_AUTO", "true")
     monkeypatch.setenv("FLASK_ENV", "production")
-    assert sw._apply_paper_runtime_override() is False
-    assert ac.RUNTIME_ADAPTIVE_OVERRIDE == {}
+    monkeypatch.delenv("REPLIT_DEPLOYMENT", raising=False)
+    before = CONFIG.read_bytes()
+    with caplog.at_level("INFO", logger="alpha.serve"):
+        assert sw._apply_paper_runtime_override() is True
+    assert CONFIG.read_bytes() == before
+    assert any("FLASK_ENV=production" in r.message and "yine uygulanıyor"
+               in r.message for r in caplog.records)
 
 
 def test_windows_optin_overrides_in_memory_only(monkeypatch, caplog):
