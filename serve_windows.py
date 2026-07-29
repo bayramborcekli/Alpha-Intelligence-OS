@@ -47,6 +47,26 @@ def main() -> None:
     # Güvenli startup özeti — secret DEĞERİ asla yazılmaz.
     log.info("python=%s", sys.executable)
     log.info("project_root=%s port=%d host=%s", ROOT, PORT, HOST)
+    # Windows SSL: antivirüs/proxy HTTPS denetimi kendi kök sertifikasını
+    # Windows sertifika deposuna kurar; certifi bu depoyu görmez ve
+    # doğrulama SSLError ile düşer. truststore, Python SSL'ini işletim
+    # sistemi deposuna bağlar — doğrulama AÇIK kalır (kapatmak YASAK).
+    if os.name == "nt":
+        try:
+            import truststore
+            truststore.inject_into_ssl()
+            log.info("SSL: truststore aktif — Windows sertifika deposu "
+                     "kullanılıyor (dogrulama ACIK; antivirus/proxy kok "
+                     "sertifikalari artik taniniyor).")
+        except ImportError:
+            log.warning("SSL: truststore paketi yok — kurumsal antivirus/"
+                        "proxy SSL denetimi varsa Binance istekleri SSLError "
+                        "verebilir. INSTALL_WINDOWS.cmd'yi yeniden calistirin "
+                        "(truststore otomatik kurulur).")
+        except Exception as exc:
+            log.warning("SSL: truststore etkinlestirilemedi (%s) — certifi "
+                        "ile devam ediliyor.", exc)
+
     # SSL tanılama: Windows'ta kline SSL hataları çoğunlukla eski certifi
     # paketinden kaynaklanır — sürüm ve CA dosyası startup'ta loglanır.
     try:

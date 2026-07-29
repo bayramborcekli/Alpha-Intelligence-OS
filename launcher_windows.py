@@ -92,11 +92,12 @@ def bootstrap_venv() -> int:
             # SSL guvenilirligi icin certifi'yi her calistirmada guncel tut
             # (Windows'ta eski CA paketi Binance SSL dogrulamasini bozabilir).
             r = subprocess.run([str(vpy), "-m", "pip", "install", "--upgrade",
-                                "certifi", "--quiet"], cwd=ROOT)
+                                "certifi", "truststore", "--quiet"], cwd=ROOT)
             if r.returncode == 0:
-                log("Bootstrap: certifi guncellendi (SSL CA paketi).")
+                log("Bootstrap: certifi + truststore guncellendi "
+                    "(SSL CA paketi + Windows sertifika deposu koprusu).")
             else:
-                log("Bootstrap: UYARI - certifi guncellenemedi; "
+                log("Bootstrap: UYARI - certifi/truststore guncellenemedi; "
                     "SSL sorunlarinda INSTALL_WINDOWS.cmd'yi tekrar calistirin.")
             return 0
         log("Bootstrap: .venv var ama bagimliliklar eksik; kurulacak.")
