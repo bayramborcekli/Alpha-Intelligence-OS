@@ -169,6 +169,25 @@ def _run_single_cycle(
         _update_status(safe_mode=True, safe_mode_reason="state.json okunamadı.")
         return
 
+    # 0. Açık pozisyon yönetimi — KANONİK SL/TP kontrolü.
+    # alpha20.manage_position tek kaynak: klasik motor (run_cycle) ile aynı
+    # fonksiyon. Safety guard'dan ÖNCE çalışır (run_cycle sırasıyla aynı):
+    # güvenlik kilidi yeni işlem açmayı durdursa bile açık pozisyon
+    # izlenmeye ve SL/TP'de kapanmaya devam etmelidir.
+    if trading_state.get("position"):
+        import sys
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        import alpha20
+        try:
+            alpha20.manage_position(trading_state)
+            _save_state(trading_state)  # kapanış/muhasebe kalıcı olsun
+        except Exception as exc:
+            log.warning("Pozisyon yönetimi hatası: %s", exc)
+            ms.append_system_error(component="auto_controller",
+                                   error_type="POSITION_MANAGE_ERROR",
+                                   message=str(exc)[:200])
+
     # 1. Safety Guard
     safety = sg.check_all(trading_state=trading_state, adaptive_cfg=adaptive_cfg)
     _update_status(kill_switch=safety.kill_switch, safe_mode=not safety.safe,

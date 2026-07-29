@@ -438,7 +438,10 @@ def manage_position(state: dict[str, Any]) -> None:
     if not raw:
         return
 
-    pos = Position(**raw)
+    # auto_controller genişletilmiş alanlar (regime, final_score, ...) yazar;
+    # kanonik SL/TP kontrolü yalnız Position alanlarını kullanır.
+    pos = Position(**{f: raw[f] for f in Position.__dataclass_fields__
+                      if f in raw})
     df = fetch_klines_safe(pos.symbol, "1m", 5, state=state)
     if df is None:
         # Veri yok — pozisyon güvenle korunur, kapatma kararı verilmez.
