@@ -23,8 +23,9 @@ import requests
 log = logging.getLogger("universe_manager")
 
 ROOT = Path(__file__).resolve().parent          # alpha20_v1/
-SMART_CONFIG_PATH = ROOT / "smart_config.json"
-SMART_LOG_PATH    = ROOT / "smart_changes.json"
+SMART_CONFIG_PATH = ROOT / "smart_config.json"   # SEED (izlenen)
+SMART_LOG_PATH    = ROOT / "smart_changes.json"  # legacy log (salt okur)
+RUNTIME_STORE_PATH = ROOT / "universe_runtime.json"  # git dışı kanonik
 CONFIG_PATH       = ROOT / "config.json"
 STATE_PATH        = ROOT / "state.json"
 BASE_URL          = "https://fapi.binance.com"
@@ -91,18 +92,23 @@ def _atomic_write(path: Path, data: Any) -> None:
 
 
 def get_smart_config() -> dict[str, Any]:
-    if not SMART_CONFIG_PATH.exists():
-        return dict(SMART_DEFAULTS)
+    """SEED (smart_config.json) + git dışı runtime overlay birleşimi.
+
+    Runtime yazımları overlay'de yaşadığı için tracked seed hiç
+    kirletilmez; overlay varsa seed'i alan bazında ezer."""
+    merged = dict(SMART_DEFAULTS)
     try:
-        with SMART_CONFIG_PATH.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return dict(SMART_DEFAULTS)
-        merged = dict(SMART_DEFAULTS)
-        merged.update(data)
-        return _enforce_universe_contract(merged)
+        if SMART_CONFIG_PATH.exists():
+            with SMART_CONFIG_PATH.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                merged.update(data)
     except (OSError, json.JSONDecodeError):
-        return _enforce_universe_contract(dict(SMART_DEFAULTS))
+        pass
+    overlay = _load_runtime().get("smart")
+    if isinstance(overlay, dict):
+        merged.update(overlay)
+    return _enforce_universe_contract(merged)
 
 
 def _enforce_universe_contract(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -125,36 +131,84 @@ def _enforce_universe_contract(cfg: dict[str, Any]) -> dict[str, Any]:
 
 
 def save_smart_config(cfg: dict[str, Any]) -> None:
-    _atomic_write(SMART_CONFIG_PATH, cfg)
+    """Runtime smart-config yazımı GIT DIŞI kanonik store'a gider.
+
+    smart_config.json artık yalnız SEED (izlenen, elle düzenlenen
+    varsayılan); normal çalışma onu ASLA yazmaz → git status temiz."""
+    rt = _load_runtime()
+    rt["smart"] = cfg
+    _save_runtime(rt)
 
 
 def load_main_config() -> dict[str, Any]:
+    """config.json (izlenen) + runtime dynamic_symbols birleşimi."""
     try:
         with CONFIG_PATH.open("r", encoding="utf-8") as f:
-            return json.load(f)
+            cfg = json.load(f)
     except (OSError, json.JSONDecodeError):
         return {}
+    if isinstance(cfg.get("symbols"), list):
+        cfg["symbols"] = effective_symbols(cfg["symbols"])
+    return cfg
+
+
+def effective_symbols(base_symbols: list[str]) -> list[str]:
+    """Etkin evren = config.json tabanı + runtime dinamik ekler
+    (sıra korunur, tekrarsız, HARD_MAX_COINS tavanı)."""
+    rt = _load_runtime()
+    removed = set(rt.get("removed_symbols") or []) - set(BASE_SYMBOLS)
+    merged = [s for s in base_symbols if s not in removed]
+    for sym in rt.get("dynamic_symbols", []):
+        if isinstance(sym, str) and sym not in merged:
+            merged.append(sym)
+    return merged[:HARD_MAX_COINS]
 
 
 def save_main_config(data: dict[str, Any]) -> None:
     _atomic_write(CONFIG_PATH, data)
 
 
-def get_smart_log() -> list[dict]:
-    if not SMART_LOG_PATH.exists():
-        return []
+# ── Git dışı kanonik runtime store ──────────────────────────────────
+# Dynamic Universe'in TÜM runtime durumu (smart overlay, dinamik
+# semboller, değişiklik log'u) burada yaşar; izlenen dosyalara normal
+# çalışmada yazılmaz.
+
+def _load_runtime() -> dict[str, Any]:
+    if not RUNTIME_STORE_PATH.exists():
+        return {}
     try:
-        with SMART_LOG_PATH.open("r", encoding="utf-8") as f:
+        with RUNTIME_STORE_PATH.open("r", encoding="utf-8") as f:
             data = json.load(f)
-        return data if isinstance(data, list) else []
+        return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):
-        return []
+        return {}
+
+
+def _save_runtime(data: dict[str, Any]) -> None:
+    _atomic_write(RUNTIME_STORE_PATH, data)
+
+
+def get_smart_log() -> list[dict]:
+    """Runtime log (git dışı) + legacy smart_changes.json (salt okur)."""
+    entries = list(_load_runtime().get("log", []))
+    if SMART_LOG_PATH.exists():
+        try:
+            with SMART_LOG_PATH.open("r", encoding="utf-8") as f:
+                legacy = json.load(f)
+            if isinstance(legacy, list):
+                entries.extend(legacy)
+        except (OSError, json.JSONDecodeError):
+            pass
+    return entries[:LOG_MAX]
 
 
 def _append_smart_log(entry: dict) -> None:
-    entries = get_smart_log()
-    entries.insert(0, entry)
-    _atomic_write(SMART_LOG_PATH, entries[:LOG_MAX])
+    """Yeni log kayıtları YALNIZ git dışı runtime store'a yazılır."""
+    rt = _load_runtime()
+    log_entries = list(rt.get("log", []))
+    log_entries.insert(0, entry)
+    rt["log"] = log_entries[:LOG_MAX]
+    _save_runtime(rt)
 
 
 def _load_trades() -> list[dict]:
@@ -639,11 +693,23 @@ def apply_auto_changes(
         if sym not in current:
             current.append(sym)
 
-    main_cfg["symbols"] = current
+    # Dinamik evren durumu GIT DIŞI store'a yazılır — config.json
+    # (izlenen taban) normal çalışmada değiştirilmez, git status temiz.
     try:
-        save_main_config(main_cfg)
+        with CONFIG_PATH.open("r", encoding="utf-8") as f:
+            base_syms = json.load(f).get("symbols", [])
+    except (OSError, json.JSONDecodeError):
+        base_syms = []
+    try:
+        rt = _load_runtime()
+        rt["dynamic_symbols"] = [s for s in current
+                                 if s not in base_syms]
+        rt["removed_symbols"] = [s for s in base_syms
+                                 if s not in current
+                                 and s not in BASE_SYMBOLS]
+        _save_runtime(rt)
     except OSError as exc:
-        return False, f"config.json kaydedilemedi: {exc}"
+        return False, f"universe_runtime.json kaydedilemedi: {exc}"
 
     coin_history = dict(smart_cfg.get("coin_history", {}))
     for sym in to_remove:

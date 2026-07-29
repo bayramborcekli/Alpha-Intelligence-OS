@@ -623,6 +623,12 @@ def start_controller_loop() -> bool:
                                    last_cycle_time=datetime.now(timezone.utc).isoformat())
 
                     symbols = cfg.get("symbols", ["BTCUSDT"])
+                    # Dinamik evren (git dışı runtime store) ekleri
+                    try:
+                        import universe_manager as _um
+                        symbols = _um.effective_symbols(symbols)
+                    except Exception:
+                        pass
                     _run_single_cycle(adaptive_cfg, symbols)
                     _update_status(
                         analyzed_symbol_count=len(symbols))

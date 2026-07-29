@@ -230,6 +230,8 @@ class TestCanonicalScheduler:
         import universe_manager as um
         monkeypatch.setattr(um, "SMART_CONFIG_PATH",
                             tmp_path / "smart_config.json")
+        monkeypatch.setattr(um, "RUNTIME_STORE_PATH",
+                            tmp_path / "universe_runtime.json")
         monkeypatch.setattr(um, "SMART_LOG_PATH",
                             tmp_path / "smart_log.json")
         monkeypatch.setattr(um, "run_analysis",
@@ -259,6 +261,8 @@ class TestCanonicalScheduler:
         import universe_manager as um
         monkeypatch.setattr(um, "SMART_CONFIG_PATH",
                             tmp_path / "smart_config.json")
+        monkeypatch.setattr(um, "RUNTIME_STORE_PATH",
+                            tmp_path / "universe_runtime.json")
         def boom(cur, cfg):
             raise RuntimeError("ağ hatası")
         monkeypatch.setattr(um, "run_analysis", boom)
@@ -273,6 +277,8 @@ class TestCanonicalScheduler:
         import universe_manager as um
         monkeypatch.setattr(um, "SMART_CONFIG_PATH",
                             tmp_path / "smart_config.json")
+        monkeypatch.setattr(um, "RUNTIME_STORE_PATH",
+                            tmp_path / "universe_runtime.json")
         monkeypatch.setattr(um, "run_analysis",
                             lambda cur, cfg: [{"symbol": "XRPUSDT"}])
         monkeypatch.setattr(um, "compute_auto_changes",
@@ -291,6 +297,8 @@ class TestCanonicalScheduler:
         from services import system_runtime_orchestrator as sro
         monkeypatch.setattr(um, "SMART_CONFIG_PATH",
                             tmp_path / "smart_config.json")
+        monkeypatch.setattr(um, "RUNTIME_STORE_PATH",
+                            tmp_path / "universe_runtime.json")
         um.save_smart_config({**um.SMART_DEFAULTS,
                               "last_analysis_time":
                               "2026-07-29T10:00:00+00:00",
@@ -390,6 +398,76 @@ class TestCanonicalScheduler:
             assert token in html, token
 
 
+class TestUniverseRuntimeStore:
+    """Runtime evren durumu git dışı kanonik store'da yaşar;
+    izlenen dosyalar (config.json, smart_config.json,
+    smart_changes.json) normal çalışmada YAZILMAZ."""
+
+    def _iso(self, um, tmp_path, monkeypatch):
+        monkeypatch.setattr(um, "SMART_CONFIG_PATH",
+                            tmp_path / "smart_config.json")
+        monkeypatch.setattr(um, "SMART_LOG_PATH",
+                            tmp_path / "smart_changes.json")
+        monkeypatch.setattr(um, "CONFIG_PATH",
+                            tmp_path / "config.json")
+        monkeypatch.setattr(um, "RUNTIME_STORE_PATH",
+                            tmp_path / "universe_runtime.json")
+
+    def test_save_smart_config_never_touches_seed(self, tmp_path,
+                                                  monkeypatch):
+        import universe_manager as um
+        self._iso(um, tmp_path, monkeypatch)
+        (tmp_path / "smart_config.json").write_text(
+            json.dumps({"mode": "ONERI"}), encoding="utf-8")
+        seed_before = (tmp_path / "smart_config.json").read_text()
+        cfg = um.get_smart_config()
+        cfg["last_analysis_time"] = "2026-07-29T12:00:00+00:00"
+        um.save_smart_config(cfg)
+        assert (tmp_path / "smart_config.json"
+                ).read_text() == seed_before  # seed dokunulmadı
+        assert (tmp_path / "universe_runtime.json").exists()
+        # overlay okunuyor + seed alanı korunuyor
+        merged = um.get_smart_config()
+        assert merged["last_analysis_time"] == \
+            "2026-07-29T12:00:00+00:00"
+        assert merged["mode"] == "ONERI"
+
+    def test_apply_auto_changes_keeps_config_json_clean(
+            self, tmp_path, monkeypatch):
+        import universe_manager as um
+        self._iso(um, tmp_path, monkeypatch)
+        base = {"symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"]}
+        (tmp_path / "config.json").write_text(
+            json.dumps(base), encoding="utf-8")
+        raw_before = (tmp_path / "config.json").read_text()
+        ok, msg = um.apply_auto_changes(
+            ["XRPUSDT"], [], um.get_smart_config(), "SCHEDULER")
+        assert ok, msg
+        # izlenen config.json değişmedi
+        assert (tmp_path / "config.json").read_text() == raw_before
+        # etkin evren dinamik ekleri içeriyor
+        assert um.load_main_config()["symbols"] == [
+            "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
+        # log runtime store'da, legacy dosya oluşmadı
+        assert not (tmp_path / "smart_changes.json").exists()
+        assert um.get_smart_log()[0]["added"] == ["XRPUSDT"]
+
+    def test_effective_symbols_cap_and_dedupe(self, tmp_path,
+                                              monkeypatch):
+        import universe_manager as um
+        self._iso(um, tmp_path, monkeypatch)
+        um._save_runtime({"dynamic_symbols":
+                          [f"S{i}USDT" for i in range(30)]})
+        syms = um.effective_symbols(["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+        assert len(syms) == um.HARD_MAX_COINS
+        assert syms[:3] == ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+
+    def test_runtime_store_gitignored(self):
+        gi = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        assert "alpha20_v1/universe_runtime.json" in gi
+        assert "verify_scheduler_report.json" in gi
+
+
 class TestDynamicUniverse:
     """8) BTC/ETH/SOL pinli + max 20 sözleşmesi."""
 
@@ -404,6 +482,8 @@ class TestDynamicUniverse:
         p = tmp_path / "smart_config.json"
         p.write_text(json.dumps({"max_coins": 50}), encoding="utf-8")
         monkeypatch.setattr(um, "SMART_CONFIG_PATH", p)
+        monkeypatch.setattr(um, "RUNTIME_STORE_PATH",
+                            tmp_path / "universe_runtime.json")
         cfg = um.get_smart_config()
         assert cfg["max_coins"] == 20
         assert "BTCUSDT" in cfg["pinned"]
