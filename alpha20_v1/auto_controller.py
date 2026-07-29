@@ -49,7 +49,13 @@ _status_lock = threading.Lock()
 
 def get_status() -> dict[str, Any]:
     with _status_lock:
-        return dict(_last_status)
+        st = dict(_last_status)
+    # Salt-okunur görünürlük: Windows PAPER runtime override aktif mi?
+    # (config.json'a yazılmayan, yalnız bellekte yaşayan bayraklar.)
+    st["runtime_override"] = bool(RUNTIME_ADAPTIVE_OVERRIDE)
+    if RUNTIME_ADAPTIVE_OVERRIDE:
+        st["runtime_override_flags"] = dict(RUNTIME_ADAPTIVE_OVERRIDE)
+    return st
 
 
 def _update_status(**kwargs: Any) -> None:

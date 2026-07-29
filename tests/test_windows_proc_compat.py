@@ -240,6 +240,22 @@ def test_windows_start_bot_uses_detached_flags(monkeypatch, tmp_path):
     # PID dosyası yazıldı → panel yeniden açıldığında botu bulabilir
     assert app_module.read_pid() == 42424
 
+# 'Panel' süreci simülasyonu: botu detach ederek başlatır, PID dosyasını
+# yazar ve hemen çıkar (start_bot'un POSIX yolundaki start_new_session=True
+# davranışıyla aynı garanti).
+_PARENT_LAUNCHER = """\
+import json, subprocess, sys
+proc = subprocess.Popen(
+    [sys.executable, {bot!r}],
+    stdout=open({out!r}, "w"),
+    stderr=subprocess.STDOUT,
+    start_new_session=True,
+)
+with open({pidfile!r}, "w", encoding="utf-8") as f:
+    json.dump({{"pid": proc.pid}}, f)
+"""
+
+
 def test_bot_survives_parent_death(tmp_path):
     """F) Gerçek süreç testi: botu başlatan 'panel' süreci ölür, bot
     _pid_alive kalır. (Linux'ta start_new_session=True aynı garantiyi

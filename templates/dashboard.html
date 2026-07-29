@@ -33,6 +33,7 @@
     .success { background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.4); color: #7ee787; }
     .error   { background: rgba(248,81,73,.12);  border: 1px solid rgba(248,81,73,.45); color: #ffaaa5; }
     .info    { background: rgba(88,166,255,.10); border: 1px solid rgba(88,166,255,.35); color: #a5d6ff; }
+    .warning { background: rgba(210,153,34,.12); border: 1px solid rgba(210,153,34,.45); color: #e3b341; }
     .grid { display: grid; gap: 16px; grid-template-columns: repeat(12,1fr); }
     .card { background: rgba(22,27,34,.96); border: 1px solid var(--border);
       border-radius: 14px; box-shadow: 0 16px 48px rgba(0,0,0,.18); padding: 20px; }
@@ -48,6 +49,8 @@
     .s-run::before  { background: var(--success); }
     .s-stop { background: rgba(248,81,73,.14); color: #ffaaa5; }
     .s-stop::before { background: var(--danger); }
+    .s-warn { background: rgba(210,153,34,.16); color: #e3b341; }
+    .s-warn::before { background: var(--warn, #d29922); }
     /* metrics */
     .metrics { display: grid; gap: 10px; grid-template-columns: repeat(4,1fr); margin: 16px 0; }
     .metric { background: var(--soft); border: 1px solid var(--border); border-radius: 10px; padding: 11px; }
@@ -797,7 +800,9 @@
           <h2 style="margin-bottom:0">Uyarlanabilir Karar & Risk Motoru</h2>
         </div>
         {% set adp = adaptive.adaptive %}
-        {% if adp.enabled %}
+        {% if adaptive.ctrl.runtime_override %}
+          <span class="sbadge s-warn" title="Bellek-içi override aktif; config.json değişmedi. Süreç kapanınca kaybolur.">⚡ RUNTIME OVERRIDE (yalnız bellek)</span>
+        {% elif adp.enabled %}
           <span class="sbadge s-run">Aktif</span>
         {% else %}
           <span class="sbadge s-stop">Devre Dışı</span>
@@ -809,6 +814,14 @@
         Geçmiş performans gelecekteki sonuçları garanti etmez.
       </div>
 
+      {% if adaptive.ctrl.runtime_override %}
+        <div class="message warning" style="margin-bottom:14px">
+          ⚡ <strong>Geçici Bellek Modu (Runtime Override)</strong> — Otomasyon
+          bellek-içi override ile çalışıyor; config.json <em>değişmedi</em> ve
+          burada görünen kayıtlı ayarlar geçerli durumu yansıtmayabilir.
+          Süreç yeniden başlatılınca bu mod kaybolur.
+        </div>
+      {% endif %}
       {% if adp.kill_switch or adaptive.safety.kill_switch %}
         <div class="message error" style="margin-bottom:14px">
           ⛔ <strong>Acil Durdur Etkin</strong> — Yeni işlem açılmıyor. Açık pozisyonlar mevcut stop/hedef kurallarıyla yönetilmeye devam eder.
