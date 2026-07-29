@@ -1,0 +1,240 @@
+MISSION — PAPER AUTO END-TO-END RUNTIME VALIDATION (WINDOWS)
+
+AMAÇ
+
+Windows local ortamında PAPER trading yaşam döngüsünü uçtan uca doğrula.
+
+Yeni özellik ekleme.
+Refactor yapma.
+Kod güzelleştirme yapma.
+
+Yalnız mevcut sistemi çalıştır ve zincirin nerede durduğunu kesin kanıtla.
+
+==================================================================
+AŞAMA 1 — BOOT
+==================================================================
+
+Uygulama yeniden başlat.
+
+Kanıtla:
+
+✓ AUTO LOOP STARTED
+✓ CONTROLLER STARTED
+✓ AUTOMATION SCHEDULER STARTED
+
+Her biri için:
+
+- thread adı
+- thread id
+- alive
+- daemon
+- başlangıç zamanı
+
+==================================================================
+AŞAMA 2 — RUNTIME
+==================================================================
+
+İlk çevrim gerçekten çalışıyor mu?
+
+Raporla:
+
+- cycle_count
+- last_cycle
+- next_cycle
+- duration
+- exception
+
+==================================================================
+AŞAMA 3 — SIGNAL ENGINE
+==================================================================
+
+Son sinyal:
+
+- symbol
+- direction
+- score
+- final_score
+- reason
+- timestamp
+
+Hiç sinyal yoksa nedenini yaz.
+
+==================================================================
+AŞAMA 4 — PAPER TRADE
+==================================================================
+
+_open_paper_trade()
+
+çağrıldı mı?
+
+Evetse:
+
+- trade id
+- symbol
+- qty
+- entry
+- stop
+- take profit
+
+Hayırsa neden.
+
+==================================================================
+AŞAMA 5 — POSITION MANAGEMENT
+==================================================================
+
+manage_position()
+
+çağrıldı mı?
+
+Kaç kez çağrıldı?
+
+Açık pozisyon var mı?
+
+SL
+
+TP
+
+Break-even
+
+Trailing
+
+hangileri çalıştı?
+
+==================================================================
+AŞAMA 6 — LEDGER
+==================================================================
+
+ledger_events.json
+
+Son kayıt:
+
+- action
+- symbol
+- balance_before
+- balance_after
+- pnl
+- fee
+
+state.json
+
+Açık pozisyon doğru mu?
+
+==================================================================
+AŞAMA 7 — DASHBOARD
+==================================================================
+
+Dashboard neden
+
+Toplam Portföy Veri Yok
+
+PnL Veri Yok
+
+Açık Pozisyon Veri Yok
+
+gösteriyor?
+
+Sebep:
+
+A)
+
+Henüz trade oluşmadı
+
+B)
+
+API dönmüyor
+
+C)
+
+UI bug
+
+D)
+
+Ledger okunmuyor
+
+Hangisi?
+
+Kanıtla.
+
+==================================================================
+AŞAMA 8 — BINANCE
+==================================================================
+
+NOT_CONFIGURED
+
+ile
+
+Bağlantı Yok
+
+arasındaki farkı doğrula.
+
+API anahtarı olmadığı için mi?
+
+Yoksa bağlantı kodu mu çalışmıyor?
+
+Kanıtla.
+
+==================================================================
+AŞAMA 9 — KESİN KÖK NEDEN
+==================================================================
+
+Paper otomasyonu gerçekten çalışıyorsa
+
+kanıt göster.
+
+Çalışmıyorsa
+
+tek kök nedeni yaz.
+
+Birden fazla sebep yazma.
+
+En temel sebebi yaz.
+
+==================================================================
+ÇIKTI
+==================================================================
+
+1.
+
+Thread durumu
+
+2.
+
+İlk cycle
+
+3.
+
+İlk signal
+
+4.
+
+İlk paper trade
+
+5.
+
+manage_position
+
+6.
+
+ledger
+
+7.
+
+dashboard
+
+8.
+
+Binance
+
+9.
+
+Kesin kök neden
+
+Kod değişikliği minimum.
+
+Sorun yoksa "çalışıyor" de.
+
+Sorun varsa yalnız gerekli dosyayı düzelt.
+
+Tek commit.
+
+Merge guard kurallarına uy.
