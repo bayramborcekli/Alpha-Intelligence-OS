@@ -533,6 +533,58 @@ def save_symbols(symbols: list[str]) -> tuple[bool, str]:
 # Bot süreç yönetimi
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _proc_fs_available() -> bool:
+    """Linux /proc dosya sistemi kullanılabilir mi? (Windows'ta yok.)"""
+    return os.name != "nt" and Path("/proc").exists()
+
+
+def _pid_alive(pid: int) -> bool:
+    """Platform-bağımsız süreç canlılık kontrolü.
+
+    Linux/POSIX: os.kill(pid, 0) — sinyal göndermez, yalnız yoklar.
+    Windows: os.kill(pid, 0) süreci ÖLDÜRÜR (TerminateProcess), bu yüzden
+    ctypes ile OpenProcess denenir; açılabiliyorsa süreç yaşıyordur.
+    """
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            SYNCHRONIZE = 0x00100000
+            handle = kernel32.OpenProcess(SYNCHRONIZE, 0, pid)
+            if handle:
+                kernel32.CloseHandle(handle)
+                return True
+            return False
+        except Exception:
+            # Windows API'ye erişilemedi (ör. test simülasyonu) —
+            # fail-safe: süreç yok say.
+            return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
+def _pidfile_bot_pid() -> int | None:
+    """PID dosyası tabanlı platform-bağımsız bot tespiti.
+
+    Yalnız /proc'un OLMADIĞI ortamlarda (Windows) anlamlıdır: PID dosyası
+    okunur ve süreç hâlâ canlıysa PID döner. /proc'lu Linux'ta cmdline
+    doğrulaması yapılabildiği için bu yol kullanılmaz (davranış değişmez).
+    """
+    pid = read_pid()
+    if pid is None:
+        return None
+    return pid if _pid_alive(pid) else None
+
+
 def process_cmdline(pid: int) -> list[str] | None:
     try:
         raw = Path(f"/proc/{pid}/cmdline").read_bytes()
@@ -589,23 +641,36 @@ def write_pid(pid: int) -> None:
 
 
 def bot_running() -> bool:
-    return bool(find_bot_pids())
+    # Linux: /proc taraması (davranış değişmedi). Windows / /proc'suz
+    # ortam: PID dosyası + canlılık kontrolü ile gerçek durum yansıtılır.
+    if _proc_fs_available():
+        return bool(find_bot_pids())
+    return _pidfile_bot_pid() is not None
 
 
 def start_bot() -> tuple[bool, str]:
     with CONFIG_LOCK:
-        if find_bot_pids():
+        if bot_running():
             return False, "Bot zaten çalışıyor."
         if not BOT_PATH.exists():
             return False, "Bot dosyası bulunamadı."
         try:
-            out  = BOT_OUTPUT.open("a", encoding="utf-8")
+            out = BOT_OUTPUT.open("a", encoding="utf-8")
+            popen_kwargs: dict[str, Any] = {
+                "cwd": str(ROOT), "stdin": subprocess.DEVNULL,
+                "stdout": out, "stderr": subprocess.STDOUT,
+                "close_fds": True,
+            }
+            if os.name == "nt":
+                # Windows: start_new_session POSIX'e özgüdür; panel süreci
+                # kapansa da bot yaşasın diye ayrı süreç grubu + detach.
+                popen_kwargs["creationflags"] = (
+                    getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                    | getattr(subprocess, "DETACHED_PROCESS", 0))
+            else:
+                popen_kwargs["start_new_session"] = True
             proc = subprocess.Popen(
-                [sys.executable, str(BOT_PATH)],
-                cwd=str(ROOT), stdin=subprocess.DEVNULL,
-                stdout=out, stderr=subprocess.STDOUT,
-                start_new_session=True, close_fds=True,
-            )
+                [sys.executable, str(BOT_PATH)], **popen_kwargs)
             write_pid(proc.pid)
             out.close()
         except (OSError, ValueError) as exc:
@@ -616,16 +681,25 @@ def start_bot() -> tuple[bool, str]:
 def stop_bot() -> tuple[bool, str]:
     with CONFIG_LOCK:
         pid = read_pid()
-        if pid is None or not is_bot_command(pid):
+        # Linux: cmdline /proc'tan doğrulanır (yanlış süreci öldürme).
+        # Windows: /proc yok — PID dosyası + canlılık kontrolü yeterlidir
+        # (dosyayı yalnız bu uygulama yazar).
+        if _proc_fs_available():
+            verified = pid is not None and is_bot_command(pid)
+        else:
+            verified = pid is not None and _pid_alive(pid)
+        if pid is None or not verified:
             PID_PATH.unlink(missing_ok=True)
             return False, "Uygulamanın başlattığı çalışan bot bulunamadı."
         try:
+            # Windows'ta os.kill(pid, SIGTERM) TerminateProcess'e eşdeğerdir
+            # (koşulsuz sonlandırma); POSIX'te nazik SIGTERM gönderilir.
             os.kill(pid, signal.SIGTERM)
             for _ in range(20):
-                if not Path(f"/proc/{pid}").exists():
+                if not _pid_alive(pid):
                     break
                 time.sleep(0.1)
-            if Path(f"/proc/{pid}").exists():
+            if _pid_alive(pid) and hasattr(signal, "SIGKILL"):
                 os.kill(pid, signal.SIGKILL)
         except ProcessLookupError:
             pass

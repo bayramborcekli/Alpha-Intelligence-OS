@@ -88,6 +88,40 @@ def test_linux_behavior_unchanged():
     assert os.getpid() not in pids
 
 
+def test_windows_bot_running_via_pidfile(monkeypatch, tmp_path):
+    """C) Windows'ta bot_running() PID dosyası + canlılık ile durum döner."""
+    monkeypatch.setattr(app_module, "os", _OsNtProxy())
+    pidfile = tmp_path / ".bot.pid"
+    monkeypatch.setattr(app_module, "PID_PATH", pidfile)
+    # PID dosyası yok → çalışmıyor
+    assert app_module.bot_running() is False
+    # PID dosyası var + süreç canlı sayılıyor → çalışıyor
+    pidfile.write_text('{"pid": 12345}', encoding="utf-8")
+    monkeypatch.setattr(app_module, "_pid_alive", lambda pid: pid == 12345)
+    assert app_module.bot_running() is True
+    # Süreç ölü → çalışmıyor
+    monkeypatch.setattr(app_module, "_pid_alive", lambda pid: False)
+    assert app_module.bot_running() is False
+
+
+def test_windows_stop_bot_uses_pid_alive(monkeypatch, tmp_path):
+    """C) Windows'ta stop_bot cmdline yerine PID dosyası doğrulaması yapar."""
+    monkeypatch.setattr(app_module, "os", _OsNtProxy())
+    pidfile = tmp_path / ".bot.pid"
+    monkeypatch.setattr(app_module, "PID_PATH", pidfile)
+    # Bot yok → net mesaj, exception yok
+    ok, msg = app_module.stop_bot()
+    assert ok is False
+    assert "bulunamadı" in msg
+
+
+def test_linux_pid_alive_matches_reality():
+    """E) Linux: _pid_alive kendi PID'i için True, imkânsız PID için False."""
+    assert app_module._pid_alive(os.getpid()) is True
+    assert app_module._pid_alive(2**22 + 12345) is False
+    assert app_module._pid_alive(0) is False
+
+
 def test_executive_summary_returns_200_on_windows_sim(monkeypatch):
     """B) Windows simülasyonunda /api/v1/executive/summary → HTTP 200."""
     monkeypatch.setattr(app_module, "os", _OsNtProxy())
