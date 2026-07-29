@@ -10,3 +10,6 @@ Universe expansion history: originally only a background loop (`start_auto_loop`
 - Honest reason codes: NOT_RUN_YET → INSUFFICIENT_ELIGIBLE_SYMBOLS / FILTERS_EXCLUDED_ALL / UNIVERSE_REFRESH_FAILED; keep `tools/windows/verify_scheduler.py` HONEST_REASON_CODES in sync with `universe_reason_code()`.
 
 **Why:** two tasks fixed the same false-NOT_RUN_YET symptom concurrently; the scheduler-driven design won at merge. Do not reintroduce mode-gated interim codes (e.g. AUTO_MODE_OFF) — they are unreachable and contradict the canonical source.
+
+## Git dışı runtime store (Temmuz 2026)
+Runtime evren durumu kanonik olarak `alpha20_v1/universe_runtime.json` (+.lock) dosyasında: smart overlay (yalnız seed'den FARKLI alanlar — seed düzenlemeleri maskelenmez), dynamic_symbols/removed_symbols, değişiklik log'u. Tüm mutasyonlar flock'lu `_update_runtime` üzerinden (lost update yok). İzlenen config.json/smart_config.json/smart_changes.json normal çalışmada YAZILMAZ → git status temiz; smart_config drift-checkout ritüeli artık gereksiz. Etkin evrenin tek yükleyicisi `effective_symbols()` — bot (alpha20.py), auto_controller ve smart rotaları hepsi bundan geçer.
