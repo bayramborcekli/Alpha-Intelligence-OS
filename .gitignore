@@ -57,6 +57,7 @@ alpha20_v1/.bot.pid
 alpha20_v1/bot_process.log
 alpha20_v1/safety_state.json
 alpha20_v1/panel_status.json
+alpha20_v1/rate_limit_state.json
 alpha20_v1/*.jsonl
 state.json
 alpha20.log
