@@ -292,7 +292,7 @@
     // UI'da "Yerel Windows Oturumu" gösterilir (auth davranışı değişmez);
     // gerçek admin girişinde gerçek kullanıcı adı aynen görünür.
     if (actor === "local-dev-bypass" || actor === "replit-dev-bypass") {
-      return "Yerel Windows Oturumu (auth_mode=" + actor + ")";
+      return "Yerel Windows Oturumu";
     }
     return actor;
   }

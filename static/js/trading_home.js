@@ -402,13 +402,20 @@
     }
     if (products) {
       setText("th-ai-scanned", products.length);
-      setText("th-ai-eligible", products.filter(function (p) {
-        return p.entry_eligible;
-      }).length);
     } else {
       setText("th-ai-scanned", null);
-      setText("th-ai-eligible", null);
     }
+    // "Uygun Fırsatlar" = GERÇEK sinyal adayları (karar kayıtlarında
+    // WATCH/OPEN) — enabled/entry_eligible sembol fırsat DEĞİLDİR.
+    // Üç sembol yalnız "Sinyal bekliyor" ise sayı 0 olmalıdır.
+    fetch("/api/paper/state", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        setText("th-ai-eligible",
+                d && typeof d.signal_candidate_count === "number"
+                  ? d.signal_candidate_count : null);
+      })
+      .catch(function () { setText("th-ai-eligible", null); });
     setText("th-ai-last", new Date().toLocaleTimeString("tr-TR"));
   }
 

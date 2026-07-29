@@ -1,0 +1,257 @@
+MISSION — FIX ANALYSIS SCHEDULER SOURCE-OF-TRUTH & FALSE GREEN PIPELINE
+
+GERÇEK WINDOWS KANITI
+
+Aynı /automation ekranında çelişkili durum görülüyor:
+
+Üst şerit:
+- Pipeline GREEN
+- Analiz Zamanlayıcısı RUNNING
+- Tarama 5 dk
+- Evren 3 sembol
+
+Sayfanın zamanlayıcı bölümü:
+- ALPHA_AUTOMATION_ENABLED kapalı
+- Çalışıyor mu: Hayır
+- Aralık: 60 dk
+- Sonraki koşu: —
+- Şimdi Çalıştır pasif
+
+Bu durum kabul edilemez. Pipeline, çalışmayan scheduler ile GREEN gösteriliyor.
+
+AMAÇ
+
+Analysis Scheduler, orchestrator, /automation sayfası, üst şerit ve
+/api/paper/state aynı kanonik runtime kaynağını kullanacak.
+
+============================================================
+1) ÖNCE GERÇEK KAYNAKLARI BUL
+============================================================
+
+Şunların hangi kaynaktan okunduğunu kesin olarak belirle:
+
+- üst şerit scheduler RUNNING
+- üst şerit scan interval 5 dk
+- /automation ALPHA_AUTOMATION_ENABLED
+- /automation çalışıyor/hayır
+- /automation interval 60 dk
+- orchestrator scheduler readiness
+- scheduler thread/process gerçek durumu
+- last_run / next_run
+- dynamic universe yenilenmesi
+
+Teslimde gerçek dosya/servis isimlerini raporla.
+
+============================================================
+2) TEK KANONİK SCHEDULER DURUMU
+============================================================
+
+Scheduler durumu yalnız gerçek çalışan servis üzerinden hesaplanmalı:
+
+- enabled
+- running
+- interval_minutes
+- last_run
+- next_run
+- active_run_id
+- last_result
+- last_error
+- analyzed_symbol_count
+
+Tercih değeri RUNNING olsa bile gerçek worker/thread çalışmıyorsa:
+
+running=false
+
+olmalı.
+
+UI tercihini gerçek çalışma durumu gibi göstermemeli.
+
+============================================================
+3) FALSE GREEN DÜZELTMESİ
+============================================================
+
+OVERALL PIPELINE yalnız şu durumda GREEN olabilir:
+
+- scheduler enabled=true
+- scheduler running=true
+- last successful analysis güncel
+- next_run mevcut
+- feature/decision/risk hattı READY
+- controller RUNNING
+
+Scheduler kapalı veya çalışmıyorsa:
+
+OVERALL PIPELINE = RED/BLOCKED
+
+Tercih RUNNING fakat servis başlamamışsa:
+
+YELLOW/STARTUP_FAILED
+
+göster.
+
+============================================================
+4) WINDOWS PAPER BAŞLANGICI
+============================================================
+
+Windows + PAPER başlangıcında, kayıtlı tercih RUNNING ise orchestrator:
+
+1. Analysis Scheduler’ı gerçekten başlatsın
+2. interval’i kanonik tercihten alsın
+3. varsayılan 5 dakika uygulasın
+4. worker’ın başladığını doğrulasın
+5. ilk analiz koşusunu çalıştırsın
+6. last_run ve next_run oluştursun
+7. ancak sonra pipeline readiness’i GREEN yapabilsin
+
+Kullanıcı manuel STOP seçmişse zorla başlatma.
+
+============================================================
+5) ESKİ 60 DAKİKA / ENV ÇATIŞMASI
+============================================================
+
+ALPHA_AUTOMATION_ENABLED ve eski 60 dakika config yolu yalnız legacy kaynaksa:
+
+- doğrudan UI doğruluk kaynağı olmaktan çıkar
+- kanonik runtime preference/service’e migrate et
+- duplicate state oluşturma
+- aynı ayarı iki farklı dosyada tutma
+
+.env yalnız başlangıç varsayılanı olabilir; runtime gerçek durumu değildir.
+
+============================================================
+6) /AUTOMATION SAYFASI
+============================================================
+
+Sayfa gerçek scheduler servisini göstermeli:
+
+ANALİZ ZAMANLAYICISI
+
+Tercih:
+RUNNING / STOPPED
+
+Gerçek Durum:
+RUNNING / STOPPED / FAILED
+
+Aralık:
+5 dk
+
+Son Koşu:
+timestamp
+
+Sonuç:
+PASS / DEGRADED / FAIL
+
+Analiz Edilen Sembol:
+N
+
+Sonraki Koşu:
+timestamp
+
+“Şimdi Çalıştır” yalnız:
+
+- local authenticated admin
+- CSRF
+- başka koşu aktif değilse
+
+çalışabilsin.
+
+============================================================
+7) DYNAMIC UNIVERSE BAĞLANTISI
+============================================================
+
+Scheduler’ın gerçek başarılı koşusu:
+
+- universe manager’ı çalıştırmalı
+- BTC/ETH/SOL’u korumalı
+- uygun likit USDT pariteleriyle en fazla 20 sembole genişletebilmeli
+- seçilen evreni karar hattına iletmeli
+
+Evren yalnız 3 sembolde kalırsa neden kodu göster:
+
+- INSUFFICIENT_ELIGIBLE_SYMBOLS
+- UNIVERSE_REFRESH_FAILED
+- PUBLIC_DATA_DEGRADED
+- FILTERS_EXCLUDED_ALL
+- NOT_RUN_YET
+
+Sessizce 3 sembolü başarılı dinamik evren gibi gösterme.
+
+============================================================
+8) UI TUTARLILIĞI
+============================================================
+
+Üst şerit, /automation, Trading Home ve /api/paper/state aynı snapshot’ı kullansın.
+
+Ayrıca üst sağdaki:
+
+local-dev-bypass
+
+etiketini:
+
+Yerel Windows Oturumu
+
+olarak göster; auth davranışını değiştirme.
+
+“Uygun Fırsatlar” yalnız gerçek sinyal adaylarını saysın.
+Üç sembol yalnız “Sinyal bekliyor” ise sayı 0 olmalı.
+
+============================================================
+9) KORUNACAKLAR
+============================================================
+
+Bozma:
+
+- üç risk profili
+- risk engine bağlantısı
+- Binance Global DPAPI
+- Paper ledger/bakiye
+- emergency stop
+- symbol preferences
+- Operation Center
+- decision trace
+- Git pack-lock düzeltmesi
+- SETUP tek tık akışı
+
+LIVE ORDERS: DISABLED
+
+============================================================
+10) TESTLER
+============================================================
+
+Zorunlu testler:
+
+1. preference RUNNING + worker STOPPED → pipeline GREEN değil
+2. scheduler gerçekten başlayınca running=true
+3. interval üst şerit ve sayfada aynı
+4. 60 dk legacy değer 5 dk kanonik tercihi ezemez
+5. last_run/next_run gerçek koşudan gelir
+6. scheduler başarısızsa blocker görünür
+7. scheduler başarılı koşu dynamic universe’ü yeniler
+8. universe 3’te kalırsa reason_code görünür
+9. enabled semboller fırsat sayılmaz
+10. local-dev-bypass kullanıcı adı gibi görünmez
+11. manuel STOP restart sonrası korunur
+12. Live Orders daima DISABLED
+13. mevcut testler yeşil
+
+============================================================
+11) TESLİM
+============================================================
+
+COMMIT:
+PUSH:
+
+ROOT CAUSE:
+UPPER BAR SOURCE:
+AUTOMATION PAGE SOURCE:
+CANONICAL SCHEDULER SOURCE:
+LEGACY CONFIG MIGRATION:
+REAL WORKER START:
+SCAN INTERVAL:
+LAST/NEXT RUN:
+DYNAMIC UNIVERSE REFRESH:
+FALSE GREEN FIX:
+OPPORTUNITY COUNTER:
+LOCAL SESSION LABEL:
+LIVE ORDERS: DISABLED
+TESTS:

@@ -624,6 +624,8 @@ def start_controller_loop() -> bool:
 
                     symbols = cfg.get("symbols", ["BTCUSDT"])
                     _run_single_cycle(adaptive_cfg, symbols)
+                    _update_status(
+                        analyzed_symbol_count=len(symbols))
 
                     # Öğrenme motoru
                     learn_interval = float(adaptive_cfg.get("learning_interval_hours", 24))

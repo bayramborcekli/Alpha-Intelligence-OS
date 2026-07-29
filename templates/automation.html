@@ -43,12 +43,40 @@
 
 <p class="au-note" style="margin-bottom:12px">
   <span class="advisory-tag">ANALİZ OTOMASYONU</span>
-  Bu panel Intelligence ANALİZ otomasyonunu gösterir ve manuel analiz
+  Üstteki kanonik blok gerçek analiz zamanlayıcısını gösterir. Alttaki
+  LEGACY blok Intelligence RAPORLAMA otomasyonunu gösterir ve manuel analiz
   tetiği gönderir; bu sayfadan emir oluşturulmaz. Kontrollü ticaret
   eylemleri (otomasyon başlat/durdur, kapatma niyeti, kill-switch)
   <a href="/operation-center">Operation Center</a>'dadır ve Mission 2100
   kontrollü yürütme hattından geçer.
 </p>
+
+<!-- MASTER INTEGRATION FIX: kanonik Analysis Scheduler bloğu.
+     Tek doğruluk kaynağı: GET /api/paper/state →
+     analysis_scheduler_detail (tercih + GERÇEK worker durumu).
+     Aşağıdaki ALPHA_AUTOMATION_ENABLED bloğu LEGACY intelligence
+     RAPORLAMA zamanlayıcısıdır; analiz hattını TEMSİL ETMEZ. -->
+<section class="au-sec" aria-labelledby="h-sched">
+  <h2 id="h-sched">📊 ANALİZ ZAMANLAYICISI (Kanonik)</h2>
+  <div class="au-grid" aria-live="polite">
+    <div class="au-card"><h3>Tercih</h3><div class="v" id="s-pref">—</div></div>
+    <div class="au-card"><h3>Gerçek Durum</h3><div class="v" id="s-state">—</div></div>
+    <div class="au-card"><h3>Aralık</h3><div class="v" id="s-interval">—</div></div>
+    <div class="au-card"><h3>Son Koşu</h3>
+      <div class="v" style="font-size:.85rem" id="s-last">—</div></div>
+    <div class="au-card"><h3>Sonuç</h3><div class="v" id="s-result">—</div></div>
+    <div class="au-card"><h3>Analiz Edilen Sembol</h3>
+      <div class="v" id="s-symbols">—</div></div>
+    <div class="au-card"><h3>Sonraki Koşu</h3>
+      <div class="v" style="font-size:.85rem" id="s-next">—</div></div>
+    <div class="au-card"><h3>Pipeline</h3><div class="v" id="s-pipe">—</div></div>
+  </div>
+  <p class="au-note" id="s-blockers" role="status"></p>
+  <p class="au-note">Bu blok gerçek analiz döngüsünü (tarama →
+  özellikler → karar → risk) gösterir. Tercih RUNNING olsa bile
+  worker çalışmıyorsa Gerçek Durum STARTUP_FAILED yazar; tercih asla
+  gerçek çalışma durumu gibi gösterilmez.</p>
+</section>
 
 <div class="au-banner" id="au-disabled-banner" role="alert">
   ℹ️ Automation kapalı (ALPHA_AUTOMATION_ENABLED). Zamanlayıcı çalışmıyor;
@@ -207,6 +235,38 @@
   refresh();
   // Yalnız status ucu, sabit aralıkla okunur (yeni polling sistemi yok)
   setInterval(refresh, 30000);
+
+  // ── Kanonik Analysis Scheduler bloğu — üst şeritle AYNI snapshot:
+  //    GET /api/paper/state (tercih ≠ gerçek durum ayrımı burada da).
+  function refreshCanonical() {
+    fetch("/api/paper/state", { credentials: "same-origin" })
+      .then(function (r) { if (!r.ok) { throw new Error(); } return r.json(); })
+      .then(function (d) {
+        var s = d.analysis_scheduler_detail || {};
+        el("s-pref").textContent = txt(s.preference);
+        el("s-state").textContent = txt(s.state);
+        el("s-interval").textContent = txt(s.interval_minutes, " dk");
+        el("s-last").textContent = txt((s.last_run || "").replace("T", " "));
+        el("s-result").textContent = txt(s.last_result);
+        el("s-symbols").textContent = txt(s.analyzed_symbol_count);
+        el("s-next").textContent = txt((s.next_run || "").replace("T", " "));
+        var icon = { GREEN: "🟢", YELLOW: "🟡", RED: "🔴" };
+        el("s-pipe").textContent =
+          (icon[d.overall_pipeline] || "◌") + " " + txt(d.overall_pipeline);
+        var bl = d.pipeline_blockers || [];
+        el("s-blockers").textContent = bl.length
+          ? "Engeller: " + bl.join(", ")
+          : "";
+      })
+      .catch(function () {
+        ["s-pref", "s-state", "s-interval", "s-last", "s-result",
+         "s-symbols", "s-next", "s-pipe"].forEach(function (i) {
+          el(i).textContent = "—";
+        });
+      });
+  }
+  refreshCanonical();
+  setInterval(refreshCanonical, 30000);
 })();
 </script>
 {% endblock %}

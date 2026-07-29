@@ -124,7 +124,12 @@ class TestActions:
     def test_only_agent04_endpoints_used(self):
         src = _template_source()
         called = set(re.findall(r'fetch\("([^"]+)"', src))
-        assert called == {"/api/automation/status", "/api/automation/run"}
+        # MASTER INTEGRATION FIX: kanonik Analysis Scheduler bloğu
+        # üst şeritle AYNI snapshot'ı (/api/paper/state) okur —
+        # bilinçli genişletme; legacy blok yalnız Agent 04 uçlarını
+        # kullanmaya devam eder.
+        assert called == {"/api/automation/status",
+                          "/api/automation/run", "/api/paper/state"}
 
     def test_no_websocket_or_sse(self):
         src = _template_source()

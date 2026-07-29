@@ -105,6 +105,98 @@ def recent_decisions(n: int = 50) -> list[dict]:
     return _tail_jsonl(ALPHA_DIR / "decisions.jsonl", n)
 
 
+def scheduler_status(controller_status: dict[str, Any] | None = None,
+                     preference: str | None = None) -> dict[str, Any]:
+    """TEK KANONİK Analysis Scheduler durumu.
+
+    Analiz zamanlayıcısı = auto_controller analiz döngüsü (fetch →
+    features → decision → risk). Kaynaklar:
+    - Tercih (istenen durum): services/runtime_preferences
+      (analysis_scheduler, scan_interval_minutes — varsayılan 5 dk)
+    - GERÇEK durum: auto_controller.get_status() (canlı thread)
+
+    Tercih RUNNING olsa bile gerçek worker çalışmıyorsa running=False
+    ve state=STARTUP_FAILED döner — UI tercihini gerçek çalışma
+    durumu gibi GÖSTEREMEZ. Legacy ALPHA_AUTOMATION_ENABLED / 60 dk
+    yolu intelligence RAPORLAMA zamanlayıcısıdır; analiz hattının
+    doğruluk kaynağı DEĞİLDİR (yalnız /automation'da legacy blok)."""
+    from services import runtime_preferences as prefs
+    p = prefs.get_all()
+    if controller_status is None:
+        try:
+            _alpha_path()
+            import auto_controller as ac
+            controller_status = ac.get_status()
+        except Exception:
+            controller_status = {}
+    st = controller_status or {}
+    # İstenen durum: öncelik kanonik operasyon tercihi (Operation
+    # Control store — manuel STOP restart sonrası korunur); yoksa
+    # runtime_preferences başlangıç varsayılanı. İkisi ayrı "duplicate
+    # state" DEĞİLDİR: operation store kanoniktir, prefs yalnız
+    # başlangıç varsayılanıdır.
+    if preference not in ("RUNNING", "STOPPED"):
+        preference = p["analysis_scheduler"]  # RUNNING | STOPPED
+    enabled = preference == "RUNNING"
+    running = bool(st.get("running"))
+    interval_min = p["scan_interval_minutes"]
+    last_run = st.get("last_cycle_time")
+    last_error = st.get("last_cycle_error")
+    next_run = None
+    if running and last_run:
+        try:
+            next_run = datetime.fromtimestamp(
+                datetime.fromisoformat(last_run).timestamp()
+                + interval_min * 60, timezone.utc).isoformat()
+        except ValueError:
+            next_run = None
+    if running:
+        state = "RUNNING"
+        last_result = ("FAIL" if last_error else
+                       ("PASS" if last_run else "NOT_RUN_YET"))
+    elif enabled:
+        state = "STARTUP_FAILED"  # tercih RUNNING, worker yok
+        last_result = "FAIL"
+    else:
+        state = "STOPPED"
+        last_result = "STOPPED"
+    return {
+        "preference": preference,
+        "enabled": enabled,
+        "running": running,
+        "state": state,
+        "interval_minutes": interval_min,
+        "last_run": last_run,
+        "next_run": next_run,
+        "active_run_id": st.get("cycle_count") or None,
+        "last_result": last_result,
+        "last_error": last_error,
+        "analyzed_symbol_count": st.get("analyzed_symbol_count",
+                                        None),
+    }
+
+
+def universe_reason_code(universe_size: int) -> str | None:
+    """Evren temel 3 sembolde kaldıysa dürüst neden kodu üret.
+
+    3 sembol 'başarılı dinamik evren' gibi gösterilmez."""
+    try:
+        _alpha_path()
+        import universe_manager as um
+        base_n = len(um.BASE_SYMBOLS)
+        if universe_size > base_n:
+            return None  # gerçekten genişlemiş
+        smart_log = um.get_smart_log()
+        if not smart_log:
+            return "NOT_RUN_YET"
+        last = smart_log[-1] if isinstance(smart_log, list) else {}
+        if isinstance(last, dict) and last.get("error"):
+            return "UNIVERSE_REFRESH_FAILED"
+        return "INSUFFICIENT_ELIGIBLE_SYMBOLS"
+    except Exception:
+        return "UNIVERSE_REFRESH_FAILED"
+
+
 def readiness(controller_status: dict[str, Any],
               automation_state: str,
               emergency_active: bool) -> dict[str, Any]:
@@ -123,10 +215,14 @@ def readiness(controller_status: dict[str, Any],
     except Exception:
         symbols, universe_size, universe_ready = [], 0, False
 
-    # Analiz/karar hattı = controller döngüsü
-    controller_running = bool(controller_status.get("running"))
-    last_cycle = controller_status.get("last_cycle_time")
-    cycle_err = controller_status.get("last_cycle_error")
+    # Analiz zamanlayıcısı — TEK kanonik durum (tercih ≠ gerçek durum)
+    sched = scheduler_status(
+        controller_status,
+        automation_state if automation_state in ("RUNNING", "STOPPED")
+        else None)
+    controller_running = sched["running"]
+    last_cycle = sched["last_run"]
+    cycle_err = sched["last_error"]
     scan_s = p["scan_interval_minutes"] * 60
     fresh = False
     if last_cycle:
@@ -136,7 +232,9 @@ def readiness(controller_status: dict[str, Any],
             fresh = age < max(3 * scan_s, 900)
         except ValueError:
             fresh = False
-    analysis_ready = controller_running and fresh and not cycle_err
+    analysis_ready = (sched["enabled"] and controller_running and
+                      fresh and not cycle_err and
+                      sched["next_run"] is not None)
     analysis_degraded = controller_running and not analysis_ready
 
     # Karar motoru (scoring/rules tabanlı — dürüst ad: DECISION
@@ -177,15 +275,39 @@ def readiness(controller_status: dict[str, Any],
                              "STOPPED"),
     }
 
-    # Genel durum — yalnız controller thread'i yetmez:
-    # analiz tazeliği + decision + risk hazır olmalı.
+    # FALSE GREEN yasağı — GREEN yalnız: scheduler enabled+running,
+    # son analiz taze, next_run mevcut, decision+risk READY,
+    # controller RUNNING, evren hazır. Blocker'lar dürüstçe listelenir.
+    blockers: list[str] = []
+    if emergency_active:
+        blockers.append("EMERGENCY_STOP_ACTIVE")
+    if not sched["enabled"]:
+        blockers.append("SCHEDULER_DISABLED")
+    elif sched["state"] == "STARTUP_FAILED":
+        blockers.append("SCHEDULER_STARTUP_FAILED")
+    elif not analysis_ready:
+        blockers.append("ANALYSIS_STALE" if last_cycle
+                        else "ANALYSIS_NOT_RUN_YET")
+    if not decision_ready:
+        blockers.append("DECISION_ENGINE_NOT_READY")
+    if not risk_ready:
+        blockers.append("RISK_ENGINE_NOT_READY")
+    if not paper_ready:
+        blockers.append("PAPER_CONTROLLER_STOPPED")
+    if not universe_ready:
+        blockers.append("UNIVERSE_EMPTY")
+
     if emergency_active:
         overall = "RED"
-    elif (analysis_ready and decision_ready and risk_ready and
-          paper_ready and universe_ready):
+    elif not blockers:
         overall = "GREEN"
-    elif decision_ready and risk_ready and (
-            controller_running or automation_state != "RUNNING"):
+    elif sched["state"] == "STARTUP_FAILED":
+        # tercih RUNNING ama servis başlamadı → görünür arıza
+        overall = "YELLOW"
+    elif not sched["enabled"]:
+        # scheduler kapalı/çalışmıyor → GREEN imkânsız, RED/BLOCKED
+        overall = "RED"
+    elif decision_ready and risk_ready:
         overall = "YELLOW"
     else:
         overall = "RED"
@@ -193,11 +315,13 @@ def readiness(controller_status: dict[str, Any],
     return {
         "stages": stages,
         "overall_pipeline": overall,
+        "blockers": blockers,
         "universe_size": universe_size,
         "universe_symbols": symbols,
-        "scan_interval_minutes": p["scan_interval_minutes"],
-        "analysis_scheduler": ("RUNNING" if controller_running
-                               else "STOPPED"),
+        "universe_reason_code": universe_reason_code(universe_size),
+        "scan_interval_minutes": sched["interval_minutes"],
+        "analysis_scheduler": sched["state"],
+        "analysis_scheduler_detail": sched,
         "selected_risk_profile": (profile["label"] if profile
                                   else "UNKNOWN"),
         "last_complete_analysis": last_cycle,

@@ -236,11 +236,21 @@
                   (icon[d.overall_pipeline] || "◌") + " " +
                   (d.overall_pipeline || "UNKNOWN"),
                   pipeCls(d.overall_pipeline));
+          // Kanonik scheduler durumu: RUNNING / STOPPED /
+          // STARTUP_FAILED — tercih asla gerçek durum gibi gösterilmez
           setPipe("xh-sched", d.analysis_scheduler || "—",
-                  d.analysis_scheduler === "RUNNING" ? "st-ok" : "st-off");
+                  d.analysis_scheduler === "RUNNING" ? "st-ok" :
+                  d.analysis_scheduler === "STARTUP_FAILED"
+                    ? "st-part" : "st-off");
           setPipe("xh-scan", (d.scan_interval || "?") + " dk", "st-ok");
-          setPipe("xh-uni", (d.universe_size || 0) + " sembol",
-                  d.universe_size > 0 ? "st-ok" : "st-off");
+          var uniTxt = (d.universe_size || 0) + " sembol";
+          if (d.universe_reason_code) {
+            uniTxt += " (" + d.universe_reason_code + ")";
+          }
+          setPipe("xh-uni", uniTxt,
+                  d.universe_size > 0
+                    ? (d.universe_reason_code ? "st-part" : "st-ok")
+                    : "st-off");
           setPipe("xh-lastan",
                   d.last_complete_analysis
                     ? String(d.last_complete_analysis)

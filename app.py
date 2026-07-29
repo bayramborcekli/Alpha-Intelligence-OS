@@ -3752,8 +3752,11 @@ def api_paper_state():
     except Exception as exc:
         app.logger.warning("readiness hesaplanamadı: %s", exc)
         ready = {"stages": {}, "overall_pipeline": "RED",
+                 "blockers": ["READINESS_UNAVAILABLE"],
                  "universe_size": 0, "scan_interval_minutes": 5,
                  "analysis_scheduler": "UNKNOWN",
+                 "analysis_scheduler_detail": {},
+                 "universe_reason_code": None,
                  "selected_risk_profile": "UNKNOWN",
                  "last_complete_analysis": None,
                  "last_decision": None}
@@ -3808,7 +3811,11 @@ def api_paper_state():
         "last_complete_analysis": ready["last_complete_analysis"],
         "last_decision": ready["last_decision"],
         "overall_pipeline": ready["overall_pipeline"],
+        "pipeline_blockers": ready.get("blockers", []),
         "pipeline_stages": ready["stages"],
+        "analysis_scheduler_detail": ready.get(
+            "analysis_scheduler_detail", {}),
+        "universe_reason_code": ready.get("universe_reason_code"),
         "windows_runtime": "RUNNING",  # bu süreç yanıt veriyor
         "paper": ("ACTIVE" if est.get("environment") != "LIVE"
                   and not est["active"] else

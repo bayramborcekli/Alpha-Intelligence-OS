@@ -144,11 +144,23 @@ class TestOrchestrator:
             ac.RUNTIME_SCAN_SECONDS.update(old_scan)
 
     def test_scheduler_stopped_not_green(self, prefs_tmp):
-        """2) Analiz döngüsü çalışmıyorsa overall GREEN OLMAZ."""
+        """2) Analiz döngüsü çalışmıyorsa overall GREEN OLMAZ.
+        Tercih RUNNING + worker STOPPED → STARTUP_FAILED (YELLOW)."""
         from services import system_runtime_orchestrator as sro
         r = sro.readiness({"running": False}, "RUNNING", False)
         assert r["overall_pipeline"] != "GREEN"
+        assert r["analysis_scheduler"] == "STARTUP_FAILED"
+        assert r["overall_pipeline"] == "YELLOW"
+        assert "SCHEDULER_STARTUP_FAILED" in r["blockers"]
+
+    def test_scheduler_preference_stopped_is_red(self, prefs_tmp):
+        """Manuel STOP: tercih STOPPED → RED/BLOCKED, GREEN imkânsız;
+        zorla başlatma yok, durum STOPPED (arıza değil)."""
+        from services import system_runtime_orchestrator as sro
+        r = sro.readiness({"running": False}, "STOPPED", False)
         assert r["analysis_scheduler"] == "STOPPED"
+        assert r["overall_pipeline"] == "RED"
+        assert "SCHEDULER_DISABLED" in r["blockers"]
 
     def test_emergency_stop_forces_red(self, prefs_tmp):
         from services import system_runtime_orchestrator as sro
@@ -161,6 +173,88 @@ class TestOrchestrator:
         r = sro.readiness({"running": True, "last_cycle_time": None},
                           "RUNNING", False)
         assert r["overall_pipeline"] != "GREEN"
+        assert "ANALYSIS_NOT_RUN_YET" in r["blockers"]
+
+
+class TestCanonicalScheduler:
+    """FIX misyonu — tek kanonik scheduler durumu + false GREEN."""
+
+    def test_preference_never_shown_as_running(self, prefs_tmp):
+        """1) Tercih RUNNING + worker STOPPED → running=False."""
+        from services import system_runtime_orchestrator as sro
+        s = sro.scheduler_status({"running": False}, "RUNNING")
+        assert s["enabled"] is True
+        assert s["running"] is False
+        assert s["state"] == "STARTUP_FAILED"
+        assert s["next_run"] is None
+
+    def test_real_worker_running_true(self, prefs_tmp):
+        """2) Gerçek worker çalışınca running=True, next_run üretilir."""
+        from datetime import datetime, timezone
+        from services import system_runtime_orchestrator as sro
+        now = datetime.now(timezone.utc).isoformat()
+        s = sro.scheduler_status(
+            {"running": True, "last_cycle_time": now,
+             "analyzed_symbol_count": 3}, "RUNNING")
+        assert s["running"] is True and s["state"] == "RUNNING"
+        assert s["last_run"] == now and s["next_run"] is not None
+        assert s["analyzed_symbol_count"] == 3
+        assert s["last_result"] == "PASS"
+
+    def test_legacy_60min_cannot_override_5min(self, prefs_tmp,
+                                               monkeypatch):
+        """4) Legacy ALPHA_AUTOMATION 60 dk kanonik 5 dk'yı ezemez."""
+        monkeypatch.setenv("ALPHA_AUTOMATION_INTERVAL_MINUTES", "60")
+        from services import system_runtime_orchestrator as sro
+        s = sro.scheduler_status({"running": False}, "STOPPED")
+        assert s["interval_minutes"] == 5
+
+    def test_manual_stop_preserved(self, prefs_tmp):
+        """11) Manuel STOP → state STOPPED, STARTUP_FAILED değil."""
+        from services import system_runtime_orchestrator as sro
+        s = sro.scheduler_status({"running": False}, "STOPPED")
+        assert s["state"] == "STOPPED"
+        assert s["last_result"] == "STOPPED"
+
+    def test_scheduler_failure_visible_as_blocker(self, prefs_tmp):
+        """6) Scheduler başarısızsa blocker listede görünür."""
+        from services import system_runtime_orchestrator as sro
+        r = sro.readiness({"running": False}, "RUNNING", False)
+        assert r["blockers"]
+        assert any("SCHEDULER" in b for b in r["blockers"])
+
+    def test_universe_reason_code_when_only_base(self):
+        """8) Evren 3'te kalırsa neden kodu döner, sessiz başarı yok."""
+        from services import system_runtime_orchestrator as sro
+        code = sro.universe_reason_code(3)
+        assert code in ("NOT_RUN_YET", "UNIVERSE_REFRESH_FAILED",
+                        "INSUFFICIENT_ELIGIBLE_SYMBOLS",
+                        "FILTERS_EXCLUDED_ALL",
+                        "PUBLIC_DATA_DEGRADED")
+        assert sro.universe_reason_code(12) is None
+
+    def test_local_dev_bypass_label(self):
+        """10) local-dev-bypass kullanıcı adı gibi görünmez."""
+        js = (ROOT / "static/js/operation_control.js").read_text(
+            encoding="utf-8")
+        assert '"Yerel Windows Oturumu"' in js
+
+    def test_opportunity_counter_uses_signal_candidates(self):
+        """9) 'Uygun Fırsatlar' entry_eligible değil gerçek sinyal
+        adayı sayacından beslenir."""
+        js = (ROOT / "static/js/trading_home.js").read_text(
+            encoding="utf-8")
+        assert "signal_candidate_count" in js
+
+    def test_automation_page_canonical_block(self):
+        """5) /automation kanonik bloğu aynı snapshot'tan okur."""
+        html = (ROOT / "templates/automation.html").read_text(
+            encoding="utf-8")
+        for token in ("ANALİZ ZAMANLAYICISI (Kanonik)", "Tercih",
+                      "Gerçek Durum", "Sonraki Koşu",
+                      "Analiz Edilen Sembol", "/api/paper/state",
+                      "STARTUP_FAILED"):
+            assert token in html, token
 
 
 class TestDynamicUniverse:
