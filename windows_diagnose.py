@@ -28,8 +28,10 @@ PAPER_AUTO_LINE = f"{PAPER_AUTO_KEY}=true"
 URLS = [
     ("BINANCE ANA", "https://fapi.binance.com/fapi/v1/ping"),
     ("BINANCE BTC", "https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=10"),
+    ("BINANCE ETH", "https://fapi.binance.com/fapi/v1/klines?symbol=ETHUSDT&interval=1h&limit=10"),
     ("BINANCE SOL", "https://fapi.binance.com/fapi/v1/klines?symbol=SOLUSDT&interval=1h&limit=10"),
 ]
+SYMBOL_LABELS = ("BINANCE BTC", "BINANCE ETH", "BINANCE SOL")
 
 results: dict[str, str] = {}
 
@@ -292,24 +294,35 @@ def main() -> int:
              if k.upper() in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY") and v}
     p(f"proxy env      : {', '.join(proxy) if proxy else 'yok'}")
 
-    # FAZ 3 — doğrudan bağlantı testleri (doğrulama AÇIK)
+    # FAZ 3 — doğrudan bağlantı testleri (doğrulama AÇIK; geçici TLS
+    # kopmalarına karşı her URL 3 kez, artan bekleme + HER denemede YENİ
+    # bağlantı/session denenir)
     p("-" * 62)
+    import time as _time
+
     import requests
     ssl_fail_msg = ""
     for label, url in URLS:
-        try:
-            r = requests.get(url, timeout=15)
-            ok = r.status_code == 200
-            results[label] = "PASS" if ok else f"FAIL (HTTP {r.status_code})"
-            p(f"{label:<14} : {'PASS' if ok else 'FAIL'} (HTTP {r.status_code})")
-        except requests.exceptions.SSLError as exc:
-            results[label] = "FAIL (SSL)"
-            ssl_fail_msg = str(exc)
-            p(f"{label:<14} : FAIL — SSLError")
-        except Exception as exc:
-            results[label] = f"FAIL ({type(exc).__name__})"
-            ssl_fail_msg = ssl_fail_msg or str(exc)
-            p(f"{label:<14} : FAIL — {type(exc).__name__}: {str(exc)[:140]}")
+        for attempt in range(3):
+            try:
+                with requests.Session() as s:
+                    r = s.get(url, timeout=15)
+                ok = r.status_code == 200
+                results[label] = "PASS" if ok else f"FAIL (HTTP {r.status_code})"
+                p(f"{label:<14} : {'PASS' if ok else 'FAIL'} (HTTP {r.status_code})"
+                  + (f"  [deneme {attempt + 1}/3]" if attempt else ""))
+                break
+            except requests.exceptions.SSLError as exc:
+                results[label] = "FAIL (SSL)"
+                ssl_fail_msg = str(exc)
+                p(f"{label:<14} : FAIL — SSLError  [deneme {attempt + 1}/3]")
+            except Exception as exc:
+                results[label] = f"FAIL ({type(exc).__name__})"
+                ssl_fail_msg = ssl_fail_msg or str(exc)
+                p(f"{label:<14} : FAIL — {type(exc).__name__}: "
+                  f"{str(exc)[:120]}  [deneme {attempt + 1}/3]")
+            if attempt < 2:
+                _time.sleep(1.5 * (attempt + 1))
 
     # FAZ 5 — çalışan sunucu varsa runtime durumu
     p("-" * 62)
@@ -332,6 +345,7 @@ def main() -> int:
     p("=" * 62)
     p("FINAL RAPOR")
     all_binance = all(results.get(k) == "PASS" for k, _ in [(l, u) for l, u in URLS])
+    sym_pass = sum(1 for k in SYMBOL_LABELS if results.get(k) == "PASS")
     p(f"SSL/BINANCE    : {'PASS' if all_binance else 'FAIL'}")
     for label, _ in URLS:
         p(f"  {label:<12} : {results.get(label)}")
@@ -346,9 +360,79 @@ def main() -> int:
     elif all_binance:
         p("ROOT CAUSE     : SSL engeli YOK — sunucuyu yeniden baslatin, "
           "kart yesile doner.")
+    if not all_binance and sym_pass >= 2:
+        p(f"NOT            : {sym_pass}/3 sembol calisiyor — sunucu yine de "
+          "baslatilir; controller calisan sembollerle cevrim yapar.")
     p("=" * 62)
-    return 0 if all_binance else 1
+    # En az 2 sembol + ana endpoint çalışıyorsa kurtarma akışı devam eder.
+    ana_ok = results.get("BINANCE ANA") == "PASS"
+    return 0 if (all_binance or (ana_ok and sym_pass >= 2)) else 1
+
+
+def wait_health(timeout_s: int = 120) -> int:
+    """Sunucu başladıktan sonra /health/runtime'ı bekler; tek özet basar.
+
+    Beklenen: controller=running ve cycle_count>=1 (ilk çevrim gecikirse
+    süre boyunca yeniden denenir). Salt okunur.
+    """
+    import time as _time
+
+    import requests
+    deadline = _time.time() + timeout_s
+    last: dict = {}
+    while _time.time() < deadline:
+        try:
+            r = requests.get("http://127.0.0.1:5000/health/runtime", timeout=5)
+            if r.status_code == 200:
+                last = r.json()
+                if (last.get("controller") == "running"
+                        and (last.get("cycle_count") or 0) >= 1):
+                    break
+        except Exception:
+            pass
+        _time.sleep(5)
+    p("=" * 62)
+    p("WINDOWS INTEGRATED RECOVERY — FINAL")
+    if not last:
+        p("SERVER         : STOPPED (health yaniti alinamadi)")
+        p("RUNTIME CARD   : \U0001F534")
+        p("ROOT CAUSE     : sunucu baslatilamadi — konsol loglarini kontrol edin.")
+        p("=" * 62)
+        return 1
+    ctrl = last.get("controller")
+    cyc = last.get("cycle_count") or 0
+    ok = ctrl == "running" and cyc >= 1
+    p("SERVER         : RUNNING")
+    p(f"ENTRYPOINT     : {last.get('entrypoint')}")
+    p(f"GIT HEAD       : {last.get('git_head')}")
+    p(f"RUNTIME OVERRIDE: {last.get('runtime_override')}")
+    p(f"AUTO LOOP      : {last.get('auto_loop')}")
+    p(f"CONTROLLER     : {str(ctrl).upper()}")
+    p(f"PAPER          : {str(last.get('paper')).upper()}")
+    p(f"CYCLE COUNT    : {cyc}")
+    p(f"LAST CYCLE     : {last.get('last_cycle')}")
+    p("RUNTIME CARD   : " + ("\U0001F7E2" if ok else "\U0001F7E1"))
+    if not ok:
+        if not last.get("runtime_override"):
+            p("ROOT CAUSE     : runtime_override=false — .env'de "
+              "ALPHA_WINDOWS_PAPER_AUTO=true eksik/ezilmis (teshis "
+              "ciktisindaki ONARIM satirina bakin).")
+        elif ctrl != "running":
+            p("ROOT CAUSE     : controller baslamadi — konsoldaki "
+              "'CONTROLLER' satirlarini kontrol edin.")
+        else:
+            p("ROOT CAUSE     : ilk cevrim henuz tamamlanmadi — sunucu "
+              "calisiyor, birkac dakika sonra panelden kontrol edin.")
+    p("=" * 62)
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
+    if "--wait-health" in sys.argv:
+        try:
+            idx = sys.argv.index("--wait-health")
+            timeout = int(sys.argv[idx + 1])
+        except (ValueError, IndexError):
+            timeout = 120
+        sys.exit(wait_health(timeout))
     sys.exit(main())
