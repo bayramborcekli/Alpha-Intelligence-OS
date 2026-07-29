@@ -1,0 +1,147 @@
+MISSION — PAPER FIRST TRADE ACCEPTANCE TEST (FINAL VALIDATION)
+
+AMAÇ:
+Windows Paper AUTO sisteminde ilk gerçek kabul edilen Paper trade zincirini uçtan uca doğrula.
+
+KOD DEĞİŞİKLİĞİ YAPMA.
+
+ÖN KOŞUL:
+
+- ALPHA_WINDOWS_PAPER_AUTO=true
+- Runtime override aktif
+- consecutive_losses=0
+- Controller çalışıyor
+- Scheduler çalışıyor
+- Live trading kapalı
+
+==================================================================
+1) RUNTIME KONTROL
+==================================================================
+
+Başlangıç logları:
+
+✓ WINDOWS PAPER AUTO ENABLED (RUNTIME)
+✓ AUTO LOOP STARTED
+✓ CONTROLLER STARTED
+
+Doğrula:
+
+- cycle_count artıyor mu?
+- last_cycle güncelleniyor mu?
+- exception var mı?
+
+==================================================================
+2) ACCEPTED SIGNAL BEKLEME
+==================================================================
+
+İlk REJECT olmayan sinyali yakala.
+
+Raporla:
+
+- symbol
+- direction (LONG/SHORT)
+- score
+- final_score
+- reason
+
+Reject edilenleri listeleme.
+Sadece kabul edilen ilk sinyal.
+
+==================================================================
+3) PAPER ORDER
+==================================================================
+
+İlk Paper işlem oluştuğunda raporla:
+
+- trade_id
+- symbol
+- side
+- quantity
+- entry_price
+- stop_loss
+- take_profit
+- timestamp
+
+Kanıt:
+
+state.json
+trade_history.json
+
+==================================================================
+4) POSITION MANAGEMENT
+==================================================================
+
+Açılan pozisyon için doğrula:
+
+manage_position()
+
+çalıştı mı?
+
+Rapor:
+
+- çağrı zamanı
+- pozisyon durumu
+- SL/TP değerleri
+
+==================================================================
+5) KAPANIŞ TESTİ
+==================================================================
+
+Pozisyon kapanırsa:
+
+- exit_price
+- close_reason
+- pnl
+- balance_after
+
+raporla.
+
+==================================================================
+6) DASHBOARD DOĞRULAMA
+==================================================================
+
+Windows Runtime kartında:
+
+✓ Controller çalışıyor
+✓ Cycle count artıyor
+✓ Son çevrim dolu
+✓ Açık pozisyon görünüyor
+✓ Son trade görünüyor
+
+Paper bölümünde:
+
+✓ bakiye
+✓ pozisyon
+✓ işlem geçmişi
+
+==================================================================
+7) BINANCE GÜVENLİK
+==================================================================
+
+Kanıtla:
+
+- public market data kullanılıyor
+- imzalı order endpoint çağrılmadı
+- gerçek emir gönderilmedi
+
+==================================================================
+8) SONUÇ
+
+Eğer zincir tamamlandıysa:
+
+PASS
+
+Eğer durduysa:
+
+SADECE TEK KÖK NEDEN RAPORLA.
+
+Çıktı:
+
+- İlk kabul edilen sinyal
+- İlk Paper trade
+- İlk pozisyon
+- İlk kapanış
+- Kalan tek engel
+
+Kod değişikliği yok.
+Tek rapor.
