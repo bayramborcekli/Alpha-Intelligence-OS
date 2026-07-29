@@ -15,4 +15,5 @@
 - [Task agent scope deletions](task-agent-scope-deletions.md) — merge'ler son eklenen kodu ve .replit userenv değişkenlerini "kapsam dışı" diye silebilir; her merge sonrası doğrula.
 - [Windows SSL truststore](windows-ssl-truststore.md) — AV/proxy HTTPS denetimi certifi'yi kırar; truststore.inject_into_ssl (yalnız nt, app import'tan önce) kök çözüm; verify asla kapatılmaz.
 - [Binance connection service](binance-connection-service.md) — tek kanonik bağlantı/izin/saklama servisi; route-guard allowlist'i tam rota + gerekçeli yorumla genişletilir; DPAPI fail-closed.
+- [Browser e2e Playwright](browser-e2e-playwright.md) — Playwright'ın kendi chromium'u Nix'te libnspr4 ile çöker; Nix chromium + executable_path kullan, timer'ları page.clock ile sar.
 - [Merge push gap](merge-push-gap.md) — görev ajanı merge'leri GitHub'a otomatik push ETMEZ; Windows git pull öncesi origin/main HEAD eşitliğini her seferinde doğrula.
