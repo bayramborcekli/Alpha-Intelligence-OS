@@ -120,8 +120,14 @@ def append_decision(
     reason: str,
     config_version: str = "1",
     components: dict | None = None,
+    trace: dict | None = None,
 ) -> None:
+    """``trace``: Decision Trace ek alanları (correlation_id,
+    data_status, selected_risk_profile, calculated_position_size,
+    risk_result, final_decision, rejection_reason ...). Karar kaydına
+    olduğu gibi eklenir; eski kayıtlarla geriye uyumlu (opsiyonel)."""
     _append("decisions", {
+        **(trace or {}),
         "ts": _now_iso(), "symbol": symbol, "price": round(price, 8),
         "regime": regime, "regime_confidence": regime_confidence,
         "strategy_score": strategy_score, "final_score": final_score,

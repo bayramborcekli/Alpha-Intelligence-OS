@@ -170,4 +170,104 @@
     setInterval(refresh, 30000);
   })();
   </script>
+  <!-- MASTER INTEGRATION — Pipeline şeridi + risk profili seçici.
+       Mission 1400.5 sözleşmesi (üst monitoring bölümünde işlem
+       düğmesi yok) yukarıdaki salt-okunur bölüm için geçerlidir;
+       risk profili seçici misyonla eklenmiş, emir GÖNDERMEYEN tek
+       kontrol. Tek doğruluk kaynağı: GET /api/paper/state. -->
+  <style>
+    .xh-rp { font-size:.68rem; font-weight:700; padding:2px 8px;
+             border-radius:10px; border:1px solid #30363d; cursor:pointer;
+             background:#161b22; color:#8b949e; }
+    .xh-rp.active { border-color:rgba(88,166,255,.6); color:#58a6ff;
+                    background:rgba(88,166,255,.12); }
+  </style>
+  <div class="xh-row xh-status" role="group"
+       aria-label="Pipeline durum çubuğu">
+    <span class="xh-st">Pipeline <span id="xh-pipe" class="st-unk">—</span></span>
+    <span class="xh-st">Analiz Zamanlayıcısı <span id="xh-sched" class="st-unk">—</span></span>
+    <span class="xh-st">Tarama <span id="xh-scan" class="st-unk">—</span></span>
+    <span class="xh-st">Evren <span id="xh-uni" class="st-unk">—</span></span>
+    <span class="xh-st">Son Analiz <span id="xh-lastan" class="st-unk">—</span></span>
+    <span class="xh-st" style="display:inline-flex;gap:6px;align-items:center">
+      Risk Profili
+      <span id="xh-rp-group" role="group" aria-label="Risk profili seçici">
+        <button type="button" class="xh-rp" data-rp="KORUMA">KORUMA</button>
+        <button type="button" class="xh-rp" data-rp="DENGELI">DENGELİ</button>
+        <button type="button" class="xh-rp" data-rp="AGRESIF">AGRESİF</button>
+      </span>
+    </span>
+  </div>
+  <script>
+  (function () {
+    "use strict";
+    // CSRF token'ı sayfanın mevcut meta'sından oku (şablon
+    // determinizmi: topbar'a oturum-bağımlı içerik gömülmez).
+    function csrfToken() {
+      var m = document.querySelector('meta[name="csrf-token"]');
+      return m ? m.getAttribute("content") : "";
+    }
+    function el(id) { return document.getElementById(id); }
+    function pipeCls(v) {
+      if (v === "GREEN") return "st-ok";
+      if (v === "YELLOW") return "st-part";
+      if (v === "RED") return "st-off";
+      return "st-unk";
+    }
+    function setPipe(id, text, cls) {
+      var e = el(id); if (!e) return;
+      e.textContent = text; e.className = cls || "st-unk";
+    }
+    function markProfile(sel) {
+      document.querySelectorAll(".xh-rp").forEach(function (b) {
+        b.className = "xh-rp" +
+          (b.getAttribute("data-rp") === sel ? " active" : "");
+      });
+    }
+    var rpAlias = { "KORUMA": "KORUMA", "DENGELİ": "DENGELI",
+                    "AGRESİF": "AGRESIF" };
+    function refreshPipeline() {
+      fetch("/api/paper/state", { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d) return;
+          var icon = { GREEN: "🟢", YELLOW: "🟡", RED: "🔴" };
+          setPipe("xh-pipe",
+                  (icon[d.overall_pipeline] || "◌") + " " +
+                  (d.overall_pipeline || "UNKNOWN"),
+                  pipeCls(d.overall_pipeline));
+          setPipe("xh-sched", d.analysis_scheduler || "—",
+                  d.analysis_scheduler === "RUNNING" ? "st-ok" : "st-off");
+          setPipe("xh-scan", (d.scan_interval || "?") + " dk", "st-ok");
+          setPipe("xh-uni", (d.universe_size || 0) + " sembol",
+                  d.universe_size > 0 ? "st-ok" : "st-off");
+          setPipe("xh-lastan",
+                  d.last_complete_analysis
+                    ? String(d.last_complete_analysis)
+                        .replace("T", " ").slice(0, 16)
+                    : "yok",
+                  d.last_complete_analysis ? "st-ok" : "st-part");
+          markProfile(rpAlias[d.selected_risk_profile] ||
+                      d.selected_risk_profile);
+        })
+        .catch(function () { /* rozetler mevcut halinde kalır */ });
+    }
+    document.querySelectorAll(".xh-rp").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var rp = b.getAttribute("data-rp");
+        fetch("/api/risk-profile", {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json",
+                     "X-CSRFToken": csrfToken() },
+          body: JSON.stringify({ profile: rp })
+        }).then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d && d.ok) { markProfile(rp); refreshPipeline(); }
+          }).catch(function () {});
+      });
+    });
+    refreshPipeline();
+    setInterval(refreshPipeline, 30000);
+  })();
+  </script>
 </div>

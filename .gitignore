@@ -136,3 +136,6 @@ data/local_admin.json
 data/
 intelligence_history.jsonl
 .env.backup_*
+alpha20_v1/runtime_preferences.json
+alpha20_v1/runtime_preferences.json.bak
+alpha20_v1/pipeline_test_ledger.jsonl

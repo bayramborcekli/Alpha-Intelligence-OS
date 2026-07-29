@@ -3739,7 +3739,76 @@ def api_paper_state():
     n_enabled = sum(1 for s in strategies if s["enabled"])
     n_running = sum(1 for s in strategies
                     if s["run_state"] == "RUNNING")
+    # Readiness graph + evren + profil (orchestrator — mevcut kanonik
+    # kaynakları okur, ağ çağrısı yapmaz)
+    from services import system_runtime_orchestrator as sro
+    try:
+        auto_state = get_operation_service().automation_state.value
+    except Exception:
+        auto_state = "UNKNOWN"
+    try:
+        ready = sro.readiness(ac.get_status(), auto_state,
+                              bool(est["active"]))
+    except Exception as exc:
+        app.logger.warning("readiness hesaplanamadı: %s", exc)
+        ready = {"stages": {}, "overall_pipeline": "RED",
+                 "universe_size": 0, "scan_interval_minutes": 5,
+                 "analysis_scheduler": "UNKNOWN",
+                 "selected_risk_profile": "UNKNOWN",
+                 "last_complete_analysis": None,
+                 "last_decision": None}
+    # Dürüst sayaçlar: enabled sembol "fırsat" DEĞİLDİR. Sinyal adayı
+    # = son karar kayıtlarında WATCH/OPEN; riskten geçen = risk
+    # allowed; paper intent = OPEN kararı.
+    recent = sro.recent_decisions(100)
+    latest_by_symbol: dict[str, dict] = {}
+    for d in recent:
+        if d.get("symbol"):
+            latest_by_symbol[d["symbol"]] = d
+    vals = list(latest_by_symbol.values())
+    signal_candidates = sum(1 for d in vals
+                            if d.get("decision") in ("WATCH", "OPEN"))
+    risk_approved = sum(1 for d in vals
+                        if (d.get("risk_result") or {}).get("allowed"))
+    paper_intents = sum(1 for d in vals
+                        if d.get("decision") == "OPEN")
+    try:
+        bt = (bcn.status().get("BINANCE_TR") or {}).get(
+            "status", "NOT_CONFIGURED")
+    except Exception:
+        bt = "UNKNOWN"
+    try:
+        import json as _json
+        open_positions = 0
+        if STATE_PATH.exists():
+            st = _json.loads(STATE_PATH.read_text(encoding="utf-8"))
+            open_positions = 1 if st.get("position") else 0
+    except Exception:
+        open_positions = 0
     payload = {
+        "analysis_scheduler": ready["analysis_scheduler"],
+        "scan_interval": ready["scan_interval_minutes"],
+        "universe_size": ready["universe_size"],
+        "market_data_status": ready["stages"].get("market_data",
+                                                  "UNKNOWN"),
+        "feature_pipeline": ready["stages"].get("features",
+                                                "UNKNOWN"),
+        "decision_engine": ready["stages"].get("decision_engine",
+                                               "UNKNOWN"),
+        "selected_risk_profile": ready["selected_risk_profile"],
+        "risk_engine": ready["stages"].get("risk_engine", "UNKNOWN"),
+        "strategy_count": len(strategies),
+        "enabled_strategy_count": n_enabled,
+        "running_strategy_count": n_running,
+        "signal_candidate_count": signal_candidates,
+        "risk_approved_count": risk_approved,
+        "paper_intent_count": paper_intents,
+        "open_paper_position_count": open_positions,
+        "binance_tr": bt,
+        "last_complete_analysis": ready["last_complete_analysis"],
+        "last_decision": ready["last_decision"],
+        "overall_pipeline": ready["overall_pipeline"],
+        "pipeline_stages": ready["stages"],
         "windows_runtime": "RUNNING",  # bu süreç yanıt veriyor
         "paper": ("ACTIVE" if est.get("environment") != "LIVE"
                   and not est["active"] else
@@ -3759,6 +3828,71 @@ def api_paper_state():
     resp = jsonify(payload)
     resp.headers["Cache-Control"] = "no-store, private"
     return resp
+
+
+@app.get("/api/risk-profile")
+def api_risk_profile_get():
+    from services import risk_profiles as rp
+    p = rp.current_profile()
+    return jsonify({"ok": True, "data": {
+        "selected": p["name"], "label": p["label"],
+        "version": p["version"],
+        "profiles": {k: {
+            "label": v["label"],
+            "risk_per_trade_limit": float(
+                v["risk_per_trade_fraction"]),
+            "daily_loss_limit": float(v["daily_loss_fraction"]),
+            "maximum_drawdown_limit": float(
+                v["max_drawdown_fraction"]),
+        } for k, v in rp.PROFILES.items()}}})
+
+
+@app.post("/api/risk-profile")
+def api_risk_profile_set():
+    """Risk profili seçimi — kalıcı (git dışı yerel tercih deposu) ve
+    GERÇEK motor bağlantılı: adaptive_risk override'ı anında yenilenir.
+    Yalnız YENİ Paper kararlarına uygulanır; açık pozisyonu geriye
+    dönük değiştirmez. Emergency/Risk Stop'u bypass edemez."""
+    from services import risk_profiles as rp
+    from services import system_runtime_orchestrator as sro
+    body = request.get_json(silent=True) or {}
+    try:
+        name = rp.set_profile(str(body.get("profile", "")))
+    except ValueError:
+        return jsonify({"ok": False, "error": {
+            "code": "INVALID_RISK_PROFILE",
+            "message": "Geçerli profil: KORUMA, DENGELİ, AGRESİF"}}), 400
+    try:
+        sro.apply_user_preferences(ac)  # yeni limitler hemen aktif
+    except Exception as exc:
+        app.logger.warning("Profil override uygulanamadı: %s", exc)
+    return jsonify({"ok": True, "data": {
+        "selected": name, "applied_to_risk_engine": True}})
+
+
+@app.get("/api/decision-trace")
+def api_decision_trace():
+    """Decision Trace — 'neden işlem açılmadı?' kanıtı (salt-okunur)."""
+    from services import system_runtime_orchestrator as sro
+    n = min(max(int(request.args.get("n", 50)), 1), 200)
+    symbol = request.args.get("symbol")
+    rows = sro.recent_decisions(200)
+    if symbol:
+        rows = [r for r in rows if r.get("symbol") == symbol]
+    resp = jsonify({"ok": True, "data": rows[-n:]})
+    resp.headers["Cache-Control"] = "no-store, private"
+    return resp
+
+
+@app.post("/api/paper/pipeline-test")
+def api_paper_pipeline_test():
+    """PAPER PIPELINE TEST — sentetik, TEST etiketli hat doğrulaması.
+    Varsayılan kapalı; açık onay ifadesi ister. Gerçek emir yok."""
+    from services import paper_pipeline_test as ppt
+    body = request.get_json(silent=True) or {}
+    actor = session.get("username") or "local"
+    out = ppt.run(str(body.get("confirmation", "")), actor)
+    return jsonify(out), (200 if out.get("ok") else 400)
 
 
 @app.get("/settings/binance")

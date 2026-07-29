@@ -41,6 +41,11 @@ KLINE_LIMIT       = 100
 MIN_CANDLES       = 55
 LOG_MAX           = 100
 
+# Temel semboller — HER ZAMAN evrende kalır (dinamik seçim çıkaramaz).
+BASE_SYMBOLS: tuple[str, ...] = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
+# Dinamik evren üst sınırı (temel semboller dahil toplam).
+HARD_MAX_COINS = 20
+
 # ── Akıllı seçim varsayılanları ────────────────────────────────────────────────
 SMART_DEFAULTS: dict[str, Any] = {
     "mode":                "MANUEL",   # MANUEL | ONERI | OTOMATIK
@@ -95,9 +100,28 @@ def get_smart_config() -> dict[str, Any]:
             return dict(SMART_DEFAULTS)
         merged = dict(SMART_DEFAULTS)
         merged.update(data)
-        return merged
+        return _enforce_universe_contract(merged)
     except (OSError, json.JSONDecodeError):
-        return dict(SMART_DEFAULTS)
+        return _enforce_universe_contract(dict(SMART_DEFAULTS))
+
+
+def _enforce_universe_contract(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Misyon sözleşmesi (yükleme anında, dosyaya YAZMADAN):
+
+    - BTC/ETH/SOL her zaman pinned — dinamik seçim çıkaramaz.
+    - Toplam evren en fazla HARD_MAX_COINS (20) sembol."""
+    pinned = list(cfg.get("pinned") or [])
+    for sym in BASE_SYMBOLS:
+        if sym not in pinned:
+            pinned.append(sym)
+    cfg["pinned"] = pinned
+    try:
+        max_coins = int(cfg.get("max_coins", 10))
+    except (TypeError, ValueError):
+        max_coins = 10
+    cfg["max_coins"] = max(len(BASE_SYMBOLS),
+                           min(HARD_MAX_COINS, max_coins))
+    return cfg
 
 
 def save_smart_config(cfg: dict[str, Any]) -> None:

@@ -283,6 +283,13 @@ def _bootstrap_background_services() -> None:
         log.warning("CONTROLLER başlatılamadı: %s", exc)
 
     # 4a2. Desired-state reconciliation — kayıtlı Paper tercihini geri yükle.
+    # Tercihleri (risk profili, scan interval) motorlara uygula —
+    # reconcile'dan ÖNCE, controller doğru limitlerle başlasın.
+    try:
+        from services import system_runtime_orchestrator as sro
+        sro.start(_app)
+    except Exception as exc:
+        log.warning("Orchestrator başlangıcı başarısız: %s", exc)
     _reconcile_paper_desired_state(_app)
 
     # 4b. Automation scheduler — yalnız ALPHA_AUTOMATION_ENABLED="true" ise

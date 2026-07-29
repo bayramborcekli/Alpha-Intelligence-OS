@@ -145,6 +145,14 @@ class TestRouteSurface:
         # bilinçli genişletme)
         "/api/accounts/<account_id>/credentials",
         "/api/accounts/<account_id>/connect",
+        # MASTER INTEGRATION: risk profili seçimi (CSRF+auth korumalı;
+        # yalnız git dışı yerel tercih deposu + bellek-içi adaptive
+        # override — config.json'a yazmaz, emir GÖNDERMEZ) ve PAPER
+        # PIPELINE TEST (açık onay ifadesi zorunlu; sentetik, TEST
+        # etiketli ayrı ledger; gerçek emir yolu yok) — bilinçli
+        # genişletme.
+        "/api/risk-profile",
+        "/api/paper/pipeline-test",
         "/api/accounts/<account_id>/disconnect",
         "/api/accounts/<account_id>/primary",
         "/api/accounts/<account_id>/edit",

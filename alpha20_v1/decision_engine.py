@@ -257,6 +257,7 @@ def log_decision(
     decision: str,
     reason: str,
     config_version: str = "1",
+    trace: dict | None = None,
 ) -> None:
     try:
         ms.append_decision(
@@ -266,6 +267,7 @@ def log_decision(
             risk_pct=risk_pct, stop=stop, target=target,
             decision=decision, reason=reason,
             config_version=config_version, components=components,
+            trace=trace,
         )
     except Exception:
         pass

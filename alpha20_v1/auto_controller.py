@@ -72,6 +72,20 @@ def _update_status(**kwargs: Any) -> None:
 RUNTIME_ADAPTIVE_OVERRIDE: dict[str, Any] = {}
 
 
+# Bellek-içi tarama aralığı override'ı (saniye). Kalıcı kaynak:
+# services/runtime_preferences.py (scan_interval_minutes, varsayılan 5).
+# config.json'a yazılmaz; orchestrator her başlangıçta yeniden uygular.
+RUNTIME_SCAN_SECONDS: dict[str, int] = {}
+
+
+def set_runtime_scan_seconds(seconds: int | None) -> None:
+    """Tarama aralığını bellekte override et (None = kaldır)."""
+    RUNTIME_SCAN_SECONDS.clear()
+    if seconds is not None and seconds > 0:
+        RUNTIME_SCAN_SECONDS["value"] = int(seconds)
+        log.info("Runtime scan override: %ss (yalnız bellek).", seconds)
+
+
 def set_runtime_adaptive_override(flags: dict[str, Any]) -> None:
     """Bellek-içi adaptive_system override'ını ayarla (dosyaya yazmaz)."""
     RUNTIME_ADAPTIVE_OVERRIDE.clear()
@@ -387,7 +401,35 @@ def _process_symbol(
         decision_type = "REJECT"
         decision_reason = reason
 
-    # Log
+    # Log — Decision Trace: her karar kaydında profil, veri durumu ve
+    # nihai karar nedeni zorunlu alanlarla saklanır ("neden işlem
+    # açılmadı?" sorusunun kanıtı).
+    trace_fields: dict[str, Any] = {
+        "correlation_id": f"dt-{symbol}-{int(time.time() * 1000)}",
+        "data_status": ("DATA_FRESH" if dq_score >= 70 else
+                        "DATA_DEGRADED" if dq_score >= 40 else
+                        "DATA_STALE"),
+        "signal_direction": side or "NONE",
+        "decision_score": round(final_score, 1),
+        "required_threshold": float(
+            adaptive_cfg.get("final_decision_threshold",
+                             de.DEFAULT_AUTO_THRESHOLD)),
+        "calculated_position_size": 0.0,  # OPEN'da güncellenir
+        "risk_result": risk_res.to_dict() if hasattr(
+            risk_res, "to_dict") else {
+            "allowed": risk_res.allowed,
+            "risk_pct": risk_res.risk_pct},
+        "cooldown_status": "OK" if cooldown_ok else "COOLDOWN",
+        "final_decision": ("OPEN" if decision_type == "OPEN"
+                           else "NO_TRADE"),
+        "rejection_reason": (decision_reason
+                             if decision_type != "OPEN" else ""),
+    }
+    try:
+        from services import risk_profiles as rp
+        trace_fields.update(rp.decision_fields())
+    except Exception:
+        pass
     de.log_decision(
         symbol=symbol, price=price, side=side,
         final_score=final_score, category=category,
@@ -397,6 +439,7 @@ def _process_symbol(
         risk_pct=risk_res.risk_pct,
         stop=None, target=None,
         decision=decision_type, reason=decision_reason,
+        trace=trace_fields,
     )
 
     decisions.append({
@@ -604,7 +647,8 @@ def start_controller_loop() -> bool:
                         except Exception as exc:
                             log.warning("Öğrenme motoru hatası: %s", exc)
 
-                    scan_s = int(cfg.get("scan_seconds", 60))
+                    scan_s = RUNTIME_SCAN_SECONDS.get(
+                        "value", int(cfg.get("scan_seconds", 60)))
                     _update_status(
                         last_cycle_error=None,
                         next_cycle_time=(

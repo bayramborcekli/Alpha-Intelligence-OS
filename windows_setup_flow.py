@@ -410,6 +410,24 @@ def connect_accounts() -> None:
             report[label] = "FAIL"
 
 
+def fetch_pipeline_snapshot() -> dict:
+    """Tek doğruluk kaynağı /api/paper/state'ten pipeline özeti al.
+
+    Endpoint auth ister; local Windows'ta local-dev-bypass devrededir.
+    Alınamazsa boş dict döner — FINAL rapor UNKNOWN yazar, uydurmaz."""
+    import requests
+    port = os.environ.get("ALPHA_PORT", "5000").strip() or "5000"
+    try:
+        r = requests.get(f"http://127.0.0.1:{port}/api/paper/state",
+                         timeout=8)
+        if r.status_code == 200:
+            data = r.json()
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+
 def final_report(health: dict) -> int:
     ctrl = str(health.get("controller", "stopped"))
     cyc = int(health.get("cycle_count") or 0)
@@ -450,6 +468,27 @@ def final_report(health: dict) -> int:
               "'Paper Kilidini Kontrol Et ve Kaldir'")
     except Exception:
         p("EMERGENCY STOP : UNKNOWN")
+    # Misyon bölüm 25 — pipeline özeti (tek snapshot kaynağından)
+    snap = fetch_pipeline_snapshot()
+
+    def sv(key: str, default: str = "UNKNOWN") -> str:
+        v = snap.get(key)
+        return str(v) if v not in (None, "") else default
+    p(f"MARKET DATA    : {sv('market_data_status')}")
+    p(f"DYNAMIC UNIVERSE: {sv('universe_size', '0')} symbols")
+    p(f"ANALYSIS SCHEDULER: {sv('analysis_scheduler')}")
+    p(f"SCAN INTERVAL  : {sv('scan_interval', '?')} min")
+    p(f"FEATURE PIPELINE: {sv('feature_pipeline')}")
+    p(f"DECISION ENGINE: {sv('decision_engine')}")
+    p(f"RISK PROFILE   : {sv('selected_risk_profile')}")
+    p(f"RISK ENGINE    : {sv('risk_engine')}")
+    p(f"ENABLED STRATEGIES: {sv('enabled_strategy_count', '0')}")
+    p(f"LAST COMPLETE ANALYSIS: {sv('last_complete_analysis', '-')}")
+    p(f"LAST DECISION  : {sv('last_decision', '-')}")
+    _ovr = sv('overall_pipeline')
+    _icon = {"GREEN": "\U0001F7E2", "YELLOW": "\U0001F7E1",
+             "RED": "\U0001F534"}.get(_ovr, "?")
+    p(f"OVERALL PIPELINE: {_icon} {_ovr}")
     p("LIVE ORDERS    : DISABLED")
     p(f"RUNTIME CARD   : {card}")
     if not ok:
