@@ -54,7 +54,7 @@ def test_payload_fields_and_read_only(client):
     for key in ("app", "paper", "controller", "auto_loop", "cycle_count",
                 "last_cycle", "positions", "paper_balance", "last_trade",
                 "last_error", "runtime_override", "safe_mode",
-                "git_head", "entrypoint", "started_at"):
+                "git_head", "code_stale", "entrypoint", "started_at"):
         assert key in d
     assert d["app"] == "running"
     assert d["controller"] in ("running", "stopped")
@@ -82,6 +82,46 @@ def test_git_head_null_on_failure(monkeypatch):
         raise OSError("git yok")
     monkeypatch.setattr(m.subprocess, "run", boom)
     assert m._runtime_git_head() is None
+
+
+def test_code_stale_false_when_heads_match(client):
+    """Süreç HEAD'i = disk HEAD'i iken code_stale False."""
+    d = client.get("/health/runtime").get_json()
+    assert d["code_stale"] is False
+
+
+def test_code_stale_true_on_head_mismatch(monkeypatch, client):
+    """Disk HEAD'i farklıysa code_stale True olur."""
+    import app as m
+    if not m._RUNTIME_GIT_HEAD:
+        pytest.skip("git HEAD alınamadı")
+    monkeypatch.setattr(m, "_runtime_git_head", lambda: "fffffff")
+    d = client.get("/health/runtime").get_json()
+    assert d["code_stale"] is True
+
+
+def test_code_stale_false_when_git_unavailable(monkeypatch, client):
+    """Karşılaştırma yapılamıyorsa (git yok) yanlış alarm üretmez."""
+    import app as m
+    monkeypatch.setattr(m, "_runtime_git_head", lambda: None)
+    d = client.get("/health/runtime").get_json()
+    assert d["code_stale"] is False
+
+
+def test_code_stale_false_when_process_head_unknown(monkeypatch):
+    """Süreç HEAD'i bilinmiyorsa code_stale False döner."""
+    import app as m
+    monkeypatch.setattr(m, "_RUNTIME_GIT_HEAD", None)
+    assert m._runtime_code_stale() is False
+
+
+def test_dashboard_stale_warning_present():
+    """Kartta Türkçe 'eski kod' uyarı satırı ve code_stale kontrolü var."""
+    src = (ROOT / "templates" / "trading_home.html").read_text(
+        encoding="utf-8")
+    assert "code_stale" in src
+    assert "Eski kod çalışıyor" in src
+    assert "yeniden başlatın" in src
 
 
 def test_no_secrets_in_payload(client):

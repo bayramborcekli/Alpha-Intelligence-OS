@@ -239,6 +239,8 @@
         ? (d.open_position.symbol + " " + d.open_position.side +
            " @ " + d.open_position.entry) : "yok");
     var notes = [];
+    if (d.code_stale)
+      notes.push("\u26A0 Eski kod çalışıyor — yeniden başlatın");
     if (d.runtime_override) notes.push("Runtime override aktif (yalnız bellek)");
     if (d.safe_mode && d.safe_mode_reason)
       notes.push("Güvenlik: " + d.safe_mode_reason);

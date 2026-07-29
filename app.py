@@ -969,6 +969,20 @@ def _runtime_git_head():
 _RUNTIME_GIT_HEAD = _runtime_git_head()
 
 
+def _runtime_code_stale():
+    """Süreç HEAD'i ile diskteki güncel HEAD farklıysa True.
+
+    Karşılaştırma yapılamıyorsa (git yok, HEAD alınamadı) False döner —
+    yanlış alarm üretmez. Salt okunur.
+    """
+    if not _RUNTIME_GIT_HEAD:
+        return False
+    disk_head = _runtime_git_head()
+    if not disk_head:
+        return False
+    return disk_head != _RUNTIME_GIT_HEAD
+
+
 def _runtime_entrypoint():
     """Sürecin başlatılma yolu — sys.argv özetinden (dosya içeriği dönmez)."""
     try:
@@ -1069,6 +1083,7 @@ def health_runtime():
         "last_trade": last_trade,
         "last_error": last_error,
         "git_head": _RUNTIME_GIT_HEAD,
+        "code_stale": _runtime_code_stale(),
         "entrypoint": _runtime_entrypoint(),
         "started_at": _APP_STARTED_AT,
         "uptime_s": round(time.time() - _APP_START_TIME, 1),
