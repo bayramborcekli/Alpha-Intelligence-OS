@@ -1,0 +1,736 @@
+MISSION — CORE WINDOWS RECOVERY AGENT + ONE-CLICK BINANCE CONNECTION AGENT
+
+AMAÇ
+
+Daha önce başarıyla çalışan Windows tek tık kurulum/kurtarma çözümünü geçici betik olmaktan çıkarıp Alpha Intelligence OS’un ana agent mimarisine kalıcı olarak işle.
+
+Aynı görev içinde Binance Global ve Binance TR hesap bağlantılarını güvenli, anlaşılır ve tek akışlı bir yerel bağlantı sihirbazıyla tamamla.
+
+Bu görev iki kalıcı sistem agentı oluşturacak:
+
+1. Windows Runtime Recovery Agent
+2. Binance Connection Agent
+
+Parçalı görev, manuel .env düzenleme, terminalden çoklu komut veya ayrı bağlantı betikleri olmayacak.
+
+============================================================
+1) ANA SİSTEM AGENT MİMARİSİ
+============================================================
+
+Önce mevcut repository mimarisini incele.
+
+Mevcut bir agent registry/manager yapısı varsa onu kullan.
+Yoksa minimum ve sade bir registry oluştur:
+
+alpha_agents/
+    __init__.py
+    registry.py
+    windows_runtime_agent.py
+    binance_connection_agent.py
+
+Agentlar uygulamanın ana sistemi tarafından tanınmalı ve durumları dashboard üzerinden görüntülenebilmelidir.
+
+Registry en az şu bilgileri vermeli:
+
+- agent_id
+- agent_name
+- enabled
+- status
+- last_run
+- last_result
+- last_error
+- capabilities
+
+Agentlar uygulama import edilirken ağır işlem başlatmamalı.
+Yalnız açıkça çağrıldığında çalışmalı.
+
+============================================================
+2) WINDOWS RUNTIME RECOVERY AGENT
+============================================================
+
+Daha önce başarıyla çalışan şu dosyaları yeniden yazma veya bozma:
+
+- SETUP_AND_START_WINDOWS.cmd
+- windows_setup.ps1
+- windows_setup_flow.py
+- serve_windows.py
+- windows_diagnose.py
+- RECOVER_WINDOWS.cmd
+- INSTALL_WINDOWS.cmd
+
+Mevcut çalışan akışı Windows Runtime Recovery Agent içine bağla.
+
+Agent şu yeteneklere sahip olsun:
+
+- Git bulma/kurma/güncelleme
+- Python ve .venv hazırlama
+- requirements kurulumu
+- certifi/truststore hazırlama
+- .env güvenli onarımı
+- Binance public veri kontrolü
+- yalnız Alpha süreçlerini kapatma
+- serve_windows.py başlatma
+- /health/runtime doğrulama
+- Paper AUTO/controller başlatma
+- FINAL PASS/FAIL raporu
+
+Agent yeni mantık icat etmemeli.
+Başarılı olduğu kanıtlanan mevcut akışı reusable servis olarak çağırmalı.
+
+Tek kaynak prensibi uygula:
+
+- CLI betikleri
+- dashboard
+- agent registry
+
+aynı Python recovery servislerini kullanmalı.
+
+Kod tekrarını azalt.
+
+Önerilen ortak servis:
+
+services/windows_runtime_recovery.py
+
+Buraya windows_setup_flow.py içindeki tekrar kullanılabilir fonksiyonlar güvenli biçimde ayrılabilir.
+
+Ancak mevcut çalışan:
+
+SETUP_AND_START_WINDOWS.cmd
+
+davranışı kesinlikle bozulmayacak.
+
+============================================================
+3) WINDOWS AGENT ÇAĞIRMA YOLLARI
+============================================================
+
+Windows agent üç şekilde çalıştırılabilsin:
+
+A) Mevcut tek tık dosya:
+
+SETUP_AND_START_WINDOWS.cmd
+
+B) Yerel panel:
+
+Sistem Ayarları
+→ Windows Runtime
+→ “Kontrol Et ve Onar”
+
+C) Güvenli yerel endpoint:
+
+POST /api/agents/windows-runtime/run
+
+Endpoint yalnız:
+
+- local Windows
+- authenticated local admin
+- CSRF korumalı
+
+olarak çalışsın.
+
+Replit/public deployment üzerinden Windows makine işlemi yapmaya kalkmasın.
+
+============================================================
+4) WINDOWS AGENT DURUMU
+============================================================
+
+Dashboard’da şu alanlar gösterilsin:
+
+WINDOWS RUNTIME AGENT
+
+Git:
+PASS/FAIL
+
+Python Environment:
+PASS/FAIL
+
+ENV:
+PASS/FAIL
+
+Truststore:
+PASS/FAIL
+
+Binance Public:
+PASS/DEGRADED/FAIL
+
+Server:
+RUNNING/STOPPED
+
+Controller:
+RUNNING/STOPPED
+
+Paper:
+ACTIVE/DISABLED
+
+Cycle Count:
+N
+
+Runtime Card:
+🟢 / 🟡 / 🔴
+
+Son başarılı çalıştırma zamanı ve kullanılan HEAD commit gösterilsin.
+
+Secret, API key veya parola hiçbir yerde gösterilmesin.
+
+============================================================
+5) BINANCE CONNECTION AGENT
+============================================================
+
+Yeni kalıcı agent:
+
+alpha_agents/binance_connection_agent.py
+
+Agent aşağıdaki bağlantıları yönetsin:
+
+- Binance Global
+- Binance TR
+
+Her bağlantı birbirinden bağımsız olsun.
+
+Birinin başarısız olması diğerini bozmasın.
+
+Agent sadece:
+
+- API bağlantısı
+- hesap doğrulaması
+- salt okunur hesap verisi
+- izin kontrolü
+- bağlantı durumu
+
+için kullanılacak.
+
+CANLI EMİR AÇILMAYACAK.
+
+============================================================
+6) TEK TIK BINANCE BAĞLANTI SİHİRBAZI
+============================================================
+
+Yerel panelde yeni sayfa oluştur:
+
+/settings/binance
+veya mevcut ayarlar mimarisine uygun eşdeğer yol.
+
+Ekranda iki ayrı kart olsun:
+
+BINANCE GLOBAL
+BINANCE TR
+
+Her kartta:
+
+- Bağlı / Bağlı Değil / Hatalı
+- Son test zamanı
+- Hesap türü
+- Yetki doğrulama durumu
+- Maskelenmiş API anahtarı
+- Bağlan
+- Test Et
+- Güncelle
+- Bağlantıyı Kaldır
+
+butonları bulunsun.
+
+Kullanıcı API Key ve Secret Key’i maskeli alanlara bir defa girsin.
+
+Form gönderildikten sonra secret tekrar kullanıcıya gösterilmesin.
+
+============================================================
+7) GÜVENLİ CREDENTIAL STORAGE
+============================================================
+
+API secret bilgilerini düz metin olarak şuralarda saklama:
+
+- .env
+- config.json
+- log
+- stdout
+- HTML
+- browser localStorage
+- Git repository
+- test fixture
+
+Windows yerel çalışmada öncelik:
+
+Windows DPAPI veya Windows Credential Manager
+
+Mevcut güvenli credential store varsa onu kullan.
+
+Önerilen servis:
+
+services/secure_credentials.py
+
+Davranış:
+
+Windows:
+- kullanıcı/makineye bağlı şifreli saklama
+- başka bilgisayara kopyalanınca otomatik açılamama
+
+Replit/Linux:
+- mevcut secret store veya mevcut güvenli proje mekanizması
+- gerçek secret repository dosyasına yazılmamalı
+
+Her durumda:
+
+- loglarda yalnız maskeli key
+- exception içinde secret yok
+- telemetry içinde secret yok
+- API cevabında secret yok
+
+============================================================
+8) BINANCE GLOBAL BAĞLANTI TESTİ
+============================================================
+
+Binance Global bağlantısında sırasıyla:
+
+1. DNS/TLS/public endpoint testi
+2. server time alma
+3. yerel saat ile Binance saati farkını ölçme
+4. timestamp offset hesaplama
+5. imzalı read-only account sorgusu
+6. izin alanlarını kontrol etme
+7. hesap tipini doğrulama
+8. Futures hesabı varsa ayrı durum olarak belirleme
+
+Şu hataları ayrı sınıflandır:
+
+- API_KEY_INVALID
+- API_SECRET_INVALID
+- IP_RESTRICTED
+- PERMISSION_DENIED
+- TIMESTAMP_DRIFT
+- REGION_RESTRICTED
+- TLS_ERROR
+- DNS_ERROR
+- RATE_LIMIT
+- TEMPORARY_NETWORK_ERROR
+- UNKNOWN_RESPONSE
+
+Timestamp hatasında kullanıcıyı hemen reddetme.
+
+Önce Binance server time üzerinden otomatik offset kullanarak tekrar dene.
+
+TLS/geçici bağlantı hatasında:
+
+- 5 deneme
+- exponential backoff
+- her denemede yeni session
+- SSL doğrulaması açık
+
+Kesinlikle kullanma:
+
+- verify=False
+- CERT_NONE
+
+============================================================
+9) BINANCE GLOBAL İZİN GÜVENLİĞİ
+============================================================
+
+Global hesap cevabında mevcutsa kontrol et:
+
+- canTrade
+- canWithdraw
+- canDeposit
+- brokered
+- permissions
+- accountType
+
+Politika:
+
+- canWithdraw=true ise bağlantıyı REDDET
+- withdrawal yetkisi açık anahtar saklanmasın
+- canTrade=true ise açık ve kırmızı uyarı göster
+
+Sistem yalnız salt okunur bağlantı hedefliyorsa:
+
+- trading yetkisi açık anahtarı varsayılan olarak reddet
+- kullanıcıya Binance panelinden trading/withdrawal yetkilerini kapatmasını söyle
+- anahtarı güvenli depoya kaydetme
+
+Read-only olduğu doğrulanan bağlantı:
+
+CONNECTED_READ_ONLY
+
+olarak işaretlensin.
+
+Yetki alanları API tarafından kesin doğrulanamıyorsa:
+
+CONNECTED_PERMISSIONS_UNVERIFIED
+
+olarak sarı durumda gösterilsin.
+
+Yanlış biçimde tam güvenli görünümü verme.
+
+============================================================
+10) BINANCE FUTURES DURUMU
+============================================================
+
+Global Spot bağlantısı başarılı olduktan sonra Futures erişimini ayrı test et.
+
+Sonuçlardan biri gösterilsin:
+
+- FUTURES_AVAILABLE_READ_ONLY
+- FUTURES_NOT_ENABLED
+- FUTURES_PERMISSION_DENIED
+- FUTURES_CONNECTION_FAILED
+- NOT_TESTED
+
+Futures hesabı bulunmaması Global hesap bağlantısını başarısız yapmasın.
+
+Futures API erişimi olsa bile:
+
+- emir gönderme yok
+- pozisyon kapatma yok
+- kaldıraç değiştirme yok
+- margin değiştirme yok
+
+Yalnız read-only bilgi sorguları.
+
+============================================================
+11) BINANCE TR BAĞLANTI TESTİ
+============================================================
+
+Mevcut projede Binance TR connector/client varsa onu kullan.
+
+Yoksa resmi Binance TR API sözleşmesine uygun ayrı adapter oluştur.
+
+Global Binance endpointlerini Binance TR için yanlışlıkla kullanma.
+
+Test sırası:
+
+1. Public endpoint
+2. server time varsa zaman senkronizasyonu
+3. imzalı read-only hesap sorgusu
+4. bakiye/hesap kimliği gibi zararsız bir doğrulama
+5. izin bilgisi API’de varsa kontrol
+6. bağlantı durumunu sınıflandır
+
+Binance TR izin alanlarını kesin doğrulayamıyorsa:
+
+CONNECTED_PERMISSIONS_UNVERIFIED
+
+yaz.
+
+Doğrulanmamış yetkiyi “READ ONLY VERIFIED” olarak gösterme.
+
+============================================================
+12) IP KISITLAMASI VE KULLANICI YÖNLENDİRMESİ
+============================================================
+
+API anahtarında IP kısıtı varsa ve bağlantı reddediliyorsa:
+
+- dış IP’yi güvenilir biçimde belirlemeye çalış
+- kullanıcıya yalnız gerekli IP bilgisini göster
+- anahtarı tekrar tekrar isteme
+- mevcut credential’ı koru
+- “Binance API yönetiminde bu IP’ye izin verin” şeklinde tek işlem göster
+
+Replit’in dış IP’si ile Windows bilgisayarının dış IP’sini karıştırma.
+
+Yerel Windows bağlantısı Windows makinesinden test edilmeli.
+
+Replit ortamında yapılan test, Windows bağlantısı başarılı kabul edilmemeli.
+
+============================================================
+13) BAĞLANTI DURUM MODELİ
+============================================================
+
+Her hesap için standart durum modeli kullan:
+
+NOT_CONFIGURED
+TESTING
+CONNECTED_READ_ONLY
+CONNECTED_PERMISSIONS_UNVERIFIED
+INVALID_CREDENTIALS
+IP_RESTRICTED
+PERMISSION_DENIED
+TIMESTAMP_DRIFT
+NETWORK_DEGRADED
+DISCONNECTED
+ERROR
+
+Durumlar dashboard, API ve agent registry arasında aynı olsun.
+
+============================================================
+14) BINANCE CONNECTION ENDPOINTLERİ
+============================================================
+
+Yerel ve authenticated endpointler oluştur:
+
+GET  /api/integrations/binance/status
+POST /api/integrations/binance/global/connect
+POST /api/integrations/binance/global/test
+POST /api/integrations/binance/global/disconnect
+
+POST /api/integrations/binance/tr/connect
+POST /api/integrations/binance/tr/test
+POST /api/integrations/binance/tr/disconnect
+
+Güvenlik:
+
+- authentication
+- CSRF
+- rate limit
+- local/admin authorization
+- secret response’a geri dönmeyecek
+- request body loglanmayacak
+
+Connect endpointi:
+
+1. credential’ı geçici bellekte alır
+2. bağlantıyı test eder
+3. izinleri doğrular
+4. yalnız başarılı ve güvenli ise şifreli saklar
+5. başarısızsa secret’ı saklamaz
+6. bellekteki geçici secret referanslarını bırakır
+
+============================================================
+15) STARTUP DAVRANIŞI
+============================================================
+
+Uygulama açılırken:
+
+- credential varsa otomatik read-only bağlantı testi yap
+- bağlantı yoksa uygulamayı durdurma
+- Binance hesap bağlantısı Paper controller için zorunlu olmasın
+- public market data ile Paper sistem çalışmaya devam etsin
+- private hesap bağlantısı düşerse controller ölmesin
+
+Startup sırasında bağlantı problemi:
+
+- dashboard’da sarı/kırmızı durum
+- retry/backoff
+- diğer servisleri durdurmama
+
+============================================================
+16) WINDOWS TEK TIK AKIŞINA ENTEGRASYON
+============================================================
+
+SETUP_AND_START_WINDOWS.cmd akışının sonunda Runtime kartı 🟢 ise:
+
+Binance hesap bağlantısı yapılandırılsın mı? (E/H)
+
+sorusu korunabilir.
+
+E seçilirse terminalde secret almaya çalışmak yerine mümkünse:
+
+http://127.0.0.1:5000/settings/binance
+
+sayfasını varsayılan tarayıcıda aç.
+
+Böylece kullanıcı API key ve secret’ı güvenli maskeli formdan girsin.
+
+Terminalde API secret görüntülenmesin.
+
+H seçilirse:
+
+- Paper sistem çalışmaya devam etsin
+- durum NOT_CONFIGURED olsun
+- bu bir sistem hatası sayılmasın
+
+============================================================
+17) DASHBOARD ENTEGRASYONU
+============================================================
+
+Ana dashboard’a “Bağlantılar” bölümü ekle.
+
+Göster:
+
+Binance Public Data:
+🟢 PASS / 🟡 DEGRADED / 🔴 FAIL
+
+Binance Global:
+🟢 READ-ONLY / 🟡 UNVERIFIED / ⚪ NOT CONFIGURED / 🔴 ERROR
+
+Binance Global Futures:
+durum
+
+Binance TR:
+🟢 READ-ONLY / 🟡 UNVERIFIED / ⚪ NOT CONFIGURED / 🔴 ERROR
+
+Live Trading:
+🔒 DISABLED
+
+API anahtarının yalnız ilk ve son birkaç karakteri maskeli gösterilebilir:
+
+ABCD••••••••WXYZ
+
+Secret hiçbir durumda gösterilmez.
+
+============================================================
+18) LIVE TRADING KİLİDİ
+============================================================
+
+Bu görev yalnız bağlantı ve read-only veri içindir.
+
+Aşağıdakileri açma veya değiştirme:
+
+- ALPHA_ENABLE_LIVE_TRADING
+- live order routing
+- signed order endpoints
+- buy/sell emirleri
+- cancel order
+- leverage change
+- margin change
+- withdrawal
+- transfer
+
+Canlı işlem kilidi startup ve runtime seviyesinde kapalı kalmalı.
+
+FINAL raporda her zaman:
+
+LIVE ORDERS: DISABLED
+
+göster.
+
+============================================================
+19) AUDIT LOG
+============================================================
+
+Secret içermeyen güvenli audit kayıtları oluştur:
+
+- connection_attempt
+- connection_success
+- connection_failure
+- permission_rejected
+- credential_updated
+- credential_removed
+
+Kayıtta olabilir:
+
+- provider
+- timestamp
+- masked_api_key
+- result_code
+- environment
+- source=windows_local/replit
+
+Kayıtta olamaz:
+
+- secret
+- signature
+- tam API key
+- request body
+- raw authorization header
+
+============================================================
+20) TESTLER
+============================================================
+
+Gerçek API anahtarı kullanmadan test yaz.
+
+Mock testleri:
+
+- Global read-only başarı
+- Global canTrade=true reddi
+- Global canWithdraw=true reddi
+- invalid API key
+- IP restriction
+- timestamp drift ve otomatik offset
+- TLS ilk iki deneme hata, üçüncü PASS
+- Futures mevcut değil ama Spot başarılı
+- Binance TR başarı
+- TR permission alanı yok → UNVERIFIED
+- secret hiçbir response/log içinde yok
+- credential başarısız testte saklanmıyor
+- disconnect credential siliyor
+- Windows DPAPI adapter mock
+- Replit startup etkilenmiyor
+- Paper controller private bağlantı olmadan çalışıyor
+- SETUP_AND_START_WINDOWS.cmd davranışı bozulmuyor
+- /health/runtime sözleşmesi bozulmuyor
+
+Mevcut tüm testler yeşil kalmalı.
+
+============================================================
+21) DOKÜMANTASYON
+============================================================
+
+Ana proje klasörüne şu belgeyi ekle:
+
+WINDOWS_AND_BINANCE_AGENTS.md
+
+İçerik:
+
+- Windows Runtime Recovery Agent nedir
+- SETUP_AND_START_WINDOWS.cmd nasıl kullanılır
+- Binance Global API anahtarı nasıl oluşturulur
+- yalnız read-only izinler
+- withdrawal/trading izinlerinin neden kapalı olması gerektiği
+- IP restriction nasıl ayarlanır
+- Binance TR bağlantısı
+- durum kodlarının anlamı
+- credential’ların nerede ve nasıl korunduğu
+- bağlantının nasıl kaldırılacağı
+- Live Trading’in kapalı olduğu
+
+Gerçek secret örneği yazma.
+
+============================================================
+22) FINAL TESLİM RAPORU
+============================================================
+
+Teslim sonunda şunları açıkça raporla:
+
+COMMIT:
+hash
+
+WINDOWS RUNTIME AGENT:
+PASS/FAIL
+
+SETUP_AND_START_WINDOWS:
+PASS/FAIL
+
+BINANCE CONNECTION AGENT:
+PASS/FAIL
+
+GLOBAL READ-ONLY TEST:
+PASS/FAIL
+
+GLOBAL FUTURES DETECTION:
+PASS/FAIL
+
+BINANCE TR TEST:
+PASS/FAIL
+
+SECURE CREDENTIAL STORE:
+PASS/FAIL
+
+SECRET LEAK TEST:
+PASS/FAIL
+
+LIVE ORDERS:
+DISABLED
+
+DASHBOARD INTEGRATION:
+PASS/FAIL
+
+TESTS:
+passed/failed
+
+REPLIT IMPACT:
+NONE veya açıklaması
+
+WINDOWS USER ACTION:
+1. SETUP_AND_START_WINDOWS.cmd çalıştır
+2. Açılan Binance Bağlantıları sayfasından API bilgilerini gir
+
+============================================================
+23) BAŞARI KRİTERİ
+============================================================
+
+Görev yalnız şu koşullarda PASS:
+
+- çalışan Windows çözümü ana sistem agent mimarisine işlendi
+- SETUP_AND_START_WINDOWS.cmd çalışmaya devam ediyor
+- Windows Runtime Agent dashboard’dan görülebiliyor
+- Binance Global ve Binance TR ayrı bağlanabiliyor
+- bağlantı tek yerel sihirbaz üzerinden kuruluyor
+- timestamp/IP/TLS/izin hataları doğru sınıflandırılıyor
+- credential’lar şifreli saklanıyor
+- secret hiçbir log/response/Git dosyasında görünmüyor
+- read-only olmayan anahtar reddediliyor
+- Paper sistem bağlantı olmadan çalışmaya devam ediyor
+- Live Trading kesin olarak kapalı
+- tüm mevcut testler yeşil
+- tek commit veya mantıksal olarak en fazla iki temiz commit
+- GitHub main’e push edildi
+
+Bu görevden sonra ayrı Windows recovery, SSL, .env, Global bağlantı veya Binance TR bağlantı agentı açılmayacak.

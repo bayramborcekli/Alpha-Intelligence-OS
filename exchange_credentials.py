@@ -95,10 +95,83 @@ def _load_store() -> dict:
     return accounts if isinstance(accounts, dict) else {}
 
 
+def _dpapi_available() -> bool:
+    return os.name == "nt"
+
+
+def _dpapi_protect(value: str) -> str | None:
+    """Windows DPAPI ile kullanıcı/makineye bağlı şifreleme (b64 blob).
+
+    Başka bilgisayara kopyalanan depo dosyası otomatik AÇILAMAZ."""
+    if os.name != "nt":  # pragma: no cover - yalnız Windows
+        return None
+    try:
+        import base64
+        import ctypes
+        import ctypes.wintypes as wt
+
+        class _BLOB(ctypes.Structure):
+            _fields_ = [("cbData", wt.DWORD),
+                        ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+        raw = value.encode("utf-8")
+        blob_in = _BLOB(len(raw), ctypes.cast(
+            ctypes.create_string_buffer(raw, len(raw)),
+            ctypes.POINTER(ctypes.c_char)))
+        blob_out = _BLOB()
+        if not ctypes.windll.crypt32.CryptProtectData(
+                ctypes.byref(blob_in), None, None, None, None, 0,
+                ctypes.byref(blob_out)):
+            return None
+        try:
+            data = ctypes.string_at(blob_out.pbData, blob_out.cbData)
+            return base64.b64encode(data).decode("ascii")
+        finally:
+            ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+    except Exception:
+        return None
+
+
+def _dpapi_unprotect(b64_blob: str) -> str | None:
+    if os.name != "nt":  # pragma: no cover - yalnız Windows
+        return None
+    try:
+        import base64
+        import ctypes
+        import ctypes.wintypes as wt
+
+        class _BLOB(ctypes.Structure):
+            _fields_ = [("cbData", wt.DWORD),
+                        ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+        raw = base64.b64decode(b64_blob.encode("ascii"))
+        blob_in = _BLOB(len(raw), ctypes.cast(
+            ctypes.create_string_buffer(raw, len(raw)),
+            ctypes.POINTER(ctypes.c_char)))
+        blob_out = _BLOB()
+        if not ctypes.windll.crypt32.CryptUnprotectData(
+                ctypes.byref(blob_in), None, None, None, None, 0,
+                ctypes.byref(blob_out)):
+            return None
+        try:
+            return ctypes.string_at(blob_out.pbData,
+                                    blob_out.cbData).decode("utf-8")
+        finally:
+            ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+    except Exception:
+        return None
+
+
 def _store_entry(exchange: str) -> tuple[str, str] | None:
     entry = _load_store().get(exchange)
     if not isinstance(entry, dict):
         return None
+    if entry.get("enc") == "dpapi":
+        key = _dpapi_unprotect(entry.get("api_key_enc") or "")
+        sec = _dpapi_unprotect(entry.get("api_secret_enc") or "")
+        if key and sec:
+            return key.strip(), sec.strip()
+        return None  # çözülemedi (başka makine/kullanıcı) → fail closed
     key = entry.get("api_key")
     sec = entry.get("api_secret")
     if (isinstance(key, str) and key.strip()
@@ -151,11 +224,16 @@ def save_local(exchange: str, api_key: str, api_secret: str) -> None:
 
 def _save_locked(exchange: str, api_key: str, api_secret: str) -> None:
     accounts = _load_store()
-    accounts[exchange] = {
-        "api_key": api_key,
-        "api_secret": api_secret,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    entry: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    key_enc = _dpapi_protect(api_key) if _dpapi_available() else None
+    sec_enc = _dpapi_protect(api_secret) if _dpapi_available() else None
+    if key_enc and sec_enc:
+        # Windows: kullanıcı/makineye bağlı DPAPI şifreli saklama.
+        entry.update({"enc": "dpapi", "api_key_enc": key_enc,
+                      "api_secret_enc": sec_enc})
+    else:
+        entry.update({"api_key": api_key, "api_secret": api_secret})
+    accounts[exchange] = entry
     record = {"schema_version": SCHEMA_VERSION, "accounts": accounts}
     fd, tmp_name = tempfile.mkstemp(dir=str(DATA_DIR),
                                     prefix=".exchange_cred_", suffix=".tmp")
@@ -175,6 +253,54 @@ def _save_locked(exchange: str, api_key: str, api_secret: str) -> None:
         except OSError:
             pass
         raise
+
+
+def remove_local(exchange: str) -> bool:
+    """Yerel depodan anahtar çiftini kaldırır (bağlantıyı kes)."""
+    if not _local_store_enabled():
+        raise ValueError("Replit ortamında yerel exchange deposu yok; "
+                         "Secrets üzerinden yönetin.")
+    if exchange not in EXCHANGES:
+        raise ValueError("bilinmeyen borsa")
+    if not FILE.is_file():
+        return False
+    lock_path = DATA_DIR / ".exchange_credentials.lock"
+    lock_fh = open(lock_path, "a+")
+    try:
+        try:
+            import fcntl
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
+        except ImportError:  # pragma: no cover - Windows
+            import msvcrt
+            lock_fh.seek(0)
+            msvcrt.locking(lock_fh.fileno(), msvcrt.LK_LOCK, 1)
+        accounts = _load_store()
+        if exchange not in accounts:
+            return False
+        del accounts[exchange]
+        record = {"schema_version": SCHEMA_VERSION, "accounts": accounts}
+        fd, tmp_name = tempfile.mkstemp(dir=str(DATA_DIR),
+                                        prefix=".exchange_cred_",
+                                        suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(record, fh, ensure_ascii=False, indent=2)
+                fh.flush()
+                os.fsync(fh.fileno())
+            try:
+                os.chmod(tmp_name, 0o600)
+            except OSError:
+                pass
+            os.replace(tmp_name, FILE)
+        except BaseException:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
+        return True
+    finally:
+        lock_fh.close()
 
 
 def _env_pair(exchange: str) -> tuple[str, str]:

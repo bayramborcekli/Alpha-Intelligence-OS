@@ -3542,6 +3542,112 @@ def api_accounts_credentials(account_id: str):
     })
 
 
+# ── Sistem agent'ları + Binance bağlantı sihirbazı ─────────────────────────
+# Kimlik doğrulama _security_gate ile zorunlu; POST'lar CSRFProtect
+# kapsamında. Secret hiçbir yanıtta/logda görünmez; request body loglanmaz.
+
+@app.get("/api/agents")
+def api_agents_list():
+    import alpha_agents
+    return jsonify({"ok": True, "agents": alpha_agents.list_agents(),
+                    "live_orders": "DISABLED"})
+
+
+@app.post("/api/agents/windows-runtime/run")
+def api_agents_windows_run():
+    """Kurtarma koşusu — YALNIZ yerel Windows + rate limit + CSRF."""
+    ip = auth.get_client_ip()
+    allowed, secs = auth.check_rate_limit(ip)
+    if not allowed:
+        return _api_error(f"Çok fazla deneme; {secs} sn bekleyin.", 429)
+    if local_env.is_replit() or os.name != "nt":
+        return _api_error("Windows Runtime kurtarması yalnız yerel Windows "
+                          "makinede çalıştırılabilir (Replit/public "
+                          "üzerinden makine işlemi yapılmaz).", 403)
+    import alpha_agents
+    agent = alpha_agents.get_agent("windows-runtime")
+    try:
+        result = agent.run()
+    except Exception:
+        return _api_error("Kurtarma koşusu başarısız; sunucu loglarına "
+                          "bakın.", 500)
+    return jsonify({"ok": True, "data": result})
+
+
+@app.get("/settings/binance")
+def binance_settings_page():
+    return _render_workspace("binance_settings.html", "binance_settings")
+
+
+@app.get("/api/integrations/binance/status")
+def api_binance_status():
+    from services import binance_connection as bc
+    return jsonify({"ok": True, "data": bc.status()})
+
+
+def _binance_mutation(provider: str, action: str):
+    """connect/test/disconnect ortak sarmalayıcı (sterile, secret'sız)."""
+    from services import binance_connection as bc
+    ip = auth.get_client_ip()
+    allowed, secs = auth.check_rate_limit(ip)
+    if not allowed:
+        return _api_error(f"Çok fazla deneme; {secs} sn bekleyin.", 429)
+    if action in ("connect", "disconnect") and local_env.is_replit():
+        return _api_error("Replit ortamında API anahtarları Secrets'ta "
+                          "yönetilir; bağlantı sihirbazı yerel Windows "
+                          "içindir.", 403)
+    try:
+        if action == "connect":
+            body = request.get_json(silent=True) or {}
+            result = bc.connect(provider,
+                                str(body.get("apiKey") or ""),
+                                str(body.get("apiSecret") or ""))
+        elif action == "test":
+            result = bc.test_stored(provider)
+        else:
+            result = bc.disconnect(provider)
+    except ValueError as exc:
+        return _api_error(str(exc), 400)
+    except Exception:
+        return _api_error("İşlem başarısız; durum değişmedi.", 500)
+    result.pop("guidance_secret", None)
+    slog.log_event(slog.STARTUP, ip=ip,
+                   username=session.get("username", ""),
+                   detail=f"binance {action} {provider} → "
+                          f"{result.get('status')}")
+    return jsonify({"ok": True, "data": result})
+
+
+@app.post("/api/integrations/binance/global/connect")
+def api_binance_global_connect():
+    return _binance_mutation("BINANCE_GLOBAL", "connect")
+
+
+@app.post("/api/integrations/binance/global/test")
+def api_binance_global_test():
+    return _binance_mutation("BINANCE_GLOBAL", "test")
+
+
+@app.post("/api/integrations/binance/global/disconnect")
+def api_binance_global_disconnect():
+    return _binance_mutation("BINANCE_GLOBAL", "disconnect")
+
+
+@app.post("/api/integrations/binance/tr/connect")
+def api_binance_tr_connect():
+    return _binance_mutation("BINANCE_TR", "connect")
+
+
+@app.post("/api/integrations/binance/tr/test")
+def api_binance_tr_test():
+    return _binance_mutation("BINANCE_TR", "test")
+
+
+@app.post("/api/integrations/binance/tr/disconnect")
+def api_binance_tr_disconnect():
+    return _binance_mutation("BINANCE_TR", "disconnect")
+
+
 def _paper_balance() -> str:
     """PAPER simülasyon defteri bakiyesi (Decimal-str) veya UNKNOWN.
 

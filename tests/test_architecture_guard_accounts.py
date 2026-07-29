@@ -98,9 +98,11 @@ def test_portfolio_delegates_to_canonical_service():
 def test_no_authenticated_futures_endpoints():
     # Spot-only mimari: imzalı /fapi çağrısı geri gelemez. Public
     # klines (PAPER market verisi) bilinçli istisnadır.
+    # `ping` de public/imzasız erişilebilirlik testidir (windows_diagnose
+    # ağ teşhisi) — bilinçli istisna; imzalı hesap/emir yolları yasak kalır.
     pat = re.compile(r"/fapi/v\d+/(?!klines|continuousKlines|"
-                     r"markPriceKlines|premiumIndex|ticker|exchangeInfo)"
-                     r"[A-Za-z]+")
+                     r"markPriceKlines|premiumIndex|ticker|exchangeInfo|"
+                     r"ping)[A-Za-z]+")
     offenders = []
     for p in _runtime_files():
         for i, line in enumerate(

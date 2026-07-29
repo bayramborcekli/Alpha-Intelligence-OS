@@ -113,6 +113,26 @@
 
       <div class="warn-banner" id="warn-banner" role="alert" aria-live="polite" style="display:none"></div>
 
+      <!-- Bağlantılar — Binance public/hesap bağlantı durumu (salt okunur) -->
+      <section aria-labelledby="h-conn" style="margin-bottom:18px">
+        <h2 id="h-conn" style="font-size:.8rem;color:var(--muted);text-transform:uppercase;
+            letter-spacing:.05em;margin-bottom:8px">Bağlantılar</h2>
+        <div class="cards" id="conn-cards">
+          <div class="card"><h2>Binance Public Data</h2>
+            <div class="v" id="conn-public">—</div></div>
+          <div class="card"><h2>Binance Global</h2>
+            <div class="v" id="conn-global">—</div>
+            <div style="font-size:.72rem;color:var(--muted)" id="conn-global-key"></div></div>
+          <div class="card"><h2>Binance TR</h2>
+            <div class="v" id="conn-tr">—</div>
+            <div style="font-size:.72rem;color:var(--muted)" id="conn-tr-key"></div></div>
+          <div class="card"><h2>Live Trading</h2>
+            <div class="v">🔒 DISABLED</div>
+            <div style="font-size:.72rem;color:var(--muted)">
+              <a href="/settings/binance" style="color:var(--accent)">Binance Bağlantıları →</a></div></div>
+        </div>
+      </section>
+
       <!-- Mission 1400.5 — Hızlı erişim kartları (yalnızca gezinme) -->
       <section aria-labelledby="h-quick" style="margin-bottom:18px">
         <h2 id="h-quick" style="font-size:.8rem;color:var(--muted);text-transform:uppercase;
@@ -340,6 +360,37 @@
       "Son yenileme: " + new Date().toLocaleTimeString("tr-TR");
   }
 
+  var CONN_LABELS = {
+    CONNECTED_READ_ONLY: "🟢 READ-ONLY",
+    CONNECTED_PERMISSIONS_UNVERIFIED: "🟡 UNVERIFIED",
+    NOT_CONFIGURED: "⚪ NOT CONFIGURED",
+    DISCONNECTED: "⚪ NOT CONFIGURED",
+    NETWORK_DEGRADED: "🟡 DEGRADED"
+  };
+  async function loadConnections() {
+    try {
+      var r = await fetch("/api/integrations/binance/status", { cache: "no-store" });
+      if (!r.ok) return;
+      var d = ((await r.json()) || {}).data || {};
+      var g = d.BINANCE_GLOBAL || {}, t = d.BINANCE_TR || {};
+      document.getElementById("conn-global").textContent =
+        CONN_LABELS[g.status] || ("🔴 " + (g.status || "ERROR"));
+      document.getElementById("conn-tr").textContent =
+        CONN_LABELS[t.status] || ("🔴 " + (t.status || "ERROR"));
+      document.getElementById("conn-global-key").textContent =
+        (g.masked_api_key || "") + (g.futures ? "  ·  Futures: " + g.futures : "");
+      document.getElementById("conn-tr-key").textContent = t.masked_api_key || "";
+    } catch (e) { /* bağlantı kartı panoyu durdurmaz */ }
+    try {
+      var rr = await fetch("/health/runtime", { cache: "no-store" });
+      if (rr.ok) {
+        var h = await rr.json();
+        var el = document.getElementById("conn-public");
+        el.textContent = (h && h.controller === "running") ? "🟢 PASS" : "🟡 —";
+      }
+    } catch (e) { /* yoksay */ }
+  }
+  loadConnections();
   async function load() {
     try {
       var r = await fetch("/api/v1/overview", { cache: "no-store" });

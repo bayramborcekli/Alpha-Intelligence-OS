@@ -1,0 +1,49 @@
+{% extends "dash_base.html" %}
+{% block title %}Binance Bağlantıları{% endblock %}
+{% block heading %}🔗 Binance Bağlantıları{% endblock %}
+{% block subheading %}Binance Global ve Binance TR hesaplarınızı salt okunur bağlayın. Secret bir kez girilir, şifreli saklanır, bir daha gösterilmez. Canlı emir yolu bu yazılımda kapalıdır.{% endblock %}
+
+{% block content %}
+<style>
+  .bc-grid { display:grid; gap:12px;
+      grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); }
+  .bc-card { background:var(--card,#14161c); border:1px solid
+      var(--line,#2a2d36); border-radius:12px; padding:16px; }
+  .bc-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .bc-name { font-weight:800; font-size:1.05rem; }
+  .bc-badge { display:inline-block; padding:2px 10px; border-radius:999px;
+      font-size:.7rem; font-weight:700; margin-left:auto; }
+  .bc-badge.ok { background:#153322; color:#3fbf7f; }
+  .bc-badge.warn { background:#33291a; color:#d9a441; }
+  .bc-badge.err { background:#33201f; color:#e0655c; }
+  .bc-badge.off { background:#20232c; color:#9aa0ae; }
+  .bc-rows { font-size:.82rem; }
+  .bc-rows .row { display:flex; justify-content:space-between; gap:8px;
+      padding:3px 0; border-bottom:1px dashed var(--line,#2a2d36); }
+  .bc-btns { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .bc-btn { background:#20232c; color:#cfd3dd; border:1px solid
+      var(--line,#2a2d36); border-radius:8px; padding:6px 12px;
+      font-size:.78rem; cursor:pointer; }
+  .bc-btn.accent { background:#1b2430; color:#5ab0e0; }
+  .bc-btn.danger { color:#e0655c; }
+  .bc-form { margin-top:12px; display:none; }
+  .bc-form input { width:100%; margin:4px 0; padding:8px; border-radius:8px;
+      border:1px solid var(--line,#2a2d36); background:#0f1116;
+      color:#e6e9f0; font-size:.82rem; }
+  .bc-note { color:var(--muted,#8b90a0); font-size:.75rem; margin-top:10px; }
+  .bc-msg { font-size:.78rem; margin-top:8px; white-space:pre-wrap; }
+  .bc-msg.err { color:#e0655c; } .bc-msg.ok { color:#3fbf7f; }
+  .bc-msg.warn { color:#d9a441; }
+</style>
+
+<div class="bc-grid" id="bc-grid" aria-live="polite">
+  <div class="bc-card">Yükleniyor…</div>
+</div>
+<p class="bc-note">🔒 Live Trading: DISABLED — bu yazılım hiçbir koşulda
+emir göndermez. Anahtarlarınızı Binance panelinden yalnız <b>okuma</b>
+yetkisiyle oluşturun; işlem/çekim yetkili anahtarlar reddedilir.
+Windows'ta anahtarlar DPAPI ile bu bilgisayara bağlı şifrelenir.</p>
+
+<script>window.BC_CSRF = "{{ csrf_token() }}";</script>
+<script src="{{ url_for('static', filename='js/binance_settings.js') }}"></script>
+{% endblock %}

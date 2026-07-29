@@ -290,15 +290,26 @@ def connect_accounts() -> None:
     if str(ans).strip().lower() not in ("e", "evet", "y", "yes"):
         p("HESAP        : atlandi — Paper sistem baglanti olmadan calisir.")
         return
-    import dashboard_api as da
-    import exchange_credentials as xc
-    plans = [("BINANCE_GLOBAL", "BINANCE GLOBAL ACCOUNT",
-              lambda k, s: da._signed_get(da.SPOT_BASE, "/api/v3/account",
-                                          da.SPOT_ALLOWLIST, k, s)),
-             ("BINANCE_TR", "BINANCE TR ACCOUNT",
-              lambda k, s: da._signed_get(da.TR_BASE, "/open/v1/account/spot",
-                                          da.TR_ALLOWLIST, k, s))]
-    for exchange, label, tester in plans:
+    # Tercih edilen yol: guvenli maskeli form (secret terminale girilmez).
+    port = os.environ.get("ALPHA_PORT", "5000").strip() or "5000"
+    url = f"http://127.0.0.1:{port}/settings/binance"
+    try:
+        import webbrowser
+        if webbrowser.open(url):
+            p(f"HESAP        : tarayicida acildi → {url}")
+            p("API Key/Secret'i oradaki maskeli forma girin; bu pencere "
+              "sunucuyu calistirmaya devam eder.")
+            return
+    except Exception:
+        pass
+    p(f"HESAP        : tarayici acilamadi — {url} adresini elle acabilir "
+      "veya asagidaki gizli girisle devam edebilirsiniz.")
+    # Tek kanonik yol: bağlantı testi + izin kontrolü + şifreli saklama
+    # services.binance_connection'da yapılır (duplicate fetch YASAĞI).
+    from services import binance_connection as bcn
+    plans = [("BINANCE_GLOBAL", "BINANCE GLOBAL ACCOUNT"),
+             ("BINANCE_TR", "BINANCE TR ACCOUNT")]
+    for exchange, label in plans:
         try:
             ans = input(f"{exchange} baglansin mi? (E/H): ")
         except (EOFError, OSError):
@@ -311,39 +322,36 @@ def connect_accounts() -> None:
             p(f"{exchange}  : bos deger — atlandi.")
             continue
         try:
-            body = tester(key, sec)
+            result = bcn.connect(exchange, key, sec)
         except Exception as exc:
             p(f"{exchange}  : BAGLANTI TESTI BASARISIZ ({type(exc).__name__})"
               " — anahtar kaydedilmedi. Binance'te anahtari ve IP iznini "
               "kontrol edin.")
             report[label] = "FAIL"
             continue
-        acct = body if isinstance(body, dict) else {}
-        data = acct.get("data") if isinstance(acct.get("data"), dict) else acct
-        if bool(data.get("canWithdraw")) or bool(data.get("canTrade")):
+        status = str(result.get("status", "ERROR"))
+        if status == "PERMISSION_DENIED":
             p(f"{exchange}  : REDDEDILDI — anahtar islem/cekim yetkisi "
               "tasiyor. Binance'te YALNIZ 'Enable Reading' yetkili yeni "
               "anahtar olusturun. Anahtar KAYDEDILMEDI.")
             report[label] = "FAIL"
-            continue
-        # Yetki alanları yanıtın içinde HİÇ yoksa salt-okunurluk
-        # kanıtlanamaz (özellikle Binance TR) — bağlantı çalışır ama
-        # durum açıkça UNVERIFIED raporlanır; canlı emir yolu zaten kapalı.
-        unverified = ("canTrade" not in data and "canWithdraw" not in data)
-        try:
-            xc.save_local(exchange, key, sec)
-            if unverified:
-                p(f"{exchange}  : BAGLANDI ama yetki durumu API yanitinda "
-                  "yok — salt-okunurluk KANITLANAMADI. Binance panelinden "
-                  "anahtarin yalniz okuma yetkili oldugunu kontrol edin. "
-                  "(Canli emir yolu bu yazilimda zaten kapali.)")
-                report[label] = "CONNECTED (UNVERIFIED)"
-            else:
-                p(f"{exchange}  : BAGLANDI (salt okunur dogrulandi; guvenli "
-                  "yerel depoya yazildi, terminale/git'e yazilmadi).")
-                report[label] = "CONNECTED"
-        except Exception as exc:
-            p(f"{exchange}  : depoya yazilamadi ({exc})")
+        elif status == "CONNECTED_READ_ONLY":
+            p(f"{exchange}  : BAGLANDI (salt okunur dogrulandi; guvenli "
+              "yerel depoya yazildi, terminale/git'e yazilmadi).")
+            report[label] = "CONNECTED"
+        elif status == "CONNECTED_PERMISSIONS_UNVERIFIED":
+            # Yetki alanları yanıtta HİÇ yoksa salt-okunurluk kanıtlanamaz
+            # (özellikle Binance TR) — bağlantı çalışır ama durum açıkça
+            # UNVERIFIED raporlanır; canlı emir yolu zaten kapalı.
+            p(f"{exchange}  : BAGLANDI ama yetki durumu API yanitinda "
+              "yok — salt-okunurluk KANITLANAMADI. Binance panelinden "
+              "anahtarin yalniz okuma yetkili oldugunu kontrol edin. "
+              "(Canli emir yolu bu yazilimda zaten kapali.)")
+            report[label] = "CONNECTED (UNVERIFIED)"
+        else:
+            guidance = str(result.get("guidance", "")).strip()
+            p(f"{exchange}  : BAGLANTI TESTI BASARISIZ ({status}) — "
+              "anahtar kaydedilmedi." + (f" {guidance}" if guidance else ""))
             report[label] = "FAIL"
 
 
@@ -390,6 +398,11 @@ def final_report(health: dict) -> int:
                          "birkac dakika icinde yesillenir.")
         p(f"ROOT CAUSE     : {cause}")
     p("=" * 62)
+    try:  # agent snapshot — dashboard/registry aynı sonucu görür
+        from services import windows_runtime_recovery as wrr
+        wrr.record_report(dict(report), health)
+    except Exception:
+        pass
     return 0 if ok else 1
 
 

@@ -71,16 +71,41 @@ def test_no_ssl_verification_disabled():
         assert "CERT_NONE" not in src
 
 
-def test_account_rejected_when_trade_permission(monkeypatch, capsys):
+def _isolate_bc(monkeypatch, tmp_path):
+    """binance_connection snapshot/audit dosyalarını tmp'e izole eder."""
+    from services import binance_connection as bc
+    monkeypatch.setattr(bc, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(bc, "SNAPSHOT_PATH", tmp_path / "snap.json")
+    monkeypatch.setattr(bc, "AUDIT_PATH", tmp_path / "audit.jsonl")
+
+
+def _mock_global_account(monkeypatch, account):
+    import binance_global_client as bgc
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def get_server_time(self):
+            return 1000
+
+        def get_spot_account(self):
+            return account
+    monkeypatch.setattr(bgc, "BinanceGlobalClient", FakeClient)
+
+
+def test_account_rejected_when_trade_permission(monkeypatch, capsys,
+                                                 tmp_path):
     """İşlem/çekim yetkili anahtar KAYDEDİLMEDEN reddedilir."""
     wsf.report.clear()
+    _isolate_bc(monkeypatch, tmp_path)
     answers = iter(["E", "E", "H"])  # bağlan? / global? / tr?
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    import webbrowser
+    monkeypatch.setattr(webbrowser, "open", lambda *_: False)
     monkeypatch.setattr(wsf, "_mask_echo_input", lambda *_: "x" * 20)
-    import dashboard_api as da
-    monkeypatch.setattr(da, "_signed_get",
-                        lambda *a, **k: {"canTrade": True,
-                                         "canWithdraw": False})
+    _mock_global_account(monkeypatch, {"canTrade": True,
+                                       "canWithdraw": False})
     import exchange_credentials as xc
     saved = []
     monkeypatch.setattr(xc, "save_local",
@@ -93,16 +118,17 @@ def test_account_rejected_when_trade_permission(monkeypatch, capsys):
     assert "x" * 20 not in out, "anahtar terminale basılmaz"
 
 
-def test_account_saved_when_read_only(monkeypatch):
+def test_account_saved_when_read_only(monkeypatch, tmp_path):
     wsf.report.clear()
+    _isolate_bc(monkeypatch, tmp_path)
     answers = iter(["E", "E", "H"])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    import webbrowser
+    monkeypatch.setattr(webbrowser, "open", lambda *_: False)
     monkeypatch.setattr(wsf, "_mask_echo_input", lambda *_: "k" * 20)
-    import dashboard_api as da
-    monkeypatch.setattr(da, "_signed_get",
-                        lambda *a, **k: {"canTrade": False,
-                                         "canWithdraw": False,
-                                         "balances": []})
+    _mock_global_account(monkeypatch, {"canTrade": False,
+                                       "canWithdraw": False,
+                                       "balances": []})
     import exchange_credentials as xc
     saved = []
     monkeypatch.setattr(xc, "save_local",
@@ -112,15 +138,28 @@ def test_account_saved_when_read_only(monkeypatch):
     assert saved == ["BINANCE_GLOBAL"]
 
 
-def test_tr_without_permission_fields_is_unverified(monkeypatch, capsys):
+def test_tr_without_permission_fields_is_unverified(monkeypatch, capsys,
+                                                    tmp_path):
     """TR yanıtı yetki alanı içermezse durum UNVERIFIED raporlanır."""
     wsf.report.clear()
+    _isolate_bc(monkeypatch, tmp_path)
     answers = iter(["E", "H", "E"])  # bağlan? / global? / tr?
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    import webbrowser
+    monkeypatch.setattr(webbrowser, "open", lambda *_: False)
     monkeypatch.setattr(wsf, "_mask_echo_input", lambda *_: "t" * 20)
-    import dashboard_api as da
-    monkeypatch.setattr(da, "_signed_get",
-                        lambda *a, **k: {"data": {"accountAssets": []}})
+    import binance_tr_client as btr
+
+    class FakeTR:
+        def __init__(self, *a, **k):
+            pass
+
+        def get_server_time(self):
+            return 1000
+
+        def get_spot_account(self):
+            return {"code": 0, "data": {"accountAssets": []}}
+    monkeypatch.setattr(btr, "BinanceTRClient", FakeTR)
     import exchange_credentials as xc
     monkeypatch.setattr(xc, "save_local", lambda *a: None)
     wsf.connect_accounts()

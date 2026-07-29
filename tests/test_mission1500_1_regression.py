@@ -162,6 +162,19 @@ class TestRouteSurface:
         "/api/operation-control/global/stop-new-entries",
         "/api/operation-control/global/request-close-all",
         "/api/operation-control/global/kill-switch",
+        # Binance Connection Agent (CSRF+auth+rate-limit korumalı;
+        # connect/disconnect Replit'te 403 REPLIT_ENV; secret hiçbir
+        # yanıt/log/snapshot'a yazılmaz; salt-okunur izin politikası —
+        # bilinçli genişletme, tam rota eşleşmesi, wildcard yok)
+        "/api/integrations/binance/global/connect",
+        "/api/integrations/binance/global/test",
+        "/api/integrations/binance/global/disconnect",
+        "/api/integrations/binance/tr/connect",
+        "/api/integrations/binance/tr/test",
+        "/api/integrations/binance/tr/disconnect",
+        # Windows Runtime Recovery Agent koşusu (yalnız yerel Windows;
+        # Replit/public'te 403; CSRF+auth+rate-limit — bilinçli genişletme)
+        "/api/agents/windows-runtime/run",
     }
 
     def test_no_new_write_routes(self):
