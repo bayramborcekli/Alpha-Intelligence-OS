@@ -27,6 +27,14 @@
   .st-succeeded { color:var(--ok); border-color:rgba(63,185,80,.5); }
   .st-failed, .st-interrupted { color:var(--danger); border-color:rgba(248,81,73,.5); }
   .st-unknown   { color:var(--muted); }
+  /* Task #123 — kanonik "Gerçek Durum" görsel rozeti */
+  .au-st-badge { display:inline-block; border-radius:10px; padding:2px 10px;
+                 font-size:.85rem; font-weight:700; border:1px solid transparent; }
+  .au-st-ok   { color:var(--ok); background:rgba(63,185,80,.12);
+                border-color:rgba(63,185,80,.45); }
+  .au-st-warn { color:#1c1408; background:var(--warn); border-color:#f0a020; }
+  .au-st-off  { color:var(--danger); background:rgba(248,81,73,.1);
+                border-color:rgba(248,81,73,.45); }
   table.au { width:100%; border-collapse:collapse; font-size:.8rem; }
   table.au th, table.au td { padding:5px 8px; text-align:left;
     border-bottom:1px solid rgba(48,54,61,.5); }
@@ -244,7 +252,16 @@
       .then(function (d) {
         var s = d.analysis_scheduler_detail || {};
         el("s-pref").textContent = txt(s.preference);
-        el("s-state").textContent = txt(s.state);
+        // Task #123: Gerçek Durum görsel rozet — STARTUP_FAILED belirgin
+        var stEl = el("s-state");
+        stEl.textContent = "";
+        var stB = document.createElement("span");
+        var stV = s.state || null;
+        stB.className = "au-st-badge " +
+          (stV === "RUNNING" ? "au-st-ok" :
+           stV === "STARTUP_FAILED" ? "au-st-warn" : "au-st-off");
+        stB.textContent = (stV === "STARTUP_FAILED" ? "⚠ " : "") + txt(stV);
+        stEl.appendChild(stB);
         el("s-interval").textContent = txt(s.interval_minutes, " dk");
         el("s-last").textContent = txt((s.last_run || "").replace("T", " "));
         el("s-result").textContent = txt(s.last_result);
