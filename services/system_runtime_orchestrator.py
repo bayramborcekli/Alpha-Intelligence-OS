@@ -179,28 +179,51 @@ def scheduler_status(controller_status: dict[str, Any] | None = None,
 def universe_reason_code(universe_size: int) -> str | None:
     """Evren temel 3 sembolde kaldıysa dürüst neden kodu üret.
 
-    3 sembol 'başarılı dinamik evren' gibi gösterilmez. Kaynak:
-    smart_config (scheduler_refresh + last_analysis_time +
-    candidate_count) — ilk başarılı yenilemeden sonra NOT_RUN_YET
-    kalıcı olarak temizlenir."""
+    3 sembol 'başarılı dinamik evren' gibi gösterilmez.
+
+    Kanonik kaynak: smart_config['scheduler_refresh'] (zamanlayıcı
+    kaynaklı yenileme sonucu). Panel-tetikli analizler COMPLETED
+    durumunu maskeleyemez.
+
+    Task 122 saha bulgusu: eski tasarımda genişletme yalnız arka plan
+    döngüsündeydi (start_auto_loop) ve liste değişikliği YALNIZ
+    mode=OTOMATIK iken uygulanıyordu — bu yüzden koşmuş analiz sonsuza
+    dek NOT_RUN_YET görünüyordu. Yeni tasarımda scheduler çevrimi
+    scheduled_refresh() ile yenilemeyi moddan bağımsız GERÇEKTEN
+    uygular; NOT_RUN_YET artık dürüsttür ve ilk çevrimde temizlenir.
+
+    Kod sözlüğü:
+      None                          → evren gerçekten genişlemiş
+      NOT_RUN_YET                   → scheduler yenilemesi hiç koşmadı
+      INSUFFICIENT_ELIGIBLE_SYMBOLS → koştu, uygun sembol yok
+      FILTERS_EXCLUDED_ALL          → aday vardı ama evrene eklenmedi
+      UNIVERSE_REFRESH_FAILED       → son koşu hata bıraktı
+    """
     try:
         _alpha_path()
         import universe_manager as um
         base_n = len(um.BASE_SYMBOLS)
         if universe_size > base_n:
             return None  # gerçekten genişlemiş
+        smart_log = um.get_smart_log()
+        # smart_log en-yeni-önce tutulur (_append_smart_log insert(0)).
+        newest = smart_log[0] if isinstance(smart_log, list) and smart_log \
+            else {}
+        if isinstance(newest, dict) and newest.get("error"):
+            return "UNIVERSE_REFRESH_FAILED"
         cfg = um.get_smart_config()
         sr = cfg.get("scheduler_refresh") or {}
-        # Kanonik kaynak: scheduler_refresh sonucu — panel-tetikli
-        # analizler NOT_RUN_YET'i maskeleyemez.
+        # Kanonik kaynak: scheduler_refresh sonucu
         if sr.get("last_result") == "FAILED":
             return sr.get("last_error_code") or "UNIVERSE_REFRESH_FAILED"
-        if sr.get("last_result") != "COMPLETED":
-            return "NOT_RUN_YET"  # scheduler yenilemesi hiç koşmadı
-        if int(cfg.get("candidate_count") or 0) <= 0:
-            return "INSUFFICIENT_ELIGIBLE_SYMBOLS"
-        # Aday vardı ama evrene eklenmedi (filtre/limit/mod)
-        return "FILTERS_EXCLUDED_ALL"
+        if sr.get("last_result") == "COMPLETED":
+            if int(cfg.get("candidate_count") or 0) <= 0:
+                return "INSUFFICIENT_ELIGIBLE_SYMBOLS"
+            # Aday vardı ama evrene eklenmedi (filtre/limit/mod)
+            return "FILTERS_EXCLUDED_ALL"
+        # Scheduler yenilemesi henüz koşmadı. Panel-tetikli analizler
+        # (last_analysis_time yazsalar bile) bunu maskeleyemez.
+        return "NOT_RUN_YET"
     except Exception:
         return "UNIVERSE_REFRESH_FAILED"
 

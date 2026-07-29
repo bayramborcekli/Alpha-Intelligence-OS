@@ -11,8 +11,13 @@ bu araç GERÇEK Windows PAPER başlangıcında uçtan uca kanıt toplar:
      5 dk mı, last_run/next_run doluyor mu doğrular.
   3. Evren BTC/ETH/SOL'un (3 temel sembol) üzerine genişledi mi;
      3'te kaldıysa dürüst neden kodu (NOT_RUN_YET /
-     INSUFFICIENT_ELIGIBLE_SYMBOLS / UNIVERSE_REFRESH_FAILED) var mı
-     kontrol eder. Genişlemeden neden kodu yoksa FAIL (false-GREEN).
+     INSUFFICIENT_ELIGIBLE_SYMBOLS / FILTERS_EXCLUDED_ALL /
+     UNIVERSE_REFRESH_FAILED) var mı kontrol eder. Genişlemeden neden
+     kodu yoksa FAIL (false-GREEN).
+     NOT (Task 122): Evren yenilemesi artık zamanlayıcı çevriminden
+     scheduled_refresh() ile moddan bağımsız uygulanır; kanonik kaynak
+     smart_config['scheduler_refresh']'tir. Panel-tetikli analizler
+     NOT_RUN_YET'i maskeleyemez — ilk zamanlayıcı çevrimi kodu temizler.
   4. Tercih RUNNING ama worker yoksa durum STARTUP_FAILED olmalı ve
      pipeline GREEN OLMAMALI — aksi false-GREEN regresyonudur.
   5. (İsteğe bağlı, --watch N) N dakika boyunca izler; zamanlayıcının
@@ -51,6 +56,7 @@ INFO = "[BILGI]"
 
 BASE_UNIVERSE_SIZE = 3  # BTC/ETH/SOL — temel evren
 HONEST_REASON_CODES = ("NOT_RUN_YET", "INSUFFICIENT_ELIGIBLE_SYMBOLS",
+                       "FILTERS_EXCLUDED_ALL",
                        "UNIVERSE_REFRESH_FAILED")
 
 

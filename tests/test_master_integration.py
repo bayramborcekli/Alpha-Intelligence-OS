@@ -329,11 +329,42 @@ class TestCanonicalScheduler:
         """8) Evren 3'te kalırsa neden kodu döner, sessiz başarı yok."""
         from services import system_runtime_orchestrator as sro
         code = sro.universe_reason_code(3)
-        assert code in ("NOT_RUN_YET", "UNIVERSE_REFRESH_FAILED",
+        assert code in ("NOT_RUN_YET",
+                        "UNIVERSE_REFRESH_FAILED",
                         "INSUFFICIENT_ELIGIBLE_SYMBOLS",
                         "FILTERS_EXCLUDED_ALL",
                         "PUBLIC_DATA_DEGRADED")
         assert sro.universe_reason_code(12) is None
+
+    def test_universe_reason_code_honest_states(self, monkeypatch):
+        """8b) Task 122: scheduler_refresh kanonik kaynak; en yeni
+        smart_log kaydı (index 0, en-yeni-önce) hata taşırsa FAILED."""
+        from services import system_runtime_orchestrator as sro
+        sro._alpha_path()
+        import universe_manager as um
+        ran = "2026-07-26T05:56:42+00:00"
+        monkeypatch.setattr(um, "get_smart_log", lambda: [])
+        # Scheduler yenilemesi hiç koşmamış → NOT_RUN_YET
+        monkeypatch.setattr(um, "get_smart_config",
+                            lambda: {"last_analysis_time": None})
+        assert sro.universe_reason_code(3) == "NOT_RUN_YET"
+        # COMPLETED + aday yok → INSUFFICIENT
+        monkeypatch.setattr(
+            um, "get_smart_config",
+            lambda: {"last_analysis_time": ran, "candidate_count": 0,
+                     "scheduler_refresh": {"last_result": "COMPLETED"}})
+        assert sro.universe_reason_code(3) == \
+            "INSUFFICIENT_ELIGIBLE_SYMBOLS"
+        # COMPLETED + aday var ama evren 3'te → FILTERS_EXCLUDED_ALL
+        monkeypatch.setattr(
+            um, "get_smart_config",
+            lambda: {"last_analysis_time": ran, "candidate_count": 50,
+                     "scheduler_refresh": {"last_result": "COMPLETED"}})
+        assert sro.universe_reason_code(3) == "FILTERS_EXCLUDED_ALL"
+        # En yeni log kaydı (index 0) hata taşıyorsa → FAILED
+        monkeypatch.setattr(um, "get_smart_log",
+                            lambda: [{"error": "boom"}, {"reason": "ok"}])
+        assert sro.universe_reason_code(3) == "UNIVERSE_REFRESH_FAILED"
 
     def test_local_dev_bypass_label(self):
         """10) local-dev-bypass kullanıcı adı gibi görünmez."""
