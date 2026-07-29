@@ -480,27 +480,47 @@ def diagnose_http_error(exc: Exception) -> str:
             f"Teknik ayrıntı: {exc}")
 
 
-def fetch_klines(symbol: str, interval: str, limit: int = 300) -> pd.DataFrame:
-    remaining = rate_limit_remaining()
-    if remaining > 0:
-        detail = (f"Geri çekilme aktif — yeni istek atılmadı ({remaining:.0f} "
-                  f"saniye kaldı). {rate_limit_reason()}")
-        log.warning("GERİ ÇEKİLME | %s %s | %s", symbol, interval, detail)
-        raise RuntimeError(detail)
-    try:
-        response = requests.get(
-            f"{BASE_URL}/fapi/v1/klines",
-            params={"symbol": symbol, "interval": interval, "limit": limit},
-            timeout=15,
-        )
-    except requests.exceptions.SSLError as exc:
-        detail = diagnose_ssl_error(exc)
-        log.warning("SSL DOĞRULAMA HATASI | %s %s | %s", symbol, interval, detail)
-        raise RuntimeError(detail) from exc
-    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
-        detail = diagnose_network_error(exc)
-        log.warning("AĞ HATASI | %s %s | %s", symbol, interval, detail)
-        raise RuntimeError(detail) from exc
+def fetch_klines(symbol: str, interval: str, limit: int = 300,
+                 retries: int = 2) -> pd.DataFrame:
+    """Kline çek; geçici SSL/ağ hatalarında artan beklemeyle yeniden dener.
+
+    Windows'ta antivirüs/ağ TLS müdahalesi aralıklı (bazen PASS bazen FAIL)
+    el sıkışma hataları üretebilir — tek seferlik hata çevrimi düşürmesin
+    diye kısa retry yapılır. Doğrulama ASLA kapatılmaz (verify hep açık).
+    """
+    response = None
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        remaining = rate_limit_remaining()
+        if remaining > 0:
+            detail = (f"Geri çekilme aktif — yeni istek atılmadı ({remaining:.0f} "
+                      f"saniye kaldı). {rate_limit_reason()}")
+            log.warning("GERİ ÇEKİLME | %s %s | %s", symbol, interval, detail)
+            raise RuntimeError(detail)
+        try:
+            response = requests.get(
+                f"{BASE_URL}/fapi/v1/klines",
+                params={"symbol": symbol, "interval": interval, "limit": limit},
+                timeout=15,
+            )
+            break
+        except requests.exceptions.SSLError as exc:
+            last_exc = exc
+            detail = diagnose_ssl_error(exc)
+            log.warning("SSL DOĞRULAMA HATASI | %s %s | deneme %d/%d | %s",
+                        symbol, interval, attempt + 1, retries + 1, detail)
+        except (requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout) as exc:
+            last_exc = exc
+            detail = diagnose_network_error(exc)
+            log.warning("AĞ HATASI | %s %s | deneme %d/%d | %s",
+                        symbol, interval, attempt + 1, retries + 1, detail)
+        if attempt < retries:
+            time.sleep(1.5 * (attempt + 1))
+    if response is None:
+        if isinstance(last_exc, requests.exceptions.SSLError):
+            raise RuntimeError(diagnose_ssl_error(last_exc)) from last_exc
+        raise RuntimeError(diagnose_network_error(last_exc)) from last_exc
     try:
         response.raise_for_status()
     except requests.exceptions.HTTPError as exc:
