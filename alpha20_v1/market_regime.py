@@ -4,6 +4,7 @@ API anahtarı veya gerçek emir içermez.
 """
 from __future__ import annotations
 
+import logging
 import math
 import time
 from datetime import datetime, timezone
@@ -14,6 +15,7 @@ import pandas as pd
 import requests
 
 BASE_URL = "https://fapi.binance.com"
+log = logging.getLogger("market_regime")
 
 # Rejim sabitleri
 REGIME_STRONG_UP    = "Güçlü Yükseliş"
@@ -52,6 +54,12 @@ def _fetch_klines(symbol: str, interval: str, limit: int = 100,
             for c in ["open","high","low","close","volume","quote_vol"]:
                 df[c] = pd.to_numeric(df[c], errors="coerce")
             return df.dropna(subset=["close"])
+        except requests.exceptions.SSLError as exc:
+            import alpha20
+            log.warning("SSL DOĞRULAMA HATASI | %s %s | %s",
+                        symbol, interval, alpha20.diagnose_ssl_error(exc))
+            if attempt < retries:
+                time.sleep(1.5 * (attempt + 1))
         except Exception:
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))

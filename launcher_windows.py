@@ -89,6 +89,15 @@ def bootstrap_venv() -> int:
                              cwd=ROOT, capture_output=True)
         if chk.returncode == 0:
             log("Bootstrap: .venv mevcut ve dogrulandi (kurulum atlandi).")
+            # SSL guvenilirligi icin certifi'yi her calistirmada guncel tut
+            # (Windows'ta eski CA paketi Binance SSL dogrulamasini bozabilir).
+            r = subprocess.run([str(vpy), "-m", "pip", "install", "--upgrade",
+                                "certifi", "--quiet"], cwd=ROOT)
+            if r.returncode == 0:
+                log("Bootstrap: certifi guncellendi (SSL CA paketi).")
+            else:
+                log("Bootstrap: UYARI - certifi guncellenemedi; "
+                    "SSL sorunlarinda INSTALL_WINDOWS.cmd'yi tekrar calistirin.")
             return 0
         log("Bootstrap: .venv var ama bagimliliklar eksik; kurulacak.")
     else:
@@ -111,6 +120,9 @@ def bootstrap_venv() -> int:
         [str(vpy), "-m", "pip", "install", "--upgrade", "pip", "--quiet"],
         [str(vpy), "-m", "pip", "install", "-r",
          str(ROOT / "requirements.txt"), "--quiet"],
+        # Windows'ta SSL dogrulamasinin guvenilir calismasi icin CA paketi
+        # (certifi) her kurulumda en guncel surume cekilir.
+        [str(vpy), "-m", "pip", "install", "--upgrade", "certifi", "--quiet"],
     ]
     for cmd in steps:
         r = subprocess.run(cmd, cwd=ROOT)

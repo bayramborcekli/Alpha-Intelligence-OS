@@ -207,12 +207,46 @@ def fetch_klines_safe(
         return None
 
 
+def diagnose_ssl_error(exc: Exception) -> str:
+    """SSL hatasının olası kök nedenini Türkçe olarak ayırt eder.
+
+    Not: SSL doğrulaması ASLA kapatılmaz (verify parametresini kapatmak yasak). Bu fonksiyon
+    yalnızca operatöre doğru çözüm adımını göstermek içindir.
+    """
+    text = str(exc).lower()
+    if "certificate has expired" in text or "not yet valid" in text:
+        return ("SSL hatası (saat/tarih şüphesi): sertifika tarih doğrulaması "
+                "başarısız. Windows sistem saatinin ve tarihinin doğru olduğunu "
+                "kontrol edin; saat sapması SSL doğrulamasını bozar.")
+    if "self signed certificate" in text or "self-signed certificate" in text:
+        return ("SSL hatası (proxy/antivirüs şüphesi): sertifika zincirinde "
+                "kendinden imzalı sertifika görüldü. Kurumsal proxy veya "
+                "antivirüs SSL trafiğine araya giriyor olabilir; Binance alan "
+                "adları için SSL denetimini (HTTPS tarama) devre dışı bırakın.")
+    if "unable to get local issuer certificate" in text or \
+            "certificate verify failed" in text:
+        return ("SSL hatası (sertifika paketi şüphesi): yerel CA sertifikası "
+                "doğrulanamadı. certifi paketi eski olabilir — "
+                "INSTALL_WINDOWS.cmd dosyasını yeniden çalıştırın "
+                "(certifi otomatik güncellenir). Sorun sürerse proxy/antivirüs "
+                "SSL araya girmesini de kontrol edin.")
+    return ("SSL hatası (neden belirsiz): certifi güncellemesi için "
+            "INSTALL_WINDOWS.cmd'yi yeniden çalıştırın; ayrıca sistem saatini "
+            "ve proxy/antivirüs SSL denetimini kontrol edin. "
+            f"Teknik ayrıntı: {exc}")
+
+
 def fetch_klines(symbol: str, interval: str, limit: int = 300) -> pd.DataFrame:
-    response = requests.get(
-        f"{BASE_URL}/fapi/v1/klines",
-        params={"symbol": symbol, "interval": interval, "limit": limit},
-        timeout=15,
-    )
+    try:
+        response = requests.get(
+            f"{BASE_URL}/fapi/v1/klines",
+            params={"symbol": symbol, "interval": interval, "limit": limit},
+            timeout=15,
+        )
+    except requests.exceptions.SSLError as exc:
+        detail = diagnose_ssl_error(exc)
+        log.warning("SSL DOĞRULAMA HATASI | %s %s | %s", symbol, interval, detail)
+        raise RuntimeError(detail) from exc
     response.raise_for_status()
     rows = response.json()
     columns = [

@@ -47,6 +47,14 @@ def main() -> None:
     # Güvenli startup özeti — secret DEĞERİ asla yazılmaz.
     log.info("python=%s", sys.executable)
     log.info("project_root=%s port=%d host=%s", ROOT, PORT, HOST)
+    # SSL tanılama: Windows'ta kline SSL hataları çoğunlukla eski certifi
+    # paketinden kaynaklanır — sürüm ve CA dosyası startup'ta loglanır.
+    try:
+        import certifi
+        log.info("certifi=%s ca_bundle=%s", certifi.__version__, certifi.where())
+    except Exception as exc:  # pragma: no cover - certifi requests ile gelir
+        log.warning("certifi bilgisi alinamadi (%s); SSL sorunlarinda "
+                    "INSTALL_WINDOWS.cmd'yi tekrar calistirin.", exc)
     for key, meta in local_env.credential_metadata().items():
         log.info("config %s: present=%s source=%s length=%d",
                  key, meta["present"], meta["source"], meta["length"])
