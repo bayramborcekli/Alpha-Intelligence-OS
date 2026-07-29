@@ -70,3 +70,20 @@ def _sanitize_real_creds(monkeypatch):
     for key in SANITIZED_CRED_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_state():
+    # 429/418 geri çekilme durumu paylaşılan modül durumu — testler arası
+    # sızıntı olmasın diye her testten önce/sonra sıfırlanır.
+    try:
+        import alpha20
+        alpha20.reset_rate_limit_state()
+    except Exception:
+        pass
+    yield
+    try:
+        import alpha20
+        alpha20.reset_rate_limit_state()
+    except Exception:
+        pass

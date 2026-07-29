@@ -261,3 +261,132 @@ class TestFetchKlinesSslHandling:
         for rel in ("alpha20_v1/alpha20.py", "alpha20_v1/market_regime.py"):
             text = (root / rel).read_text(encoding="utf-8")
             assert "verify=False" not in text, f"{rel} SSL doğrulamasını kapatıyor!"
+
+
+def _http_error_with_headers(status: int, headers: dict | None = None):
+    resp = requests.models.Response()
+    resp.status_code = status
+    if headers:
+        resp.headers.update(headers)
+    return requests.exceptions.HTTPError(
+        f"{status} Error for url", response=resp), resp
+
+
+class TestRateLimitBackoff:
+    """429/418 geri çekilme davranışı — ağa hiç çıkmadan (monkeypatch)."""
+
+    def _mock_status(self, monkeypatch, status: int, headers: dict | None = None,
+                     counter: list | None = None):
+        class FakeResponse:
+            status_code = status
+
+            def __init__(self):
+                self.headers = dict(headers or {})
+
+            def raise_for_status(self):
+                exc, _ = _http_error_with_headers(status, headers)
+                raise exc
+
+        def fake_get(*a, **kw):
+            if counter is not None:
+                counter.append(1)
+            return FakeResponse()
+
+        monkeypatch.setattr(alpha20.requests, "get", fake_get)
+
+    def test_429_sets_backoff_and_blocks_next_request(self, monkeypatch):
+        calls: list = []
+        self._mock_status(monkeypatch, 429, counter=calls)
+        with pytest.raises(RuntimeError):
+            alpha20.fetch_klines("SOLUSDT", "15m")
+        assert alpha20.rate_limit_remaining() > 0
+        # İkinci çağrı ağa hiç çıkmamalı
+        with pytest.raises(RuntimeError) as ei:
+            alpha20.fetch_klines("SOLUSDT", "15m")
+        assert len(calls) == 1
+        assert "Geri çekilme aktif" in str(ei.value)
+
+    def test_429_respects_retry_after_header(self, monkeypatch):
+        self._mock_status(monkeypatch, 429, headers={"Retry-After": "7"})
+        with pytest.raises(RuntimeError):
+            alpha20.fetch_klines("SOLUSDT", "15m")
+        remaining = alpha20.rate_limit_remaining()
+        assert 0 < remaining <= 7.5
+
+    def test_429_backoff_escalates_without_retry_after(self):
+        w1 = alpha20.register_rate_limit(429)
+        # sayaç korunarak ikinci 429
+        alpha20._rate_limit_state["blocked_until"] = 0.0
+        w2 = alpha20.register_rate_limit(429)
+        assert w1 == alpha20.RATE_LIMIT_DEFAULT_BACKOFF
+        assert w2 == alpha20.RATE_LIMIT_DEFAULT_BACKOFF * 2
+
+    def test_429_backoff_is_capped(self):
+        for _ in range(20):
+            alpha20._rate_limit_state["blocked_until"] = 0.0
+            wait = alpha20.register_rate_limit(429)
+        assert wait == alpha20.RATE_LIMIT_MAX_BACKOFF
+
+    def test_418_blocks_requests_with_turkish_message(self, monkeypatch):
+        calls: list = []
+        self._mock_status(monkeypatch, 418, counter=calls)
+        with pytest.raises(RuntimeError):
+            alpha20.fetch_klines("SOLUSDT", "15m")
+        assert alpha20.rate_limit_remaining() > 0
+        assert "IP yasağı" in alpha20.rate_limit_reason()
+        with pytest.raises(RuntimeError) as ei:
+            alpha20.fetch_klines("SOLUSDT", "15m")
+        assert len(calls) == 1
+        assert "IP yasağı" in str(ei.value)
+
+    def test_418_respects_retry_after_header(self):
+        _, resp = _http_error_with_headers(418, {"Retry-After": "120"})
+        wait = alpha20.register_rate_limit(418, resp)
+        assert wait == 120
+
+    def test_success_resets_consecutive_429_counter(self):
+        alpha20.register_rate_limit(429)
+        alpha20.note_rate_limit_success()
+        assert alpha20._rate_limit_state["consecutive_429"] == 0
+
+    def test_market_regime_429_stops_retries_and_sets_backoff(
+            self, monkeypatch, caplog):
+        import market_regime
+        calls: list = []
+
+        class FakeResponse:
+            status_code = 429
+            headers: dict = {}
+
+            def raise_for_status(self):
+                raise _http_error(429)
+
+        def fake_get(*a, **kw):
+            calls.append(1)
+            return FakeResponse()
+
+        monkeypatch.setattr(market_regime.requests, "get", fake_get)
+        monkeypatch.setattr(market_regime.time, "sleep", lambda *_: None)
+        with caplog.at_level("WARNING"):
+            assert market_regime._fetch_klines("SOLUSDT", "15m") is None
+        # 429 sonrası yeniden deneme YOK (yasağı büyütmemek için)
+        assert len(calls) == 1
+        assert alpha20.rate_limit_remaining() > 0
+        assert any("çok fazla istek" in r.message.lower()
+                   for r in caplog.records)
+
+    def test_market_regime_respects_active_backoff(self, monkeypatch, caplog):
+        import market_regime
+        calls: list = []
+        alpha20.register_rate_limit(418)
+
+        def fake_get(*a, **kw):
+            calls.append(1)
+            raise AssertionError("Geri çekilme sırasında ağa çıkılmamalı")
+
+        monkeypatch.setattr(market_regime.requests, "get", fake_get)
+        with caplog.at_level("WARNING", logger="market_regime"):
+            assert market_regime._fetch_klines("SOLUSDT", "15m") is None
+        assert len(calls) == 0
+        assert any("GERİ ÇEKİLME" in r.message or "kaldı" in r.message
+                   for r in caplog.records)

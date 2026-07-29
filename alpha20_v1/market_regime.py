@@ -38,6 +38,14 @@ SUITABLE_REGIMES = {
 def _fetch_klines(symbol: str, interval: str, limit: int = 100,
                   retries: int = 2, timeout: int = 12) -> pd.DataFrame | None:
     for attempt in range(retries + 1):
+        import alpha20
+        remaining = alpha20.rate_limit_remaining()
+        if remaining > 0:
+            log.warning(
+                "GERİ ÇEKİLME | %s %s | Yeni istek atılmadı (%.0f saniye "
+                "kaldı). %s", symbol, interval, remaining,
+                alpha20.rate_limit_reason())
+            return None
         try:
             r = requests.get(
                 f"{BASE_URL}/fapi/v1/klines",
@@ -62,6 +70,13 @@ def _fetch_klines(symbol: str, interval: str, limit: int = 100,
                 time.sleep(1.5 * (attempt + 1))
         except requests.exceptions.HTTPError as exc:
             import alpha20
+            status = getattr(getattr(exc, "response", None),
+                             "status_code", None)
+            if status in (429, 418):
+                alpha20.register_rate_limit(
+                    int(status), getattr(exc, "response", None))
+                # Geri çekilme sırasında yeniden denemek yasağı büyütür.
+                return None
             log.warning("HTTP HATASI | %s %s | %s",
                         symbol, interval, alpha20.diagnose_http_error(exc))
             if attempt < retries:

@@ -279,6 +279,101 @@ def diagnose_network_error(exc: Exception) -> str:
             f"Teknik ayrıntı: {exc}")
 
 
+# ── Rate-limit geri çekilme (429/418) ────────────────────────────────────────
+# Binance 429 (çok fazla istek) gelince tempo otomatik düşürülür; istekler
+# sürerse Binance IP yasağı (418) uygular. Bu paylaşılan durum, tüm kline
+# çağrılarının (alpha20 + market_regime) geri çekilme süresi boyunca yeni
+# istek atmasını engeller.
+RATE_LIMIT_DEFAULT_BACKOFF = 60.0     # 429: Retry-After yoksa ilk bekleme (sn)
+RATE_LIMIT_MAX_BACKOFF = 900.0        # 429: artan bekleme üst sınırı (sn)
+RATE_LIMIT_BAN_BACKOFF = 300.0        # 418: Retry-After yoksa varsayılan (sn)
+
+_rate_limit_state: dict[str, Any] = {
+    "blocked_until": 0.0,      # time.time() — bu ana kadar yeni istek yok
+    "reason": "",              # operatöre gösterilecek Türkçe açıklama
+    "consecutive_429": 0,      # artan bekleme için ardışık 429 sayacı
+}
+
+
+def reset_rate_limit_state() -> None:
+    """Geri çekilme durumunu sıfırlar (test ve manuel kurtarma için)."""
+    _rate_limit_state["blocked_until"] = 0.0
+    _rate_limit_state["reason"] = ""
+    _rate_limit_state["consecutive_429"] = 0
+
+
+def rate_limit_remaining(now: float | None = None) -> float:
+    """Geri çekilme bitimine kalan saniye (0 → istek atılabilir)."""
+    if now is None:
+        now = time.time()
+    return max(0.0, float(_rate_limit_state["blocked_until"]) - now)
+
+
+def rate_limit_reason() -> str:
+    return str(_rate_limit_state.get("reason", ""))
+
+
+def _parse_retry_after(response: Any) -> float | None:
+    """Retry-After başlığını saniye olarak okur; okunamazsa None."""
+    headers = getattr(response, "headers", None)
+    if not headers:
+        return None
+    raw = headers.get("Retry-After")
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def register_rate_limit(status: int, response: Any = None,
+                        now: float | None = None) -> float:
+    """429/418 yanıtını kaydeder ve geri çekilme süresini (sn) döndürür.
+
+    - 429: Retry-After varsa o kadar; yoksa artan bekleme
+      (60s → 120s → 240s ... en fazla 900s).
+    - 418: Retry-After varsa o kadar; yoksa 300s. Yasak süresi boyunca
+      yeni istek atılmaz.
+    """
+    if now is None:
+        now = time.time()
+    retry_after = _parse_retry_after(response)
+    if status == 418:
+        wait = retry_after if retry_after is not None else RATE_LIMIT_BAN_BACKOFF
+        _rate_limit_state["consecutive_429"] = 0
+        reason = (f"Binance IP yasağı (418): IP'niz geçici olarak engellendi. "
+                  f"Yeni istekler {wait:.0f} saniye boyunca durduruldu; yasak "
+                  "süresi dolunca tarama kendiliğinden devam eder. Aynı IP'den "
+                  "yoğun istek atan diğer uygulamaları kapatın.")
+    elif status == 429:
+        count = int(_rate_limit_state["consecutive_429"]) + 1
+        _rate_limit_state["consecutive_429"] = count
+        if retry_after is not None:
+            wait = retry_after
+        else:
+            wait = min(RATE_LIMIT_MAX_BACKOFF,
+                       RATE_LIMIT_DEFAULT_BACKOFF * (2 ** (count - 1)))
+        reason = (f"Binance istek limiti (429 — çok fazla istek): istek temposu otomatik "
+                  f"düşürüldü — tarama {wait:.0f} saniye duraklatıldı "
+                  "(IP yasağına dönüşmemesi için). Bekleme bitince "
+                  "kendiliğinden devam eder.")
+    else:
+        return 0.0
+    blocked_until = now + wait
+    if blocked_until > float(_rate_limit_state["blocked_until"]):
+        _rate_limit_state["blocked_until"] = blocked_until
+        _rate_limit_state["reason"] = reason
+    log.warning("GERİ ÇEKİLME | %s", reason)
+    return wait
+
+
+def note_rate_limit_success() -> None:
+    """Başarılı istek sonrası ardışık 429 sayacını sıfırlar."""
+    _rate_limit_state["consecutive_429"] = 0
+
+
 def diagnose_http_error(exc: Exception) -> str:
     """HTTP durum hatasının (429/418/5xx...) olası nedenini Türkçe açıklar.
 
@@ -317,6 +412,12 @@ def diagnose_http_error(exc: Exception) -> str:
 
 
 def fetch_klines(symbol: str, interval: str, limit: int = 300) -> pd.DataFrame:
+    remaining = rate_limit_remaining()
+    if remaining > 0:
+        detail = (f"Geri çekilme aktif — yeni istek atılmadı ({remaining:.0f} "
+                  f"saniye kaldı). {rate_limit_reason()}")
+        log.warning("GERİ ÇEKİLME | %s %s | %s", symbol, interval, detail)
+        raise RuntimeError(detail)
     try:
         response = requests.get(
             f"{BASE_URL}/fapi/v1/klines",
@@ -334,9 +435,13 @@ def fetch_klines(symbol: str, interval: str, limit: int = 300) -> pd.DataFrame:
     try:
         response.raise_for_status()
     except requests.exceptions.HTTPError as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status in (429, 418):
+            register_rate_limit(int(status), getattr(exc, "response", None))
         detail = diagnose_http_error(exc)
         log.warning("HTTP HATASI | %s %s | %s", symbol, interval, detail)
         raise RuntimeError(detail) from exc
+    note_rate_limit_success()
     rows = response.json()
     columns = [
         "open_time", "open", "high", "low", "close", "volume",
