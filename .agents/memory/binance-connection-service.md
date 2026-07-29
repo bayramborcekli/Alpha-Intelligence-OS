@@ -24,5 +24,10 @@ description: Kanonik bağlantı servisi kuralları, route-guard genişletme dese
   verirse yanlış ret yerine UNVERIFIED (sarı) dönülür.
 - Guard, kanonik hesap-path literallerini yorum/docstring'de bile yakalar;
   dokümantasyonda literal path yazma.
+- Kanonik SAKLAMA yüzeyi artık services/secure_credentials.py (facade →
+  exchange_credentials motoru); yeni kod depoya doğrudan exchange_credentials
+  ile YAZMAZ. data/integration_status.json beyaz-listeli secret'sız durum
+  dosyasıdır; silinirse status() yeniden üretir. Credential'ı silen TEK yol
+  disconnect ("Bağlantıyı Kaldır"); geçici test hatası asla silmez.
 - Futures durumu her zaman NOT_TESTED (spot-only tombstone); guard'a
   public `/fapi/v1/ping` bilinçli istisna olarak eklendi.
