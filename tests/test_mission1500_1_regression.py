@@ -172,6 +172,12 @@ class TestRouteSurface:
         "/api/integrations/binance/tr/connect",
         "/api/integrations/binance/tr/test",
         "/api/integrations/binance/tr/disconnect",
+        # PAPER acil durdurma güvenli temizleme (CSRF+auth+rate-limit
+        # korumalı; Replit/non-Windows'ta 403; yalnız PAPER; risk
+        # kaynaklı durdurma reddedilir; temizlik öncesi otomatik yedek;
+        # canlı emir yolu AÇMAZ — bilinçli genişletme, tam rota,
+        # wildcard yok)
+        "/api/automation/paper-emergency-stop/clear",
         # Windows Runtime Recovery Agent koşusu (yalnız yerel Windows;
         # Replit/public'te 403; CSRF+auth+rate-limit — bilinçli genişletme)
         "/api/agents/windows-runtime/run",

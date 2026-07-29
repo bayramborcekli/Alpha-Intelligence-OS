@@ -102,7 +102,9 @@ def test_windows_optin_overrides_in_memory_only(monkeypatch, caplog):
     # Dosyadaki gerçek değerler kilitli kalır (restart sonrası aynı):
     disk = json.loads(before)
     assert disk["adaptive_system"]["enabled"] is False
-    assert disk["adaptive_system"]["kill_switch"] is True
+    # Depo taban çizgisi: kill_switch=false (kullanıcının bilinçli değeri;
+    # true değeri yanlışlıkla gömülen test sapmasıydı — geri alındı).
+    assert disk["adaptive_system"]["kill_switch"] is False
 
 
 def test_override_cleared_means_default(monkeypatch):
@@ -117,7 +119,7 @@ def test_repo_config_flags_unchanged():
     """Depodaki config.json Paper otomasyon kilitleriyle kalır."""
     a = json.loads(CONFIG.read_text(encoding="utf-8"))["adaptive_system"]
     assert a["enabled"] is False
-    assert a["kill_switch"] is True
+    assert a["kill_switch"] is False
     assert a["auto_paper_enabled"] is False
     assert a["mode"] == "MONITOR"
 

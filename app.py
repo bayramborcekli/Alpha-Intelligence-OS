@@ -1817,7 +1817,10 @@ def toggle_auto_paper():
 def kill_switch():
     activate = request.form.get("activate") == "1"
     if activate:
-        sg.activate_kill_switch("Panelden kullanıcı etkinleştirdi.")
+        sg.activate_kill_switch(
+            "Panelden kullanıcı etkinleştirdi.",
+            reason_code="MANUAL_STOP",
+            triggered_by=session.get("username", "") or "panel")
         cfg = _get_adaptive_cfg()
         cfg["kill_switch"] = True
         _save_adaptive_cfg(cfg)
@@ -3574,6 +3577,89 @@ def api_agents_windows_run():
     return jsonify({"ok": True, "data": result})
 
 
+def _paper_clear_local_windows_ok() -> bool:
+    """Paper kilit kaldırma ortam kapısı: yalnız yerel Windows runtime.
+
+    Ayrı fonksiyon: testler os.name'i GLOBAL patch'lemeden (pathlib'i
+    bozmadan) bu kapıyı taklit edebilir."""
+    return (not local_env.is_replit()) and os.name == "nt"
+
+
+@app.get("/api/automation/paper-emergency-stop")
+def api_paper_emergency_stop_status():
+    """Acil durdurma durumunun secret'sız özeti (salt-okunur)."""
+    from services import emergency_stop as es
+    return jsonify({"ok": True, "data": es.status()})
+
+
+@app.post("/api/automation/paper-emergency-stop/clear")
+def api_paper_emergency_stop_clear():
+    """PAPER acil durdurma kilidini GÜVENLİ kaldır.
+
+    Şartlar: yerel Windows + oturum (_security_gate) + CSRF + rate
+    limit + PAPER modu + risk kaynaklı OLMAYAN neden + açık kullanıcı
+    onayı + temizlik öncesi otomatik yedek. LIVE ORDERS her durumda
+    DISABLED — bu uç canlı emir yolu açmaz; yalnız iki mevcut kanonik
+    kill-switch kaynağını (safety_state + adaptive config) kapatır."""
+    from services import emergency_stop as es
+    ip = auth.get_client_ip()
+    allowed, secs = auth.check_rate_limit(ip)
+    if not allowed:
+        return _api_error(f"Çok fazla deneme; {secs} sn bekleyin.", 429)
+    if not _paper_clear_local_windows_ok():
+        return _api_error("Paper kilidi kaldırma yalnız yerel Windows "
+                          "runtime üzerinde yapılabilir (REPLIT_ENV).", 403)
+    st = es.status()
+    if not st["active"]:
+        return _api_error("Acil durdurma zaten kapalı.", 409)
+    if st["risk_protected"]:
+        return jsonify({"ok": False,
+                        "error": "RISK_PROTECTED",
+                        "message": "Risk kaynaklı durdurma panelden "
+                                   "temizlenemez; nedeni giderin.",
+                        "data": st}), 403
+    body = request.get_json(silent=True) or {}
+    if body.get("confirm") is not True:
+        return jsonify({"ok": False,
+                        "error": "CONFIRM_REQUIRED",
+                        "message": "Kaldırmadan önce neden gösterilir ve "
+                                   "açık onay (confirm=true) gerekir.",
+                        "data": st}), 400
+    ok, why = es.health_check()
+    if not ok:
+        return _api_error(f"Sağlık kontrolü geçmedi: {why}", 409)
+    backup_name = es.write_backup(session.get("username", "") or "operator")
+    # Tek işlemde iki kanonik kaynak da kapatılır (mevcut yazarlar).
+    sg.deactivate_kill_switch()
+    cfg = _get_adaptive_cfg()
+    cfg["kill_switch"] = False
+    _save_adaptive_cfg(cfg)
+    slog.log_event(slog.KILL_SWITCH, username=session.get("username", ""),
+                   ip=ip, detail="paper-clear (backup=" + backup_name + ")")
+    automation_started = False
+    automation_note = ("DANIŞMAN tercihi korunuyor — otomatik mod "
+                       "yalnız istenirse başlatılır.")
+    if body.get("start_automation") is True:
+        # Bağımsız operatör tercihi SESSİZCE değiştirilmez; yalnız
+        # açık istek üzerine Operation Center START komutu denenir.
+        try:
+            result = get_operation_service().execute_automation_command(
+                _AUTOMATION_COMMANDS["start"], _operation_actor(), None)
+            automation_started = result.status.value == "COMPLETED"
+            automation_note = ("Paper otomatik modu başlatıldı."
+                               if automation_started else
+                               "START reddedildi: "
+                               + str(result.error_code or result.status.value))
+        except Exception:
+            automation_note = "START denemesi başarısız (servis hatası)."
+    return jsonify({"ok": True,
+                    "cleared": True,
+                    "backup": backup_name,
+                    "automation_started": automation_started,
+                    "automation_note": automation_note,
+                    "data": es.status()})
+
+
 @app.get("/settings/binance")
 def binance_settings_page():
     return _render_workspace("binance_settings.html", "binance_settings")
@@ -4223,7 +4309,10 @@ def api_operation_kill_switch():
         cfg = _get_adaptive_cfg()
         if engage:
             sg.activate_kill_switch(
-                "Operation Center acil durdurma.")
+                "Operation Center acil durdurma.",
+                reason_code="MANUAL_STOP",
+                triggered_by=session.get("username", "")
+                or "operation-center")
             cfg["kill_switch"] = True
         else:
             sg.deactivate_kill_switch()

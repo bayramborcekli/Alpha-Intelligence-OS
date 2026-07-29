@@ -366,7 +366,9 @@
     var badge, cls;
     var rl = status.rate_limit;
     if (status.kill_switch_state === "ACTIVE") {
-      badge = "Hata — Acil Durduruldu"; cls = "err";
+      // Runtime çalışıyor olabilir — blokaj ACİL STOP'tur; SSL gibi
+      // geçici uyarılar ana neden gibi gösterilmez.
+      badge = "Otomasyon durdu — ACİL STOP"; cls = "err";
     } else if (rl && rl.active) {
       // Task 93: 429/418 geri çekilmesi — tarama duraklatıldı rozeti.
       badge = "Tarama duraklatıldı (" + rl.remaining_seconds + " sn)";
@@ -386,7 +388,8 @@
     }
     if (aiSent) {
       aiSent.textContent = cls === "err"
-        ? "Sistem acil durduruldu; yeni işlem açılmaz."
+        ? "Runtime çalışıyor; ticaret otomasyonu ACİL STOP nedeniyle " +
+          "kapalı. Neden ve güvenli kaldırma: Operation Center."
         : "Piyasalar izleniyor.";
     }
     if (products) {

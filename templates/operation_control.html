@@ -231,6 +231,28 @@
     </div>
   </section>
 
+  <!-- ── ACİL DURDURMA ────────────────────────────────────────── -->
+  <section class="oc-card" aria-labelledby="oc-h-emergency">
+    <h2 id="oc-h-emergency">⛔ Acil Durdurma</h2>
+    <div class="oc-kv">
+      <div><b>Durum</b><span id="es-state" class="oc-state unknown">UNKNOWN</span></div>
+      <div><b>Neden</b><span id="es-reason">—</span></div>
+      <div><b>Kaynak</b><span id="es-by">—</span></div>
+      <div><b>Zaman</b><span id="es-at">—</span></div>
+      <div><b>Otomasyon Modu</b><span id="es-mode">—</span></div>
+    </div>
+    <p>
+      <button class="oc-btn danger" id="es-clear" hidden>
+        🔓 Paper Kilidini Kontrol Et ve Kaldır</button>
+      <span class="oc-note" id="es-note" role="status"></span>
+    </p>
+    <p class="oc-note">Kaldırma yalnız PAPER ortamında, yerel Windows
+      runtime üzerinde, sağlık kontrolü + açık onay + otomatik durum
+      yedeğiyle yapılır. Risk kaynaklı (RISK_LIMIT / CONSECUTIVE_LOSSES)
+      durdurmalar buradan temizlenemez. Canlı emirler her durumda
+      DISABLED.</p>
+  </section>
+
   <!-- ── BROKER SAĞLIĞI ───────────────────────────────────────── -->
   <section class="oc-card" aria-labelledby="ows-h-broker">
     <h2 id="ows-h-broker">Broker Sağlığı</h2>
@@ -302,5 +324,69 @@
 
 <script>window.OC_CSRF = "{{ csrf_token() }}";</script>
 <script src="{{ url_for('static', filename='js/operation_control.js') }}"></script>
+<script>
+(function () {
+  "use strict";
+  function el(id) { return document.getElementById(id); }
+  function setTxt(id, v) { el(id).textContent = (v === null ||
+    v === undefined || v === "") ? "—" : String(v); }
+
+  function render(d) {
+    var st = el("es-state");
+    st.textContent = d.active ? "AKTİF" : "KAPALI";
+    st.className = "oc-state " + (d.active ? "bad" : "good");
+    setTxt("es-reason", d.active
+      ? (d.reason_code + (d.reason_text ? " — " + d.reason_text : "")) : "—");
+    setTxt("es-by", d.triggered_by);
+    setTxt("es-at", d.triggered_at);
+    setTxt("es-mode", d.automation_mode === "AUTOMATIC"
+      ? "OTOMATİK" : "DANIŞMAN");
+    el("es-clear").hidden = !(d.active && d.can_clear);
+    if (d.active && !d.can_clear) {
+      el("es-note").textContent = d.risk_protected
+        ? "Risk kaynaklı durdurma — panelden temizlenemez."
+        : "Bu ortamda temizlenemez (yalnız yerel Windows PAPER).";
+    }
+  }
+
+  function refresh() {
+    return fetch("/api/automation/paper-emergency-stop",
+                 { headers: { "X-CSRFToken": window.OC_CSRF } })
+      .then(function (r) { return r.json(); })
+      .then(function (b) { if (b && b.ok) render(b.data); })
+      .catch(function () { el("es-note").textContent =
+        "Durum alınamadı (ağ hatası)."; });
+  }
+
+  el("es-clear").addEventListener("click", function () {
+    var reason = el("es-reason").textContent;
+    if (!window.confirm("Acil durdurma nedeni:\n" + reason +
+        "\n\nSağlık kontrolü yapılacak, durum yedeği alınacak ve PAPER " +
+        "kilidi kaldırılacak. Onaylıyor musunuz?")) { return; }
+    var startAuto = window.confirm(
+      "Kilit kalktıktan sonra Paper OTOMATİK modu da başlatılsın mı?\n" +
+      "(Hayır derseniz DANIŞMAN tercihiniz aynen korunur.)");
+    el("es-clear").disabled = true;
+    fetch("/api/automation/paper-emergency-stop/clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json",
+                 "X-CSRFToken": window.OC_CSRF },
+      body: JSON.stringify({ confirm: true, start_automation: startAuto })
+    }).then(function (r) { return r.json(); })
+      .then(function (b) {
+        el("es-note").textContent = b.ok
+          ? ("Kilit kaldırıldı (yedek: " + b.backup + "). " +
+             (b.automation_note || ""))
+          : ("Reddedildi: " + (b.message || b.error || "bilinmeyen"));
+      })
+      .catch(function () { el("es-note").textContent =
+        "İstek başarısız (ağ hatası)."; })
+      .then(function () { el("es-clear").disabled = false; refresh(); });
+  });
+
+  refresh();
+  setInterval(refresh, 30000);
+})();
+</script>
 <script src="{{ url_for('static', filename='js/operation_workspace.js') }}"></script>
 {% endblock %}

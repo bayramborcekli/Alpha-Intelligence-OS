@@ -234,6 +234,19 @@ def _bootstrap_background_services() -> None:
     except Exception as exc:
         log.warning("Binance baglanti geri yukleme baslatilamadi: %s", exc)
 
+    # 0d. Acil durdurma raporu — startup ASLA otomatik kaldırmaz.
+    try:
+        from services import emergency_stop as _es
+        _est = _es.status()
+        if _est["active"]:
+            log.warning("EMERGENCY STOP ACTIVE (reason=%s, by=%s) — "
+                        "yeni PAPER islemi acilmaz. Guvenli kaldirma: "
+                        "Operation Center > Acil Durdurma karti.",
+                        _est["reason_code"] or "UNKNOWN_LEGACY_STATE",
+                        _est["triggered_by"] or "unknown")
+    except Exception as exc:
+        log.warning("Emergency stop durumu okunamadi: %s", exc)
+
     # 1-2. Başlangıç güvenlik kontrolleri (post_fork ile aynı sıra, fail-fast)
     # NOT: try/except YOK — gunicorn.conf.py post_fork ile tam pari;
     # bu iki kontrol başarısız olursa sunucu başlamamalıdır.

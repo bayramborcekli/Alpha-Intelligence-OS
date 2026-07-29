@@ -674,9 +674,19 @@ class TestFlaskRoutes:
             **ms.LOG_FILES,
             "risk_events": tmp_path / "risk_events.jsonl",
         })
-        resp = client.post("/adaptive/kill-switch", data={"activate": "1"})
-        assert resp.status_code in (200, 302)
-        sg.deactivate_kill_switch()
+        # Rota _save_adaptive_cfg ile GERÇEK config.json'a yazar; test
+        # bitince byte-byte geri yüklenir — yoksa kill_switch=true kalıcı
+        # sapma olarak dosyada kalır ve commit'lere gömülür (yaşanmış olay).
+        cfg_path = "alpha20_v1/config.json"
+        original = open(cfg_path, encoding="utf-8").read()
+        try:
+            resp = client.post("/adaptive/kill-switch",
+                               data={"activate": "1"})
+            assert resp.status_code in (200, 302)
+        finally:
+            sg.deactivate_kill_switch()
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                f.write(original)
 
     def test_bot_start_stop_returns_200(self, client):
         resp = client.post("/bot/stop")  # bot yoksa hata mesajı döner ama 200

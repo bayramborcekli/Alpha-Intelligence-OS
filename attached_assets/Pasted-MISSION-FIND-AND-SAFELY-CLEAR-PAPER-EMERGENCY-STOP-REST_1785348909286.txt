@@ -1,0 +1,393 @@
+MISSION — FIND AND SAFELY CLEAR PAPER EMERGENCY STOP + RESTORE AUTOMATIC PAPER MODE
+
+GERÇEK WINDOWS KANITI
+
+Dashboard şu durumu gösteriyor:
+
+- Windows Runtime: ÇALIŞIYOR
+- Controller: RUNNING, cycle_count=2
+- Paper bakiye: 10.000 USDT
+- Binance Global: BAĞLI
+- Sistem durumu: HATA — ACİL DURDURULDU
+- AI durumu: “Sistem acil durduruldu; yeni işlem açılamaz.”
+- Otomasyon modu: DANIŞMAN
+- Son SOLUSDT SSL hatasına rağmen controller çevrim yapmaya devam ediyor
+
+SONUÇ
+
+Ana blokaj SSL değildir.
+
+Gerçek blokaj:
+
+1. Kalıcı emergency-stop / kill-switch durumunun açık kalması
+2. Otomasyon modunun DANIŞMAN olması
+
+Önce kök nedeni bul, sonra yalnız PAPER modunda güvenli düzeltme uygula.
+
+============================================================
+1) ÖNCE KÖK NEDENİ BUL
+============================================================
+
+Repository genelinde şu kavramların tüm kaynaklarını araştır:
+
+- emergency_stop
+- emergency stop
+- kill_switch
+- circuit_breaker
+- acil_durdurma
+- halted
+- stopped
+- automation_mode
+- advisor
+- danışman
+- automatic
+- otomatik
+
+Şunları belirle:
+
+- Acil durdurma durumunun kanonik kaynağı hangi dosya/servis?
+- Durum RAM’de mi, JSON/state dosyasında mı, config içinde mi?
+- Hangi kod veya olay bunu aktif etmiş?
+- reason / timestamp / source bilgisi tutuluyor mu?
+- Windows yeniden başlatılınca neden açık kalıyor?
+- DANIŞMAN modu acil durdurmanın sonucu mu, bağımsız ayar mı?
+- Dashboard hangi kaynaktan bu iki durumu okuyor?
+
+Yeni bir durum sistemi oluşturma.
+Mevcut kanonik kaynağı kullan.
+
+============================================================
+2) SSL HATASINI ANA NEDEN SAYMA
+============================================================
+
+SOLUSDT geçici SSL hatası:
+
+- controller çalışıyorsa
+- cycle_count artıyorsa
+- diğer semboller veri alıyorsa
+
+emergency-stop nedeni olarak gösterilmemeli.
+
+Geçici tek sembol SSL hatası:
+
+- warning/degraded olabilir
+- controller’ı öldürmemeli
+- emergency stop’u etkinleştirmemeli
+- Paper otomasyonu tamamen durdurmamalı
+
+Ancak tüm market data kaynakları uzun süre başarısızsa mevcut güvenlik politikası korunabilir.
+
+============================================================
+3) EMERGENCY-STOP NEDEN MODELİ
+============================================================
+
+Acil durdurma durumu en az şu bilgileri taşısın:
+
+- active
+- reason_code
+- reason_text
+- triggered_at
+- triggered_by
+- environment
+- can_clear
+- clear_requirements
+
+Örnek reason_code:
+
+- MANUAL_STOP
+- RISK_LIMIT
+- CONSECUTIVE_LOSSES
+- DATA_OUTAGE
+- STARTUP_FAILURE
+- STALE_TEST_STATE
+- UNKNOWN_LEGACY_STATE
+
+Mevcut durumun nedeni bulunabiliyorsa migration sırasında koru.
+
+Nedeni olmayan eski/stale kayıt:
+
+UNKNOWN_LEGACY_STATE
+
+olarak sınıflandırılsın; sessizce güvenli olay gibi gösterilmesin.
+
+============================================================
+4) PAPER MODUNDA GÜVENLİ KİLİT KALDIRMA
+============================================================
+
+Yalnız şu koşullarda kilit kaldırılabilsin:
+
+- PAPER_MODE=true
+- Live Trading kapalı
+- local Windows runtime
+- authenticated local admin
+- CSRF korumalı işlem
+- controller ve public market data sağlık kontrolü geçiyor
+
+Canlı işlem ortamında otomatik veya kolay kilit kaldırma EKLEME.
+
+Risk kaynaklı gerçek durdurmalar:
+
+- RISK_LIMIT
+- CONSECUTIVE_LOSSES
+
+sessizce sıfırlanmasın.
+
+Kullanıcıya neden ve gerekli onay açıkça gösterilsin.
+
+STALE_TEST_STATE veya UNKNOWN_LEGACY_STATE ise:
+
+- Paper ortamında
+- açık kullanıcı onayıyla
+- yedek alarak
+- tek işlemde güvenli biçimde temizlenebilsin
+
+============================================================
+5) OTOMASYON MODUNU DOĞRU YÖNET
+============================================================
+
+DANIŞMAN modunun kaynağını doğrula.
+
+Acil durdurma yalnız geçici olarak modu DANIŞMAN’a düşürüyorsa:
+
+- kilit kaldırıldıktan sonra önceki PAPER otomatik modu geri yüklenebilsin
+
+DANIŞMAN bağımsız kullanıcı tercihi ise:
+
+- sessizce değiştirme
+- kullanıcıya “Paper Otomatik Modu Başlat” seçeneği göster
+
+Windows Paper test hedefi için beklenen çalışma durumu:
+
+- PAPER: ACTIVE
+- controller: RUNNING
+- automation_mode: AUTOMATIC
+- emergency_stop: FALSE
+- live_orders: DISABLED
+
+============================================================
+6) TEK PANEL AKIŞI
+============================================================
+
+Mevcut Otomasyon veya Operation Center ekranına tek güvenli kart ekle:
+
+ACİL DURDURMA
+
+Durum:
+Aktif / Kapalı
+
+Neden:
+reason_text
+
+Kaynak:
+triggered_by
+
+Zaman:
+triggered_at
+
+Paper ortamında güvenliyse düğme:
+
+“Paper Kilidini Kontrol Et ve Kaldır”
+
+İşlem sırası:
+
+1. Sağlık kontrolü
+2. Live Trading kilidi kontrolü
+3. Durdurma nedenini göster
+4. Kullanıcı onayı
+5. State yedeği
+6. Kilidi kaldır
+7. Controller’ı tekrar doğrula
+8. Uygunsa Paper otomatik modu başlat
+9. Yeni cycle oluşmasını bekle
+10. Dashboard’u güncelle
+
+Birden fazla sayfa veya komut gerektirme.
+
+============================================================
+7) GÜVENLİ ENDPOINT
+============================================================
+
+Mevcut uygun endpoint mimarisini kullan.
+
+Gerekirse dar kapsamlı endpoint:
+
+POST /api/automation/paper-emergency-stop/clear
+
+Şartlar:
+
+- local Windows
+- authenticated admin
+- CSRF
+- rate limit
+- PAPER mode
+- live trading disabled
+- exact route allowlist
+- wildcard yok
+
+Response secret veya hassas config içermesin.
+
+============================================================
+8) WINDOWS STARTUP DAVRANIŞI
+============================================================
+
+SETUP_AND_START_WINDOWS.cmd mevcut başarılı davranışını bozma.
+
+Startup sırasında emergency stop aktifse FINAL raporda açıkça göster:
+
+EMERGENCY STOP:
+ACTIVE / CLEAR
+
+REASON:
+reason_code
+
+AUTOMATION MODE:
+ADVISOR / AUTOMATIC
+
+FINAL ACTION:
+Yalnız gerekiyorsa tek panel işlemi
+
+Risk kaynaklı kilidi otomatik kaldırma.
+
+Eski test/artık durumunu otomatik silmek yerine panelde güvenli onay akışına yönlendir.
+
+============================================================
+9) DASHBOARD DOĞRULUĞU
+============================================================
+
+Dashboard aynı anda çelişkili bilgi göstermemeli.
+
+Şu anki gibi:
+
+- Controller çalışıyor
+- Runtime yeşil
+- Sistem acil durduruldu
+
+durumu mümkün olabilir; ancak açıkça şöyle ayrıştırılmalı:
+
+RUNTIME:
+ÇALIŞIYOR
+
+TRADING AUTOMATION:
+DURDURULDU
+
+BLOCKER:
+EMERGENCY STOP — reason
+
+Böylece SSL uyarısı ana blokaj gibi görünmemeli.
+
+============================================================
+10) KORUNACAKLAR
+============================================================
+
+Değiştirme veya bozma:
+
+- Binance Global read-only bağlantısı
+- Windows DPAPI credential store
+- Binance TR altyapısı
+- SETUP_AND_START_WINDOWS.cmd
+- Windows Runtime Agent
+- Paper ledger ve bakiye
+- trade history
+- risk kuralları
+- public data retry sistemi
+- route guard
+- local admin sistemi
+
+Kesinlikle açma:
+
+- live trading
+- gerçek emir endpointleri
+- withdrawal
+- transfer
+- leverage/margin değişikliği
+
+LIVE ORDERS her durumda DISABLED.
+
+============================================================
+11) TESTLER
+============================================================
+
+Şu regresyon testlerini ekle:
+
+1. Controller running + emergency_stop active → yeni Paper işlem açılmaz
+2. Tek sembol geçici SSL hatası → emergency_stop tetiklenmez
+3. Stale Paper emergency state → panelde neden görünür
+4. Local admin onayıyla stale state güvenli temizlenir
+5. State temizlenirken yedek oluşur
+6. Risk-limit emergency stop sessizce temizlenmez
+7. Live trading açık varsayımında clear endpoint fail-closed
+8. Paper kilidi kalkınca controller çalışmaya devam eder
+9. Uygun ayarda automation mode AUTOMATIC olur
+10. Kullanıcının bağımsız ADVISOR tercihi sessizce değiştirilmez
+11. Dashboard gerçek blocker’ı doğru gösterir
+12. Secret veya credential response/log içine girmez
+13. Paper bakiye ve ledger değişmez
+14. SETUP_AND_START_WINDOWS.cmd yeşil akışı bozulmaz
+15. /health/runtime sözleşmesi bozulmaz
+16. LIVE ORDERS: DISABLED
+
+Önce ilgili testleri, sonra tam test paketini çalıştır.
+
+============================================================
+12) TESLİM RAPORU
+============================================================
+
+COMMIT:
+PUSH:
+
+ROOT CAUSE:
+Emergency stop hangi kaynaktan ve hangi nedenle aktif kaldı?
+
+EMERGENCY STATE SOURCE:
+dosya/servis
+
+AUTOMATION MODE SOURCE:
+dosya/servis
+
+SSL CLASSIFICATION:
+BLOCKING / NON_BLOCKING
+
+SAFE PAPER CLEAR:
+PASS / FAIL
+
+RISK STOP PROTECTION:
+PASS / FAIL
+
+AUTOMATIC PAPER MODE:
+PASS / FAIL
+
+DASHBOARD BLOCKER DISPLAY:
+PASS / FAIL
+
+LEDGER PRESERVED:
+PASS / FAIL
+
+LIVE ORDERS:
+DISABLED
+
+TESTS:
+passed / failed
+
+WINDOWS USER ACTION:
+Panelde tek işlem
+
+============================================================
+13) BAŞARI KRİTERİ
+============================================================
+
+Görev yalnız şu durumda PASS:
+
+- gerçek emergency-stop kaynağı bulunmuş
+- nedeni açıkça raporlanmış
+- SSL yanlış ana neden olarak gösterilmiyor
+- Paper ortamında güvenli kilit kaldırma çalışıyor
+- risk kaynaklı durdurma korunuyor
+- DANIŞMAN/AUTOMATIC ayrımı doğru
+- controller ve Paper ledger korunuyor
+- dashboard gerçek blocker’ı gösteriyor
+- canlı emirler kapalı
+- tüm testler yeşil
+- main’e push edilmiş
+
+Yeni genel mimari kurma.
+Yalnız gerçek blocker olan emergency-stop durumunu ve otomasyon modu geçişini düzelt.

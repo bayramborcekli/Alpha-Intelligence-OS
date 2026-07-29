@@ -23,6 +23,12 @@ _LOCK = threading.RLock()   # RLock: check_all içinden lock_safety çağrısın
 
 SAFETY_DEFAULTS: dict[str, Any] = {
     "kill_switch":          False,
+    # Acil durdurma neden modeli (services/emergency_stop.py okur):
+    # neden kaydı olmayan aktif kilit UNKNOWN_LEGACY_STATE sayılır.
+    "kill_switch_reason_code": "",
+    "kill_switch_reason_text": "",
+    "kill_switch_triggered_at": None,
+    "kill_switch_triggered_by": "",
     "safety_locked":        False,
     "lock_reason":          "",
     "lock_time":            None,
@@ -76,10 +82,17 @@ def get_safety_state() -> dict[str, Any]:
 # Kill-switch
 # ══════════════════════════════════════════════════════════════════════════════
 
-def activate_kill_switch(reason: str = "Kullanıcı tarafından etkinleştirildi.") -> None:
+def activate_kill_switch(reason: str = "Kullanıcı tarafından etkinleştirildi.",
+                         reason_code: str = "MANUAL_STOP",
+                         triggered_by: str = "operator") -> None:
     with _LOCK:
         state = _load()
         state["kill_switch"] = True
+        state["kill_switch_reason_code"] = str(reason_code or "MANUAL_STOP")
+        state["kill_switch_reason_text"] = str(reason or "")
+        state["kill_switch_triggered_at"] = (
+            datetime.now(timezone.utc).isoformat())
+        state["kill_switch_triggered_by"] = str(triggered_by or "operator")
         _save(state)
     ms.append_risk_event(event_type="KILL_SWITCH_ON", reason=reason)
 
@@ -88,6 +101,10 @@ def deactivate_kill_switch() -> None:
     with _LOCK:
         state = _load()
         state["kill_switch"] = False
+        state["kill_switch_reason_code"] = ""
+        state["kill_switch_reason_text"] = ""
+        state["kill_switch_triggered_at"] = None
+        state["kill_switch_triggered_by"] = ""
         _save(state)
     ms.append_risk_event(event_type="KILL_SWITCH_OFF", reason="Kullanıcı tarafından kapatıldı.")
 

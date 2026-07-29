@@ -37,6 +37,6 @@
     "break_even_enabled": false,
     "trailing_stop_enabled": false,
     "partial_take_profit_enabled": false,
-    "kill_switch": true
+    "kill_switch": false
   }
 }

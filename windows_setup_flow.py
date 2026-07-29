@@ -412,6 +412,20 @@ def final_report(health: dict) -> int:
     p(f"LAST CYCLE     : {health.get('last_cycle')}")
     p(f"BINANCE GLOBAL ACCOUNT : {report.get('BINANCE GLOBAL ACCOUNT', 'NOT_CONFIGURED')}")
     p(f"BINANCE TR ACCOUNT     : {report.get('BINANCE TR ACCOUNT', 'NOT_CONFIGURED')}")
+    # Acil durdurma durumu — startup ASLA otomatik kaldırmaz; yalnız
+    # raporlar ve gerekirse tek panel işlemine yönlendirir.
+    try:
+        from services import emergency_stop as _es
+        _est = _es.status()
+        p(f"EMERGENCY STOP : {'ACTIVE' if _est['active'] else 'CLEAR'}")
+        if _est["active"]:
+            p(f"REASON         : {_est['reason_code']}")
+        p(f"AUTOMATION MODE: {'AUTOMATIC' if _est['automation_mode'] == 'AUTOMATIC' else 'ADVISOR'}")
+        if _est["active"]:
+            p("FINAL ACTION   : Operation Center > Acil Durdurma karti > "
+              "'Paper Kilidini Kontrol Et ve Kaldir'")
+    except Exception:
+        p("EMERGENCY STOP : UNKNOWN")
     p("LIVE ORDERS    : DISABLED")
     p(f"RUNTIME CARD   : {card}")
     if not ok:
