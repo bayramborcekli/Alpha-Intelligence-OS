@@ -33,10 +33,33 @@ ROOT = Path(__file__).resolve().parent
 
 log = logging.getLogger("alpha.serve")
 
+# Kurtarma betiği (RECOVER_WINDOWS.cmd) süreç temizliğinde önce bu dosyadaki
+# PID'yi kesin eşleşmeyle dener; komut satırı deseni yalnız yedek yöntemdir.
+PID_FILE = ROOT / ".alpha_server.pid"
+
+
+def write_pid_file(path: Path = PID_FILE, pid: int | None = None) -> bool:
+    """Sunucu PID'sini dosyaya yazar; başarısızlık sunucuyu durdurmaz.
+
+    Döndürür: yazma başarılı mı. Dosya yazılamazsa yalnız uyarı loglanır —
+    kurtarma betiği komut satırı desenine (yedek yönteme) düşer.
+    """
+    real_pid = os.getpid() if pid is None else pid
+    try:
+        path.write_text(f"{real_pid}\n", encoding="ascii")
+        log.info("PID dosyası yazıldı: %s (pid=%d)", path, real_pid)
+        return True
+    except OSError as exc:
+        log.warning("PID dosyası yazılamadı (%s): %s — kurtarma betiği "
+                    "komut satırı desenli yedek temizliği kullanacak.",
+                    path, exc)
+        return False
+
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(name)s %(message)s")
+    write_pid_file()
     try:
         from waitress import serve
     except ImportError:

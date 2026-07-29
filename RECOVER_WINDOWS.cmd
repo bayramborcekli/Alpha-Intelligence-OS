@@ -42,7 +42,10 @@ if errorlevel 1 (
 echo [3/6] Eski Alpha surecleri kapatiliyor (yalniz BU klasordeki proje)...
 rem  Klasor yolu PS komutuna GOMULMEZ (bosluk/kesme isareti guvenligi):
 rem  cd /d "%~dp0" yukarida yapildi; PS kendi calisma dizininden okur.
-powershell -NoProfile -Command "$root=[regex]::Escape((Get-Location).Path + [IO.Path]::DirectorySeparatorChar); Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.CommandLine -match ($root+'.*(serve_windows|launcher_windows)') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
+rem  ONCE PID dosyasi (.alpha_server.pid) kesin eslesmeyle denenir; bayat/
+rem  geri kullanilmis PID'lere karsi ad + komut satiri dogrulanir. Komut
+rem  satiri deseni YEDEK yontem olarak her durumda calisir.
+powershell -NoProfile -Command "$root=[regex]::Escape((Get-Location).Path + [IO.Path]::DirectorySeparatorChar); $pidFile=Join-Path (Get-Location).Path '.alpha_server.pid'; if (Test-Path $pidFile) { $raw=(Get-Content $pidFile -ErrorAction SilentlyContinue | Select-Object -First 1); $alphaPid=0; if ([int]::TryParse(('' + $raw).Trim(), [ref]$alphaPid) -and $alphaPid -gt 0) { $p=Get-CimInstance Win32_Process -Filter ('ProcessId=' + $alphaPid) -ErrorAction SilentlyContinue; if ($p -and $p.Name -match '^python(w)?\.exe$' -and $p.CommandLine -match ($root+'.*(serve_windows|launcher_windows)')) { Stop-Process -Id $alphaPid -Force -ErrorAction SilentlyContinue } }; Remove-Item $pidFile -Force -ErrorAction SilentlyContinue }; Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.CommandLine -match ($root+'.*(serve_windows|launcher_windows)') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
 timeout /t 2 /nobreak >nul
 
 echo [4/6] Otomatik teshis + .env onarimi calisiyor...

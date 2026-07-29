@@ -116,6 +116,98 @@ class TestPsProcessFilter:
 
 
 # ---------------------------------------------------------------------------
+# 2b) PID dosyası: yazma (serve_windows) + batch tarafı PID-önce temizlik
+# ---------------------------------------------------------------------------
+
+import serve_windows as sw  # noqa: E402
+
+
+class TestPidFileWrite:
+    def test_writes_current_pid(self, tmp_path):
+        import os
+        pid_path = tmp_path / ".alpha_server.pid"
+        assert sw.write_pid_file(pid_path) is True
+        assert pid_path.read_text(encoding="ascii").strip() == str(os.getpid())
+
+    def test_writes_explicit_pid(self, tmp_path):
+        pid_path = tmp_path / ".alpha_server.pid"
+        assert sw.write_pid_file(pid_path, pid=4242) is True
+        assert pid_path.read_text(encoding="ascii").strip() == "4242"
+
+    def test_write_failure_returns_false_without_raising(self, tmp_path):
+        # Hedef bir DİZİN ise write_text OSError verir — sunucu çökmemeli.
+        assert sw.write_pid_file(tmp_path) is False
+
+    def test_default_path_is_project_root(self):
+        assert sw.PID_FILE == sw.ROOT / ".alpha_server.pid"
+
+
+class TestBatchPidFirstCleanup:
+    """RECOVER_WINDOWS.cmd: önce PID dosyası, sonra komut satırı yedeği."""
+
+    def test_pid_file_referenced(self):
+        assert ".alpha_server.pid" in CMD_TEXT
+
+    def test_pid_attempt_before_commandline_fallback(self):
+        ps_line = next(l for l in CMD_TEXT.splitlines()
+                       if "powershell" in l.lower()
+                       and ".alpha_server.pid" in l)
+        # Aynı PS komutunda: PID bloğu, yedek filtre ondan SONRA gelir
+        pid_idx = ps_line.index(".alpha_server.pid")
+        fallback_idx = ps_line.index("Name='python.exe' or Name='pythonw.exe'")
+        assert pid_idx < fallback_idx
+
+    def test_stale_pid_guarded_by_name_and_commandline(self):
+        # Bayat/geri kullanılmış PID başka bir süreci öldürmemeli:
+        # ad + komut satırı doğrulaması şart.
+        assert r"'^python(w)?\.exe$'" in CMD_TEXT
+        assert "[int]::TryParse" in CMD_TEXT
+        assert "Remove-Item $pidFile" in CMD_TEXT
+
+    def test_fallback_filter_still_present(self):
+        # PID yolu başarısızsa mevcut komut satırı filtresi hâlâ çalışmalı
+        assert "Name='python.exe' or Name='pythonw.exe'" in CMD_TEXT
+        assert "serve_windows|launcher_windows" in CMD_TEXT
+
+
+def _pid_guard_kills(pid_exists: bool, name: str, command_line: str,
+                     root_dir: str) -> bool:
+    """Batch'teki PID guard'ının Python eşleniği.
+
+    Öldürme yalnız: süreç var + adı python(w).exe + komut satırı bu
+    klasördeki serve/launcher ise.
+    """
+    if not pid_exists:
+        return False
+    if not re.fullmatch(r"python(w)?\.exe", name):
+        return False
+    return _ps_filter_matches(root_dir, command_line)
+
+
+class TestPidGuardBehavior:
+    ROOT_SPACED = r"C:\Users\Ali Veli\Alpha Intelligence OS"
+
+    def test_kills_matching_server(self):
+        cl = (r'"C:\Users\Ali Veli\Alpha Intelligence OS\.venv\Scripts\python.exe" '
+              r'"C:\Users\Ali Veli\Alpha Intelligence OS\serve_windows.py"')
+        assert _pid_guard_kills(True, "python.exe", cl, self.ROOT_SPACED)
+
+    def test_stale_pid_process_gone(self):
+        assert not _pid_guard_kills(False, "", "", self.ROOT_SPACED)
+
+    def test_stale_pid_reused_by_other_program(self):
+        # PID geri kullanıldı: artık notepad — ASLA öldürülmemeli
+        assert not _pid_guard_kills(True, "notepad.exe",
+                                    r"notepad.exe C:\notes.txt",
+                                    self.ROOT_SPACED)
+
+    def test_stale_pid_reused_by_unrelated_python(self):
+        assert not _pid_guard_kills(True, "python.exe",
+                                    r'python.exe "C:\Other\tool.py"',
+                                    self.ROOT_SPACED)
+
+
+# ---------------------------------------------------------------------------
 # 3) --wait-health çıkış kodları + ALPHA_PORT (ağsız)
 # ---------------------------------------------------------------------------
 
