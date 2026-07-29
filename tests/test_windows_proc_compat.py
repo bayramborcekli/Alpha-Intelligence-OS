@@ -93,6 +93,7 @@ def test_windows_bot_running_via_pidfile(monkeypatch, tmp_path):
     monkeypatch.setattr(app_module, "os", _OsNtProxy())
     pidfile = tmp_path / ".bot.pid"
     monkeypatch.setattr(app_module, "PID_PATH", pidfile)
+    monkeypatch.setattr(app_module, "BOT_OUTPUT", tmp_path / "bot_process.log")
     # PID dosyası yok → çalışmıyor
     assert app_module.bot_running() is False
     # PID dosyası var + süreç canlı sayılıyor → çalışıyor
@@ -102,6 +103,64 @@ def test_windows_bot_running_via_pidfile(monkeypatch, tmp_path):
     # Süreç ölü → çalışmıyor
     monkeypatch.setattr(app_module, "_pid_alive", lambda pid: False)
     assert app_module.bot_running() is False
+
+
+class TestCrashDetection:
+    """Task: bot çökünce panel yanlış 'çalışıyor' göstermesin.
+
+    Ölü PID tespit edilir edilmez .bot.pid silinir ve çöküş
+    bot_process.log'a WARNING olarak yazılır.
+    """
+
+    def _setup(self, monkeypatch, tmp_path, alive=False):
+        monkeypatch.setattr(app_module, "os", _OsNtProxy())
+        pidfile = tmp_path / ".bot.pid"
+        botlog = tmp_path / "bot_process.log"
+        monkeypatch.setattr(app_module, "PID_PATH", pidfile)
+        monkeypatch.setattr(app_module, "BOT_OUTPUT", botlog)
+        pidfile.write_text('{"pid": 12345}', encoding="utf-8")
+        monkeypatch.setattr(app_module, "_pid_alive", lambda pid: alive)
+        return pidfile, botlog
+
+    def test_dead_pid_removes_pidfile_and_logs(self, monkeypatch, tmp_path):
+        pidfile, botlog = self._setup(monkeypatch, tmp_path, alive=False)
+        assert app_module.bot_running() is False
+        assert not pidfile.exists(), ".bot.pid anında silinmeli"
+        content = botlog.read_text(encoding="utf-8")
+        assert "BOT ÇÖKTÜ" in content
+        assert "PID=12345" in content
+        assert "WARNING" in content
+
+    def test_crash_logged_only_once(self, monkeypatch, tmp_path):
+        pidfile, botlog = self._setup(monkeypatch, tmp_path, alive=False)
+        assert app_module.bot_running() is False
+        assert app_module.bot_running() is False  # ikinci anket
+        content = botlog.read_text(encoding="utf-8")
+        assert content.count("BOT ÇÖKTÜ") == 1, "tek çöküş tek uyarı"
+
+    def test_alive_pid_untouched(self, monkeypatch, tmp_path):
+        pidfile, botlog = self._setup(monkeypatch, tmp_path, alive=True)
+        assert app_module.bot_running() is True
+        assert pidfile.exists()
+        assert not botlog.exists()
+
+    def test_linux_stale_pidfile_cleaned(self, monkeypatch, tmp_path):
+        """Linux yolu: /proc taraması bot bulamazsa bayat .bot.pid temizlenir."""
+        pidfile = tmp_path / ".bot.pid"
+        botlog = tmp_path / "bot_process.log"
+        monkeypatch.setattr(app_module, "PID_PATH", pidfile)
+        monkeypatch.setattr(app_module, "BOT_OUTPUT", botlog)
+        monkeypatch.setattr(app_module, "find_bot_pids", lambda: [])
+        pidfile.write_text('{"pid": 12345}', encoding="utf-8")
+        assert app_module.bot_running() is False
+        assert not pidfile.exists()
+        assert "BOT ÇÖKTÜ" in botlog.read_text(encoding="utf-8")
+
+    def test_status_endpoint_reflects_crash(self, monkeypatch, tmp_path):
+        """Panelin okuduğu build_status() çöküş sonrası running=False döner."""
+        self._setup(monkeypatch, tmp_path, alive=False)
+        status, _ = app_module.build_status()
+        assert status["running"] is False
 
 
 def test_windows_stop_bot_uses_pid_alive(monkeypatch, tmp_path):

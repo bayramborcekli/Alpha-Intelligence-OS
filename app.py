@@ -572,17 +572,59 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
+def _report_bot_crash(pid: int) -> None:
+    """Bayat PID tespiti: .bot.pid dosyasını sil ve çöküşü logla.
+
+    Bot beklenmedik şekilde çökerse PID dosyasını kendisi silemez;
+    panel bir sonraki sağlık anketinde ölü PID'i görür görmez dosyayı
+    temizler ki durum anında "durdu"ya dönsün ve start_bot yeniden
+    başlatmaya izin versin. Çöküş anı bot_process.log'a WARNING olarak
+    yazılır (operatör görünürlüğü).
+
+    Çok worker'lı gunicorn yarışına karşı: dosyayı yalnız gerçekten
+    SİLEN worker loglar (FileNotFoundError = başka worker önce davrandı),
+    böylece tek çöküş tek uyarı üretir.
+    """
+    try:
+        os.unlink(PID_PATH)
+    except FileNotFoundError:
+        return  # başka worker zaten temizledi — çift log yok
+    except OSError as exc:
+        logging.getLogger("alpha.app").warning(
+            "Bayat PID dosyası silinemedi (%s) — bot yine de 'durdu' "
+            "olarak raporlanacak.", exc)
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+    line = (f"{ts} | WARNING | BOT ÇÖKTÜ | PID={pid} artık çalışmıyor — "
+            "süreç beklenmedik şekilde sonlandı; .bot.pid temizlendi, "
+            "panel durumu 'durdu' olarak güncellendi.\n")
+    try:
+        with BOT_OUTPUT.open("a", encoding="utf-8") as fh:
+            fh.write(line)
+    except OSError as exc:
+        logging.getLogger("alpha.app").warning(
+            "Çöküş uyarısı bot_process.log'a yazılamadı (%s).", exc)
+    logging.getLogger("alpha.app").warning(
+        "BOT ÇÖKTÜ | PID=%s artık çalışmıyor — .bot.pid temizlendi.", pid)
+
+
 def _pidfile_bot_pid() -> int | None:
     """PID dosyası tabanlı platform-bağımsız bot tespiti.
 
     Yalnız /proc'un OLMADIĞI ortamlarda (Windows) anlamlıdır: PID dosyası
     okunur ve süreç hâlâ canlıysa PID döner. /proc'lu Linux'ta cmdline
     doğrulaması yapılabildiği için bu yol kullanılmaz (davranış değişmez).
+
+    Bayat PID (dosya var ama süreç ölü) tespit edilirse dosya anında
+    silinir ve çöküş loglanır — panel en geç bir polling dönemi içinde
+    doğru duruma döner.
     """
     pid = read_pid()
     if pid is None:
         return None
-    return pid if _pid_alive(pid) else None
+    if _pid_alive(pid):
+        return pid
+    _report_bot_crash(pid)
+    return None
 
 
 def process_cmdline(pid: int) -> list[str] | None:
@@ -644,7 +686,13 @@ def bot_running() -> bool:
     # Linux: /proc taraması (davranış değişmedi). Windows / /proc'suz
     # ortam: PID dosyası + canlılık kontrolü ile gerçek durum yansıtılır.
     if _proc_fs_available():
-        return bool(find_bot_pids())
+        if find_bot_pids():
+            return True
+        # Bot çökmüş olabilir: bayat PID dosyası kaldıysa temizle + logla.
+        pid = read_pid()
+        if pid is not None:
+            _report_bot_crash(pid)
+        return False
     return _pidfile_bot_pid() is not None
 
 
