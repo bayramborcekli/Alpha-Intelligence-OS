@@ -106,6 +106,47 @@ def test_add_preserves_crlf(tmp_path):
         b"FLASK_SECRET_KEY=abc\r\nALPHA_WINDOWS_PAPER_AUTO=true\r\n")
 
 
+# ---------- paper_auto_present_guidance ----------
+
+def test_guidance_false_value(tmp_path):
+    content = SECRET_ENV + "ALPHA_WINDOWS_PAPER_AUTO=false\n"
+    p = _env(tmp_path, content)
+    msg = wd.paper_auto_present_guidance(p)
+    assert msg is not None
+    assert "'false'" in msg
+    assert "ALPHA_WINDOWS_PAPER_AUTO=true" in msg
+    # Dosya degismez
+    assert p.read_text(encoding="utf-8") == content
+    assert not (tmp_path / ".env.bak").exists()
+
+
+def test_guidance_empty_value(tmp_path):
+    p = _env(tmp_path, "ALPHA_WINDOWS_PAPER_AUTO=\n")
+    msg = wd.paper_auto_present_guidance(p)
+    assert msg is not None and "(bos)" in msg
+
+
+def test_guidance_typo_value(tmp_path):
+    p = _env(tmp_path, "ALPHA_WINDOWS_PAPER_AUTO=ture\n")
+    msg = wd.paper_auto_present_guidance(p)
+    assert msg is not None and "'ture'" in msg
+
+
+def test_guidance_none_when_true(tmp_path):
+    p = _env(tmp_path, "ALPHA_WINDOWS_PAPER_AUTO=true\n")
+    assert wd.paper_auto_present_guidance(p) is None
+
+
+def test_guidance_none_when_true_mixed_case(tmp_path):
+    p = _env(tmp_path, "ALPHA_WINDOWS_PAPER_AUTO=TRUE\n")
+    assert wd.paper_auto_present_guidance(p) is None
+
+
+def test_guidance_none_when_missing(tmp_path):
+    assert wd.paper_auto_present_guidance(_env(tmp_path)) is None
+    assert wd.paper_auto_present_guidance(tmp_path / "yok.env") is None
+
+
 # ---------- offer_paper_auto_fix ----------
 
 def test_offer_accept_adds_and_sets_env(tmp_path, monkeypatch):

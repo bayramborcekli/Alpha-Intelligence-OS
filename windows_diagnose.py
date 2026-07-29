@@ -107,6 +107,40 @@ def add_paper_auto_line(env_path: Path) -> str:
     return "added"
 
 
+def paper_auto_present_guidance(env_path: Path) -> str | None:
+    """Satır .env'de MEVCUT ama değeri 'true' değilse net talimat döndürür.
+
+    Dosyaya asla dokunulmaz. Satır yoksa veya değeri zaten 'true' ise None.
+    """
+    try:
+        raw = env_path.read_bytes()
+    except OSError:
+        return None
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("utf-16")
+        except UnicodeError:
+            return None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        if key.strip() == PAPER_AUTO_KEY:
+            value = value.strip()
+            if value.lower() == "true":
+                return None
+            shown = value if value else "(bos)"
+            return (f"{PAPER_AUTO_KEY} satiri .env'de MEVCUT ama degeri "
+                    f"'{shown}' — 'true' degil. Teshis mevcut degeri bilerek "
+                    "EZMEZ. Duzeltme: .env dosyasini acin ve satiri su hale "
+                    f"getirin: {PAPER_AUTO_LINE}  (sonra sunucuyu yeniden "
+                    "baslatin)")
+    return None
+
+
 def offer_paper_auto_fix(env_path: Path,
                          ask=input) -> str:
     """Eksik PAPER_AUTO için operatöre sorar; onayda satırı ekler.
@@ -169,6 +203,10 @@ def main() -> int:
                 results["ENV"] = "PASS"
                 p("PAPER_AUTO env : true  (.env'e eklendi — sunucuyu "
                   "yeniden baslatin)")
+        else:
+            guidance = paper_auto_present_guidance(env_path)
+            if guidance:
+                p("ONARIM         : " + guidance)
     p(f"saat (UTC)     : {datetime.now(timezone.utc).isoformat(timespec='seconds')}"
       "  (gercek saatten sapma varsa SSL bozulur)")
 
