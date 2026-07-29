@@ -1,0 +1,181 @@
+MISSION — WINDOWS RUNTIME GREEN FINAL DIAGNOSIS (SCREEN + HEALTH EVIDENCE)
+
+AMAÇ:
+Windows Runtime kartının neden hâlâ 🟡 Bekliyor kaldığını kesin bul.
+
+KONTEXT:
+Replit tarafında:
+
+- HEAD: dc64b22
+- runtime override kodu mevcut
+- bootstrap simülasyonu PASS
+- config.json kilitli
+- SSL düzeltmeleri mevcut
+
+Ancak gerçek Windows ekranında:
+
+WINDOWS RUNTIME:
+🟡 Bekliyor
+Controller durdu
+Son çevrim henüz yok
+Paper bakiye 9771.09 USDT
+
+Bu nedenle artık kod incelemesi değil, gerçek runtime fark analizi yapılacak.
+
+KOD DEĞİŞİKLİĞİ YAPMA.
+COMMIT YAPMA.
+SADECE KÖK NEDEN RAPORU.
+
+---
+
+1) GERÇEK ÇALIŞAN KOD SÜRÜMÜ
+
+Windows çalışan uygulamadan doğrula:
+
+- git_head değeri
+- çalışan dosya yolu
+- entrypoint
+
+Kontrol:
+
+serve_windows.py mi?
+launcher_windows.py mi?
+
+Rapor:
+
+RUNNING VERSION:
+COMMIT:
+ENTRYPOINT:
+
+---
+
+2) /health/runtime GERÇEK ÇIKTISI
+
+Windows endpoint:
+
+GET /health/runtime
+
+analiz et.
+
+Özellikle:
+
+runtime_override
+controller
+auto_loop
+paper
+cycle_count
+last_cycle
+last_error
+
+
+---
+
+3) ENV RUNTIME ANALİZİ
+
+Sadece çalışan process ortamından oku:
+
+ALPHA_WINDOWS_PAPER_AUTO
+FLASK_ENV
+REPLIT_DEPLOYMENT
+
+
+Kontrol:
+
+ALPHA_WINDOWS_PAPER_AUTO gerçekten true olarak uygulamaya ulaşıyor mu?
+
+
+---
+
+4) BOOTSTRAP KOPMA NOKTASI
+
+Gerçek Windows akışını takip et:
+
+serve_windows.py
+
+↓
+
+_apply_paper_runtime_override()
+
+↓
+
+set_runtime_adaptive_override()
+
+↓
+
+_bootstrap_background_services()
+
+↓
+
+start_controller_loop()
+
+
+Hangi adım son çalışıyor?
+
+---
+
+5) CONTROLLER NEDEN STOPPED?
+
+Eğer:
+
+runtime_override=true
+ama controller stopped ise
+
+bul:
+
+- exception
+- traceback
+- thread crash
+- config engeli
+- safety lock
+
+
+---
+
+6) ESKİ PROCESS KONTROLÜ
+
+Kontrol et:
+
+- aynı anda kaç python.exe çalışıyor?
+- eski Alpha process var mı?
+- restart gerçekten temiz mi?
+
+
+---
+
+7) SONUÇ FORMAT:
+
+WINDOWS REAL STATUS:
+
+GIT:
+PASS / FAIL
+
+ENV:
+PASS / FAIL
+
+BOOT:
+PASS / FAIL
+
+RUNTIME OVERRIDE:
+TRUE / FALSE
+
+AUTO LOOP:
+RUNNING / STOPPED
+
+CONTROLLER:
+RUNNING / STOPPED
+
+PAPER:
+ACTIVE / DISABLED
+
+
+ROOT CAUSE:
+Tek gerçek neden
+
+
+NEXT ACTION:
+Tek gerekli işlem
+
+
+Kod değiştirme yok.
+Yeni özellik yok.
+Sadece final teşhis.
