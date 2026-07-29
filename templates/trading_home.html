@@ -217,13 +217,14 @@
   }
   function render(d) {
     var badge;
-    if (d.controller === "running" && !d.safe_mode) {
-      badge = "\uD83D\uDFE2 Çalışıyor";
-    } else if (d.app === "running" &&
-               (d.controller !== "running" || d.safe_mode)) {
-      badge = d.last_error ? "\uD83D\uDD34 Hata" : "\uD83D\uDFE1 Bekliyor";
-    } else {
+    if (d.app !== "running") {
       badge = "\uD83D\uDD34 Hata";
+    } else if (d.controller === "running" && !d.safe_mode) {
+      badge = "\uD83D\uDFE2 Çalışıyor";
+    } else {
+      // Controller kapalı/bekliyor veya güvenlik kilidi: BEKLEME durumudur;
+      // geçmiş hata kayıtları rozeti kırmızıya çevirmez (notta gösterilir).
+      badge = "\uD83D\uDFE1 Bekliyor";
     }
     set("th-winrt-badge", badge);
     set("th-winrt-controller", d.controller === "running"
