@@ -549,12 +549,26 @@ def is_bot_command(pid: int) -> bool:
 
 
 def find_bot_pids() -> list[int]:
+    # Windows uyumluluğu: /proc yalnız Linux'ta vardır. Windows'ta
+    # (veya /proc yoksa) tarama yapılmaz ve güvenle "bot yok" dönülür —
+    # aksi halde Path("/proc").iterdir() FileNotFoundError fırlatır ve
+    # /api/v1/executive/summary dahil çağıran uçlar HTTP 500'e düşer.
+    proc = Path("/proc")
+    if os.name == "nt" or not proc.exists():
+        return []
     pids: list[int] = []
-    for entry in Path("/proc").iterdir():
-        if entry.name.isdigit():
-            pid = int(entry.name)
-            if pid != os.getpid() and is_bot_command(pid):
-                pids.append(pid)
+    try:
+        for entry in proc.iterdir():
+            if entry.name.isdigit():
+                pid = int(entry.name)
+                if pid != os.getpid() and is_bot_command(pid):
+                    pids.append(pid)
+    except OSError as exc:
+        # Savunma katmanı: beklenmeyen OS hatası PID taraması yüzünden
+        # endpoint'i asla 500'e düşürmesin.
+        logging.getLogger("alpha.app").warning(
+            "PID taraması başarısız (%s) — bot bulunamadı sayılıyor.", exc)
+        return []
     return pids
 
 
