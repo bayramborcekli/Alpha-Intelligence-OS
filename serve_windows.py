@@ -212,6 +212,28 @@ def _bootstrap_background_services() -> None:
     #    SALT BELLEK: hiçbir dosya değişmez.
     paper_override = _apply_paper_runtime_override()
 
+    # 0b. .env doğrulama (yalnız RAPOR — sunucu startup'ı dosya YAZMAZ;
+    #     onarım SETUP akışının işidir). Eksik yönetilen anahtar loglanır.
+    for _k in ("FLASK_ENV", "LOCAL_DEV_BYPASS", "PAPER_MODE",
+               "ALPHA_WINDOWS_PAPER_AUTO"):
+        if not os.environ.get(_k, "").strip():
+            log.warning(".env dogrulama: %s tanimsiz — "
+                        "SETUP_AND_START_WINDOWS.cmd .env'i onarir.", _k)
+
+    # 0c. Kalıcı Binance bağlantısı otomatik geri yükleme: DPAPI deposunda
+    #     kayıtlı credential varsa arka planda read-only test edilir ve
+    #     panel durumu güncellenir (kullanıcıdan anahtar İSTENMEZ; test
+    #     başarısız olsa bile credential SİLİNMEZ). gunicorn post_fork
+    #     paritesi. Paper controller bundan bağımsız çalışır.
+    try:
+        from services import binance_connection as _bc
+        _bc.start_startup_tests_async()
+        _bc.start_periodic_refresh()
+        log.info("BINANCE CONNECTION RESTORE basladi (arka plan; "
+                 "kayitli anahtar varsa otomatik test edilir).")
+    except Exception as exc:
+        log.warning("Binance baglanti geri yukleme baslatilamadi: %s", exc)
+
     # 1-2. Başlangıç güvenlik kontrolleri (post_fork ile aynı sıra, fail-fast)
     # NOT: try/except YOK — gunicorn.conf.py post_fork ile tam pari;
     # bu iki kontrol başarısız olursa sunucu başlamamalıdır.

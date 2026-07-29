@@ -101,6 +101,13 @@ def status() -> dict:
     elif snap:
         snap.setdefault("server", "STOPPED")
     snap["live_orders"] = "DISABLED"
+    # Kalıcı yapılandırma kaynakları (Mission: tek kaynak prensibi) —
+    # panel bunları "nerede saklanıyor" alanında gösterir; secret'sız.
+    snap["config_sources"] = {
+        "runtime_settings": ".env",
+        "credentials": "windows_dpapi",
+        "code": "github_main",
+    }
     return snap
 
 

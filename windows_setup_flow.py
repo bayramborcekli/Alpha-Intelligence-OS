@@ -282,6 +282,37 @@ def connect_accounts() -> None:
     """İsteğe bağlı read-only Binance hesap bağlantısı (yeşil SONRASI)."""
     report.setdefault("BINANCE GLOBAL ACCOUNT", "NOT_CONFIGURED")
     report.setdefault("BINANCE TR ACCOUNT", "NOT_CONFIGURED")
+    # KALICILIK SÖZLEŞMESİ: mevcut DPAPI credential'ları KORUNUR — SETUP
+    # tekrar çalıştırıldığında yeniden API Key/Secret İSTENMEZ, credential
+    # silinmez; yalnız otomatik bağlantı testi yapılır.
+    from services import binance_connection as bcn
+    from services import secure_credentials as sc
+    labels = {"BINANCE_GLOBAL": "BINANCE GLOBAL ACCOUNT",
+              "BINANCE_TR": "BINANCE TR ACCOUNT"}
+    existing = [x for x in ("BINANCE_GLOBAL", "BINANCE_TR")
+                if sc.configured(x)]
+    for exchange in existing:
+        p(f"{exchange}  : ZATEN YAPILANDIRILMIS "
+          f"(kaynak: {sc.credential_store(exchange)}; anahtar korunuyor, "
+          "yeniden girmeniz gerekmez). Otomatik test yapiliyor...")
+        try:
+            result = bcn.test_stored(exchange)
+            status = str(result.get("status", "ERROR"))
+        except Exception as exc:
+            status = f"ERROR({type(exc).__name__})"
+        if status == "CONNECTED_READ_ONLY":
+            p(f"{exchange}  : CONNECTED_READ_ONLY")
+            report[labels[exchange]] = "CONNECTED"
+        elif status == "CONNECTED_PERMISSIONS_UNVERIFIED":
+            p(f"{exchange}  : CONNECTED (yetki dogrulanamadi — sari)")
+            report[labels[exchange]] = "CONNECTED (UNVERIFIED)"
+        else:
+            # Geçici hata credential'ı SİLMEZ — yalnız hata kodu gösterilir.
+            p(f"{exchange}  : TEST BASARISIZ ({status}) — anahtar KORUNDU; "
+              "gerekirse panelden 'Test Et' ile tekrar deneyin.")
+            report[labels[exchange]] = f"PRESERVED ({status})"
+    if len(existing) == len(labels):
+        return  # her iki hesap da kayıtlı — yeniden bağlantı sorulmaz
     try:
         ans = input("Binance hesap baglantisi yapilandirilsin mi? "
                     "(salt okunur; E/H): ")
@@ -306,9 +337,9 @@ def connect_accounts() -> None:
       "veya asagidaki gizli girisle devam edebilirsiniz.")
     # Tek kanonik yol: bağlantı testi + izin kontrolü + şifreli saklama
     # services.binance_connection'da yapılır (duplicate fetch YASAĞI).
-    from services import binance_connection as bcn
-    plans = [("BINANCE_GLOBAL", "BINANCE GLOBAL ACCOUNT"),
-             ("BINANCE_TR", "BINANCE TR ACCOUNT")]
+    # Yalnız HENÜZ yapılandırılmamış hesaplar sorulur (mevcutlar korunur).
+    plans = [(x, labels[x]) for x in ("BINANCE_GLOBAL", "BINANCE_TR")
+             if x not in existing]
     for exchange, label in plans:
         try:
             ans = input(f"{exchange} baglansin mi? (E/H): ")

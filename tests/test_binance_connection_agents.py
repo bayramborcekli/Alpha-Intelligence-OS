@@ -17,6 +17,8 @@ def iso(tmp_path, monkeypatch):
     monkeypatch.setattr(bc, "DATA_DIR", tmp_path)
     monkeypatch.setattr(bc, "SNAPSHOT_PATH", tmp_path / "snap.json")
     monkeypatch.setattr(bc, "AUDIT_PATH", tmp_path / "audit.jsonl")
+    monkeypatch.setattr(bc, "INTEGRATION_STATUS_PATH",
+                        tmp_path / "integration_status.json")
     return tmp_path
 
 

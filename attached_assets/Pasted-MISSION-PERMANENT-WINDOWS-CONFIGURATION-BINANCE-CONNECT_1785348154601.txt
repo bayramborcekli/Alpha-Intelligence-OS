@@ -1,0 +1,343 @@
+MISSION — PERMANENT WINDOWS CONFIGURATION & BINANCE CONNECTION SINGLE SOURCE OF TRUTH
+
+AMAÇ
+
+Alpha Intelligence OS’un Windows kurulumu, Paper Runtime ayarları, Binance Global/TR bağlantıları ve güvenli credential kayıtları kalıcı ve tek kaynaklı hale getirilecek.
+
+Kullanıcı açısından:
+
+- Uygulama yeniden açıldığında ayarlar kaybolmayacak
+- git pull ayarları silmeyecek
+- SETUP_AND_START_WINDOWS.cmd yeniden çalıştırıldığında bağlantılar korunacak
+- Aynı ayar farklı dosyalarda tekrar edilmeyecek
+- Hangi ayarın nerede tutulduğu panelde açıkça görülecek
+- API Secret hiçbir zaman proje klasörüne düz metin yazılmayacak
+
+============================================================
+1) TEK KAYNAK PRENSİBİ
+============================================================
+
+Ayar kaynaklarını kesin olarak ayır:
+
+A) Repository içinde kalıcı sistem kodu:
+
+- alpha_agents/
+- services/
+- SETUP_AND_START_WINDOWS.cmd
+- windows_setup.ps1
+- windows_setup_flow.py
+- serve_windows.py
+
+B) Proje klasöründe kullanıcıya ait yerel çalışma ayarları:
+
+- .env
+- data/windows_runtime_agent.json
+- data/integration_status.json
+
+C) Secret credential’lar:
+
+- yalnız Windows DPAPI / güvenli credential store
+- .env, JSON, log veya Git içine yazılmaz
+
+Aynı ayarın birden fazla kaynakta tutulmasına izin verme.
+
+============================================================
+2) KALICI WINDOWS AYARLARI
+============================================================
+
+Gerçek runtime ayarlarının tek kaynağı .env olsun.
+
+Şunları garanti et:
+
+FLASK_ENV=development
+LOCAL_DEV_BYPASS=1
+PAPER_MODE=true
+ALPHA_WINDOWS_PAPER_AUTO=true
+
+.env:
+
+- Git dışı kalacak
+- git pull ile değişmeyecek
+- SETUP çalışınca silinmeyecek
+- yalnız eksik veya hatalı değerler düzeltilecek
+- her değişiklikten önce timestamp’li yedek alınacak
+- mevcut secret/özel değerler korunacak
+
+.env.example yalnız örnek dosya olacak; runtime tarafından okunmayacak.
+
+============================================================
+3) KALICI BINANCE CREDENTIAL SAKLAMA
+============================================================
+
+Binance Global ve Binance TR credential’larının tek kaynağı:
+
+Windows DPAPI tabanlı secure credential store
+
+olsun.
+
+Kurallar:
+
+- API Key ve Secret düz metin dosyaya yazılmayacak
+- Secret hiçbir ekranda tekrar gösterilmeyecek
+- tam API Key loglanmayacak
+- credential başka bilgisayara kopyalanınca açılamayacak
+- aynı Windows kullanıcı hesabında uygulama kapanıp açılsa da bağlantı korunacak
+- SETUP_AND_START_WINDOWS.cmd tekrar çalıştırıldığında credential silinmeyecek
+- git pull credential’ları etkilemeyecek
+- yalnız “Bağlantıyı Kaldır” işlemi credential’ı silecek
+
+Mevcut bağlı Binance Global credential’ını koru.
+Migration sırasında yeniden API Key isteme.
+
+============================================================
+4) DURUM DOSYALARI SECRET İÇERMEYECEK
+============================================================
+
+data/integration_status.json içinde yalnız şu bilgiler olabilir:
+
+- provider
+- connection_status
+- permission_status
+- account_type
+- futures_status
+- masked_api_key
+- last_test
+- last_error_code
+- credential_store = windows_dpapi
+
+Şunlar kesinlikle bulunmayacak:
+
+- API Secret
+- tam API Key
+- signature
+- authorization header
+- request body
+
+Durum dosyası silinse bile DPAPI credential kaydı korunmalı ve uygulama açılışında durum yeniden oluşturulmalı.
+
+============================================================
+5) STARTUP OTOMATİK GERİ YÜKLEME
+============================================================
+
+serve_windows.py başladığında:
+
+1. .env doğrulansın
+2. Windows Runtime başlatılsın
+3. DPAPI store içinde Binance Global/TR credential var mı kontrol edilsin
+4. Varsa read-only bağlantı otomatik test edilsin
+5. Dashboard durumu güncellensin
+6. Bağlantı testi başarısızsa credential hemen silinmesin
+7. Geçici TLS/ağ hatasında retry/backoff uygulansın
+8. Paper Controller private Binance bağlantısından bağımsız çalışmaya devam etsin
+
+Startup sırasında kullanıcıdan API Key/Secret tekrar istenmeyecek.
+
+============================================================
+6) SETUP AKIŞI MEVCUT BAĞLANTIYI KORUYACAK
+============================================================
+
+SETUP_AND_START_WINDOWS.cmd çalıştığında:
+
+- mevcut DPAPI credential var mı kontrol et
+- varsa “Binance Global zaten yapılandırılmış” göster
+- kullanıcıdan yeniden key/secret isteme
+- otomatik bağlantı testi yap
+- bağlantı başarılıysa CONNECTED_READ_ONLY göster
+- başarısızsa yalnız hata kodunu göster
+- credential’ı kendiliğinden silme
+
+Bağlantı hiç yoksa kullanıcıya Binance bağlantı sayfasını açmayı teklif et.
+
+============================================================
+7) AYARLARIN NEREDE TUTULDUĞUNU PANELDE GÖSTER
+============================================================
+
+/settings/binance sayfasına “Saklama Durumu” alanı ekle:
+
+Binance Global:
+- Credential: Windows DPAPI
+- Kalıcılık: Bu bilgisayar ve Windows kullanıcısına bağlı
+- Secret: Şifreli, görüntülenemez
+- Git durumu: Repository dışında
+- Yeniden başlatma sonrası: Korunur
+
+Binance TR için de aynı alanlar.
+
+Windows Runtime sayfasında:
+
+Runtime ayar kaynağı:
+.env
+
+Credential kaynağı:
+Windows DPAPI
+
+Kod kaynağı:
+GitHub main
+
+göster.
+
+Secret veya tam dosya içeriği gösterme.
+
+============================================================
+8) DUPLICATE CONFIG TEMİZLİĞİ
+============================================================
+
+Repository genelinde araştır:
+
+- Binance key/secret’ın .env’den okunması
+- config.json içinde credential tutulması
+- farklı credential JSON dosyaları
+- duplicate connection status kaynakları
+- eski terminal tabanlı credential saklama
+- hard-coded API bilgileri
+
+Eski veya çakışan yollar varsa:
+
+- güvenli biçimde devre dışı bırak
+- canonical secure credential service’e yönlendir
+- mevcut kullanıcı credential’ını kaybetme
+- canlı sistem davranışını bozma
+
+Tek kanonik servis:
+
+services/secure_credentials.py
+
+Tek kanonik bağlantı servisi:
+
+services/binance_connection.py
+
+Tek kanonik runtime ayar kaynağı:
+
+.env
+
+============================================================
+9) YEDEKLEME VE KURTARMA POLİTİKASI
+============================================================
+
+.env değişirse:
+
+.env.backup_<timestamp>
+
+oluştur.
+
+DPAPI credential yedeğini düz metin olarak oluşturma.
+
+Kullanıcı bilgisayar değiştirirse bağlantının yeniden kurulması gerektiğini dokümante et.
+
+Credential açılamıyorsa:
+
+- fail-closed
+- bağlantıyı ERROR göster
+- secret’ı loglama
+- kullanıcıya yalnız yeniden bağlama seçeneği sun
+
+============================================================
+10) TESTLER
+============================================================
+
+Şu testleri ekle:
+
+1. Uygulama yeniden başlatılınca Binance Global bağlantısı korunuyor
+2. SETUP_AND_START_WINDOWS.cmd tekrar çalışınca credential silinmiyor
+3. git pull simülasyonu credential’ı etkilemiyor
+4. .env onarımı Binance credential store’a dokunmuyor
+5. integration_status.json silinse bile durum DPAPI’den yeniden oluşturuluyor
+6. başka Windows kullanıcı/makine bağlamında DPAPI fail-closed
+7. “Bağlantıyı Kaldır” credential’ı gerçekten siliyor
+8. geçici TLS hatası credential’ı silmiyor
+9. secret hiçbir JSON/log/response/snapshot içinde görünmüyor
+10. tam API Key hiçbir logda görünmüyor
+11. Paper Controller Binance private bağlantısı olmadan çalışıyor
+12. Live Orders her durumda DISABLED
+13. SETUP_AND_START_WINDOWS.cmd mevcut yeşil davranışını koruyor
+14. /health/runtime sözleşmesi değişmiyor
+
+Mevcut bütün testler yeşil kalmalı.
+
+============================================================
+11) DOKÜMANTASYON
+============================================================
+
+Ana proje klasöründeki:
+
+WINDOWS_AND_BINANCE_AGENTS.md
+
+belgesini güncelle.
+
+Açıkça yaz:
+
+- Kod GitHub main’de kalıcıdır
+- Runtime ayarları yerel .env dosyasındadır
+- Binance credential’ları Windows DPAPI ile şifrelenir
+- API Secret proje klasöründe tutulmaz
+- git pull ayarları silmez
+- SETUP tekrar çalıştırılabilir
+- bilgisayar değişirse yeniden bağlantı gerekir
+- bağlantıyı yalnız paneldeki “Bağlantıyı Kaldır” düğmesi siler
+- Live Trading kapalıdır
+
+============================================================
+12) FINAL TESLİM RAPORU
+============================================================
+
+Teslim sonunda şunları raporla:
+
+COMMIT:
+PUSH:
+
+WINDOWS SETTINGS SOURCE:
+.env
+
+BINANCE CREDENTIAL SOURCE:
+Windows DPAPI
+
+BINANCE GLOBAL EXISTING CONNECTION:
+PRESERVED / FAIL
+
+BINANCE TR CONNECTION:
+PRESERVED / NOT_CONFIGURED / FAIL
+
+SETUP RERUN PERSISTENCE:
+PASS / FAIL
+
+APP RESTART PERSISTENCE:
+PASS / FAIL
+
+GIT PULL PERSISTENCE:
+PASS / FAIL
+
+DUPLICATE CONFIG CLEANUP:
+PASS / FAIL
+
+SECRET LEAK TEST:
+PASS / FAIL
+
+LIVE ORDERS:
+DISABLED
+
+TESTS:
+passed / failed
+
+WINDOWS USER ACTION:
+Yalnız git pull ve SETUP_AND_START_WINDOWS.cmd
+
+============================================================
+13) BAŞARI KRİTERİ
+============================================================
+
+Görev yalnız şu durumda PASS:
+
+- Binance Global mevcut bağlantısı kaybolmadan korunuyor
+- yeniden başlatmada otomatik geri yükleniyor
+- SETUP tekrar çalıştırılınca yeniden API Key istemiyor
+- git pull bağlantıyı silmiyor
+- credential yalnız DPAPI’de
+- .env yalnız runtime ayarlarını içeriyor
+- durum JSON’larında secret yok
+- duplicate credential/config yolları kaldırılmış
+- panel ayar kaynağını açıkça gösteriyor
+- Live Orders kapalı
+- tüm testler yeşil
+- main’e push edilmiş
+
+Bu görevden sonra ayar saklama, Windows kalıcılığı veya Binance credential kaynağı için ayrı agent açılmayacak.

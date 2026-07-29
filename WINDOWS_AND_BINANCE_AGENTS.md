@@ -87,6 +87,32 @@ Spot bağlantısını etkilemez.
 `/settings/binance` → ilgili kartta **Bağlantıyı Kaldır**. Anahtar yerel
 şifreli depodan silinir ve durum `NOT_CONFIGURED` olur.
 
+## Kalıcılık ve tek kaynak prensibi (PERMANENT CONFIGURATION)
+Ayarların TEK kaynağı vardır; aynı ayar iki yerde tutulmaz:
+
+| Ne | Nerede | Kalıcılık |
+|---|---|---|
+| Kod | GitHub `main` (git pull ile güncellenir) | Kalıcı |
+| Runtime ayarları (`FLASK_ENV`, `LOCAL_DEV_BYPASS`, `PAPER_MODE`, `ALPHA_WINDOWS_PAPER_AUTO`) | Yerel `.env` (git dışı) | `git pull` ve SETUP silmez; SETUP yalnız eksik/hatalı değeri onarır ve önce `.env.backup_<timestamp>` yedeği alır |
+| Binance Global/TR credential | Windows **DPAPI** şifreli depo (`services/secure_credentials.py` tek kanonik servis) | Uygulama yeniden başlasa, SETUP tekrar çalışsa, `git pull` yapılsa da **korunur** |
+| Secret'sız bağlantı durumu | `data/integration_status.json` (yalnız provider, connection_status, permission_status, account_type, futures_status, masked_api_key, last_test, last_error_code, credential_store) | Silinirse DPAPI kaydından otomatik yeniden oluşturulur |
+
+Kurallar:
+- API Secret proje klasörüne **asla düz metin yazılmaz**; hiçbir ekranda
+  tekrar gösterilmez; tam API Key loglanmaz.
+- Credential'ı yalnız paneldeki **"Bağlantıyı Kaldır"** düğmesi siler.
+- Bilgisayar veya Windows kullanıcısı değişirse DPAPI kaydı açılamaz
+  (fail-closed, ERROR görünür) — bağlantının panelden yeniden kurulması
+  gerekir; bu bilinçli bir güvenlik özelliğidir.
+- SETUP_AND_START_WINDOWS.cmd tekrar çalıştırılabilir: mevcut bağlantıyı
+  görür, "zaten yapılandırılmış" der, otomatik test eder, anahtar istemez.
+- Sunucu açılışında kayıtlı credential varsa arka planda otomatik
+  read-only test yapılır; geçici ağ/TLS hatası credential'ı silmez.
+- `.env.example` yalnız örnektir; runtime tarafından okunmaz.
+- `tools/mission13*.py` dosyaları geçmiş misyon kanıtı olarak donmuş,
+  elle çalıştırılan tanılama betikleridir; runtime credential yolu
+  değildir ve hiçbir yerde credential SAKLAMAZ.
+
 ## Live Trading
 Bu yazılımda canlı emir gönderimi, emir iptali, kaldıraç/margin değişimi,
 çekim ve transfer yolları **kalıcı olarak kapalıdır**. Tüm raporlarda

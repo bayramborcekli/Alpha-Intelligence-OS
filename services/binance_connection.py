@@ -19,6 +19,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 SNAPSHOT_PATH = DATA_DIR / "binance_connection_status.json"
+INTEGRATION_STATUS_PATH = DATA_DIR / "integration_status.json"
 AUDIT_PATH = DATA_DIR / "connection_audit.jsonl"
 
 PROVIDERS = ("BINANCE_GLOBAL", "BINANCE_TR")
@@ -42,8 +43,8 @@ def _now() -> str:
 
 
 def _mask(key: str) -> str:
-    import exchange_credentials as xc
-    return xc.mask_key(key or "")
+    from services import secure_credentials as sc
+    return sc.mask_key(key or "")
 
 
 # Rotasyon eşiği: dosya bu boyutu aşınca son AUDIT_KEEP_LINES satır tutulur.
@@ -112,6 +113,52 @@ def _save_snapshot(provider: str, entry: dict) -> None:
                                             indent=2), encoding="utf-8")
     except OSError:
         pass
+    _write_integration_status(snap)
+
+
+# Mission sözleşmesi: data/integration_status.json YALNIZ bu alanları
+# içerebilir (secret / tam key / imza / header / body KESİNLİKLE YOK).
+INTEGRATION_STATUS_FIELDS = (
+    "provider", "connection_status", "permission_status", "account_type",
+    "futures_status", "masked_api_key", "last_test", "last_error_code",
+    "credential_store",
+)
+
+
+def _write_integration_status(snap: dict | None = None) -> None:
+    """Secret'sız kalıcı durum dosyası — TEK duplicate'siz format.
+
+    Dosya silinse bile DPAPI credential kaydı korunur; bir sonraki
+    yazımda (açılış testi / status çağrısı) yeniden oluşturulur."""
+    from services import secure_credentials as sc
+    snap = _load_snapshot() if snap is None else snap
+    out: dict[str, Any] = {}
+    for provider in PROVIDERS:
+        e = dict(snap.get(provider) or {})
+        status_code = str(e.get("status") or (
+            "NOT_CONFIGURED" if not sc.configured(provider)
+            else "CONNECTED_PERMISSIONS_UNVERIFIED"))
+        out[provider] = {
+            "provider": provider,
+            "connection_status": status_code,
+            "permission_status": (
+                "READ_ONLY" if status_code == "CONNECTED_READ_ONLY"
+                else "DENIED" if status_code == "PERMISSION_DENIED"
+                else "UNVERIFIED"),
+            "account_type": e.get("account_type"),
+            "futures_status": e.get("futures", FUTURES_STATUS),
+            "masked_api_key": (sc.masked_key(provider)
+                               if sc.configured(provider) else ""),
+            "last_test": e.get("tested_at"),
+            "last_error_code": e.get("error_code"),
+            "credential_store": sc.credential_store(provider),
+        }
+    try:
+        DATA_DIR.mkdir(exist_ok=True)
+        INTEGRATION_STATUS_PATH.write_text(
+            json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass  # durum dosyası yazılamazsa akış durmaz (secret riski yok)
 
 
 def classify_error(exc: Exception) -> str:
@@ -280,7 +327,7 @@ _TESTERS = {"BINANCE_GLOBAL": test_global, "BINANCE_TR": test_tr}
 
 def connect(provider: str, api_key: str, api_secret: str) -> dict:
     """Test → izin doğrulama → yalnız güvenliyse şifreli sakla."""
-    import exchange_credentials as xc
+    from services import secure_credentials as sc
     if provider not in PROVIDERS:
         raise ValueError("bilinmeyen sağlayıcı")
     masked = _mask(api_key)
@@ -294,7 +341,7 @@ def connect(provider: str, api_key: str, api_secret: str) -> dict:
     ok_states = ("CONNECTED_READ_ONLY", "CONNECTED_PERMISSIONS_UNVERIFIED")
     if result.get("status") in ok_states:
         try:
-            xc.save_local(provider, api_key, api_secret)
+            sc.store(provider, api_key, api_secret)
             audit("connection_success", provider, masked,
                   result["status"])
             audit("credential_updated", provider, masked)
@@ -316,10 +363,10 @@ def connect(provider: str, api_key: str, api_secret: str) -> dict:
 
 def test_stored(provider: str) -> dict:
     """Kayıtlı credential ile yeniden test (Test Et butonu)."""
-    import exchange_credentials as xc
+    from services import secure_credentials as sc
     if provider not in PROVIDERS:
         raise ValueError("bilinmeyen sağlayıcı")
-    key, sec = xc.credentials(provider)
+    key, sec = sc.credentials(provider)
     if not key or not sec:
         result = {"provider": provider, "status": "NOT_CONFIGURED",
                   "tested_at": _now()}
@@ -345,11 +392,11 @@ def run_startup_tests() -> dict[str, str]:
     Sadece credential'ı kayıtlı sağlayıcılar test edilir; sonuç snapshot'a
     yazılır. Her tür hata yutulur — açılış asla bu yüzden durmaz ve secret
     loglanmaz. Dönüş: provider → status (test edilmeyenler atlanır)."""
-    import exchange_credentials as xc
+    from services import secure_credentials as sc
     outcomes: dict[str, str] = {}
     for provider in PROVIDERS:
         try:
-            if not xc.configured(provider):
+            if not sc.configured(provider):
                 continue
             result = test_stored(provider)
             outcomes[provider] = str(result.get("status"))
@@ -458,11 +505,12 @@ def start_periodic_refresh(interval_s: float = PERIODIC_REFRESH_INTERVAL_S,
 
 
 def disconnect(provider: str) -> dict:
-    import exchange_credentials as xc
+    """Credential'ı SİLEN TEK yol — paneldeki 'Bağlantıyı Kaldır'."""
+    from services import secure_credentials as sc
     if provider not in PROVIDERS:
         raise ValueError("bilinmeyen sağlayıcı")
-    removed = xc.remove_local(provider)
-    audit("credential_removed", provider, xc.masked_key(provider))
+    removed = sc.remove(provider)
+    audit("credential_removed", provider, sc.masked_key(provider))
     _save_snapshot(provider, {"status": "DISCONNECTED",
                               "tested_at": _now()})
     return {"provider": provider, "status": "DISCONNECTED",
@@ -471,18 +519,22 @@ def disconnect(provider: str) -> dict:
 
 def status() -> dict:
     """İki sağlayıcının anlık durumu (secret'sız; dashboard/registry)."""
-    import exchange_credentials as xc
+    from services import secure_credentials as sc
     snap = _load_snapshot()
     out: dict[str, Any] = {"live_orders": "DISABLED"}
     for provider in PROVIDERS:
         entry = dict(snap.get(provider) or {})
-        configured = xc.configured(provider)
+        configured = sc.configured(provider)
         if not configured:
             entry = {"status": "NOT_CONFIGURED"}
         else:
             entry.setdefault("status", "CONNECTED_PERMISSIONS_UNVERIFIED")
-            entry["masked_api_key"] = xc.masked_key(provider)
-            entry["source"] = xc.source(provider)
+            entry["masked_api_key"] = sc.masked_key(provider)
+            entry["source"] = sc.source(provider)
         entry.pop("guidance_secret", None)
+        entry["storage"] = sc.storage_info(provider)
         out[provider] = entry
+    # Durum dosyası silinmişse DPAPI kaydından yeniden oluştur.
+    if not INTEGRATION_STATUS_PATH.exists():
+        _write_integration_status(snap)
     return out
