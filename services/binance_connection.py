@@ -46,15 +46,49 @@ def _mask(key: str) -> str:
     return xc.mask_key(key or "")
 
 
+# Rotasyon eşiği: dosya bu boyutu aşınca son AUDIT_KEEP_LINES satır tutulur.
+AUDIT_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+AUDIT_KEEP_LINES = 20_000
+
+
+def _rotate_audit_if_needed() -> None:
+    """Audit dosyası eşiği aşarsa son N satırı koruyarak kırp.
+
+    Bütünlük: kırpma atomiktir (tmp dosyaya yaz + replace); hata olursa
+    mevcut dosya olduğu gibi kalır ve akış durmaz.
+    """
+    try:
+        if AUDIT_PATH.stat().st_size <= AUDIT_MAX_BYTES:
+            return
+        with open(AUDIT_PATH, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+        kept = lines[-AUDIT_KEEP_LINES:]
+        dropped = len(lines) - len(kept)
+        marker = json.dumps({
+            "ts": _now(), "event": "audit_rotated", "provider": "",
+            "masked_api_key": "", "result_code": f"DROPPED_{dropped}_LINES",
+            "environment": "replit" if os.environ.get("REPL_ID") else "local",
+            "source": "windows_local" if os.name == "nt" else "replit",
+        }, ensure_ascii=False)
+        tmp = AUDIT_PATH.with_suffix(".jsonl.tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(marker + "\n")
+            fh.writelines(kept)
+        os.replace(tmp, AUDIT_PATH)
+    except OSError:
+        pass  # rotasyon hatası akışı durdurmaz
+
+
 def audit(event: str, provider: str, masked_api_key: str = "",
           result_code: str = "") -> None:
-    """Secret içermeyen audit kaydı (JSONL, append-only)."""
+    """Secret içermeyen audit kaydı (JSONL, append-only + boyut rotasyonu)."""
     rec = {"ts": _now(), "event": event, "provider": provider,
            "masked_api_key": masked_api_key, "result_code": result_code,
            "environment": "replit" if os.environ.get("REPL_ID") else "local",
            "source": "windows_local" if os.name == "nt" else "replit"}
     try:
         DATA_DIR.mkdir(exist_ok=True)
+        _rotate_audit_if_needed()
         with open(AUDIT_PATH, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except OSError:

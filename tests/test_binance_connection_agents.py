@@ -201,3 +201,40 @@ def test_no_signed_futures_call_in_service():
     src = (ROOT / "services" / "binance_connection.py").read_text()
     assert not re.search(r"/fapi/v\d+/(?!klines)", src)
     assert bc.FUTURES_STATUS == "NOT_TESTED"
+
+
+# --- Task: audit rotasyonu (connection_audit.jsonl sınırsız büyümesin) ---
+
+def test_audit_rotation_trims_when_over_threshold(iso, monkeypatch):
+    monkeypatch.setattr(bc, "AUDIT_MAX_BYTES", 500)
+    monkeypatch.setattr(bc, "AUDIT_KEEP_LINES", 5)
+    for i in range(50):
+        bc.audit("connection_attempt", "BINANCE_GLOBAL", f"mk{i}", "OK")
+    lines = bc.AUDIT_PATH.read_text().splitlines()
+    assert len(lines) <= 5 + 2, "rotasyon son N satıra kırpmalı"
+    import json as _json
+    recs = [_json.loads(l) for l in lines]
+    assert any(r["event"] == "audit_rotated" for r in recs)
+    # en yeni kayıt korunur
+    assert recs[-1]["masked_api_key"] == "mk49"
+
+
+def test_audit_rotation_failure_does_not_break_flow(iso, monkeypatch):
+    monkeypatch.setattr(bc, "AUDIT_MAX_BYTES", 0)
+
+    def boom():
+        raise OSError("disk")
+    monkeypatch.setattr(bc, "_rotate_audit_if_needed", boom)
+    bc.audit("connection_attempt", "BINANCE_TR", "mk", "OK")
+    # OSError yutulur; audit yazılmasa bile akış durmaz
+    assert True
+
+
+def test_audit_rotation_never_writes_secret(iso, monkeypatch):
+    monkeypatch.setattr(bc, "AUDIT_MAX_BYTES", 100)
+    monkeypatch.setattr(bc, "AUDIT_KEEP_LINES", 3)
+    for _ in range(20):
+        bc.audit("connection_attempt", "BINANCE_GLOBAL", "abcd***wxyz", "OK")
+    content = bc.AUDIT_PATH.read_text()
+    assert "abcd***wxyz" in content
+    assert "k" * 20 not in content
