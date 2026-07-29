@@ -290,6 +290,59 @@ def test_startup_async_single_run_and_interval(iso, monkeypatch):
     assert calls == [1]
 
 
+# --- Task 112: periyodik arka plan yeniden testi (ağsız) ---
+
+def test_periodic_refresh_runs_repeatedly(iso, monkeypatch):
+    """Periyodik döngü aralık dolunca testleri tekrar koşar."""
+    import threading
+    import time as _t
+    monkeypatch.setattr(bc, "PERIODIC_LOCK_PATH", iso / "periodic.lock")
+    calls = []
+    monkeypatch.setattr(bc, "run_startup_tests",
+                        lambda: calls.append(1) or {})
+    stop = threading.Event()
+    try:
+        assert bc.start_periodic_refresh(interval_s=0.05,
+                                         stop_event=stop) is True
+        for _ in range(100):
+            if len(calls) >= 2:
+                break
+            _t.sleep(0.05)
+        assert len(calls) >= 2, "aralık başına yeniden test koşmalı"
+    finally:
+        stop.set()
+        _t.sleep(0.1)  # thread'in düzenli çıkışı için kısa bekleme
+
+
+def test_periodic_refresh_single_run_across_workers(iso, monkeypatch):
+    """Aynı tur içinde ikinci worker koşmaz (flock + zaman damgası)."""
+    monkeypatch.setattr(bc, "PERIODIC_LOCK_PATH", iso / "periodic.lock")
+    calls = []
+    monkeypatch.setattr(bc, "run_startup_tests",
+                        lambda: calls.append(1) or {})
+    # İlk koşu gerçekleşir, aralık içindeki ikinci deneme atlanır
+    assert bc._run_tests_locked(bc.PERIODIC_LOCK_PATH, 60) is True
+    assert bc._run_tests_locked(bc.PERIODIC_LOCK_PATH, 60) is False
+    assert calls == [1]
+
+
+def test_periodic_refresh_failure_does_not_raise(iso, monkeypatch):
+    """Test patlasa bile döngü süreci düşürmez ve secret sızmaz."""
+    monkeypatch.setattr(bc, "PERIODIC_LOCK_PATH", iso / "periodic.lock")
+
+    def boom():
+        raise RuntimeError("s" * 20)
+    monkeypatch.setattr(bc, "run_startup_tests", boom)
+    assert bc._run_tests_locked(bc.PERIODIC_LOCK_PATH, 0) is False
+    audit = (iso / "audit.jsonl")
+    assert not audit.exists() or "s" * 20 not in audit.read_text()
+
+
+def test_periodic_refresh_invalid_interval_rejected(iso):
+    assert bc.start_periodic_refresh(interval_s=0) is False
+    assert bc.start_periodic_refresh(interval_s=-5) is False
+
+
 def test_no_verify_false_in_new_sources():
     for name in ("services/binance_connection.py",
                  "services/windows_runtime_recovery.py",

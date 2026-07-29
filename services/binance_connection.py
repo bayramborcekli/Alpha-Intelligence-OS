@@ -334,6 +334,9 @@ def test_stored(provider: str) -> dict:
 
 
 STARTUP_LOCK_PATH = DATA_DIR / "startup_connection_test.lock"
+PERIODIC_LOCK_PATH = DATA_DIR / "periodic_connection_test.lock"
+# Task 112: düşük frekanslı arka plan yeniden testi (varsayılan 60 dk)
+PERIODIC_REFRESH_INTERVAL_S = 3600
 
 
 def run_startup_tests() -> dict[str, str]:
@@ -357,6 +360,41 @@ def run_startup_tests() -> dict[str, str]:
     return outcomes
 
 
+def _run_tests_locked(lock_path: Path, min_interval_s: float) -> bool:
+    """flock + zaman damgasıyla süreçler arası TEK koşu garantili test.
+
+    Kilit alınamazsa (başka worker koşuyor) veya son koşu aralık içindeyse
+    hiçbir şey yapmaz. Her tür hata yutulur; secret loglanmaz.
+    Dönüş: testler bu çağrıda gerçekten koştuysa True."""
+    try:
+        DATA_DIR.mkdir(exist_ok=True)
+        fh = open(lock_path, "a+", encoding="utf-8")
+        try:
+            try:
+                import fcntl
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except (ImportError, OSError):
+                if os.name != "nt":
+                    return False  # başka worker koşuyor
+            fh.seek(0)
+            try:
+                last = float((fh.read() or "0").strip() or 0)
+            except ValueError:
+                last = 0.0
+            if time.time() - last < min_interval_s:
+                return False  # yakın zamanda koşuldu (worker recycle vb.)
+            fh.seek(0)
+            fh.truncate()
+            fh.write(str(time.time()))
+            fh.flush()
+            run_startup_tests()
+            return True
+        finally:
+            fh.close()
+    except Exception:
+        return False  # bağlantı testi hiçbir koşulda süreci düşürmez
+
+
 def start_startup_tests_async(min_interval_s: int = 60) -> bool:
     """Açılış bağlantı testini arka plan thread'inde başlatır.
 
@@ -366,36 +404,54 @@ def start_startup_tests_async(min_interval_s: int = 60) -> bool:
     import threading
 
     def _runner() -> None:
-        try:
-            DATA_DIR.mkdir(exist_ok=True)
-            fh = open(STARTUP_LOCK_PATH, "a+", encoding="utf-8")
-            try:
-                try:
-                    import fcntl
-                    fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except (ImportError, OSError):
-                    if os.name != "nt":
-                        return  # başka worker koşuyor
-                fh.seek(0)
-                try:
-                    last = float((fh.read() or "0").strip() or 0)
-                except ValueError:
-                    last = 0.0
-                if time.time() - last < min_interval_s:
-                    return  # yakın zamanda koşuldu (worker recycle vb.)
-                fh.seek(0)
-                fh.truncate()
-                fh.write(str(time.time()))
-                fh.flush()
-                run_startup_tests()
-            finally:
-                fh.close()
-        except Exception:
-            pass  # açılış testi hiçbir koşulda süreci düşürmez
+        _run_tests_locked(STARTUP_LOCK_PATH, min_interval_s)
 
     try:
         threading.Thread(target=_runner, daemon=True,
                          name="binance-startup-test").start()
+        return True
+    except Exception:
+        return False
+
+
+def start_periodic_refresh(interval_s: float = PERIODIC_REFRESH_INTERVAL_S,
+                           stop_event: Any | None = None) -> bool:
+    """Kayıtlı sağlayıcıları periyodik olarak arka planda yeniden test eder.
+
+    Task 112: sunucu günlerce açık kalınca panel durumu bayatlamasın diye
+    düşük frekanslı (varsayılan 60 dk) yeniden test. Çok worker'lı
+    gunicorn'da her worker döngüyü çalıştırır ama flock + zaman damgası
+    (ayrı PERIODIC_LOCK_PATH) tur başına tek gerçek koşu garantiler.
+    Başarısızlık uygulamayı/Paper controller'ı etkilemez; secret loglanmaz.
+    Başlatılamazsa sessizce False döner."""
+    import threading
+
+    try:
+        interval = float(interval_s)
+        if interval <= 0:
+            return False
+    except (TypeError, ValueError):
+        return False
+
+    lock_path = PERIODIC_LOCK_PATH  # başlangıçta sabitlenir
+
+    def _loop() -> None:
+        while True:
+            try:
+                if stop_event is not None:
+                    if stop_event.wait(interval):
+                        return  # düzenli durdurma (test/kapanış)
+                else:
+                    time.sleep(interval)
+                # min_interval biraz kısa tutulur ki worker'lar arasındaki
+                # uyanma kaymaları turu atlatmasın.
+                _run_tests_locked(lock_path, interval * 0.9)
+            except Exception:
+                pass  # periyodik test hiçbir koşulda süreci düşürmez
+
+    try:
+        threading.Thread(target=_loop, daemon=True,
+                         name="binance-periodic-refresh").start()
         return True
     except Exception:
         return False

@@ -57,6 +57,10 @@ def post_fork(server, worker):
     # başarısızlık açılışı ve Paper controller'ı asla etkilemez).
     from services import binance_connection as _bc
     _bc.start_startup_tests_async()
+    # Task 112: sunucu günlerce açık kalınca panel durumu bayatlamasın —
+    # kayıtlı sağlayıcılar saatlik arka plan yeniden testi (flock ile
+    # süreçler arası tek koşu; başarısızlık uygulamayı etkilemez).
+    _bc.start_periodic_refresh()
 
 
 def worker_exit(server, worker):
