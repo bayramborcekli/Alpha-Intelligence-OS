@@ -33,6 +33,23 @@ def test_launcher_installs_truststore():
     assert '"truststore"' in src
 
 
+def test_install_path_installs_and_smoke_tests_truststore():
+    """İlk kurulum (--install) yolu truststore'u açıkça kurar ve
+    'import truststore' smoke testiyle doğrular."""
+    src = (ROOT / "launcher_windows.py").read_text(encoding="utf-8")
+    # Kurulum adimlari (steps listesi) truststore'u acikca icermeli.
+    steps_idx = src.index("steps = [")
+    steps_block = src[steps_idx:src.index("\n    ]", steps_idx)]
+    assert '"truststore"' in steps_block, (
+        "--install pip adimi truststore'u acikca kurmali")
+    assert '"certifi"' in steps_block
+    # Kurulum sonrasi smoke test: import truststore.
+    assert "import truststore" in src, (
+        "kurulum sonrasi 'import truststore' smoke testi olmali")
+    # Smoke test steps blogundan SONRA gelmeli (kurulum yolu icinde).
+    assert src.index("import truststore") > steps_idx
+
+
 def test_requirements_has_windows_truststore():
     req = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     assert "truststore" in req and 'sys_platform == "win32"' in req

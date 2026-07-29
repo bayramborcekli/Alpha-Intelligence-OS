@@ -122,17 +122,29 @@ def bootstrap_venv() -> int:
         [str(vpy), "-m", "pip", "install", "-r",
          str(ROOT / "requirements.txt"), "--quiet"],
         # Windows'ta SSL dogrulamasinin guvenilir calismasi icin CA paketi
-        # (certifi) her kurulumda en guncel surume cekilir.
-        [str(vpy), "-m", "pip", "install", "--upgrade", "certifi", "--quiet"],
+        # (certifi) ve Windows sertifika deposu koprusu (truststore) her
+        # kurulumda acikca ve en guncel surume cekilir. Boylece ilk kurulumda
+        # (--install) da antivirus/proxy SSL denetimi koprusu hazir olur.
+        [str(vpy), "-m", "pip", "install", "--upgrade",
+         "certifi", "truststore", "--quiet"],
     ]
     for cmd in steps:
         r = subprocess.run(cmd, cwd=ROOT)
         if r.returncode != 0:
             return fail("Bagimlilik kurulumu basarisiz (pip). "
                         "runtime\\launcher.log dosyasina bakin.")
+    log("Bootstrap: certifi + truststore kuruldu "
+        "(SSL CA paketi + Windows sertifika deposu koprusu).")
     chk = subprocess.run([str(vpy), "-c", "import waitress"], cwd=ROOT)
     if chk.returncode != 0:
         return fail("waitress kurulamadi; requirements.txt kontrol edin.")
+    # Kurulum sonrasi smoke test: truststore gercekten import edilebiliyor mu?
+    # (Ilk acilista SSL hatasinin geri gelmemesi icin kurulum aninda dogrula.)
+    chk = subprocess.run([str(vpy), "-c", "import truststore"], cwd=ROOT)
+    if chk.returncode != 0:
+        return fail("truststore kurulamadi; antivirus/proxy SSL denetimi "
+                    "koprusu eksik. INSTALL_WINDOWS.cmd'yi tekrar calistirin.")
+    log("Bootstrap: smoke test OK (import truststore).")
     log("Bootstrap: tamamlandi.")
     return 0
 
