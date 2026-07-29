@@ -147,6 +147,9 @@
       border-top-color: var(--accent); border-radius: 50%; display: inline-block;
       height: 14px; vertical-align: middle; width: 14px; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    /* runtime override notu */
+    .ovr-note { color: var(--warning); display: block; font-size: .72rem;
+      font-weight: 700; margin-top: 4px; }
     /* suggestion table */
     .suggest-wrap { overflow-x: auto; margin-top: 14px; }
     .suggest-table { border-collapse: collapse; min-width: 1100px; width: 100%; }
@@ -800,6 +803,7 @@
           <h2 style="margin-bottom:0">Uyarlanabilir Karar & Risk Motoru</h2>
         </div>
         {% set adp = adaptive.adaptive %}
+        {% set ovr = adaptive.ctrl.get('runtime_override_flags', {}) if adaptive.ctrl.runtime_override else {} %}
         {% if adaptive.ctrl.runtime_override %}
           <span class="sbadge s-warn" title="Bellek-içi override aktif; config.json değişmedi. Süreç kapanınca kaybolur.">⚡ RUNTIME OVERRIDE (yalnız bellek)</span>
         {% elif adp.enabled %}
@@ -864,6 +868,9 @@
       <div class="btn-row" style="flex-wrap:wrap;gap:10px;margin-bottom:14px">
         {# Motor aç/kapat #}
         <form method="post" action="/adaptive/enable">
+          {% if 'enabled' in ovr %}
+            <span class="ovr-note" title="Bellek override'ı: enabled={{ ovr['enabled'] }}">⚡ bellek override'ı tarafından eziliyor</span>
+          {% endif %}
           {% if adp.enabled %}
             <input type="hidden" name="enabled" value="0">
             <button class="danger" type="submit"
@@ -877,6 +884,9 @@
         </form>
 
         {# Kill-switch #}
+        {% if 'kill_switch' in ovr %}
+          <span class="ovr-note" title="Bellek override'ı: kill_switch={{ ovr['kill_switch'] }}">⚡ kill switch bayrağı bellek override'ı tarafından eziliyor</span>
+        {% endif %}
         {% if adp.kill_switch or adaptive.safety.kill_switch %}
           <form method="post" action="/adaptive/kill-switch">
             <input type="hidden" name="activate" value="0">
@@ -916,13 +926,17 @@
         <a href="/api/daily-report/export" class="btn secondary">📥 Günlük Rapor (CSV)</a>
       </div>
 
-      {# Mod seçimi (motor açıksa) #}
-      {% if adp.enabled %}
+      {# Mod seçimi (motor açıksa — runtime override motoru bellekte açtıysa
+         formlar yine gösterilir ki operatör override notlarını görsün) #}
+      {% if adp.enabled or ovr %}
         <details style="margin-bottom:14px">
           <summary style="cursor:pointer;font-weight:700;padding:8px 0;border-top:1px solid var(--border)">
             ⚙ Çalışma Modu & Otomasyon Kontrolleri
           </summary>
           <div style="margin-top:12px">
+            {% if 'mode' in ovr %}
+              <p class="ovr-note" style="margin:0 0 8px">⚡ Çalışma modu şu an bellek override'ı tarafından eziliyor (etkin değer: {{ ovr['mode'] }}). Buradan yapılan değişiklik dosyaya yazılır ama süreç yeniden başlatılana kadar etkisiz kalır.</p>
+            {% endif %}
             <div class="mode-tabs" style="margin-bottom:14px">
               {% for mkey, mlbl in [('MONITOR','🔍 İzleme'),('SUGGEST','💡 Öneri'),('AUTO','⚡ Otomatik PAPER'),('SAFE','🛡 Güvenli Durum')] %}
                 <form method="post" action="/adaptive/mode" style="display:contents">
@@ -946,6 +960,9 @@
               ] %}
                 <div class="smart-card-item">
                   <span class="metric-label">{{ label }}</span>
+                  {% if flag in ovr %}
+                    <span class="ovr-note" title="Bellek override'ı: {{ flag }}={{ ovr[flag] }}">⚡ bellek override'ı tarafından eziliyor</span>
+                  {% endif %}
                   <form method="post" action="{{ '/adaptive/auto-paper' if flag == 'auto_paper_enabled' else '/adaptive/settings' }}"
                         style="margin-top:6px">
                     <input type="hidden" name="{{ flag }}" value="{{ '0' if adp[flag] else '1' }}">
@@ -991,6 +1008,9 @@
                   <input name="{{ name }}" type="number" min="{{ lo }}" max="{{ hi }}" step="{{ step }}"
                     value="{{ adp[name] }}" required>
                   <small>{{ lo }} – {{ hi }}</small>
+                  {% if name in ovr %}
+                    <span class="ovr-note">⚡ bellek override'ı tarafından eziliyor (etkin: {{ ovr[name] }})</span>
+                  {% endif %}
                 </div>
               {% endfor %}
             </div>

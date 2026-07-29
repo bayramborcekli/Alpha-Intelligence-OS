@@ -1648,6 +1648,24 @@ def smart_coin_action():
 VALID_ADAPTIVE_MODES = {"MONITOR", "SUGGEST", "AUTO", "SAFE"}
 
 
+def _runtime_override_note(*keys: str) -> str:
+    """Bellek-içi runtime override aktifse ve gönderilen alan(lar) override
+    tarafından eziliyorsa kullanıcıya eklenecek uyarı metni döndürür.
+    Override yokken boş string döner — davranış değişmez."""
+    try:
+        ovr = ac.RUNTIME_ADAPTIVE_OVERRIDE
+    except Exception:
+        return ""
+    if not ovr:
+        return ""
+    hit = [k for k in keys if k in ovr]
+    if not hit:
+        return ""
+    return (" ⚡ Dikkat: bu ayar şu an bellek override'ı tarafından eziliyor "
+            f"({', '.join(hit)}). Değer dosyaya kaydedildi ancak süreç "
+            "yeniden başlatılana kadar etkisiz kalır.")
+
+
 @app.post("/adaptive/enable")
 def adaptive_enable():
     enabled = request.form.get("enabled") == "1"
@@ -1661,6 +1679,7 @@ def adaptive_enable():
         else:
             ac.stop_controller_loop()
             msg = "Uyarlanabilir motor devre dışı bırakıldı."
+        msg += _runtime_override_note("enabled")
     ms.append_system_error(component="adaptive", error_type="ENABLE_CHANGE",
                            message=f"enabled={enabled}") if ok else None
     return render_dashboard(msg, "success" if ok else "error")
@@ -1678,7 +1697,9 @@ def set_adaptive_mode():
                   "AUTO": "Otomatik PAPER", "SAFE": "Güvenli Durum"}[mode]
     ms.append_system_error(component="adaptive", error_type="MODE_CHANGE",
                            message=f"Mod değiştirildi: {mode}") if ok else None
-    return render_dashboard(f"Çalışma modu: {mode_label}.", "success" if ok else "error")
+    return render_dashboard(
+        f"Çalışma modu: {mode_label}." + (_runtime_override_note("mode") if ok else ""),
+        "success" if ok else "error")
 
 
 @app.post("/adaptive/settings")
@@ -1699,7 +1720,12 @@ def save_adaptive_settings():
     ok, msg = _save_adaptive_cfg(cfg)
     ms.append_system_error(component="adaptive", error_type="SETTINGS_CHANGE",
                            message="Adaptive ayarlar güncellendi.") if ok else None
-    return render_dashboard("Uyarlanabilir motor ayarları kaydedildi." if ok else msg,
+    posted_keys = [k for k in list(ADAPTIVE_SETTING_RULES) +
+                   ["break_even_enabled", "trailing_stop_enabled",
+                    "partial_take_profit_enabled", "learning_enabled"]
+                   if request.form.get(k) is not None]
+    note = _runtime_override_note(*posted_keys) if ok else ""
+    return render_dashboard(("Uyarlanabilir motor ayarları kaydedildi." + note) if ok else msg,
                             "success" if ok else "error")
 
 
@@ -1714,7 +1740,9 @@ def toggle_auto_paper():
     label   = "Otomatik PAPER açıldı." if enabled else "Otomatik PAPER kapatıldı."
     ms.append_system_error(component="adaptive", error_type="AUTO_PAPER_TOGGLE",
                            message=label) if ok else None
-    return render_dashboard(label if ok else msg, "success" if ok else "error")
+    return render_dashboard(
+        (label + _runtime_override_note("auto_paper_enabled")) if ok else msg,
+        "success" if ok else "error")
 
 
 @app.post("/adaptive/kill-switch")
@@ -1729,7 +1757,9 @@ def kill_switch():
                        username=session.get("username", ""),
                        ip=auth.get_client_ip(),
                        detail="activated")
-        return render_dashboard("⛔ Acil durdur etkinleştirildi. Yeni işlem açılmayacak.", "error")
+        return render_dashboard(
+            "⛔ Acil durdur etkinleştirildi. Yeni işlem açılmayacak."
+            + _runtime_override_note("kill_switch"), "error")
     else:
         sg.deactivate_kill_switch()
         cfg = _get_adaptive_cfg()
@@ -1739,7 +1769,9 @@ def kill_switch():
                        username=session.get("username", ""),
                        ip=auth.get_client_ip(),
                        detail="deactivated")
-        return render_dashboard("Acil durdur devre dışı bırakıldı.", "success")
+        return render_dashboard(
+            "Acil durdur devre dışı bırakıldı."
+            + _runtime_override_note("kill_switch"), "success")
 
 
 @app.post("/execution/mode")
