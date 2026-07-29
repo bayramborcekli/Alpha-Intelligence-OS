@@ -60,6 +60,13 @@ def _fetch_klines(symbol: str, interval: str, limit: int = 100,
                         symbol, interval, alpha20.diagnose_ssl_error(exc))
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
+        except (requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout) as exc:
+            import alpha20
+            log.warning("AĞ HATASI | %s %s | %s",
+                        symbol, interval, alpha20.diagnose_network_error(exc))
+            if attempt < retries:
+                time.sleep(1.5 * (attempt + 1))
         except Exception:
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))

@@ -236,6 +236,49 @@ def diagnose_ssl_error(exc: Exception) -> str:
             f"Teknik ayrıntı: {exc}")
 
 
+def diagnose_network_error(exc: Exception) -> str:
+    """Ağ hatasının (DNS, zaman aşımı, bağlantı reddi...) olası kök nedenini
+    Türkçe olarak ayırt eder.
+
+    SSL hataları için diagnose_ssl_error kullanılır; bu fonksiyon diğer
+    requests ağ hatalarını (ConnectionError, Timeout) kapsar.
+    """
+    text = str(exc).lower()
+    if isinstance(exc, requests.exceptions.Timeout) or "timed out" in text or \
+            "timeout" in text:
+        return ("Ağ hatası (zaman aşımı şüphesi): Binance sunucusu zamanında "
+                "yanıt vermedi. İnternet bağlantınız yavaş olabilir veya "
+                "güvenlik duvarı/proxy trafiği geciktiriyor olabilir. "
+                "Bağlantınızı test edin; sorun sürerse birkaç dakika sonra "
+                "kendiliğinden düzelebilir (geçici Binance yavaşlaması).")
+    if "getaddrinfo failed" in text or "name or service not known" in text or \
+            "nodename nor servname" in text or "temporary failure in name resolution" in text or \
+            "failed to resolve" in text or "name resolution" in text:
+        return ("Ağ hatası (DNS şüphesi): Binance alan adı çözümlenemedi. "
+                "İnternet bağlantınızı kontrol edin; sorun sürerse Windows DNS "
+                "ayarlarını (örn. 8.8.8.8) değiştirin veya modemi yeniden "
+                "başlatın. VPN/proxy kullanıyorsanız kapatıp deneyin.")
+    if "connection refused" in text or "actively refused" in text:
+        return ("Ağ hatası (güvenlik duvarı/engelleme şüphesi): bağlantı "
+                "reddedildi. Güvenlik duvarı, antivirüs veya kurumsal proxy "
+                "Binance bağlantısını engelliyor olabilir; Windows Güvenlik "
+                "Duvarı ve antivirüs ayarlarında Python/uygulamaya izin verin.")
+    if "connection reset" in text or "connection aborted" in text or \
+            "remote end closed" in text:
+        return ("Ağ hatası (bağlantı koptu): bağlantı karşı tarafça "
+                "sıfırlandı. Geçici ağ kesintisi veya proxy/antivirüs araya "
+                "girmesi olabilir; birkaç dakika sonra tekrar denenir, sorun "
+                "sürerse ağ ekipmanınızı (modem/router) yeniden başlatın.")
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return ("Ağ hatası (bağlantı kurulamadı): Binance sunucusuna "
+                "ulaşılamıyor. İnternet bağlantınızı, güvenlik duvarını ve "
+                "varsa VPN/proxy ayarlarını kontrol edin. "
+                f"Teknik ayrıntı: {exc}")
+    return ("Ağ hatası (neden belirsiz): internet bağlantınızı ve güvenlik "
+            "duvarı/proxy ayarlarını kontrol edin. "
+            f"Teknik ayrıntı: {exc}")
+
+
 def fetch_klines(symbol: str, interval: str, limit: int = 300) -> pd.DataFrame:
     try:
         response = requests.get(
@@ -246,6 +289,10 @@ def fetch_klines(symbol: str, interval: str, limit: int = 300) -> pd.DataFrame:
     except requests.exceptions.SSLError as exc:
         detail = diagnose_ssl_error(exc)
         log.warning("SSL DOĞRULAMA HATASI | %s %s | %s", symbol, interval, detail)
+        raise RuntimeError(detail) from exc
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+        detail = diagnose_network_error(exc)
+        log.warning("AĞ HATASI | %s %s | %s", symbol, interval, detail)
         raise RuntimeError(detail) from exc
     response.raise_for_status()
     rows = response.json()

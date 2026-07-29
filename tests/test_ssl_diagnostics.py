@@ -43,6 +43,95 @@ class TestDiagnoseSslError:
         assert "weird tls failure" in msg
 
 
+class TestDiagnoseNetworkError:
+    def test_dns_failure_points_to_dns(self):
+        msg = alpha20.diagnose_network_error(
+            requests.exceptions.ConnectionError(
+                "HTTPSConnectionPool(host='fapi.binance.com', port=443): "
+                "Max retries exceeded (Caused by NameResolutionError: "
+                "getaddrinfo failed)"))
+        assert "DNS" in msg
+        assert "Ağ hatası" in msg
+
+    def test_timeout_points_to_slow_network(self):
+        msg = alpha20.diagnose_network_error(
+            requests.exceptions.ConnectTimeout("Connection to fapi.binance.com timed out"))
+        assert "zaman aşımı" in msg.lower()
+
+    def test_read_timeout_points_to_slow_network(self):
+        msg = alpha20.diagnose_network_error(
+            requests.exceptions.ReadTimeout("Read timed out. (read timeout=15)"))
+        assert "zaman aşımı" in msg.lower()
+
+    def test_connection_refused_points_to_firewall(self):
+        msg = alpha20.diagnose_network_error(
+            requests.exceptions.ConnectionError(
+                "[WinError 10061] No connection could be made because the "
+                "target machine actively refused it"))
+        assert "güvenlik duvarı" in msg.lower()
+
+    def test_connection_reset_points_to_interruption(self):
+        msg = alpha20.diagnose_network_error(
+            requests.exceptions.ConnectionError("Connection reset by peer"))
+        assert "sıfırlandı" in msg or "koptu" in msg
+
+    def test_generic_connection_error_has_turkish_guidance(self):
+        msg = alpha20.diagnose_network_error(
+            requests.exceptions.ConnectionError("weird network failure"))
+        assert "Ağ hatası" in msg
+        assert "weird network failure" in msg
+
+
+class TestFetchKlinesNetworkHandling:
+    def test_dns_error_raises_turkish_runtime_error(self, monkeypatch):
+        def boom(*a, **kw):
+            raise requests.exceptions.ConnectionError("getaddrinfo failed")
+        monkeypatch.setattr(alpha20.requests, "get", boom)
+        with pytest.raises(RuntimeError) as ei:
+            alpha20.fetch_klines("SOLUSDT", "15m")
+        assert "DNS" in str(ei.value)
+
+    def test_timeout_raises_turkish_runtime_error(self, monkeypatch):
+        def boom(*a, **kw):
+            raise requests.exceptions.ReadTimeout("Read timed out.")
+        monkeypatch.setattr(alpha20.requests, "get", boom)
+        with pytest.raises(RuntimeError) as ei:
+            alpha20.fetch_klines("SOLUSDT", "15m")
+        assert "zaman aşımı" in str(ei.value).lower()
+
+    def test_fetch_klines_safe_returns_none_on_network_error(self, monkeypatch):
+        def boom(*a, **kw):
+            raise requests.exceptions.ConnectionError("getaddrinfo failed")
+        monkeypatch.setattr(alpha20.requests, "get", boom)
+        state: dict = {}
+        assert alpha20.fetch_klines_safe("SOLUSDT", "15m", state=state) is None
+        assert state["network_errors"] == 1
+
+
+class TestMarketRegimeNetworkHandling:
+    def test_dns_error_logs_turkish_message(self, monkeypatch, caplog):
+        import market_regime
+
+        def boom(*a, **kw):
+            raise requests.exceptions.ConnectionError("getaddrinfo failed")
+        monkeypatch.setattr(market_regime.requests, "get", boom)
+        monkeypatch.setattr(market_regime.time, "sleep", lambda *_: None)
+        with caplog.at_level("WARNING", logger="market_regime"):
+            assert market_regime._fetch_klines("SOLUSDT", "15m") is None
+        assert any("DNS" in r.message for r in caplog.records)
+
+    def test_timeout_logs_turkish_message(self, monkeypatch, caplog):
+        import market_regime
+
+        def boom(*a, **kw):
+            raise requests.exceptions.ReadTimeout("Read timed out.")
+        monkeypatch.setattr(market_regime.requests, "get", boom)
+        monkeypatch.setattr(market_regime.time, "sleep", lambda *_: None)
+        with caplog.at_level("WARNING", logger="market_regime"):
+            assert market_regime._fetch_klines("SOLUSDT", "15m") is None
+        assert any("zaman aşımı" in r.message.lower() for r in caplog.records)
+
+
 class TestFetchKlinesSslHandling:
     def test_ssl_error_raises_turkish_runtime_error(self, monkeypatch):
         def boom(*a, **kw):
