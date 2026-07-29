@@ -40,7 +40,9 @@ if errorlevel 1 (
 )
 
 echo [3/6] Eski Alpha surecleri kapatiliyor (yalniz BU klasordeki proje)...
-powershell -NoProfile -Command "$root=[regex]::Escape('%~dp0'); Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.CommandLine -match ($root+'.*(serve_windows|launcher_windows)') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
+rem  Klasor yolu PS komutuna GOMULMEZ (bosluk/kesme isareti guvenligi):
+rem  cd /d "%~dp0" yukarida yapildi; PS kendi calisma dizininden okur.
+powershell -NoProfile -Command "$root=[regex]::Escape((Get-Location).Path + [IO.Path]::DirectorySeparatorChar); Get-CimInstance Win32_Process -Filter \"Name='python.exe' or Name='pythonw.exe'\" | Where-Object { $_.CommandLine -match ($root+'.*(serve_windows|launcher_windows)') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
 timeout /t 2 /nobreak >nul
 
 echo [4/6] Otomatik teshis + .env onarimi calisiyor...
@@ -73,5 +75,7 @@ if errorlevel 1 (
     exit /b 1
 )
 echo.
-echo SONUC: PASS - kart 🟢. Panel: http://127.0.0.1:5000
+set "ALPHA_PANEL_PORT=%ALPHA_PORT%"
+if not defined ALPHA_PANEL_PORT set "ALPHA_PANEL_PORT=5000"
+echo SONUC: PASS - kart 🟢. Panel: http://127.0.0.1:%ALPHA_PANEL_PORT%
 pause

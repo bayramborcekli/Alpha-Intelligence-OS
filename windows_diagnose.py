@@ -430,12 +430,24 @@ def wait_health(timeout_s: int = 120) -> int:
     return 0 if ok else 1
 
 
+def parse_wait_health_timeout(argv: list[str], default: int = 120) -> int | None:
+    """`--wait-health [saniye]` argümanını çözümler.
+
+    Dönüş: bayrak yoksa None; sayı eksik/bozuksa `default`; aksi halde sayı.
+    Negatif değerler 0'a sabitlenir (deadline geçmişte kalmasın).
+    """
+    if "--wait-health" not in argv:
+        return None
+    try:
+        idx = argv.index("--wait-health")
+        timeout = int(argv[idx + 1])
+    except (ValueError, IndexError):
+        return default
+    return max(0, timeout)
+
+
 if __name__ == "__main__":
-    if "--wait-health" in sys.argv:
-        try:
-            idx = sys.argv.index("--wait-health")
-            timeout = int(sys.argv[idx + 1])
-        except (ValueError, IndexError):
-            timeout = 120
-        sys.exit(wait_health(timeout))
+    _timeout = parse_wait_health_timeout(sys.argv)
+    if _timeout is not None:
+        sys.exit(wait_health(_timeout))
     sys.exit(main())
