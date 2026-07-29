@@ -179,22 +179,40 @@ def scheduler_status(controller_status: dict[str, Any] | None = None,
 def universe_reason_code(universe_size: int) -> str | None:
     """Evren temel 3 sembolde kaldıysa dürüst neden kodu üret.
 
-    3 sembol 'başarılı dinamik evren' gibi gösterilmez."""
+    3 sembol 'başarılı dinamik evren' gibi gösterilmez. Kaynak:
+    smart_config (scheduler_refresh + last_analysis_time +
+    candidate_count) — ilk başarılı yenilemeden sonra NOT_RUN_YET
+    kalıcı olarak temizlenir."""
     try:
         _alpha_path()
         import universe_manager as um
         base_n = len(um.BASE_SYMBOLS)
         if universe_size > base_n:
             return None  # gerçekten genişlemiş
-        smart_log = um.get_smart_log()
-        if not smart_log:
-            return "NOT_RUN_YET"
-        last = smart_log[-1] if isinstance(smart_log, list) else {}
-        if isinstance(last, dict) and last.get("error"):
-            return "UNIVERSE_REFRESH_FAILED"
-        return "INSUFFICIENT_ELIGIBLE_SYMBOLS"
+        cfg = um.get_smart_config()
+        sr = cfg.get("scheduler_refresh") or {}
+        if sr.get("last_result") == "FAILED":
+            return sr.get("last_error_code") or "UNIVERSE_REFRESH_FAILED"
+        if not cfg.get("last_analysis_time"):
+            return "NOT_RUN_YET"  # hiç uygun çevrim koşmadı
+        if int(cfg.get("candidate_count") or 0) <= 0:
+            return "INSUFFICIENT_ELIGIBLE_SYMBOLS"
+        # Aday vardı ama evrene eklenmedi (filtre/limit/mod)
+        return "FILTERS_EXCLUDED_ALL"
     except Exception:
         return "UNIVERSE_REFRESH_FAILED"
+
+
+def universe_refresh_result() -> str:
+    """Son scheduler-kaynaklı evren yenilemesinin sonucu:
+    COMPLETED | FAILED | NOT_RUN_YET."""
+    try:
+        _alpha_path()
+        import universe_manager as um
+        sr = um.get_scheduler_refresh_status()
+        return sr.get("last_result") or "NOT_RUN_YET"
+    except Exception:
+        return "NOT_RUN_YET"
 
 
 def readiness(controller_status: dict[str, Any],
@@ -296,6 +314,13 @@ def readiness(controller_status: dict[str, Any],
         blockers.append("PAPER_CONTROLLER_STOPPED")
     if not universe_ready:
         blockers.append("UNIVERSE_EMPTY")
+    # Evren yenilemesi hiç koşmadıysa ya da başarısızsa GREEN yasak —
+    # NOT_RUN_YET ile GREEN çelişkisi (Windows saha bulgusu) imkânsız.
+    uni_reason = universe_reason_code(universe_size)
+    if uni_reason == "NOT_RUN_YET":
+        blockers.append("UNIVERSE_NOT_REFRESHED_YET")
+    elif uni_reason == "UNIVERSE_REFRESH_FAILED":
+        blockers.append("UNIVERSE_REFRESH_FAILED")
 
     if emergency_active:
         overall = "RED"
@@ -318,7 +343,8 @@ def readiness(controller_status: dict[str, Any],
         "blockers": blockers,
         "universe_size": universe_size,
         "universe_symbols": symbols,
-        "universe_reason_code": universe_reason_code(universe_size),
+        "universe_reason_code": uni_reason,
+        "universe_refresh_result": universe_refresh_result(),
         "scan_interval_minutes": sched["interval_minutes"],
         "analysis_scheduler": sched["state"],
         "analysis_scheduler_detail": sched,

@@ -139,3 +139,4 @@ intelligence_history.jsonl
 alpha20_v1/runtime_preferences.json
 alpha20_v1/runtime_preferences.json.bak
 alpha20_v1/pipeline_test_ledger.jsonl
+verify_scheduler_report.json

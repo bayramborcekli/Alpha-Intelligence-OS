@@ -668,6 +668,81 @@ def apply_auto_changes(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Scheduler kaynaklı evren yenileme (FIX misyonu)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_scheduler_refresh_status() -> dict[str, Any]:
+    """Zamanlayıcı kaynaklı son evren yenilemesinin dosya-tabanlı
+    durumu (worker'lar arası ortak)."""
+    cfg = get_smart_config()
+    sr = cfg.get("scheduler_refresh")
+    return sr if isinstance(sr, dict) else {}
+
+
+def scheduled_refresh(current_symbols: list[str]) -> str:
+    """Zamanlayıcı çevriminden çağrılır (senkron, aynı thread).
+
+    - İlk uygun çevrimde HER ZAMAN koşar (NOT_RUN_YET burada temizlenir).
+    - Sonrasında eval_interval_hours'a saygı duyar (SKIPPED_RECENT).
+    - Önerileri gerçekten uygular: BTC/ETH/SOL pinned korunur,
+      HARD_MAX_COINS (20) tavanı contract ile zorlanır.
+    - Sonuç smart_config['scheduler_refresh'] içine yazılır:
+      COMPLETED ya da açık hata kodu — sessiz başarı yok."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    def _record(result: str, error_code: str | None) -> str:
+        cfg2 = get_smart_config()
+        cfg2["scheduler_refresh"] = {
+            "last_attempt_time": now_iso,
+            "last_result": result,
+            "last_error_code": error_code,
+        }
+        save_smart_config(cfg2)
+        return result
+
+    cfg = get_smart_config()
+    last = cfg.get("last_analysis_time")
+    if last:
+        try:
+            interval_h = float(cfg.get("eval_interval_hours", 6))
+            elapsed_h = (datetime.now(timezone.utc) -
+                         datetime.fromisoformat(last)
+                         ).total_seconds() / 3600
+            if elapsed_h < interval_h:
+                return "SKIPPED_RECENT"  # taze; durum ezilmez
+        except (TypeError, ValueError):
+            pass
+    if not _ANALYSIS_LOCK.acquire(blocking=False):
+        return "ALREADY_RUNNING"
+    _ANALYSIS_RUNNING.set()
+    try:
+        with _status_lock:
+            analysis_status.update({"running": True, "error": None,
+                                    "started_at": now_iso})
+        suggestions = run_analysis(current_symbols, cfg)
+        cfg = get_smart_config()
+        cfg["last_analysis_time"] = now_iso
+        cfg["candidate_count"] = len(suggestions)
+        cfg["last_suggestions"] = suggestions[:60]
+        save_smart_config(cfg)
+        to_add, to_remove = compute_auto_changes(
+            suggestions, current_symbols, cfg)
+        if to_add or to_remove:
+            apply_auto_changes(to_add, to_remove, cfg, "SCHEDULER")
+        return _record("COMPLETED", None)
+    except Exception as exc:  # açık hata kodu — sessiz geçilmez
+        log.error("Scheduler evren yenilemesi hatası: %s", exc)
+        with _status_lock:
+            analysis_status["error"] = str(exc)
+        return _record("FAILED", "UNIVERSE_REFRESH_FAILED")
+    finally:
+        with _status_lock:
+            analysis_status["running"] = False
+        _ANALYSIS_RUNNING.clear()
+        _ANALYSIS_LOCK.release()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Arka plan analiz tetikleyici
 # ══════════════════════════════════════════════════════════════════════════════
 

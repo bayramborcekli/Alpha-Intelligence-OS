@@ -627,6 +627,19 @@ def start_controller_loop() -> bool:
                     _update_status(
                         analyzed_symbol_count=len(symbols))
 
+                    # FIX misyonu: başarılı çevrim Dynamic Universe
+                    # yenilemesini GERÇEKTEN çağırır (ilk çevrimde
+                    # hemen; sonrasında eval_interval_hours'a saygı).
+                    try:
+                        import universe_manager as um
+                        ur = um.scheduled_refresh(symbols)
+                        _update_status(last_universe_refresh=ur)
+                    except Exception as exc:
+                        log.warning(
+                            "Evren yenileme çağrısı hatası: %s", exc)
+                        _update_status(
+                            last_universe_refresh="FAILED")
+
                     # Öğrenme motoru
                     learn_interval = float(adaptive_cfg.get("learning_interval_hours", 24))
                     last_learn     = _last_status.get("last_learning_time")

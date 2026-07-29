@@ -66,7 +66,7 @@ def test_snapshot_fields_exist_on_real_endpoint(client):
     assert set(s) == {
         "overall_pipeline", "pipeline_blockers", "analysis_scheduler",
         "analysis_scheduler_detail", "scan_interval", "universe_size",
-        "universe_reason_code"}
+        "universe_reason_code", "universe_refresh_result"}
     det = s["analysis_scheduler_detail"]
     assert isinstance(det, dict)
     # Kanonik blok alanları (FIX ANALYSIS SCHEDULER sözleşmesi)
@@ -79,7 +79,11 @@ def test_snapshot_fields_exist_on_real_endpoint(client):
 
 def _snap(pref="RUNNING", state="RUNNING", interval=5, last_run=None,
           next_run=None, pipeline="YELLOW", usize=3,
-          ucode="NOT_RUN_YET", last_error=None):
+          ucode="NOT_RUN_YET", last_error=None, uresult=None):
+    if uresult is None:
+        uresult = ("NOT_RUN_YET" if ucode == "NOT_RUN_YET"
+                   else ("FAILED" if ucode == "UNIVERSE_REFRESH_FAILED"
+                         else "COMPLETED"))
     return {
         "overall_pipeline": pipeline,
         "pipeline_blockers": [],
@@ -92,6 +96,7 @@ def _snap(pref="RUNNING", state="RUNNING", interval=5, last_run=None,
         "scan_interval": interval,
         "universe_size": usize,
         "universe_reason_code": ucode,
+        "universe_refresh_result": uresult,
     }
 
 
@@ -130,9 +135,38 @@ def test_startup_failed_with_green_pipeline_fails():
 
 
 def test_startup_failed_with_non_green_pipeline_passes_scheduler():
+    """Zamanlayıcı kontrolleri geçer; NOT_RUN_YET yine FAIL üretir
+    (NOT_RUN_YET hiçbir durumda PASS değildir)."""
     s = _snap(state="STARTUP_FAILED", pipeline="YELLOW",
               ucode="NOT_RUN_YET")
-    assert vs.check_snapshot(s) == []
+    fails = vs.check_snapshot(s)
+    assert not any("regresyonu" in f for f in fails)
+    assert any("NOT_RUN_YET" in f for f in fails)
+
+
+def test_not_run_yet_never_passes():
+    """FIX: NOT_RUN_YET durumunda araç asla PASS vermez."""
+    s = _snap(usize=3, ucode="NOT_RUN_YET",
+              last_run="2026-07-29T10:00:00+00:00",
+              next_run="2026-07-29T10:05:00+00:00")
+    fails = vs.check_snapshot(s)
+    assert any("NOT_RUN_YET" in f for f in fails)
+
+
+def test_not_run_yet_with_green_pipeline_double_fails():
+    s = _snap(usize=3, ucode="NOT_RUN_YET", pipeline="GREEN",
+              last_run="2026-07-29T10:00:00+00:00",
+              next_run="2026-07-29T10:05:00+00:00")
+    fails = vs.check_snapshot(s)
+    assert any("false-GREEN" in f for f in fails)
+
+
+def test_refresh_failed_is_explicit_fail():
+    s = _snap(usize=3, ucode="UNIVERSE_REFRESH_FAILED",
+              last_run="2026-07-29T10:00:00+00:00",
+              next_run="2026-07-29T10:05:00+00:00")
+    fails = vs.check_snapshot(s)
+    assert any("FAILED" in f for f in fails)
 
 
 def test_wrong_interval_fails():

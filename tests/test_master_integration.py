@@ -223,6 +223,78 @@ class TestCanonicalScheduler:
         assert r["blockers"]
         assert any("SCHEDULER" in b for b in r["blockers"])
 
+    def test_scheduled_refresh_first_run_completes(self, tmp_path,
+                                                   monkeypatch):
+        """FIX 1-3: ilk uygun çevrimde refresh gerçekten koşar,
+        NOT_RUN_YET temizlenir, sonuç COMPLETED yazılır."""
+        import universe_manager as um
+        monkeypatch.setattr(um, "SMART_CONFIG_PATH",
+                            tmp_path / "smart_config.json")
+        monkeypatch.setattr(um, "SMART_LOG_PATH",
+                            tmp_path / "smart_log.json")
+        monkeypatch.setattr(um, "run_analysis",
+                            lambda cur, cfg: [{"symbol": "XRPUSDT"}])
+        applied = {}
+        monkeypatch.setattr(um, "compute_auto_changes",
+                            lambda s, c, cfg: (["XRPUSDT"], []))
+        monkeypatch.setattr(
+            um, "apply_auto_changes",
+            lambda a, r, cfg, mode: applied.update(
+                add=a, mode=mode) or (True, "ok"))
+        res = um.scheduled_refresh(["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+        assert res == "COMPLETED"
+        assert applied["add"] == ["XRPUSDT"]
+        assert applied["mode"] == "SCHEDULER"
+        cfg = um.get_smart_config()
+        assert cfg["last_analysis_time"]  # NOT_RUN_YET temizlendi
+        sr = um.get_scheduler_refresh_status()
+        assert sr["last_result"] == "COMPLETED"
+        assert sr["last_error_code"] is None
+        # ikinci çağrı taze analiz nedeniyle atlanır
+        assert um.scheduled_refresh(["BTCUSDT"]) == "SKIPPED_RECENT"
+
+    def test_scheduled_refresh_failure_is_explicit(self, tmp_path,
+                                                   monkeypatch):
+        """FIX 3: hata sessiz geçilmez — FAILED + açık kod."""
+        import universe_manager as um
+        monkeypatch.setattr(um, "SMART_CONFIG_PATH",
+                            tmp_path / "smart_config.json")
+        def boom(cur, cfg):
+            raise RuntimeError("ağ hatası")
+        monkeypatch.setattr(um, "run_analysis", boom)
+        assert um.scheduled_refresh(["BTCUSDT"]) == "FAILED"
+        sr = um.get_scheduler_refresh_status()
+        assert sr["last_result"] == "FAILED"
+        assert sr["last_error_code"] == "UNIVERSE_REFRESH_FAILED"
+
+    def test_controller_cycle_calls_universe_refresh(self):
+        """FIX 1: zamanlayıcı çevrimi refresh'i GERÇEKTEN çağırır."""
+        src = (ROOT / "alpha20_v1/auto_controller.py").read_text(
+            encoding="utf-8")
+        assert "scheduled_refresh" in src
+
+    def test_not_run_yet_blocks_green(self, prefs_tmp, monkeypatch):
+        """FIX 4: NOT_RUN_YET iken pipeline GREEN olamaz."""
+        from datetime import datetime, timezone
+        from services import system_runtime_orchestrator as sro
+        monkeypatch.setattr(sro, "universe_reason_code",
+                            lambda n: "NOT_RUN_YET")
+        now = datetime.now(timezone.utc).isoformat()
+        r = sro.readiness({"running": True, "last_cycle_time": now},
+                          "RUNNING", False)
+        assert r["overall_pipeline"] != "GREEN"
+        assert "UNIVERSE_NOT_REFRESHED_YET" in r["blockers"]
+
+    def test_refresh_completed_allows_green_path(self, prefs_tmp,
+                                                 monkeypatch):
+        """Yenileme koşup dürüst sonuç verdiyse evren blocker'ı
+        eklenmez (GREEN diğer koşullara bağlı kalır)."""
+        from services import system_runtime_orchestrator as sro
+        monkeypatch.setattr(sro, "universe_reason_code",
+                            lambda n: "INSUFFICIENT_ELIGIBLE_SYMBOLS")
+        r = sro.readiness({"running": False}, "STOPPED", False)
+        assert "UNIVERSE_NOT_REFRESHED_YET" not in r["blockers"]
+
     def test_universe_reason_code_when_only_base(self):
         """8) Evren 3'te kalırsa neden kodu döner, sessiz başarı yok."""
         from services import system_runtime_orchestrator as sro

@@ -3816,6 +3816,8 @@ def api_paper_state():
         "analysis_scheduler_detail": ready.get(
             "analysis_scheduler_detail", {}),
         "universe_reason_code": ready.get("universe_reason_code"),
+        "universe_refresh_result": ready.get(
+            "universe_refresh_result", "NOT_RUN_YET"),
         "windows_runtime": "RUNNING",  # bu süreç yanıt veriyor
         "paper": ("ACTIVE" if est.get("environment") != "LIVE"
                   and not est["active"] else

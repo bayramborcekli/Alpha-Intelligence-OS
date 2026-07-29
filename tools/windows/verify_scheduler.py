@@ -123,6 +123,7 @@ def snapshot(c: Client) -> dict:
         "scan_interval": st.get("scan_interval"),
         "universe_size": st.get("universe_size"),
         "universe_reason_code": st.get("universe_reason_code"),
+        "universe_refresh_result": st.get("universe_refresh_result"),
     }
 
 
@@ -172,17 +173,33 @@ def check_snapshot(s: dict) -> list[str]:
     else:
         fails.append(f"Zamanlayıcı tercihi okunamadı: {pref!r}")
 
-    # Evren dürüstlük kuralı
+    # Evren dürüstlük kuralı — NOT_RUN_YET asla PASS DEĞİLDİR:
+    # evren yenilemesi hiç koşmadıysa doğrulama başarısızdır.
+    uresult = s.get("universe_refresh_result")
+    print(f"  - universe_refresh_result={uresult}")
+    if ucode == "NOT_RUN_YET" or uresult == "NOT_RUN_YET":
+        fails.append("Evren yenilemesi hiç koşmadı (NOT_RUN_YET) — "
+                     "zamanlayıcı çevrimi refresh'i çağırmıyor ya da "
+                     "ilk uygun çevrim henüz tamamlanmadı; PASS verilemez")
+    if ucode == "NOT_RUN_YET" and pipeline == "GREEN":
+        fails.append("NOT_RUN_YET iken pipeline GREEN — false-GREEN")
     if isinstance(usize, int) and usize > BASE_UNIVERSE_SIZE:
         print(f"  - evren {usize} sembole genişlemiş (>3)  {OK}")
         if ucode:
             fails.append(f"Evren genişlemişken reason_code={ucode} — "
                          "çelişkili rozet")
+        if uresult not in ("COMPLETED", None):
+            fails.append(f"Evren genişlemiş ama sonuç {uresult!r} — "
+                         "COMPLETED bekleniyordu")
     elif isinstance(usize, int):
-        if ucode in HONEST_REASON_CODES:
-            print(f"  - evren {usize} sembolde, dürüst neden kodu "
-                  f"{ucode}  {OK}")
-        else:
+        if uresult == "COMPLETED" and ucode in (
+                "INSUFFICIENT_ELIGIBLE_SYMBOLS", "FILTERS_EXCLUDED_ALL"):
+            print(f"  - yenileme KOŞTU (COMPLETED), evren {usize} "
+                  f"sembolde, dürüst neden kodu {ucode}  {OK}")
+        elif uresult == "FAILED" or ucode == "UNIVERSE_REFRESH_FAILED":
+            fails.append("Evren yenilemesi FAILED "
+                         f"(reason_code={ucode!r}) — açık hata")
+        elif ucode not in HONEST_REASON_CODES:
             fails.append(f"Evren {usize} sembolde ama dürüst neden kodu "
                          f"yok (reason_code={ucode!r}) — false-GREEN")
     else:
@@ -201,9 +218,10 @@ def watch(c: Client, minutes: int) -> tuple[dict, list[str]]:
         ran = bool(det.get("last_run"))
         expanded = (isinstance(s.get("universe_size"), int)
                     and s["universe_size"] > BASE_UNIVERSE_SIZE)
-        honest = s.get("universe_reason_code") in HONEST_REASON_CODES
-        if ran and (expanded or (honest and s.get("universe_reason_code")
-                                 != "NOT_RUN_YET")):
+        refreshed = s.get("universe_refresh_result") == "COMPLETED"
+        honest = (s.get("universe_reason_code") in HONEST_REASON_CODES
+                  and s.get("universe_reason_code") != "NOT_RUN_YET")
+        if ran and (expanded or (refreshed and honest)):
             print(f"  - koşu tamam: last_run={det.get('last_run')} "
                   f"universe_size={s['universe_size']} "
                   f"reason={s.get('universe_reason_code')}")
