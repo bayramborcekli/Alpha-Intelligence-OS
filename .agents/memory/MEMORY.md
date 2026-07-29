@@ -12,3 +12,5 @@
 - [Test env isolation](test-env-isolation.md) — code writing creds directly to os.environ leaks past monkeypatch; conftest sanitizer must cover every resolver alias.
 - [Binance TR API quirks](binance-tr-api.md) — `data` may be list or dict; movements API omits trades so reconciliation is PARTIAL by design; transferType=1 = internal.
 - [Task agent scope deletions](task-agent-scope-deletions.md) — merge'ler son eklenen kodu ve .replit userenv değişkenlerini "kapsam dışı" diye silebilir; her merge sonrası doğrula.
+- [Windows SSL truststore](windows-ssl-truststore.md) — AV/proxy HTTPS denetimi certifi'yi kırar; truststore.inject_into_ssl (yalnız nt, app import'tan önce) kök çözüm; verify asla kapatılmaz.
+- [Merge push gap](merge-push-gap.md) — görev ajanı merge'leri GitHub'a otomatik push ETMEZ; Windows git pull öncesi origin/main HEAD eşitliğini her seferinde doğrula.
