@@ -199,15 +199,17 @@ def risk_lock_check() -> None:
 def stop_old_processes() -> None:
     if os.name != "nt":
         return
-    root = str(ROOT).replace("\\", "\\\\")
-    cmd = ("$root=[regex]::Escape('" + str(ROOT) + "'); "
+    # Proje kökü env üzerinden geçirilir — tek tırnak/boşluk içeren
+    # kullanıcı yolları PowerShell alıntılamasını KIRAMAZ.
+    env = dict(os.environ, ALPHA_KILL_ROOT=str(ROOT))
+    cmd = ("$root=[regex]::Escape($env:ALPHA_KILL_ROOT); "
            "Get-CimInstance Win32_Process -Filter \"Name='python.exe' or "
            "Name='pythonw.exe'\" | Where-Object { $_.ProcessId -ne $PID -and "
            "$_.CommandLine -match ($root+'.*(serve_windows|launcher_windows)') } "
            "| ForEach-Object { Stop-Process -Id $_.ProcessId -Force "
            "-ErrorAction SilentlyContinue }")
     subprocess.run(["powershell", "-NoProfile", "-Command", cmd],
-                   capture_output=True, timeout=30)
+                   capture_output=True, timeout=30, env=env)
     p("SUREC        : eski Alpha surecleri kapatildi (yalniz bu klasor).")
 
 
@@ -238,6 +240,18 @@ def start_server() -> int | None:
     return proc.pid
 
 
+def health_ok(h: dict) -> bool:
+    """Misyon sözleşmesinin TAMAMI: yalnız controller+cycle değil."""
+    return bool(
+        h.get("entrypoint") == "serve_windows"
+        and h.get("runtime_override") is True
+        and str(h.get("paper")) == "active"
+        and str(h.get("auto_loop")) == "running"
+        and str(h.get("controller")) == "running"
+        and (h.get("cycle_count") or 0) >= 1
+        and h.get("last_cycle"))
+
+
 def wait_health(timeout_s: int = 180) -> dict:
     import requests
     port = os.environ.get("ALPHA_PORT", "5000").strip() or "5000"
@@ -249,8 +263,7 @@ def wait_health(timeout_s: int = 180) -> dict:
             r = requests.get(url, timeout=5)
             if r.status_code == 200:
                 last = r.json()
-                if (last.get("controller") == "running"
-                        and (last.get("cycle_count") or 0) >= 1):
+                if health_ok(last):
                     break
         except Exception:
             pass
@@ -313,11 +326,22 @@ def connect_accounts() -> None:
               "anahtar olusturun. Anahtar KAYDEDILMEDI.")
             report[label] = "FAIL"
             continue
+        # Yetki alanları yanıtın içinde HİÇ yoksa salt-okunurluk
+        # kanıtlanamaz (özellikle Binance TR) — bağlantı çalışır ama
+        # durum açıkça UNVERIFIED raporlanır; canlı emir yolu zaten kapalı.
+        unverified = ("canTrade" not in data and "canWithdraw" not in data)
         try:
             xc.save_local(exchange, key, sec)
-            p(f"{exchange}  : BAGLANDI (salt okunur dogrulandi; guvenli "
-              "yerel depoya yazildi, terminale/git'e yazilmadi).")
-            report[label] = "CONNECTED"
+            if unverified:
+                p(f"{exchange}  : BAGLANDI ama yetki durumu API yanitinda "
+                  "yok — salt-okunurluk KANITLANAMADI. Binance panelinden "
+                  "anahtarin yalniz okuma yetkili oldugunu kontrol edin. "
+                  "(Canli emir yolu bu yazilimda zaten kapali.)")
+                report[label] = "CONNECTED (UNVERIFIED)"
+            else:
+                p(f"{exchange}  : BAGLANDI (salt okunur dogrulandi; guvenli "
+                  "yerel depoya yazildi, terminale/git'e yazilmadi).")
+                report[label] = "CONNECTED"
         except Exception as exc:
             p(f"{exchange}  : depoya yazilamadi ({exc})")
             report[label] = "FAIL"
@@ -326,7 +350,7 @@ def connect_accounts() -> None:
 def final_report(health: dict) -> int:
     ctrl = str(health.get("controller", "stopped"))
     cyc = int(health.get("cycle_count") or 0)
-    ok = ctrl == "running" and cyc >= 1
+    ok = health_ok(health)
     card = "\U0001F7E2" if ok else ("\U0001F7E1" if health else "\U0001F534")
     p("=" * 62)
     p("ALPHA INTELLIGENCE OS — WINDOWS FINAL STATUS")
@@ -390,7 +414,7 @@ def main() -> int:
     start_server()
     p("[E] Runtime dogrulaniyor (ilk cevrim icin en fazla 180 sn)...")
     health = wait_health(180)
-    if health.get("controller") == "running" and (health.get("cycle_count") or 0) >= 1:
+    if health_ok(health):
         p("-" * 62)
         p("[F] Istege bagli Binance hesap baglantisi...")
         connect_accounts()

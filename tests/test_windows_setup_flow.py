@@ -110,3 +110,33 @@ def test_account_saved_when_read_only(monkeypatch):
     wsf.connect_accounts()
     assert wsf.report["BINANCE GLOBAL ACCOUNT"] == "CONNECTED"
     assert saved == ["BINANCE_GLOBAL"]
+
+
+def test_tr_without_permission_fields_is_unverified(monkeypatch, capsys):
+    """TR yanıtı yetki alanı içermezse durum UNVERIFIED raporlanır."""
+    wsf.report.clear()
+    answers = iter(["E", "H", "E"])  # bağlan? / global? / tr?
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    monkeypatch.setattr(wsf, "_mask_echo_input", lambda *_: "t" * 20)
+    import dashboard_api as da
+    monkeypatch.setattr(da, "_signed_get",
+                        lambda *a, **k: {"data": {"accountAssets": []}})
+    import exchange_credentials as xc
+    monkeypatch.setattr(xc, "save_local", lambda *a: None)
+    wsf.connect_accounts()
+    assert wsf.report["BINANCE TR ACCOUNT"] == "CONNECTED (UNVERIFIED)"
+    assert "KANITLANAMADI" in capsys.readouterr().out
+
+
+def test_health_ok_requires_full_contract():
+    good = {"entrypoint": "serve_windows", "runtime_override": True,
+            "paper": "active", "auto_loop": "running",
+            "controller": "running", "cycle_count": 1,
+            "last_cycle": "2026-07-29T00:00:00Z"}
+    assert wsf.health_ok(good)
+    for key, bad in [("entrypoint", "gunicorn"), ("runtime_override", False),
+                     ("paper", "disabled"), ("auto_loop", "stopped"),
+                     ("controller", "stopped"), ("cycle_count", 0),
+                     ("last_cycle", None)]:
+        broken = dict(good, **{key: bad})
+        assert not wsf.health_ok(broken), key
