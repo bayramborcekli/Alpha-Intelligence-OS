@@ -34,6 +34,18 @@ class TestTemplateContract:
     def test_csrf_token_exposed(self):
         assert "OC_CSRF" in TEMPLATE
 
+    def test_reconcile_status_present(self):
+        # Son restart reconcile kararı /health/runtime'dan beslenir;
+        # kayıt yoksa "kayıt yok" gösterilir (görev: karar bağlamı
+        # Operasyon Kontrol sayfasında da görünsün).
+        assert "oc-reconcile" in TEMPLATE
+        assert "/health/runtime" in TEMPLATE
+        assert "paper_reconcile" in TEMPLATE
+        assert "kayıt yok" in TEMPLATE
+        for result in ("RESTORED_RUNNING", "BLOCKED_EMERGENCY",
+                       "PRESERVED_STOPPED", "LIVE_FAIL_CLOSED", "ERROR"):
+            assert result in TEMPLATE
+
     def test_paper_intent_disclosed(self):
         # Kapatma gerçek borsa pozisyonu kapattığını İDDİA ETMEZ.
         assert "PAPER" in TEMPLATE

@@ -19,6 +19,7 @@
   .oc-state.unknown, .oc-badge.unknown, .ows-unknown { color:#9aa0ae; }
   .oc-state.bad, .oc-badge.bad, .ows-loss { color:#e05656; }
   .oc-state.good, .oc-badge.good, .ows-profit { color:#3fbf7f; }
+  .oc-state.warn { color:#d6a53c; }
   .ows-pending { color:#d9a441; }
   .ows-info { color:#5ab0e0; }
   .oc-mode-paper { background:#153322; color:#3fbf7f; padding:2px 8px;
@@ -240,7 +241,10 @@
       <div><b>Kaynak</b><span id="es-by">—</span></div>
       <div><b>Zaman</b><span id="es-at">—</span></div>
       <div><b>Otomasyon Modu</b><span id="es-mode">—</span></div>
+      <div><b>Son Restart Reconcile</b>
+        <span id="oc-reconcile" class="oc-state unknown">—</span></div>
     </div>
+    <p class="oc-note" id="oc-reconcile-detail" hidden></p>
     <p>
       <button class="oc-btn danger" id="es-clear" hidden>
         🔓 Paper Kilidini Kontrol Et ve Kaldır</button>
@@ -384,8 +388,62 @@
       .then(function () { el("es-clear").disabled = false; refresh(); });
   });
 
+  // Son restart reconcile kararı — /health/runtime.paper_reconcile alanından
+  // beslenir (trading_home.html'deki Windows Runtime kartıyla aynı kaynak).
+  function renderReconcile(d) {
+    var rc = d && d.paper_reconcile;
+    var span = el("oc-reconcile");
+    var det = el("oc-reconcile-detail");
+    if (rc && rc.result) {
+      var rcMap = {
+        "RESTORED_RUNNING": { t: "Geri yüklendi (çalışıyor)", c: "good" },
+        "BLOCKED_EMERGENCY": { t: "Engellendi (acil durum)", c: "bad" },
+        "PRESERVED_STOPPED": { t: "Korundu (durdurulmuş)", c: "warn" },
+        "LIVE_FAIL_CLOSED": { t: "LIVE — güvenli kapalı", c: "bad" },
+        "ERROR": { t: "Reconcile hatası", c: "bad" }
+      };
+      var m = rcMap[rc.result] || { t: rc.result, c: "unknown" };
+      span.textContent = m.t;
+      span.className = "oc-state " + m.c;
+      var parts = [];
+      if (rc.ts)
+        parts.push("zaman: " + new Date(rc.ts).toLocaleString("tr-TR"));
+      var syms = rc.symbols ? Object.keys(rc.symbols) : [];
+      if (syms.length) {
+        parts.push("semboller: " + syms.map(function (s) {
+          return s + "=" + rc.symbols[s];
+        }).join(", "));
+      }
+      if (rc.detail) parts.push(rc.detail);
+      det.textContent = parts.length
+        ? ("Son restart reconcile — " + parts.join(" • ")) : "";
+      det.hidden = !parts.length;
+    } else {
+      span.textContent = "kayıt yok";
+      span.className = "oc-state unknown";
+      det.textContent = "";
+      det.hidden = true;
+    }
+  }
+
+  function refreshReconcile() {
+    fetch("/health/runtime", { credentials: "same-origin" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(renderReconcile)
+      .catch(function () {
+        var span = el("oc-reconcile");
+        span.textContent = "alınamadı";
+        span.className = "oc-state unknown";
+      });
+  }
+
   refresh();
+  refreshReconcile();
   setInterval(refresh, 30000);
+  setInterval(refreshReconcile, 30000);
 })();
 </script>
 <script src="{{ url_for('static', filename='js/operation_workspace.js') }}"></script>
