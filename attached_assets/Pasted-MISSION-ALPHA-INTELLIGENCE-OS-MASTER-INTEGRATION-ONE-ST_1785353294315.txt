@@ -1,0 +1,1256 @@
+MISSION — ALPHA INTELLIGENCE OS MASTER INTEGRATION:
+ONE-START AI PAPER PIPELINE, COMPLETE DATA FLOW, DYNAMIC MARKET UNIVERSE,
+PERSISTENT WINDOWS STATE, DECISION TRACE & 3 CENTRAL RISK PROFILES
+
+AMAÇ
+
+Alpha Intelligence OS içindeki bütün piyasa verisi, analiz, yapay zekâ/karar,
+risk, Paper işlem ve izleme bileşenlerini tek başlangıçta çalışan, birbirine
+bağlı ve doğrulanabilir bir sistem haline getir.
+
+Kullanıcı normal kullanımda yalnız:
+
+SETUP_AND_START_WINDOWS.cmd
+
+çalıştıracak.
+
+Bundan sonra kullanıcı:
+
+- Analysis Scheduler’ı ayrı açmayacak
+- Operation Center’ı ayrı başlatmayacak
+- BTC/ETH/SOL’u tekrar tekrar etkinleştirmeyecek
+- farklı sayfalarda ayrı servisleri çalıştırmayacak
+- risk profilini farklı yerlerde tekrar seçmeyecek
+- Binance Global anahtarını yeniden girmeyecek
+
+Bu görev aşağıdaki önceki bütün görevlerin yerine geçer:
+
+- CONSOLIDATE VERIFIED WINDOWS PAPER RUNTIME
+- EXPAND AND ACCELERATE PAPER MARKET SCANNING
+- FIX ANALYSIS SCHEDULER BLOCKER
+- UNIFIED AI TRADING PIPELINE
+- 3 RISK PROFILE INTEGRATION
+- WINDOWS PAPER STATE PERSISTENCE
+- DASHBOARD CONSISTENCY
+- DECISION TRACE
+- DYNAMIC UNIVERSE
+- PAPER PIPELINE TEST
+
+Bunları ayrı görevler olarak uygulama.
+
+============================================================
+0) MEVCUT SAĞLAM TABAN — KORUNACAK COMMIT
+============================================================
+
+Başlangıç tabanı:
+
+ec4e30f
+
+Bu committe doğrulanmış ve çalışan özellikler:
+
+- canonical Paper state:
+  alpha20_v1/operation_control_state.json
+- OTONOM / STOPPED tercihi kalıcı
+- BTCUSDT / ETHUSDT / SOLUSDT durumları kalıcı
+- manuel STOP tercihi restart sonrası korunuyor
+- Emergency Stop ve Risk Stop tercihlerin üzerinde
+- Binance Global Windows DPAPI’de kalıcı
+- Binance Global CONNECTED_READ_ONLY
+- SETUP Global anahtarını yeniden istemiyor
+- Git pack-lock interaktif y/n döngüsü giderilmiş
+- /automation ve /operation-center kavramları ayrılmış
+- yanlış “Sıradaki İşlemler” etiketi düzeltilmiş
+- local-dev-bypass yerine “Yerel Windows Oturumu”
+- GET /api/paper/state kanonik snapshot mevcut
+- Paper bakiye, ledger ve trade history korunuyor
+- Live Orders kapalı
+
+Bu özellikleri yeniden yazma, geri alma veya paralel alternatif oluşturma.
+
+============================================================
+1) MEVCUT SORUN
+============================================================
+
+Sistem parçalar halinde çalışıyor:
+
+- Windows Runtime çalışıyor
+- Paper Controller çalışıyor
+- Operation Center çalışıyor
+- Analysis Scheduler ayrı ve kapalı kalabiliyor
+- scheduler aralığı 60 dakika olabiliyor
+- dinamik piyasa evreni devrede değil
+- yalnız BTCUSDT, ETHUSDT ve SOLUSDT görüntülenebiliyor
+- gerçek sinyal olmayan enabled semboller fırsat sayılabiliyor
+- AI/karar motoruna hangi verilerin ulaştığı görünmüyor
+- risk profillerinin yalnız görsel mi yoksa gerçek Risk Engine girdisi mi
+  olduğu kanıtlanmamış
+- kullanıcı “neden işlem açılmadı?” sorusunun cevabını göremiyor
+- farklı sayfalar farklı servis durumları gösterebiliyor
+- yalnız controller thread’i çalışıyor diye sistem yeşil görünebiliyor
+
+Modüler yapı korunabilir.
+
+Ancak modüllerin elle, ayrı ayrı başlatılması ve aralarındaki veri bağlantısının
+kopuk olması kabul edilmez.
+
+Hedef tek hat:
+
+Binance Market Data
+→ Dynamic Universe
+→ Analysis Scheduler
+→ Feature Pipeline
+→ Market Regime
+→ Strategy Signals
+→ AI / Decision Engine
+→ Selected Risk Profile
+→ Central Risk Engine
+→ Paper Intent
+→ Paper Position / Ledger
+→ Position Monitoring
+→ Performance Feedback
+→ Dashboard
+
+============================================================
+2) ÖNCE GERÇEK MİMARİYİ ÇIKAR
+============================================================
+
+Kod değiştirmeden önce repository genelinde aşağıdaki bileşenleri incele:
+
+1. Binance public market data
+2. OHLCV / candle verisi
+3. volume
+4. order book
+5. spread
+6. liquidity
+7. sembol evreni
+8. Analysis Scheduler
+9. feature / indicator üretimi
+10. market regime
+11. strategy signals
+12. AI model veya scoring engine
+13. decision threshold
+14. risk profile
+15. Central Risk Engine
+16. Operation Center
+17. Paper controller
+18. Paper intent
+19. Paper ledger
+20. açık pozisyon yönetimi
+21. performans geri beslemesi
+22. dashboard snapshot
+23. Windows startup akışı
+
+Her bileşen için belirle:
+
+- kanonik dosya/servis
+- aldığı girdiler
+- ürettiği çıktılar
+- çıktıyı kullanan sonraki bileşen
+- çalışma sıklığı
+- son çalışma zamanı
+- state kaynağı
+- duplicate bağlantılar
+- kopuk bağlantılar
+- yalnız UI’da görünen fakat karar motoruna ulaşmayan değerler
+- karar üreten fakat Risk Engine’i bypass eden yollar
+
+Teslim raporunda:
+
+ARCHITECTURE MAP
+BROKEN CONNECTIONS FOUND
+DUPLICATE PATHS FOUND
+
+başlıkları altında gerçek bulguları yaz.
+
+Eksik bir bileşeni varmış gibi raporlama.
+Sahte AI veya sahte veri üretme.
+
+============================================================
+3) TEK KANONİK ORKESTRATÖR
+============================================================
+
+Mevcut uygun orchestrator varsa geliştir.
+
+Yoksa minimum servis oluştur:
+
+services/system_runtime_orchestrator.py
+
+Orchestrator yalnız mevcut kanonik servisleri yönetsin.
+Yeni paralel market-data, risk veya karar motoru oluşturmasın.
+
+Başlatma sırası:
+
+1. Environment validation
+2. Paper / Live safety locks
+3. Emergency Stop ve Risk Stop
+4. Windows truststore
+5. Binance public connectivity
+6. Binance Global read-only status
+7. Market data collector
+8. Dynamic Universe Manager
+9. Analysis Scheduler
+10. Feature Pipeline
+11. Market Regime
+12. Strategy Signal Engine
+13. AI / Decision Engine
+14. Risk Profile Service
+15. Central Risk Engine
+16. Operation Center
+17. Paper Controller
+18. Position Monitor
+19. Ledger / Audit
+20. Unified Dashboard Snapshot
+
+Normal Windows başlangıcında bütün bu zincir tek seferde çalışsın.
+
+============================================================
+4) TEK BAŞLANGIÇ VE TEK DURDURMA
+============================================================
+
+SETUP_AND_START_WINDOWS.cmd başarıyla tamamlandığında orchestrator otomatik
+başlasın.
+
+Kullanıcı ayrı ayrı servis başlatmasın.
+
+Tek sistem başlangıcı:
+
+SİSTEMİ BAŞLAT
+
+şunları çalıştırsın:
+
+- public market data
+- Dynamic Universe
+- Analysis Scheduler
+- feature üretimi
+- AI karar hattı
+- Risk Engine
+- Operation Center
+- seçili semboller
+- Paper Controller
+- pozisyon izleme
+- dashboard health
+
+Tek sistem durdurma:
+
+SİSTEMİ DURDUR
+
+şunları yapmalı:
+
+- yeni Paper girişlerini durdur
+- mevcut açık Paper pozisyonları mevcut güvenlik politikasına göre izle
+- bakiye veya ledger kaydını silme
+- kullanıcı tercihlerini silme
+- Binance credential silme
+
+============================================================
+5) READINESS GRAPH
+============================================================
+
+Kritik servisler birbirine readiness sözleşmesiyle bağlansın:
+
+MARKET DATA READY
+→ UNIVERSE READY
+→ ANALYSIS READY
+→ FEATURES READY
+→ DECISION ENGINE READY
+→ RISK ENGINE READY
+→ PAPER CONTROLLER READY
+
+Bir önceki katman hazır değilse sonraki katman Paper işlemi üretemez.
+
+Genel durum:
+
+GREEN:
+Bütün kritik hat çalışıyor ve veri güncel.
+
+YELLOW / DEGRADED:
+Tek sembol veya ikincil veri problemi var; ana hat çalışıyor.
+
+RED / BLOCKED:
+Analiz, decision, risk veya Paper hattının kritik bölümü çalışmıyor.
+
+Yalnız controller thread’i çalışıyor diye sistem GREEN gösterilmesin.
+
+Analysis Scheduler kapalıysa GREEN gösterilmesin.
+
+Risk Engine hazır değilse GREEN gösterilmesin.
+
+============================================================
+6) CANONICAL STATE VE KALICILIK
+============================================================
+
+Mevcut kanonik state kaynağını kullan:
+
+alpha20_v1/operation_control_state.json
+
+Gereksiz yeni Paper preference dosyası oluşturma.
+
+Aşağıdaki tercihler bu mevcut git-dışı yerel state sisteminde tutulmalı:
+
+- OTONOM / DANIŞMAN
+- system automation RUNNING / STOPPED
+- Analysis Scheduler RUNNING / STOPPED
+- scan interval
+- seçili risk profili
+- BTCUSDT enabled / disabled / paused
+- ETHUSDT enabled / disabled / paused
+- SOLUSDT enabled / disabled / paused
+- dinamik sembol enabled / disabled
+- sembol run state
+- kullanıcının manuel STOP tercihi
+
+Kurallar:
+
+- restart sonrası korunur
+- git pull sonrası korunur
+- SETUP tekrarında korunur
+- secret içermez
+- repository’ye commit edilmez
+- kullanıcı STOP seçtiyse restart’ta sessizce tekrar başlatılmaz
+
+Güvenlik önceliği:
+
+Emergency Stop
+→ Risk Stop
+→ Data Freshness
+→ Kullanıcı Tercihleri
+
+============================================================
+7) ANALYSIS SCHEDULER ENTEGRASYONU
+============================================================
+
+/automation sayfasındaki Analysis Scheduler gerçek karar hattına bağlansın.
+
+Windows + PAPER ortamında:
+
+- kayıtlı kullanıcı tercihi RUNNING ise orchestrator otomatik başlatsın
+- ilk güvenli kurulumda varsayılan RUNNING olabilir
+- kullanıcı manuel STOP verdiyse restart’ta zorla açma
+- varsayılan scan interval 5 dakika
+- interval yerel state içinde kalıcı
+- aynı anda iki analiz koşusu çalışmasın
+- aynı kapanmamış mum üzerinde duplicate karar üretilmesin
+- manuel “Şimdi Çalıştır” local authenticated admin için aktif olsun
+- manuel koşu devam eden koşuyla çakışmasın
+- scheduler çıktısı doğrudan kanonik decision pipeline’a aktarılsın
+
+Scheduler yalnız rapor veya dekoratif servis olmasın.
+
+============================================================
+8) DİNAMİK PİYASA EVRENİ
+============================================================
+
+Temel semboller her zaman korunsun:
+
+- BTCUSDT
+- ETHUSDT
+- SOLUSDT
+
+Bunlara ek olarak Binance’taki uygun USDT paritelerinden toplam en fazla:
+
+20 sembol
+
+seçilsin.
+
+Seçim kriterleri:
+
+- yüksek hacim
+- yeterli likidite
+- kabul edilebilir spread
+- yeterli geçmiş veri
+- güncel veri
+- minimum listing yaşı
+- desteklenen ürün tipi
+- risk politikasına uygunluk
+- aşırı olmayan volatilite
+
+Hariç tut:
+
+- stablecoin / stablecoin pariteleri
+- yeni listelenmiş ve geçmişi yetersiz semboller
+- düşük likidite
+- aşırı spread
+- bozuk veya bayat veri
+- kara listedeki semboller
+- desteklenmeyen ürünler
+
+Evren periyodik yenilensin.
+
+Evren yenilenmesi açık pozisyonları veya ledger kayıtlarını silmesin.
+
+Bir sembolün veri hatası diğer sembollerin analizini durdurmasın.
+
+============================================================
+9) MARKET DATA VE DATA FRESHNESS
+============================================================
+
+Her sembol için kontrol et:
+
+- son candle zamanı
+- veri yaşı
+- beklenen candle sayısı
+- eksik candle
+- duplicate candle
+- volume verisi
+- spread yaşı
+- order-book yaşı
+- son başarılı bağlantı
+- feature completeness
+
+Sembol durumları:
+
+- DATA_FRESH
+- DATA_DEGRADED
+- DATA_STALE
+- DATA_MISSING
+
+Kurallar:
+
+- DATA_STALE ile yeni Paper pozisyon açılmaz
+- DATA_MISSING ile yeni Paper pozisyon açılmaz
+- tek sembol bozuksa yalnız o sembol NO_TRADE olur
+- diğer semboller analiz edilmeye devam eder
+
+============================================================
+10) AI / DECISION INPUT CONTRACT
+============================================================
+
+AI veya karar motorunun gerçekten kullandığı girdileri açık sözleşmede tanımla.
+
+Mevcut sistemde bulunan girdilerden uygun olanlar:
+
+- OHLCV
+- volume
+- spread
+- liquidity
+- volatility
+- momentum
+- trend
+- support / resistance
+- market regime
+- BTC genel yönü
+- correlation
+- data freshness
+- strategy signals
+- open Paper positions
+- current exposure
+- portfolio exposure
+- daily PnL
+- drawdown
+- consecutive losses
+- selected risk profile
+- cooldown
+- önceki Paper performansı
+- portfolio limits
+
+Olmayan veriyi sahte sabit değerle doldurma.
+
+Zorunlu girdi eksikse:
+
+FINAL DECISION: NO_TRADE
+REASON: MISSING_DATA
+
+üret.
+
+Sistemde gerçek ML/AI modeli yoksa UI’da varmış gibi gösterme.
+
+Mevcut karar sistemi scoring/rules tabanlıysa dürüstçe:
+
+DECISION ENGINE
+
+olarak adlandır.
+
+============================================================
+11) FEATURE VE KARAR HATTI
+============================================================
+
+Her sembol yalnız şu kanonik hattan geçsin:
+
+Market Data
+→ Feature Pipeline
+→ Market Regime
+→ Strategy Signals
+→ Decision Score
+→ Selected Risk Profile
+→ Central Risk Engine
+→ Paper Intent
+→ Paper Ledger
+
+Scheduler, UI endpointi, controller veya legacy servis Risk Engine’i bypass
+ederek Paper pozisyon açamasın.
+
+Duplicate karar yollarını kanonik servise delege et.
+
+Risk onayı olmadan Paper intent oluşmasın.
+
+Paper intent olmadan Paper ledger pozisyon kaydı oluşturmasın.
+
+============================================================
+12) ÜÇ RİSK PROFİLİ
+============================================================
+
+Üst menüye gerçek seçici ekle:
+
+- KORUMA
+- DENGELİ
+- AGRESİF
+
+Kanonik değerler:
+
+KORUMA
+- risk_per_trade_limit: %0,15
+- code value: 0.0015
+- daily_loss_limit: %0,50
+- code value: 0.0050
+- maximum_drawdown_limit: %0,75
+- code value: 0.0075
+
+DENGELİ
+- risk_per_trade_limit: %0,25
+- code value: 0.0025
+- daily_loss_limit: %1,00
+- code value: 0.0100
+- maximum_drawdown_limit: %1,50
+- code value: 0.0150
+
+AGRESİF
+- risk_per_trade_limit: %0,50
+- code value: 0.0050
+- daily_loss_limit: %2,00
+- code value: 0.0200
+- maximum_drawdown_limit: %3,00
+- code value: 0.0300
+
+Repository’de daha önce kabul edilmiş profil tanımları varsa bunları tek
+kanonik kaynağa taşı veya mevcut kaynağı kullan.
+
+Değerleri sessizce değiştirme.
+
+============================================================
+13) RİSK PROFİLİ GERÇEK ENTEGRASYONU
+============================================================
+
+Zorunlu akış:
+
+Üst Menü Risk Seçimi
+→ Canonical Local State
+→ Risk Profile Service
+→ Central Risk Engine
+→ Trade Approval
+→ Position Sizing
+→ Exposure Limits
+→ Daily Loss Limit
+→ Drawdown Limit
+→ Paper Controller
+
+Risk profili yalnız UI etiketi olmayacak.
+
+Her karar kaydında zorunlu alanlar:
+
+- selected_risk_profile
+- profile_version
+- risk_per_trade_limit
+- daily_loss_limit
+- maximum_drawdown_limit
+- calculated_position_size
+- current_exposure
+- portfolio_exposure
+- risk_approved
+- risk_rejection_reason
+
+Profil seçimi:
+
+- restart sonrası korunur
+- git pull sonrası korunur
+- SETUP tekrarında korunur
+- Dashboard, Operation Center ve Risk Engine’de aynı görünür
+- yalnız yeni Paper kararlarına uygulanır
+- mevcut açık pozisyonu geriye dönük değiştirmez
+
+AGRESİF profil işlem açılmasını zorunlu kılmaz.
+
+Geçerli sinyal yoksa her profil:
+
+NO_TRADE
+
+kararı verebilmelidir.
+
+============================================================
+14) RİSK PROFİLİ TEST KANITI
+============================================================
+
+Aynı piyasa verisi ve aynı sinyal için:
+
+- KORUMA
+- DENGELİ
+- AGRESİF
+
+profillerinin Central Risk Engine’e farklı limit veya position sizing sonucu
+verebildiği testlerle kanıtlansın.
+
+Test yalnız UI değerlerini karşılaştırmasın.
+
+Gerçek Risk Engine input/output sonucu doğrulansın.
+
+Emergency Stop, Risk Stop ve Data Freshness her profilin üzerinde öncelikli
+olmalıdır.
+
+============================================================
+15) DECISION TRACE
+============================================================
+
+Her sembol için karar izi oluştur:
+
+- correlation_id
+- symbol
+- data_status
+- last_market_data
+- last_analysis
+- analyzed_timeframes
+- feature_completeness
+- market_regime
+- signal_direction
+- strategy_score
+- decision_score
+- required_threshold
+- selected_risk_profile
+- calculated_position_size
+- risk_result
+- cooldown_status
+- exposure_status
+- final_decision
+- rejection_reason
+- created_at
+
+Örnek:
+
+BTCUSDT
+
+DATA: FRESH
+REGIME: SIDEWAYS
+DIRECTION: NONE
+SCORE: 61/78
+RISK PROFILE: DENGELİ
+POSITION SIZE: 0
+FINAL DECISION: NO_TRADE
+REASON: YÖN TEYİDİ YOK
+
+Kullanıcı “neden işlem açılmadı?” sorusunun cevabını doğrudan görebilmeli.
+
+============================================================
+16) SAYAÇLARI DÜZELT
+============================================================
+
+Enabled veya hazır sembolleri “Uygun fırsat” sayma.
+
+Ayrı sayaçlar:
+
+- Evren Büyüklüğü
+- Veri Alınan Semboller
+- Analizi Tamamlananlar
+- Sinyal Adayları
+- Riskten Geçenler
+- Paper Emir Niyetleri
+- Açılan Paper Pozisyonlar
+
+Yönü ve geçerli sinyali olmayan sembol fırsat değildir.
+
+Gerçek Paper intent yoksa:
+
+“Sıradaki İşlemler”
+
+başlığı kullanılmasın.
+
+Yerine:
+
+- İzlenen Piyasalar
+- Sinyal Bekleyenler
+- Hazır Stratejiler
+
+kullanılabilir.
+
+Durum aşamaları:
+
+- İzleniyor
+- Analiz Ediliyor
+- Sinyal Bekliyor
+- Aday
+- Risk İncelemesinde
+- Paper Intent Oluştu
+- Paper Pozisyon Açıldı
+- Reddedildi
+
+============================================================
+17) OPERATION CENTER VE SEMBOL DURUMU
+============================================================
+
+BTCUSDT, ETHUSDT, SOLUSDT ve dinamik semboller ayrı kontrol birimleri olarak
+kalabilir.
+
+Ancak aynı kanonik model kullanılsın:
+
+- symbol
+- enabled
+- run_state
+- entry_allowed
+- data_status
+- signal_status
+- last_signal
+- last_decision
+- last_error
+- updated_at
+
+Trading Home, Operation Center, Analysis Scheduler ve Controller aynı state’i
+okumalı.
+
+Şu çelişkiler oluşmamalı:
+
+- Operation Center ENABLED, Trading Home STOPPED
+- sistem RUNNING, semboller sebepsiz DISABLED
+- restart sonrası semboller varsayılan STOPPED
+- SSL hatası sembolü kalıcı DISABLED yapıyor
+- tek sembol hatası bütün sistemi durduruyor
+
+============================================================
+18) EMERGENCY STOP VE RISK STOP
+============================================================
+
+Mevcut güvenlik düzeltmelerini koru:
+
+- config kill_switch baseline false
+- config ve safety_state birlikte değerlendirilir
+- stale test state tekrar oluşmaz
+- testler state/config dosyalarını geri yükler
+- risk kaynaklı stop sessizce temizlenmez
+- live modda clear fail-closed
+
+Emergency Stop aktifse:
+
+- market data toplanabilir
+- analiz yapılabilir
+- ancak yeni Paper intent veya pozisyon açılamaz
+- gerçek blocker açıkça gösterilir
+
+Risk profilleri Emergency Stop’u bypass edemez.
+
+============================================================
+19) SSL / TLS SEMBOL İZOLASYONU
+============================================================
+
+Gerçek Windows testinde bazı Binance istekleri ikinci veya üçüncü denemede
+başarılı oluyor.
+
+Tek sembol geçici SSL/TLS hatası:
+
+- DATA_DEGRADED olur
+- retry/backoff uygulanır
+- controller durmaz
+- Analysis Scheduler durmaz
+- Emergency Stop açılmaz
+- sembol kalıcı DISABLED olmaz
+- diğer semboller etkilenmez
+- sonraki başarılı analizde hata temizlenir
+
+Tüm market data uzun süre başarısızsa:
+
+- yeni Paper pozisyon açılmaz
+- mevcut açık Paper pozisyonlar güvenli şekilde izlenir
+- OVERALL PIPELINE: BLOCKED olur
+
+Kesinlikle yasak:
+
+- verify=False
+- CERT_NONE
+- SSL doğrulamasını kapatmak
+
+============================================================
+20) BINANCE GLOBAL VE BINANCE TR
+============================================================
+
+Mevcut çalışan Binance Global davranışını koru:
+
+- Windows DPAPI
+- CONNECTED_READ_ONLY
+- restart sonrası otomatik test
+- git pull ile korunur
+- SETUP tekrarında korunur
+- API Key/Secret tekrar istenmez
+- permission validation korunur
+
+Global bağlıysa genel bağlantı sorusu tekrar sorulmasın.
+
+Göster:
+
+BINANCE GLOBAL: CONNECTED_READ_ONLY
+
+Binance TR yapılandırılmamışsa yalnız ayrı seçenek:
+
+“Binance TR bağlantı sayfası açılsın mı? E/H”
+
+Binance TR bağlandığında aynı güvenli DPAPI kalıcılığı kullanılsın.
+
+Private Binance bağlantısının geçici hatası Paper Controller’ı öldürmesin.
+
+Public market data ile Paper analiz devam edebilsin.
+
+============================================================
+21) GIT PACK-LOCK KORUMASI
+============================================================
+
+ec4e30f içindeki düzeltmeyi koru:
+
+- git pull --ff-only
+- GIT_ASK_YESNO=false
+- gc.auto=0
+- maintenance.auto=false
+- eski pack cleanup hatası WARNING
+- interaktif y/n döngüsü yok
+- pack dosyaları zorla silinmez
+- HEAD başarıyla güncellendiyse SETUP devam eder
+
+============================================================
+22) UI VE MENÜ
+============================================================
+
+/automation:
+
+ANALİZ ZAMANLAYICISI
+
+- piyasa tarama ve analiz koşularını gösterir
+- Paper ticaret otomasyonu değildir
+
+/operation-center:
+
+PAPER TİCARET OTOMASYONU
+
+- Paper strateji ve işlem hattını yönetir
+
+Trading Home:
+
+- bütün sistem hattının özetini gösterir
+
+Üst menüde:
+
+- KORUMA / DENGELİ / AGRESİF seçici
+- Analysis Scheduler durumu
+- scan interval
+- Dynamic Universe büyüklüğü
+- son tam analiz
+- son karar
+- Paper Controller
+- Overall Pipeline
+- Live Orders: DISABLED
+
+local-dev-bypass kullanıcı adı gibi gösterilmesin.
+
+Yerine:
+
+Yerel Windows Oturumu
+
+gösterilsin.
+
+============================================================
+23) UNIFIED DASHBOARD SNAPSHOT
+============================================================
+
+Mevcut:
+
+GET /api/paper/state
+
+snapshot’ını geliştir veya kanonik snapshot servisine delege et.
+
+Tek response içinde en az:
+
+- windows_runtime
+- paper
+- controller
+- automation_mode
+- analysis_scheduler
+- scan_interval
+- universe_size
+- market_data_status
+- feature_pipeline
+- decision_engine
+- selected_risk_profile
+- risk_engine
+- emergency_stop
+- strategy_count
+- enabled_strategy_count
+- running_strategy_count
+- signal_candidate_count
+- risk_approved_count
+- paper_intent_count
+- open_paper_position_count
+- binance_global
+- binance_tr
+- last_complete_analysis
+- last_decision
+- overall_pipeline
+- live_orders
+
+bulunsun.
+
+Bütün ana sayfalar aynı snapshot’tan beslensin.
+
+============================================================
+24) PAPER PIPELINE TEST
+============================================================
+
+Gerçek piyasa sinyali beklemeden teknik hattı doğrulamak için varsayılan kapalı
+test oluştur:
+
+PAPER PIPELINE TEST
+
+Test:
+
+- yalnız local Windows + authenticated admin
+- açık kullanıcı onayı ister
+- sentetik ve TEST etiketli sinyal kullanır
+- feature
+  → decision
+  → selected risk profile
+  → Central Risk Engine
+  → Paper intent
+  → test ledger
+
+hattını doğrular.
+
+Kurallar:
+
+- gerçek Binance emri göndermez
+- normal performans istatistiklerine katılmaz
+- gerçek kâr/zarar gibi gösterilmez
+- gerçek risk eşiklerini düşürmez
+- audit kaydı oluşturur
+- test pozisyonu açıkça TEST olarak işaretlenir
+- test sonunda temizlenebilir
+
+============================================================
+25) WINDOWS FINAL STATUS
+============================================================
+
+SETUP_AND_START_WINDOWS.cmd sonunda göster:
+
+GIT UPDATE:
+PASS / FAIL
+
+GIT CLEANUP:
+PASS / WARNING
+
+MARKET DATA:
+PASS / DEGRADED / FAIL
+
+DYNAMIC UNIVERSE:
+N symbols
+
+ANALYSIS SCHEDULER:
+RUNNING / STOPPED
+
+SCAN INTERVAL:
+N min
+
+FEATURE PIPELINE:
+READY / FAIL
+
+DECISION ENGINE:
+READY / FAIL
+
+RISK PROFILE:
+KORUMA / DENGELİ / AGRESİF
+
+RISK ENGINE:
+READY / BLOCKED
+
+OPERATION CENTER:
+RUNNING / STOPPED
+
+PAPER CONTROLLER:
+RUNNING / STOPPED
+
+ENABLED STRATEGIES:
+N
+
+LAST COMPLETE ANALYSIS:
+timestamp
+
+LAST DECISION:
+timestamp
+
+EMERGENCY STOP:
+CLEAR / ACTIVE
+
+BINANCE GLOBAL:
+CONNECTED_READ_ONLY / diğer
+
+BINANCE TR:
+CONNECTED / NOT_CONFIGURED / diğer
+
+LIVE ORDERS:
+DISABLED
+
+OVERALL PIPELINE:
+🟢 / 🟡 / 🔴
+
+Analysis Scheduler kapalıysa OVERALL PIPELINE yeşil olamaz.
+
+Decision Engine veya Risk Engine hazır değilse yeşil olamaz.
+
+============================================================
+26) KORUNACAKLAR
+============================================================
+
+Bozma veya silme:
+
+- commit ec4e30f davranışları
+- Windows Runtime Agent
+- SETUP_AND_START_WINDOWS.cmd tek tık akışı
+- operation_control_state.json
+- Binance Global DPAPI credential
+- Binance permission validation
+- Binance TR altyapısı
+- Paper bakiye
+- Paper ledger
+- trade history
+- açık Paper pozisyonlar
+- Emergency Stop
+- Risk Stop
+- route guard
+- local admin güvenliği
+- CSRF
+- retry/backoff
+- /health/runtime sözleşmesi
+- /api/paper/state uyumluluğu
+
+Kesinlikle açma:
+
+- ALPHA_ENABLE_LIVE_TRADING
+- gerçek buy/sell
+- gerçek cancel order
+- leverage change
+- margin change
+- withdrawal
+- transfer
+
+LIVE ORDERS her durumda DISABLED.
+
+============================================================
+27) TESTLER
+============================================================
+
+Aşağıdaki testleri ekle veya mevcut testlerle kanıtla:
+
+1. Tek başlangıç bütün kritik Paper servislerini çalıştırır
+2. Analysis Scheduler kapalıysa overall GREEN olmaz
+3. Scheduler çıktısı kanonik decision engine’e ulaşır
+4. AI/decision input contract zorunlu alanları doğrular
+5. Eksik veri NO_TRADE / MISSING_DATA üretir
+6. Bayat veri Paper intent üretmez
+7. Dynamic Universe maksimum 20 sembol üretir
+8. BTC/ETH/SOL daima evrendedir
+9. Enabled sembol fırsat sayılmaz
+10. Yön veya geçerli sinyal olmadan Paper intent oluşmaz
+11. KORUMA profili gerçek Risk Engine’e ulaşır
+12. DENGELİ profili gerçek Risk Engine’e ulaşır
+13. AGRESİF profili gerçek Risk Engine’e ulaşır
+14. Üç profil aynı girdide farklı position sizing sonucu verebilir
+15. Risk profili yalnız UI etiketi değildir
+16. Profil restart sonrası korunur
+17. Profil git pull sonrası korunur
+18. Profil SETUP tekrarında korunur
+19. Profil değişikliği açık pozisyonu değiştirmez
+20. OTONOM tercihi restart sonrası korunur
+21. Manuel STOP restart sonrası korunur
+22. Scheduler tercihi restart sonrası korunur
+23. scan interval restart sonrası korunur
+24. sembol enabled durumları restart sonrası korunur
+25. Emergency Stop restore işlemlerinden üstündür
+26. Risk Stop restore işlemlerinden üstündür
+27. tek sembol SSL hatası diğerlerini durdurmaz
+28. SSL hatası sembolü kalıcı DISABLED yapmaz
+29. Binance Global yeniden credential istemez
+30. Binance TR bağımsız kalır
+31. dashboard ve Operation Center aynı snapshot’ı gösterir
+32. yanlış fırsat sayacı düzeltilmiştir
+33. gerçek intent yokken “Sıradaki İşlemler” gösterilmez
+34. local-dev-bypass kullanıcı adı olarak görünmez
+35. Git pack-lock interaktif döngü oluşturmaz
+36. Paper Pipeline Test gerçek Binance emri göndermez
+37. Paper Pipeline Test normal performansa karışmaz
+38. Paper ledger ve bakiye korunur
+39. Live Orders daima DISABLED
+40. Replit ortamı Windows local orchestration başlatmaz
+41. mevcut tüm testler yeşil kalır
+
+Sentetik uçtan uca test:
+
+market data fixture
+→ dynamic universe
+→ feature generation
+→ market regime
+→ strategy signal
+→ decision score
+→ selected risk profile
+→ risk approval
+→ Paper intent
+→ test ledger
+
+tek correlation_id ile doğrulansın.
+
+============================================================
+28) TESLİM RAPORU
+============================================================
+
+COMMIT:
+PUSH:
+
+BASE COMMIT PRESERVED:
+ec4e30f — PASS / FAIL
+
+ARCHITECTURE MAP:
+özet
+
+BROKEN CONNECTIONS FOUND:
+liste
+
+DUPLICATE PATHS FOUND:
+liste
+
+CANONICAL STATE SOURCES:
+liste
+
+UNIFIED ORCHESTRATOR:
+PASS / FAIL
+
+ONE-START PIPELINE:
+PASS / FAIL
+
+MARKET DATA:
+PASS / FAIL
+
+DYNAMIC UNIVERSE:
+PASS / FAIL
+
+ANALYSIS SCHEDULER:
+PASS / FAIL
+
+SCAN INTERVAL:
+değer
+
+DATA FRESHNESS:
+PASS / FAIL
+
+AI / DECISION INPUT CONTRACT:
+PASS / FAIL
+
+FEATURE PIPELINE:
+PASS / FAIL
+
+DECISION ENGINE:
+PASS / FAIL
+
+KORUMA PROFILE:
+PASS / FAIL
+
+DENGELİ PROFILE:
+PASS / FAIL
+
+AGRESİF PROFILE:
+PASS / FAIL
+
+RISK PROFILE UI CONNECTION:
+PASS / FAIL
+
+RISK ENGINE CONNECTION:
+PASS / FAIL
+
+PROFILE PERSISTENCE:
+PASS / FAIL
+
+PAPER CONTROLLER:
+PASS / FAIL
+
+DECISION TRACE:
+PASS / FAIL
+
+COUNTER CORRECTION:
+PASS / FAIL
+
+RESTART PERSISTENCE:
+PASS / FAIL
+
+SYMBOL STATE PERSISTENCE:
+PASS / FAIL
+
+BINANCE GLOBAL PERSISTENCE:
+PASS / FAIL
+
+BINANCE TR SUPPORT:
+PASS / FAIL
+
+SSL SYMBOL ISOLATION:
+PASS / FAIL
+
+GIT PACK LOCK:
+PASS / FAIL
+
+LOCAL SESSION LABEL:
+PASS / FAIL
+
+UNIFIED DASHBOARD:
+PASS / FAIL
+
+PAPER PIPELINE TEST:
+PASS / FAIL
+
+LEDGER PRESERVED:
+PASS / FAIL
+
+LIVE ORDERS:
+DISABLED
+
+TESTS:
+passed / failed
+
+WINDOWS USER ACTION:
+git pull
+SETUP_AND_START_WINDOWS.cmd
+
+============================================================
+29) BAŞARI KRİTERİ
+============================================================
+
+Görev yalnız şu durumda PASS:
+
+- ec4e30f içindeki çalışan özellikler korunmuş
+- kullanıcı bütün servisleri tek tek başlatmıyor
+- tek SETUP bütün Paper analiz hattını çalıştırıyor
+- Analysis Scheduler gerçek decision pipeline’a bağlı
+- varsayılan tarama aralığı 5 dakika
+- Dynamic Universe en fazla 20 uygun sembol tarıyor
+- BTC/ETH/SOL her zaman korunuyor
+- AI/decision engine yalnız gerçek ve güncel verileri kullanıyor
+- eksik veya bayat veriyle Paper işlem açılmıyor
+- KORUMA/DENGELİ/AGRESİF üst menüde seçilebiliyor
+- üç profil Central Risk Engine’e gerçekten bağlı
+- profil seçimi kalıcı
+- profil gerçek position sizing ve risk limitlerini etkiliyor
+- her kararın nedeni görülebiliyor
+- yanlış fırsat sayaçları düzeltilmiş
+- sembol durumları restart sonrası korunuyor
+- kullanıcı STOP tercihi korunuyor
+- Emergency ve Risk Stop her şeyin üzerinde
+- tek sembol hatası bütün sistemi durdurmuyor
+- Binance Global yeniden anahtar istemiyor
+- Git pack-lock kullanıcıyı döngüye sokmuyor
+- dashboard bütün sistemi tek snapshot’tan gösteriyor
+- Paper Pipeline Test gerçek emir göndermiyor
+- Paper bakiye ve ledger korunuyor
+- Live Trading kapalı
+- bütün testler yeşil
+- GitHub main’e push edilmiş
+
+Yeni paralel alt sistem oluşturma.
+
+Mevcut Alpha Intelligence OS bileşenlerini tek orkestratör, tek veri hattı,
+tek karar hattı, tek Central Risk Engine ve tek doğruluk snapshot’ı altında
+birleştir.
