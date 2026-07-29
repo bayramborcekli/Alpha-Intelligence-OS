@@ -134,3 +134,4 @@ runtime/
 data/local_admin.json
 data/
 intelligence_history.jsonl
+.env.backup_*

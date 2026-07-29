@@ -8,6 +8,9 @@ rem  SSL dogrulamasi ASLA kapatilmaz. Canli emir yolu YOKTUR.
 rem ============================================================
 setlocal
 cd /d "%~dp0"
+echo NOT: Yeni tek giris noktasi SETUP_AND_START_WINDOWS.cmd dosyasidir.
+echo Bu betik uyumluluk icin calismaya devam eder.
+echo.
 
 echo [1/6] Guncel kod cekiliyor (git pull)...
 set "GIT_EXE=git"
