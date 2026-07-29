@@ -1,0 +1,451 @@
+MISSION — ALPHA INTELLIGENCE OS WINDOWS COMPLETE ONE-CLICK SETUP, RECOVERY & BINANCE CONNECTION
+
+AMAÇ
+
+Windows kullanıcısı yalnızca tek dosyayı çalıştıracak:
+
+SETUP_AND_START_WINDOWS.cmd
+
+Bu tek akış:
+
+- Windows ortamını hazırlar
+- Git sorununu çözer
+- güncel kodu alır
+- Python/.venv kurulumunu tamamlar
+- .env dosyasını güvenli biçimde oluşturur veya onarır
+- SSL/TLS sorunlarını teşhis eder ve mümkün olan güvenli düzeltmeleri uygular
+- Paper AUTO sistemini etkinleştirir
+- controller ve background servislerini başlatır
+- Binance public market verisini doğrular
+- isteğe bağlı Binance Global/TR read-only hesap bağlantısını kurar
+- dashboard Runtime kartını yeşile getirir
+- tek FINAL PASS/FAIL raporu üretir
+
+ARTIK PARÇALI BETİK, İKİNCİ ÇALIŞTIRMA, AYRI TEŞHİS KOMUTU VEYA KULLANICIYI DOSYA DÜZENLEMEYE YÖNLENDİRME YOK.
+
+============================================================
+1. TEK GİRİŞ NOKTASI
+============================================================
+
+Yeni tek Windows giriş dosyası:
+
+SETUP_AND_START_WINDOWS.cmd
+
+Gerekli karmaşık işlemler için arka planda:
+
+windows_setup.ps1
+
+kullanılabilir.
+
+Kullanıcı yalnız SETUP_AND_START_WINDOWS.cmd dosyasına çift tıklayacak.
+
+Mevcut:
+
+- INSTALL_WINDOWS.cmd
+- RECOVER_WINDOWS.cmd
+- windows_diagnose.py
+- start_alpha.cmd
+
+işlevleri bu tek akış altında birleştirilecek.
+
+Eski dosyalar gerekiyorsa uyumluluk yönlendirmesi olarak kalabilir, fakat kullanıcıya ayrı ayrı çalıştırılmayacak.
+
+============================================================
+2. GIT OTOMATİK KURULUM VE GÜNCELLEME
+============================================================
+
+Önce Git’i ara:
+
+- PATH içindeki git.exe
+- C:\Program Files\Git\cmd\git.exe
+- C:\Program Files (x86)\Git\cmd\git.exe
+- GitHub Desktop içindeki Git
+
+Git bulunursa tam yolu kullan.
+
+Git bulunmazsa:
+
+- winget mevcutsa Git.Git paketini otomatik kur
+- gerekli kullanıcı/yönetici onayını göster
+- kurulumdan sonra PATH yeniden yüklenemiyorsa Git’in tam yolunu doğrudan kullan
+- kullanıcının terminali kapatıp açmasını isteme
+
+Sonra:
+
+- aktif branch’i doğrula
+- git status kontrol et
+- kullanıcıya ait takip edilmeyen .env/state/runtime dosyalarını koru
+- güvenliyse git pull yap
+- HEAD commit’i kaydet
+
+Çalışma ağacında kaynak kod değişikliği varsa üzerine yazma; açık ve tek hata göster.
+
+============================================================
+3. PYTHON VE .VENV OTOMATİK KURULUM
+============================================================
+
+Doğru proje kökünü otomatik bul.
+
+Python sürümünü kontrol et.
+
+.venv yoksa oluştur.
+
+Her işlemde kesin olarak:
+
+.venv\Scripts\python.exe
+
+kullan.
+
+Paketleri güncelle:
+
+- pip
+- requirements.txt
+- certifi
+- truststore
+
+Yanlış global Python kullanılmasına izin verme.
+
+============================================================
+4. .ENV GÜVENLİ OTOMATİK ONARIM
+============================================================
+
+Runtime yalnız gerçek .env dosyasını kullanacak.
+
+.env.example hiçbir zaman runtime dosyası kabul edilmeyecek.
+
+.env yoksa oluştur.
+
+.env varsa:
+
+- silme
+- önce .env.backup_<timestamp> yedeği al
+- mevcut parola/hash/session/Binance değerlerini koru
+- duplicate satırları güvenli biçimde normalize et
+
+Aşağıdaki yerel ayarları garanti et:
+
+FLASK_ENV=development
+LOCAL_DEV_BYPASS=1
+PAPER_MODE=true
+ALPHA_WINDOWS_PAPER_AUTO=true
+
+SESSION_SECRET veya FLASK_SECRET_KEY yoksa:
+
+- güvenli rastgele değer üret
+- yalnız .env dosyasına yaz
+- terminale secret değerini basma
+
+Kesinlikle:
+
+- .env Git’e eklenmeyecek
+- .env.example içine gerçek secret yazılmayacak
+- ALPHA_ENABLE_LIVE_TRADING açılmayacak
+
+Onarım için kullanıcıdan ikinci çalıştırma isteme.
+Onarım sonrası aynı akış devam etsin.
+
+============================================================
+5. WINDOWS SSL/TLS VE BINANCE PUBLIC DATA
+============================================================
+
+Uygulama import edilmeden önce:
+
+truststore.inject_into_ssl()
+
+aktif olsun.
+
+SSL doğrulaması her zaman açık kalacak.
+
+KESİNLİKLE YASAK:
+
+- verify=False
+- CERT_NONE
+- sertifika doğrulamasını kapatma
+
+Test et:
+
+- https://fapi.binance.com
+- BTCUSDT kline
+- ETHUSDT kline
+- SOLUSDT kline
+
+Her endpoint için:
+
+- en az 5 deneme
+- artan bekleme
+- her denemede temiz bağlantı/session
+- PASS sayısı ve hata tipi
+
+Geçici TLS hataları tek sembol yüzünden sistemi tamamen durdurmamalı.
+
+En az iki sembol veri verebiliyorsa controller başlatılmalı ve problemli sembol geçici olarak atlanmalı.
+
+Tüm semboller başarısızsa gerçek nedeni sınıflandır:
+
+- CERTIFICATE_VERIFY_FAILED
+- SEC_E_INVALID_TOKEN
+- TLS alert
+- timeout
+- DNS
+- proxy/VPN
+- antivirüs HTTPS inspection
+
+Kodla güvenli biçimde düzeltilemeyen makine ayarında yalnız tek açık kullanıcı işlemi göster.
+
+============================================================
+6. DAYANIKLI MARKET DATA DAVRANIŞI
+============================================================
+
+Public kline isteklerinde:
+
+- retry
+- exponential backoff
+- timeout
+- geçici sembol izolasyonu
+
+bulunsun.
+
+Bir sembolün geçici SSL/ağ hatası:
+
+- controller thread’ini öldürmemeli
+- tüm cycle’ı kalıcı durdurmamalı
+- diğer sembollerin analizine engel olmamalı
+
+429/418 durumunda mevcut rate-limit güvenliği korunmalı.
+
+============================================================
+7. GÜVENLİ PROCESS YÖNETİMİ
+============================================================
+
+Tüm python.exe süreçlerini körlemesine kapatma.
+
+Yalnız Alpha Intelligence OS’a ait süreçleri tespit et:
+
+- PID dosyası
+- command line
+- proje dizini
+- entrypoint
+
+Eski Alpha sürecini kapat.
+
+Tek instance başlat:
+
+.venv\Scripts\python.exe serve_windows.py
+
+Başlatılan PID, entrypoint, started_at ve git_head kaydedilsin.
+
+============================================================
+8. WINDOWS BACKGROUND SERVİSLERİ
+============================================================
+
+Windows bootstrap şu sırayı tek sefer çalıştırmalı:
+
+1. validate_startup_config()
+2. enforce_paper_mode_lock()
+3. runtime Paper override
+4. universe_manager.start_auto_loop()
+5. auto_controller.start_controller_loop()
+6. uygun ise automation scheduler
+
+Beklenen loglar:
+
+WINDOWS PAPER AUTO ENABLED (RUNTIME)
+AUTO LOOP STARTED
+CONTROLLER STARTED
+FIRST CYCLE COMPLETED
+
+Controller tek sembol bağlantı hatasıyla kapanmayacak.
+
+============================================================
+9. PAPER STATE VE RİSK KİLİDİ
+============================================================
+
+Mevcut Paper:
+
+- bakiye
+- trade history
+- açık pozisyon
+- ledger/state
+
+korunacak.
+
+consecutive_losses limiti aktifse:
+
+- kullanıcıya açık biçimde göster
+- otomatik olarak sessizce sıfırlama
+- yalnız Paper test ortamında onaylı sıfırlama seçeneği sun
+
+Canlı işlem veya Binance emir gönderimi hiçbir durumda açılmayacak.
+
+============================================================
+10. BINANCE GLOBAL/TR HESAP BAĞLANTISI
+============================================================
+
+Runtime yeşile geldikten sonra aynı tek akış isteğe bağlı olarak:
+
+“Binance hesap bağlantısı yapılandırılsın mı?”
+
+diye sorsun.
+
+Kullanıcı istemezse atla; Paper sistem çalışmaya devam etsin.
+
+Kullanıcı isterse:
+
+- Binance Global read-only API bilgilerini güvenli yerel ekrandan al
+- Binance TR read-only API bilgilerini güvenli yerel ekrandan al
+- terminale anahtarları basma
+- Git’e yazma
+- mevcut güvenli credential store mekanizmasını kullan
+- imzalı hesap sorgusuyla bağlantıyı test et
+- işlem/withdraw yetkilerinin kapalı olduğunu doğrula
+- fazla yetki varsa reddet ve açık uyarı göster
+
+Bu aşama API anahtarı oluşturamaz; kullanıcı Binance hesabından anahtarı üretip bir kez girecektir. Anahtar girildikten sonraki tüm kontrol otomatik olacaktır.
+
+Canlı emir yolu yine kapalı kalacak.
+
+============================================================
+11. OTOMATİK HEALTH DOĞRULAMASI
+============================================================
+
+Sunucu başlatıldıktan sonra en fazla 180 saniye izle:
+
+http://127.0.0.1:5000/health/runtime
+
+Beklenen:
+
+entrypoint = serve_windows
+git_head = güncel HEAD
+runtime_override = true
+paper = active
+auto_loop = running
+controller = running
+cycle_count >= 1
+last_cycle dolu
+
+Dashboard Runtime kartı:
+
+🟢 Çalışıyor
+
+olmadan görev PASS sayılmayacak.
+
+============================================================
+12. KULLANICI DENEYİMİ
+============================================================
+
+Kullanıcıdan şunlar istenmeyecek:
+
+- PowerShell komutu yazması
+- .env dosyasını elle düzenlemesi
+- Git’i elle PATH’e eklemesi
+- ayrı diagnose scripti çalıştırması
+- aynı betiği ikinci kez çalıştırması
+- farklı dosyalar arasında dolaşması
+
+Gerekli onaylar aynı pencere içinde sorulacak.
+
+Pencere işlem bitmeden kapanmayacak.
+
+============================================================
+13. FINAL RAPOR
+============================================================
+
+Tek akış sonunda yalnız bir özet göster:
+
+ALPHA INTELLIGENCE OS — WINDOWS FINAL STATUS
+
+GIT:
+PASS / FAIL
+
+HEAD:
+commit
+
+PYTHON ENV:
+PASS / FAIL
+
+ENV:
+PASS / FAIL
+
+TRUSTSTORE:
+PASS / FAIL
+
+BINANCE PUBLIC:
+PASS / DEGRADED / FAIL
+
+BTC:
+PASS/FAIL
+
+ETH:
+PASS/FAIL
+
+SOL:
+PASS/FAIL
+
+SERVER:
+RUNNING / STOPPED
+
+ENTRYPOINT:
+serve_windows / başka
+
+RUNTIME OVERRIDE:
+TRUE / FALSE
+
+AUTO LOOP:
+RUNNING / STOPPED
+
+CONTROLLER:
+RUNNING / STOPPED
+
+PAPER:
+ACTIVE / DISABLED
+
+CYCLE COUNT:
+N
+
+LAST CYCLE:
+timestamp
+
+BINANCE GLOBAL ACCOUNT:
+CONNECTED / NOT_CONFIGURED / FAIL
+
+BINANCE TR ACCOUNT:
+CONNECTED / NOT_CONFIGURED / FAIL
+
+LIVE ORDERS:
+DISABLED
+
+RUNTIME CARD:
+🟢 / 🟡 / 🔴
+
+ROOT CAUSE:
+Yalnız FAIL varsa tek gerçek neden
+
+FINAL ACTION:
+Yalnız sistem dışı kullanıcı müdahalesi zorunluysa tek işlem
+
+============================================================
+14. BAŞARI KRİTERİ
+============================================================
+
+Görev yalnız şu durumda PASS:
+
+- Kullanıcı tek dosya çalıştırdı
+- Git/Python/.venv otomatik hazırlandı
+- .env güvenli biçimde düzeltildi
+- Paper AUTO aktif
+- public market data yeterli
+- server başladı
+- runtime_override=true
+- controller=running
+- cycle_count>=1
+- dashboard Runtime kartı 🟢
+- canlı emirler kapalı
+- ikinci çalıştırma gerekmedi
+
+Kod değişiklikleri minimum ve bütünleşik olsun.
+
+Tek commit.
+GitHub main’e push et.
+Merge sonrası kullanıcıya yalnız şu talimat ver:
+
+SETUP_AND_START_WINDOWS.cmd dosyasına çift tıklayın.
