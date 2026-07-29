@@ -53,7 +53,77 @@ def main() -> None:
 
     from app import app
 
+    _bootstrap_background_services()
+
     serve(app, host=HOST, port=PORT, threads=8)
+
+
+# Tek instance koruması: bootstrap bu süreçte yalnız bir kez koşar
+# (waitress tek süreç; ikinci çağrı çift scheduler oluşturamaz).
+_BOOTSTRAP_DONE = False
+
+
+def _bootstrap_background_services() -> None:
+    """Gunicorn post_fork PARİTESİ (bkz. gunicorn.conf.py) — Windows'ta
+    aynı arka plan servislerini AYNI SIRAYLA başlatır.
+
+    Config davranışı DEĞİŞMEZ: adaptive_system.enabled / kill_switch /
+    auto_paper_enabled / ALPHA_AUTOMATION_ENABLED bayraklarına dokunulmaz;
+    servisler yalnız mevcut ayarlara göre başlar veya 'DISABLED' loglar.
+    Hiçbir başlatma hatası sunucuyu çökertmez.
+    """
+    global _BOOTSTRAP_DONE
+    if _BOOTSTRAP_DONE:
+        log.info("bootstrap zaten yapıldı — ikinci kez başlatılmadı.")
+        return
+    _BOOTSTRAP_DONE = True
+
+    import threading
+    import app as _app
+
+    # 1-2. Başlangıç güvenlik kontrolleri (post_fork ile aynı sıra)
+    try:
+        _app.validate_startup_config()
+        _app.enforce_paper_mode_lock()
+    except Exception as exc:
+        log.warning("startup kontrol hatası (devam ediliyor): %s", exc)
+
+    # 3. Universe manager — koşulsuz (post_fork paritesi).
+    #    İkinci instance koruması: aynı adlı thread yaşıyorsa başlatma.
+    try:
+        if any(t.name == "auto_analysis" and t.is_alive()
+               for t in threading.enumerate()):
+            log.info("AUTO LOOP zaten çalışıyor — tekrar başlatılmadı.")
+        else:
+            _app.um.start_auto_loop(_app._get_main_config)
+            log.info("AUTO LOOP STARTED (universe_manager)")
+    except Exception as exc:
+        log.warning("AUTO LOOP başlatılamadı: %s", exc)
+
+    # 4. Adaptive controller — yalnız config'te enabled=true ise
+    #    (start_controller_loop kendi tekil kilidini içerir).
+    try:
+        cfg0 = _app._get_main_config()
+        if cfg0.get("adaptive_system", {}).get("enabled", False):
+            started = _app.ac.start_controller_loop()
+            log.info("CONTROLLER STARTED" if started
+                     else "CONTROLLER zaten çalışıyor — tekrar başlatılmadı.")
+        else:
+            log.info("CONTROLLER DISABLED (adaptive_system.enabled=false)")
+    except Exception as exc:
+        log.warning("CONTROLLER başlatılamadı: %s", exc)
+
+    # 5. Automation scheduler — yalnız ALPHA_AUTOMATION_ENABLED="true" ise
+    #    (start_automation_scheduler kendi tekil guard'ını içerir).
+    try:
+        th = _app.start_automation_scheduler()
+        if th is not None:
+            log.info("AUTOMATION SCHEDULER STARTED")
+        else:
+            log.info("AUTOMATION SCHEDULER DISABLED "
+                     "(ALPHA_AUTOMATION_ENABLED != 'true')")
+    except Exception as exc:
+        log.warning("AUTOMATION SCHEDULER başlatılamadı: %s", exc)
 
 
 if __name__ == "__main__":
