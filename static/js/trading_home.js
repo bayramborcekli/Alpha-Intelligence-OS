@@ -364,8 +364,13 @@
             autonomous ? "th-profit" : "");
     // Basit durum rozetleri: Çalışıyor / Duraklatıldı / Hata.
     var badge, cls;
+    var rl = status.rate_limit;
     if (status.kill_switch_state === "ACTIVE") {
       badge = "Hata — Acil Durduruldu"; cls = "err";
+    } else if (rl && rl.active) {
+      // Task 93: 429/418 geri çekilmesi — tarama duraklatıldı rozeti.
+      badge = "Tarama duraklatıldı (" + rl.remaining_seconds + " sn)";
+      cls = "pause";
     } else if (autonomous) {
       badge = "Çalışıyor"; cls = "run";
     } else {
@@ -461,7 +466,15 @@
       // banner olarak görünür (dash_base.html → showWarnings).
       var st = r[0].body && r[0].body.ok ? r[0].body.data : null;
       if (st && typeof showWarnings === "function") {
-        showWarnings(st.legacy_env_warnings || []);
+        var warns = (st.legacy_env_warnings || []).slice();
+        // Task 93: aktif 429/418 geri çekilmesi banner + rozet olarak
+        // görünür; süre dolunca sonraki yenilemede kendiliğinden kaybolur.
+        var rl = st.rate_limit;
+        if (rl && rl.active) {
+          warns.push("Tarama " + rl.remaining_seconds +
+                     " saniye duraklatıldı — " + rl.reason);
+        }
+        showWarnings(warns);
       }
       renderTop(r[0].body && r[0].body.ok ? r[0].body.data : null,
                 data(5, "portfolio"), data(3, "products"));

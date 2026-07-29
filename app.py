@@ -3816,11 +3816,37 @@ def api_accounts_sync(account_id: str):
                                  "value_usdt": snap["value_usdt"]})
 
 
+RATE_LIMIT_STATE_PATH = ROOT / "alpha20_v1" / "rate_limit_state.json"
+
+
+def _rate_limit_panel_view() -> dict[str, Any]:
+    """Task 93: Bot'un 429/418 geri çekilmesi panelde görünsün.
+
+    Bot ayrı süreçte çalıştığı için durum alpha20.py'nin diske yazdığı
+    rate_limit_state.json'dan okunur. Süre dolduysa veya dosya
+    yoksa/bozuksa geri çekilme AKTİF DEĞİL kabul edilir — sahte uyarı
+    üretilmez, biten uyarı kendiliğinden kaybolur."""
+    try:
+        raw = json.loads(RATE_LIMIT_STATE_PATH.read_text(encoding="utf-8"))
+        blocked_until = float(raw.get("blocked_until", 0.0))
+        reason = str(raw.get("reason", ""))
+    except (OSError, ValueError, TypeError):
+        return {"active": False, "remaining_seconds": 0, "reason": ""}
+    remaining = blocked_until - time.time()
+    if remaining <= 0 or not reason:
+        return {"active": False, "remaining_seconds": 0, "reason": ""}
+    return {"active": True,
+            "remaining_seconds": int(math.ceil(remaining)),
+            "reason": reason}
+
+
 @app.get("/api/operation-control/status")
 def api_operation_status():
     snapshot = _operation_snapshot()
     data = _oca.serialize_view(snapshot.status)
     data["confirmation_phrase"] = OPERATION_CONFIRMATION_PHRASE
+    # Task 93: aktif 429/418 geri çekilmesi üst çubukta rozet/uyarı olur.
+    data["rate_limit"] = _rate_limit_panel_view()
     # Task 70: Eski Binance env isim uyarıları ana panelde banner olarak
     # gösterilir (yalnız metin; sır değeri asla içermez).
     data["legacy_env_warnings"] = local_env.legacy_name_warnings()

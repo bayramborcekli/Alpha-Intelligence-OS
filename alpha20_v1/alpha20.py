@@ -294,12 +294,59 @@ _rate_limit_state: dict[str, Any] = {
     "consecutive_429": 0,      # artan bekleme için ardışık 429 sayacı
 }
 
+# Panelin (ayrı süreç — gunicorn) geri çekilmeyi görebilmesi için durum
+# geçişlerinde diske yazılır. Yalnız geçişlerde yazılır (her istek değil).
+RATE_LIMIT_STATE_PATH = ROOT / "rate_limit_state.json"
+
+
+def _persist_rate_limit_state() -> None:
+    """Geri çekilme durumunu panel için diske yazar (atomik).
+
+    Yazma hatası taramayı durdurmaz; yalnız log'a düşer (görünürlük
+    yardımcı özelliktir, ticaret akışını asla bloklamamalı)."""
+    payload = {
+        "blocked_until": float(_rate_limit_state["blocked_until"]),
+        "reason": str(_rate_limit_state["reason"]),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        temp = RATE_LIMIT_STATE_PATH.with_suffix(".tmp")
+        with temp.open("w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        temp.replace(RATE_LIMIT_STATE_PATH)
+    except OSError as exc:
+        log.warning("GERİ ÇEKİLME | durum dosyası yazılamadı: %s", exc)
+
+
+def read_rate_limit_file(now: float | None = None,
+                         path: Path | None = None) -> dict[str, Any]:
+    """Diskteki geri çekilme durumunu okur (panel süreci için).
+
+    Dönüş: {"remaining_seconds": float, "reason": str}. Dosya yoksa,
+    bozuksa veya süre dolduysa remaining_seconds 0 olur."""
+    if path is None:
+        path = RATE_LIMIT_STATE_PATH
+    if now is None:
+        now = time.time()
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        blocked_until = float(data.get("blocked_until", 0.0))
+        reason = str(data.get("reason", ""))
+    except (OSError, ValueError, TypeError):
+        return {"remaining_seconds": 0.0, "reason": ""}
+    remaining = max(0.0, blocked_until - now)
+    if remaining <= 0:
+        return {"remaining_seconds": 0.0, "reason": ""}
+    return {"remaining_seconds": remaining, "reason": reason}
+
 
 def reset_rate_limit_state() -> None:
     """Geri çekilme durumunu sıfırlar (test ve manuel kurtarma için)."""
     _rate_limit_state["blocked_until"] = 0.0
     _rate_limit_state["reason"] = ""
     _rate_limit_state["consecutive_429"] = 0
+    _persist_rate_limit_state()
 
 
 def rate_limit_remaining(now: float | None = None) -> float:
@@ -365,6 +412,7 @@ def register_rate_limit(status: int, response: Any = None,
     if blocked_until > float(_rate_limit_state["blocked_until"]):
         _rate_limit_state["blocked_until"] = blocked_until
         _rate_limit_state["reason"] = reason
+        _persist_rate_limit_state()
     log.warning("GERİ ÇEKİLME | %s", reason)
     return wait
 
