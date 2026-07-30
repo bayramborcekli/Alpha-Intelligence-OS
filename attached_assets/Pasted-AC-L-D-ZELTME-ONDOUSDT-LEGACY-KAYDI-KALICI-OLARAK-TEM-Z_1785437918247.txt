@@ -1,0 +1,81 @@
+ACİL DÜZELTME — ONDOUSDT LEGACY KAYDI KALICI OLARAK TEMİZLENSİN
+
+Windows panelinde ONDOUSDT hâlâ eksik/yetim pozisyon olarak görünüyor.
+
+Kapat düğmesine basılıyor, gerekçe ve onay giriliyor ancak kayıt silinmiyor.
+
+Kök ayrım:
+Bu işlem normal Paper manual-close değildir.
+quantity, entry_price ve current_price olmadığı için kapatma hesaplanamaz.
+Gerekli işlem legacy state bütünlüğü temizliğidir.
+
+İstenen:
+
+1. ONDOUSDT kaydını alpha20_v1/state.json içindeki legacy position alanından tespit et.
+
+2. İşlem öncesinde yeniden sınıflandır:
+- sembol ONDOUSDT
+- dual_model_runtime içinde karşılığı yok
+- geçerli quantity yok
+- geçerli entry yok
+- geçerli açık trade/ledger karşılığı yok
+
+Bu koşullar sağlanıyorsa:
+ORPHAN_POSITION veya INCOMPLETE_POSITION_DATA_CLEANABLE
+olarak kabul et.
+
+3. Ana ekranda “Kapat” yerine ayrı düğme göster:
+“Kayıttan Kaldır”
+
+4. Kayıttan Kaldır akışı:
+- kullanıcı ONDOUSDT yazarak onaylasın
+- controller/auto-loop aktifse anlaşılır hata göster:
+  CLEANUP_REQUIRES_CONTROLLER_PAUSE
+- mümkünse yalnız controller girişlerini kısa süreli duraklat
+- state.json’u flock altında yeniden oku
+- sınıflandırmayı taze veride tekrar doğrula
+- yalnız doğrulanmış ONDOUSDT legacy position alanını temizle
+- diğer trade, history, balance ve runtime verilerine dokunma
+- atomic write kullan
+- audit kaydı yaz:
+  action=POSITION_RECORD_CLEANED
+  symbol=ONDOUSDT
+  source=legacy
+  previous_status
+  reason
+  timestamp
+
+5. Temizlik sonrası:
+- ONDOUSDT aktif işlemler listesinden tamamen kaybolsun
+- açık pozisyon sayısı yeniden hesaplansın
+- UNKNOWN PnL/pozisyon değeri diğer sağlıklı satırları etkilemesin
+- sayfa yenilenince geri gelmesin
+- restart sonrası geri oluşmasın
+
+6. “Kapat” düğmesi eksik pozisyonlarda hiç gösterilmesin.
+Yerine yalnız:
+- Kayıttan Kaldır
+- Ayrıntı
+gösterilsin.
+
+7. UI, backend 409/422/500 cevabını sessizce yutmasın.
+Kullanıcıya gerçek reason code ve çözüm gösterilsin.
+
+8. Testler:
+- ONDOUSDT orphan kaydı temizlenir
+- bot/controller aktifken fail-closed davranır ve açıklayıcı mesaj verir
+- controller duraklatıldıktan sonra temizlik başarılı olur
+- başka sembol veya sağlıklı pozisyon silinmez
+- state.json bozulmaz
+- audit kaydı oluşur
+- restart sonrası ONDOUSDT geri gelmez
+- LIVE ORDERS DISABLED korunur
+
+Windows gerçek doğrulama olmadan görevi kapatma.
+
+Kabul kanıtı:
+- ONDOUSDT satırı tamamen yok
+- API overview içinde ONDOUSDT yok
+- state.json.position boş/null
+- audit dosyasında POSITION_RECORD_CLEANED kaydı var
+- restart sonrası kayıt geri gelmiyor
