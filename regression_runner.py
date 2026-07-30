@@ -75,6 +75,12 @@ AGENT_TEST_MODULES = MappingProxyType({
            "test_controlled_execution_architecture"),
     "09": ("test_security_validation", "test_soak",
            "test_regression", "test_certification"),
+    # Saha araçları (tools/windows) CI kapsamı — Task 136:
+    # dual-model saha doğrulayıcısının çekirdek mantığı mock
+    # HTTP + mock git ile otomatik koşar. AGENT_CHAIN'e girmez
+    # (Mission 2100 teslim zinciri dondurulmuştur); kapsam
+    # haritasında ayrı anahtar olarak taşınır.
+    "FIELD_TOOLS": ("test_verify_dual_model",),
 })
 
 # Bilinen ve GEREKÇELİ atlamalar — kritik test DEĞİLDİR.
