@@ -296,6 +296,13 @@ class TestStatusExposure:
         assert "data-detail-symbol" in js
         assert "CLEANUP_REQUIRES_CONTROLLER_PAUSE" in js
         assert "NOT_CLEANABLE" in js
+        # Task 159: JSON parse edilemeyen hata gövdesi (ör. proxy 502
+        # HTML) genel "ulaşılamadı" mesajına indirgenmez — r.json()
+        # reddi yakalanıp gerçek HTTP durum kodu gösterilir.
+        clean_block = js.split("/api/state/orphan-position/clean")[1]
+        clean_block = clean_block.split("data-detail-symbol")[0]
+        assert "return { st: r.status, d: null };" in clean_block
+        assert '"HTTP_" + o.st' in clean_block
         appsrc = (ROOT / "app.py").read_text(encoding="utf-8")
         assert '"cleanup_eligible"' in appsrc
         html = (ROOT / "templates/trading_home.html").read_text(

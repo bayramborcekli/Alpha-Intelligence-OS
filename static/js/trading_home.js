@@ -669,8 +669,13 @@
                    "X-CSRFToken": window.TH_CSRF },
         body: JSON.stringify({ confirm: true, symbol: csym })
       }).then(function (r) {
+        // Task 159: JSON parse edilemeyen gövde (ör. proxy 502 HTML)
+        // genel "ulaşılamadı" mesajına düşmesin — gerçek HTTP durum
+        // kodu operatöre gösterilsin.
         return r.json().then(function (d) {
           return { st: r.status, d: d };
+        }, function () {
+          return { st: r.status, d: null };
         });
       }).then(function (o) {
         if (o.d && o.d.ok) {
