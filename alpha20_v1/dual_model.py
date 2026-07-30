@@ -1130,17 +1130,35 @@ def _hold_shadow_cycle(open_syms: list[str], now: float) -> None:
         pc = copy.deepcopy(p)
         _hi.evaluate_position_cycle(pc, kl or [], btc, now)
         updates[sym] = {"hold_shadow": pc.get("hold_shadow"),
-                        "hold_track": pc.get("hold_track")}
+                        "hold_track": pc.get("hold_track"),
+                        "opened_ts": p.get("opened_ts")}
     if not updates:
         return
 
     def _mut(rtm: dict) -> None:
         posm = _open_positions(rtm)
         for sym, u in updates.items():
-            if sym in posm:
-                posm[sym]["hold_shadow"] = u["hold_shadow"]
-                if u["hold_track"] is not None:
-                    posm[sym]["hold_track"] = u["hold_track"]
+            live = posm.get(sym)
+            if not isinstance(live, dict):
+                continue  # pozisyon bu arada kapandı — bayat yazma YOK
+            snap = updates[sym]
+            if live.get("opened_ts") != snap.get("opened_ts"):
+                continue  # aynı sembolde YENİ pozisyon — atla
+            live["hold_shadow"] = u["hold_shadow"]
+            # hold_track MERGE-ONLY: monitör bu arada ilerlemiş
+            # olabilir; canlı sayaçlar/zirveler ASLA geri alınmaz,
+            # yalnız yeni variant_exit anahtarları eklenir
+            # (karar anındaki dondurulmuş değerle).
+            new_tr = u["hold_track"]
+            if isinstance(new_tr, dict):
+                live_tr = live.get("hold_track")
+                if not isinstance(live_tr, dict):
+                    live["hold_track"] = new_tr
+                else:
+                    ve = live_tr.setdefault("variant_exits", {})
+                    for k, v in (new_tr.get("variant_exits")
+                                 or {}).items():
+                        ve.setdefault(k, v)
         rtm["positions"] = posm
 
     _update_runtime(_mut)

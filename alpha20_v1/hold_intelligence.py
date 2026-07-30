@@ -91,6 +91,13 @@ def trend_health(klines: list[list],
         vols = [float(k[5]) for k in klines]
     except (TypeError, ValueError, IndexError):
         return None
+    # Fail-closed girdi doğrulama: sonlu olmayan / pozitif olmayan
+    # fiyat verisiyle skor ÜRETİLMEZ (uydurma yasak).
+    if not all(math.isfinite(x) and x > 0
+               for x in closes + highs + lows):
+        return None
+    if not all(math.isfinite(v) and v >= 0 for v in vols):
+        return None
     votes: dict[str, float] = {}
 
     # EMA eğimi + açılımı (expansion)
@@ -408,8 +415,11 @@ def update_track(p: dict, price: float, now: float) -> dict | None:
     entry = _num(p.get("entry"))
     qty = _num(p.get("quantity"))
     opened = _num(p.get("opened_ts"))
-    if entry is None or qty is None or opened is None or entry <= 0:
-        return None
+    price = _num(price)  # type: ignore[assignment]
+    now = _num(now)      # type: ignore[assignment]
+    if entry is None or qty is None or opened is None or \
+            price is None or now is None or entry <= 0 or price <= 0:
+        return None      # NaN/geçersiz girdi kalıcılaştırılmaz
     gross = (price - entry) * qty
     fee = (entry + price) * qty * FEE_RATE
     slip = price * qty * SLIP_RATE
@@ -592,10 +602,19 @@ def append_shadow(record: dict, path: Path | None = None) -> bool:
 
 def read_shadow(limit: int = 500,
                 path: Path | None = None) -> list[dict]:
+    """Gölge dosyasının SON kayıtları — kuyruktan sınırlı okuma:
+    5MB dosyada bile yalnız son ~256KB okunur (worker bloklamaz)."""
     path = path if path is not None else SHADOW_PATH
+    tail_bytes = 256 * 1024
     try:
-        with open(path, encoding="utf-8") as f:
-            lines = f.read().splitlines()
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(size - tail_bytes, 0))
+            chunk = f.read().decode("utf-8", errors="replace")
+        lines = chunk.splitlines()
+        if size > tail_bytes and lines:
+            lines = lines[1:]  # kısmi ilk satırı at
     except OSError:
         return []
     out = []
@@ -670,6 +689,37 @@ def on_trade_closed(trade: dict) -> dict:
 
 # ── MODÜL 6 + rapor ────────────────────────────────────────────────
 
+_LAB_CTX_CACHE: dict[str, Any] = {"ts": 0.0, "value": None}
+_LAB_CTX_TTL_SEC = 60.0
+
+
+def _lab_context() -> dict:
+    """MODÜL 12: Strategy Lab bağlamı — SALT OKUNUR + süreç içi
+    kısa önbellek (her GET isteğinde lab durumu yeniden hesaplanıp
+    worker bloklanmaz). Skorlar lab'de yalnız GÖLGE challenger
+    verisidir; champion'a asla yazılmaz."""
+    import time as _t
+    now = _t.monotonic()
+    if _LAB_CTX_CACHE["value"] is not None and \
+            now - _LAB_CTX_CACHE["ts"] < _LAB_CTX_TTL_SEC:
+        return _LAB_CTX_CACHE["value"]
+    ctx: dict[str, Any] = {
+        "scores_role": "SHADOW_CHALLENGER_ONLY",
+        "champion_changed": False}
+    try:
+        import strategy_lab as _sl
+        st = _sl.status() if hasattr(_sl, "status") else None
+        if isinstance(st, dict):
+            ctx["live_orders"] = st.get("live_orders", "DISABLED")
+            ctx["lab_reachable"] = True
+        else:
+            ctx["lab_reachable"] = False
+    except Exception:
+        ctx["lab_reachable"] = False
+    _LAB_CTX_CACHE["ts"] = now
+    _LAB_CTX_CACHE["value"] = ctx
+    return ctx
+
 def build_report(trades: list[dict]) -> dict:
     """Salt okunur rapor: gölge HOLD vs EXIT karşılaştırması, kâr
     kalitesi ve hafıza özetleri. Uydurma yok — kapsam dürüst."""
@@ -705,7 +755,11 @@ def build_report(trades: list[dict]) -> dict:
 
     mem_out = {"symbols": {}, "regimes": {}}
     for scope in ("symbols", "regimes"):
-        for k, b in (mem.get(scope) or {}).items():
+        items = list((mem.get(scope) or {}).items())
+        # Sınırlı projeksiyon: en çok örneklemli 50 kova (rapor
+        # sınırsız sembol kardinalitesiyle şişmez)
+        items.sort(key=lambda kv: kv[1].get("n", 0), reverse=True)
+        for k, b in items[:50]:
             mem_out[scope][k] = {
                 "n": b.get("n", 0),
                 "avg_hold_minutes": _avg(b, "hold_minutes"),
@@ -716,19 +770,7 @@ def build_report(trades: list[dict]) -> dict:
     # MODÜL 12: Strategy Lab entegrasyonu — SALT OKUNUR bağlam.
     # TCP/EPP/PFS/PHI lab'de yalnız GÖLGE challenger verisi olarak
     # değerlendirilir; champion'a ve lab durumuna YAZILMAZ.
-    lab_ctx: dict[str, Any] = {
-        "scores_role": "SHADOW_CHALLENGER_ONLY",
-        "champion_changed": False}
-    try:
-        import strategy_lab as _sl
-        st = _sl.status() if hasattr(_sl, "status") else None
-        if isinstance(st, dict):
-            lab_ctx["live_orders"] = st.get("live_orders", "DISABLED")
-            lab_ctx["lab_reachable"] = True
-        else:
-            lab_ctx["lab_reachable"] = False
-    except Exception:
-        lab_ctx["lab_reachable"] = False
+    lab_ctx = _lab_context()
     return {
         "strategy_lab": lab_ctx,
         "coverage": {
