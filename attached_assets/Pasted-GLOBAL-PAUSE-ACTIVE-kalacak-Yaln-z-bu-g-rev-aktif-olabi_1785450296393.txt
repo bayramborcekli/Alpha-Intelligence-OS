@@ -1,0 +1,530 @@
+GLOBAL_PAUSE: ACTIVE kalacak.
+
+Yalnız bu görev aktif olabilir.
+
+Başka göreve geçme.
+Follow-up oluşturma.
+markTaskComplete çağırma.
+
+LIVE ORDERS kesinlikle DISABLED kalacak.
+
+Tüm geliştirme önce Shadow,
+sonra yalnız Paper Challenger.
+
+==================================================
+AMAÇ
+==================================================
+
+PFDE tamamlandı.
+
+Artık sistem;
+
+Confidence,
+TCP,
+EPP,
+PFS
+
+üretebiliyor.
+
+Bu görev yeni skor üretmeyecek.
+
+Amaç;
+
+işlem açıldıktan sonra
+
+her analiz çevriminde
+
+"beklemek mi"
+
+"çıkmak mı"
+
+sorusunu öğrenmek.
+
+==================================================
+ANA FELSEFE
+==================================================
+
+İşlem;
+
+girişte kazanılmaz.
+
+İşlem;
+
+pozisyon doğru yönetildiğinde kazanılır.
+
+Yeni hedef;
+
+Doğru ürünü seçmek
+
+↓
+
+Doğru anda girmek
+
+↓
+
+Trend devam ederken taşıyabilmek
+
+↓
+
+Trend öldüğünde çıkmak
+
+↓
+
+Oluşan net kârı mümkün olduğunca koruyabilmek
+
+==================================================
+MODÜL 1
+
+POSITION HEALTH INDEX
+
+PHI
+
+==================================================
+
+Yeni skor:
+
+PHI
+
+0-100
+
+Soru:
+
+"Bu açık pozisyon şu anda ne kadar sağlıklı?"
+
+PHI;
+
+TCP
+
+EPP
+
+TDP
+
+PFS
+
+kullanır.
+
+Yeni bağımsız skor değildir.
+
+Pozisyonun anlık sağlık puanıdır.
+
+==================================================
+PHI aşağıdakileri izler
+
+trend eğimi
+
+trend ivmesi
+
+EMA yapısı
+
+VWAP
+
+hacim
+
+hacim ivmesi
+
+relative strength
+
+BTC hizası
+
+momentum
+
+volatilite
+
+spread
+
+slippage
+
+likidite
+
+MFE
+
+MAE
+
+maximum net profit
+
+current net profit
+
+captured profit
+
+giveback
+
+time since peak
+
+new high frequency
+
+==================================================
+MODÜL 2
+
+TREND HEALTH
+
+==================================================
+
+Her çevrimde ölç:
+
+trend güçleniyor mu
+
+aynı mı
+
+zayıflıyor mu
+
+bozuluyor mu
+
+trend öldü mü
+
+Bunun için:
+
+EMA slope
+
+EMA expansion
+
+higher highs
+
+higher lows
+
+MACD
+
+RSI direction
+
+VWAP
+
+ADX
+
+volume
+
+birlikte değerlendirilir.
+
+Tek indikatör karar veremez.
+
+==================================================
+MODÜL 3
+
+HOLD QUALITY
+
+==================================================
+
+Her pozisyon;
+
+HOLD STRONG
+
+HOLD NORMAL
+
+HOLD WEAK
+
+EXIT WATCH
+
+EXIT READY
+
+EXIT NOW
+
+olarak sınıflanır.
+
+Shadow Only.
+
+==================================================
+MODÜL 4
+
+PROFIT QUALITY
+
+==================================================
+
+Net kâr oluştuysa ölç:
+
+maximum net profit
+
+current net profit
+
+captured ratio
+
+giveback
+
+profit velocity
+
+profit stability
+
+new high frequency
+
+profit decay
+
+==================================================
+MODÜL 5
+
+TREND DECAY
+
+==================================================
+
+Trend neden ölüyor?
+
+Reason code üret:
+
+EMA_COLLAPSING
+
+VWAP_LOST
+
+LOWER_HIGH
+
+LOWER_LOW
+
+BTC_REVERSAL
+
+MOMENTUM_LOST
+
+VOLUME_COLLAPSE
+
+BREAKOUT_FAILED
+
+RANGE_FORMING
+
+VOLATILITY_DROPPED
+
+LIQUIDITY_LOST
+
+DATA_QUALITY
+
+==================================================
+MODÜL 6
+
+HOLD vs EXIT
+
+==================================================
+
+Her çevrimde Shadow karar üret:
+
+HOLD
+
+↓
+
+EXIT
+
+karşılaştırması.
+
+Hangisi
+
+daha fazla
+
+net kâr bırakacaktı?
+
+Gerçek sonuçla eşleştir.
+
+==================================================
+MODÜL 7
+
+MISSED PROFIT
+
+==================================================
+
+Her çıkıştan sonra ölç:
+
+çıkış doğru muydu
+
+erken miydi
+
+geç miydi
+
+kaçırılan maksimum kâr
+
+kaçırılan devam trendi
+
+gereksiz bekleme
+
+gereksiz zarar
+
+==================================================
+MODÜL 8
+
+CONTINUATION MEMORY
+
+==================================================
+
+Her sembol için öğren:
+
+hangi trendler
+
+devam ediyor
+
+hangi trendler
+
+erken bitiyor
+
+hangi rejimde
+
+ne kadar taşımak gerekiyor
+
+Shadow öğrenme.
+
+==================================================
+MODÜL 9
+
+REGIME MEMORY
+
+==================================================
+
+Strong Trend
+
+Weak Trend
+
+Range
+
+Stress
+
+High Volatility
+
+Low Volatility
+
+rejimlerinde
+
+hold süresi
+
+giveback
+
+captured profit
+
+ayrı öğrenilsin.
+
+==================================================
+MODÜL 10
+
+ADAPTIVE HOLD
+
+==================================================
+
+Sabit trailing mantığı kullanma.
+
+Trend güçlüyse
+
+daha fazla tolerans.
+
+Trend zayıfsa
+
+daha az tolerans.
+
+Giveback limiti;
+
+trend gücü,
+
+rejim,
+
+volatilite,
+
+likidite,
+
+PHI
+
+ile değişsin.
+
+==================================================
+MODÜL 11
+
+SHADOW
+
+==================================================
+
+Gerçek çıkış değişmeyecek.
+
+Her işlem için üret:
+
+Gerçek sistem
+
+Shadow Hold
+
+Shadow Exit
+
+Balanced
+
+Conservative
+
+Aggressive
+
+karşılaştırması.
+
+==================================================
+MODÜL 12
+
+STRATEGY LAB
+
+==================================================
+
+TCP
+
+EPP
+
+PFS
+
+ve yeni PHI
+
+Strategy Lab'de
+
+yalnız Shadow Challenger
+
+olarak değerlendirilir.
+
+Champion değişmez.
+
+==================================================
+TESTLER
+
+1 Trend güçlenmesi doğru algılanıyor
+
+2 Trend zayıflaması doğru algılanıyor
+
+3 PHI deterministik
+
+4 Giveback doğru hesaplanıyor
+
+5 Captured ratio doğru
+
+6 Hold state doğru
+
+7 Exit state doğru
+
+8 Trend decay reason code doğru
+
+9 Shadow gerçek işlemi değiştirmiyor
+
+10 Champion değişmiyor
+
+11 LIVE ORDERS DISABLED
+
+12 Restart sonrası state korunuyor
+
+13 Strategy Lab çalışıyor
+
+14 Look-ahead yok
+
+15 Veri eksikse fail-closed
+
+==================================================
+TESLİM
+
+1 Değişen dosyalar
+
+2 Veri akışı
+
+3 PHI tasarımı
+
+4 Trend Health
+
+5 Hold Intelligence
+
+6 Profit Quality
+
+7 Shadow sonuçları
+
+8 Strategy Lab entegrasyonu
+
+9 Testler
+
+10 Commit
+
+11 Git status
+
+12 Gerçek davranış değişmedi kanıtı
+
+GLOBAL_PAUSE: ACTIVE
+
+LIVE_ORDERS: DISABLED
+
+CHAMPION_CHANGED: FALSE
+
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+
+BACKGROUND_WORK: STOPPED

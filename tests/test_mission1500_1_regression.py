@@ -257,6 +257,9 @@ class TestRouteSurface:
         "/api/strategy/intelligence", "/api/v1/strategy/intelligence",
         # Mission 1800 / Agent 05: UI sayfası (GET-only).
         "/strategy-intelligence",
+        # Hold Intelligence (PHI) gölge raporu: GET-only, salt okunur;
+        # gerçek çıkış davranışı DEĞİŞMEZ — yüzey bilinçli genişletildi.
+        "/api/hold-intelligence/report",
     }
 
     def test_intelligence_route_set_exact(self):

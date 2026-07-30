@@ -5075,6 +5075,20 @@ def api_profit_first_report():
                     "data": _pf.build_report(rt.get("trades", []))})
 
 
+@app.get("/api/hold-intelligence/report")
+def api_hold_intelligence_report():
+    """Hold Intelligence (PHI) GÖLGE raporu — salt okunur.
+
+    Gerçek vs gölge varyant (Balanced/Conservative/Aggressive)
+    karşılaştırması, kâr kalitesi, sembol/rejim hafızası. Gerçek
+    çıkış davranışı bu uçtan etkilenmez; LIVE ORDERS DISABLED."""
+    import dual_model as _dm
+    import hold_intelligence as _hi
+    rt = _dm._load_runtime()
+    return jsonify({"ok": True,
+                    "data": _hi.build_report(rt.get("trades", []))})
+
+
 @app.get("/api/dual-model/learning")
 def api_dual_model_learning():
     """AI Öğrenme Merkezi — GERÇEK öğrenme durumu (sahte veri yok).

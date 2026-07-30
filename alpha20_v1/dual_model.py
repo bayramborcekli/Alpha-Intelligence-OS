@@ -656,6 +656,9 @@ def _build_trade(p: dict, price: float, result: str,
                              "quantity", "opened_at", "confidence")},
         "shadow_scores": p.get("shadow_scores"),
         "early_marks": p.get("early_marks") or None,
+        # Hold Intelligence gölge izleri (karar etkisi YOK)
+        "hold_track": p.get("hold_track"),
+        "hold_shadow": p.get("hold_shadow"),
         "exit": price, "result": result,
         "gross_pnl": round(gross, 6),
         "fees": round(fee, 6),
@@ -786,6 +789,15 @@ def monitor_positions(price_of: Callable[[str], float | None],
                 continue
             p["peak"] = max(p.get("peak", p["entry"]), price)
             p["trough"] = min(p.get("trough", p["entry"]), price)
+            # Hold Intelligence GÖLGE izi: anlık net PnL / zirve /
+            # yeni-zirve sayacı (ucuz, deterministik; karar etkisi
+            # YOK — gerçek çıkış kuralları aşağıda aynen durur).
+            try:
+                import hold_intelligence as _hi
+                _hi.update_track(p, price, now)
+            except Exception as exc:
+                log.error("hold_track güncellenemedi (%s): %s",
+                          sym, exc)
             trail_stop = p["peak"] * (1 - p["trailing_pct"] / 100)
             held_min = (now - p["opened_ts"]) / 60
             # PFDE erken-pencere izi: 30/60/90/180 sn eşiği ilk kez
@@ -843,6 +855,25 @@ def monitor_positions(price_of: Callable[[str], float | None],
     for t in closed:
         log.info("PAPER KAPANDI [%s] %s %s net=%.4f", t["model"],
                  t["symbol"], t["result"], t["net_pnl"])
+    # Hold Intelligence kapanış değerlendirmesi (GÖLGE: hafıza +
+    # gölge dosyası + trade'e hold_review alanı; karar etkisi YOK).
+    if closed:
+        try:
+            import hold_intelligence as _hi
+            reviews = {t["trade_id"]: _hi.on_trade_closed(t)
+                       for t in closed}
+
+            def _mut_rv(rt: dict) -> None:
+                for t in rt.get("trades", [])[:len(closed) + 10]:
+                    rv = reviews.get(t.get("trade_id"))
+                    if rv is not None:
+                        t["hold_review"] = rv
+
+            _update_runtime(_mut_rv)
+            for t in closed:
+                t["hold_review"] = reviews.get(t["trade_id"])
+        except Exception as exc:
+            log.error("hold_review üretilemedi: %s", exc)
     return closed
 
 
@@ -1067,6 +1098,54 @@ def _monitor_open_positions(open_syms: list[str],
     return False
 
 
+_HOLD_RR = {"i": 0}
+
+
+def _hold_shadow_cycle(open_syms: list[str], now: float) -> None:
+    """Açık pozisyonlar için Hold Intelligence GÖLGE değerlendirmesi.
+
+    Round-robin en fazla 3 sembol/çevrim (rate-limit dostu); klines
+    kilit DIŞINDA çekilir, değerlendirme kopya üzerinde yapılır,
+    sonuç kısa mutasyonla yazılır. Karar etkisi YOK."""
+    import copy
+    import hold_intelligence as _hi
+    batch = open_syms[_HOLD_RR["i"] % len(open_syms):] + \
+        open_syms[:_HOLD_RR["i"] % len(open_syms)]
+    batch = batch[:3]
+    _HOLD_RR["i"] = (_HOLD_RR["i"] + len(batch)) % max(len(open_syms), 1)
+    rt = _load_runtime()
+    btc = rt.get("btc_change_pct")
+    pos = _open_positions(rt)
+    updates: dict[str, dict] = {}
+    for sym in batch:
+        p = pos.get(sym)
+        if not isinstance(p, dict):
+            continue
+        try:
+            kl = fetch_spot_klines(sym)
+        except RateLimited:
+            break  # paylaşımlı geri çekilme — tur biter
+        except Exception:
+            kl = None
+        pc = copy.deepcopy(p)
+        _hi.evaluate_position_cycle(pc, kl or [], btc, now)
+        updates[sym] = {"hold_shadow": pc.get("hold_shadow"),
+                        "hold_track": pc.get("hold_track")}
+    if not updates:
+        return
+
+    def _mut(rtm: dict) -> None:
+        posm = _open_positions(rtm)
+        for sym, u in updates.items():
+            if sym in posm:
+                posm[sym]["hold_shadow"] = u["hold_shadow"]
+                if u["hold_track"] is not None:
+                    posm[sym]["hold_track"] = u["hold_track"]
+        rtm["positions"] = posm
+
+    _update_runtime(_mut)
+
+
 def _loop(get_main_config: Callable[[], dict]) -> None:
     last_refresh = 0.0
     price_fail_flag = False
@@ -1203,6 +1282,14 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
             if open_syms:
                 price_fail_flag = _monitor_open_positions(
                     open_syms, price_cache, cfg, price_fail_flag)
+            # 5) Hold Intelligence GÖLGE çevrimi: açık pozisyonlar
+            # için trend sağlığı / PHI / hold-vs-exit gölge kararı.
+            # Gerçek çıkış kuralları ETKİLENMEZ; hata yutulur.
+            if open_syms:
+                try:
+                    _hold_shadow_cycle(open_syms, time.time())
+                except Exception as exc:
+                    log.error("hold gölge çevrimi hatası: %s", exc)
             _STOP.wait(cfg["monitor_seconds"])
         except Exception as exc:  # döngü asla ölmez; hata görünür
             log.error("dual_model döngü hatası: %s", exc)

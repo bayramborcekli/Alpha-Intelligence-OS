@@ -168,3 +168,9 @@ alpha20_v1/pfs_shadow.jsonl
 alpha20_v1/pfs_shadow.jsonl.tmp
 alpha20_v1/pfs_shadow.jsonl.lock
 alpha20_v1/pfs_shadow.jsonl.*.tmp
+alpha20_v1/hold_shadow.jsonl
+alpha20_v1/hold_shadow.jsonl.lock
+alpha20_v1/hold_shadow.jsonl.*.tmp
+alpha20_v1/hold_memory.json
+alpha20_v1/hold_memory.json.lock
+alpha20_v1/hold_memory.json.*.tmp
