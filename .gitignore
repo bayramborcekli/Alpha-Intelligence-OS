@@ -164,3 +164,5 @@ alpha20_v1/strategy_lab_history.jsonl
 # Yetim/eksik pozisyon tespiti audit kaydı (git dışı)
 alpha20_v1/position_integrity_audit.jsonl
 alpha20_v1/position_integrity_acks.json
+alpha20_v1/pfs_shadow.jsonl
+alpha20_v1/pfs_shadow.jsonl.tmp

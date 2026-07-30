@@ -563,7 +563,9 @@ def legacy_open_position() -> dict | None:
 
 def try_open_position(symbol: str, model: str, sig: dict,
                       net_edge_pct: float, cfg: dict,
-                      now: float | None = None) -> tuple[bool, str | None]:
+                      now: float | None = None,
+                      shadow: dict | None = None
+                      ) -> tuple[bool, str | None]:
     """Limit + cooldown kontrolleriyle Paper pozisyonu aç (LIVE yok)."""
     m = cfg["core"] if model == MODEL_CORE else cfg["opportunity"]
     now = now or time.time()
@@ -610,6 +612,10 @@ def try_open_position(symbol: str, model: str, sig: dict,
             "execution_mode": "PAPER",
             # Öğrenme köprüsü: bu girişte hangi config sürümü etkindi?
             "config_version": m.get("config_version", "BASE"),
+            # PFDE gölge skorları (raporlama; karar etkisi YOK)
+            "shadow_scores": shadow,
+            # İlk 3 dk davranış izleri (30/60/90/180 sn MFE/MAE)
+            "early_marks": {},
         }
         rt["positions"] = pos
         result["ok"] = True
@@ -648,6 +654,8 @@ def _build_trade(p: dict, price: float, result: str,
         "net_edge_pct": p.get("net_edge_pct"),
         **{k: p[k] for k in ("symbol", "model", "side", "entry",
                              "quantity", "opened_at", "confidence")},
+        "shadow_scores": p.get("shadow_scores"),
+        "early_marks": p.get("early_marks") or None,
         "exit": price, "result": result,
         "gross_pnl": round(gross, 6),
         "fees": round(fee, 6),
@@ -780,6 +788,19 @@ def monitor_positions(price_of: Callable[[str], float | None],
             p["trough"] = min(p.get("trough", p["entry"]), price)
             trail_stop = p["peak"] * (1 - p["trailing_pct"] / 100)
             held_min = (now - p["opened_ts"]) / 60
+            # PFDE erken-pencere izi: 30/60/90/180 sn eşiği ilk kez
+            # aşıldığında o ana kadarki MFE/MAE dondurulur (gölge).
+            marks = p.get("early_marks")
+            if isinstance(marks, dict):
+                held_sec = now - p["opened_ts"]
+                for th in (30, 60, 90, 180):
+                    key = str(th)
+                    if held_sec >= th and key not in marks:
+                        e = p["entry"]
+                        marks[key] = {
+                            "mfe": round((p["peak"] / e - 1) * 100, 4),
+                            "mae": round((1 - p["trough"] / e) * 100,
+                                         4)}
             result = None
             if price >= p["tp"]:
                 result = "TP"
@@ -1064,12 +1085,24 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                 opp = build_opportunity_list(
                     tickers, cfg, {r["symbol"] for r in core})
 
+                # PFDE gölge bağlamı: BTC 24s değişimi (rejim/hiza)
+                btc_chg = None
+                for t in tickers:
+                    if t.get("symbol") == "BTCUSDT":
+                        try:
+                            btc_chg = float(
+                                t.get("priceChangePercent") or 0)
+                        except (TypeError, ValueError):
+                            btc_chg = None
+                        break
+
                 def _mut(rt: dict) -> None:
                     rt["core_list"] = core
                     rt["opportunity_list"] = opp
                     rt["last_refresh"] = _now_iso()
                     rt["updated_ts"] = int(now)
                     rt["last_error"] = None
+                    rt["btc_change_pct"] = btc_chg
 
                 _update_runtime(_mut)
                 price_cache = {r["symbol"]: r["last"]
@@ -1112,13 +1145,28 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                                          sig.get("reason_code",
                                                  "NO_SIGNAL"))
                         continue
+                    # PFDE GÖLGE skoru: gerçek kapıdan BAĞIMSIZ,
+                    # kararı DEĞİŞTİRMEZ; yalnız kayıt (raporlama).
+                    shadow = None
+                    try:
+                        import profit_first as _pf
+                        shadow = _pf.score_candidate(
+                            row, sig, kl, model, m,
+                            {"btc_change_pct":
+                             rt.get("btc_change_pct"),
+                             "trades": rt.get("trades", [])[:100]})
+                        _pf.append_shadow(shadow)
+                    except Exception as exc:
+                        log.error("PFS gölge skoru üretilemedi "
+                                  "(%s): %s", sym, exc)
                     ok, reason, net = execution_quality_gate(
                         row, sig, model, cfg)
                     if not ok:
                         record_rejection(sym, model, reason)
                         continue
                     cands.append({"symbol": sym, "sig": sig,
-                                  "net_edge_pct": net})
+                                  "net_edge_pct": net,
+                                  "shadow": shadow})
                 rr[key] = (i0 + batch) % max(len(rows), 1)
 
                 def _mutc(rtc: dict, model=model, n=len(cands)) -> None:
@@ -1139,7 +1187,8 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                 for w in own["winners"]:
                     opened, reason = try_open_position(
                         w["symbol"], w["model"], w["sig"],
-                        w["net_edge_pct"], cfg, now)
+                        w["net_edge_pct"], cfg, now,
+                        shadow=w.get("shadow"))
                     if not opened:
                         record_rejection(w["symbol"], w["model"],
                                          reason)
