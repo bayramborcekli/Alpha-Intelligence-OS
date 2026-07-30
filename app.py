@@ -3360,7 +3360,13 @@ def _operation_raw() -> dict[str, Any]:
             _stale_h = 0
         _cls = _classify_legacy_position(
             _pos, _st or {}, stale_hours=_stale_h or None)
-        if _cls["status"] != "ORPHAN_POSITION":
+        # Task 149: operatör "görüldü / manuel kapatıldı" onayı
+        # verdiyse INCOMPLETE kayıt aktif listeye alınmaz (audit
+        # geçmişinde görünür kalır).
+        if _cls["status"] == "INCOMPLETE_POSITION_DATA" and \
+                _position_ack_active(_pos):
+            pass
+        elif _cls["status"] != "ORPHAN_POSITION":
             raw["positions"].append({
                 # BÜYÜK harf: close ucu position_id.upper() ile arar —
                 # küçük harfli id kapatma akışını kırar (review bulgusu)
@@ -3465,6 +3471,68 @@ def _audit_position_integrity(symbol: str, status: str,
         pass
 
 
+# Task 149: operatör onayı (görüldü / manuel kapatıldı) kayıtları.
+# Anahtar = "SEMBOL|opened_at" — aynı kayıt için ack kalıcıdır ama
+# YENİ bir pozisyon (farklı opened_at) tespiti yeniden görünür.
+POSITION_ACK_PATH = ROOT / "alpha20_v1" / \
+    "position_integrity_acks.json"
+
+
+def _position_ack_key(pos: dict) -> str:
+    return f"{pos.get('symbol')}|{pos.get('opened_at')!r}"
+
+
+def _load_position_acks() -> dict:
+    try:
+        data = json.loads(POSITION_ACK_PATH.read_text(
+            encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _position_ack_active(pos: dict) -> bool:
+    """Bu pozisyon kaydı operatörce onaylanmış mı (aktif ack)?"""
+    try:
+        acks = _load_position_acks()
+        return acks.get(str(pos.get("symbol"))) == \
+            _position_ack_key(pos)
+    except Exception:
+        return False  # ack okunamazsa koruma AÇIK kalır (fail-closed)
+
+
+def _record_position_ack(pos: dict, actor: str) -> None:
+    """Operatör onayını kalıcılaştır: ack deposu + audit kaydı.
+
+    Worker-safe: ack deposu flock ile yazılır (Task 149)."""
+    symbol = str(pos.get("symbol") or "")
+    try:
+        import fcntl as _fl
+    except ImportError:  # Windows
+        sys.path.insert(0, str(ROOT / "alpha20_v1"))
+        import portable_flock as _fl  # type: ignore
+    with POSITION_ACK_PATH.open("a+", encoding="utf-8") as fh:
+        _fl.flock(fh.fileno(), _fl.LOCK_EX)
+        try:
+            fh.seek(0)
+            try:
+                acks = json.loads(fh.read() or "{}")
+                if not isinstance(acks, dict):
+                    acks = {}
+            except ValueError:
+                acks = {}
+            acks[symbol] = _position_ack_key(pos)
+            fh.seek(0)
+            fh.truncate()
+            fh.write(json.dumps(acks, ensure_ascii=False, indent=2))
+        finally:
+            _fl.flock(fh.fileno(), _fl.LOCK_UN)
+    _audit_position_integrity(
+        symbol, "operator_ack",
+        f"Operatör onayı ({actor}): görüldü / manuel kapatıldı — "
+        "kayıt aktif listeden çıkarıldı")
+
+
 # Task 144: panel banner'ında gösterilecek son audit kaydı sayısı.
 POSITION_AUDIT_RECENT_LIMIT = 20
 
@@ -3473,6 +3541,10 @@ _POSITION_AUDIT_LABELS_TR = {
     "INCOMPLETE_POSITION_DATA": "Eksik pozisyon verisi",
     "STALE_POSITION": "Bayat pozisyon",
 }
+# Yalnız görüntüleme etiketi — sınıflandırma bu durumu ÜRETMEZ,
+# dolayısıyla uyarı banner'ı tetiklemez (Task 149).
+_POSITION_AUDIT_LABELS_TR.setdefault(
+    "operator_ack", "Operatör onayı (görüldü / manuel kapatıldı)")
 
 
 def _recent_position_audit(
@@ -3542,6 +3614,10 @@ def _position_integrity_panel() -> dict:
             cls = _classify_legacy_position(
                 pos, st or {}, stale_hours=stale_h or None)
             status = cls.get("status")
+            # Task 149: operatör onayladıysa uyarı üretilmez.
+            if status == "INCOMPLETE_POSITION_DATA" and \
+                    _position_ack_active(pos):
+                status = None
             if status in _POSITION_AUDIT_LABELS_TR:
                 label = _POSITION_AUDIT_LABELS_TR[status]
                 detail = ""
@@ -4705,6 +4781,52 @@ def api_dual_model_close():
     body = request.get_json(silent=True) or {}
     ok, msg = _dm.manual_close(body.get("symbol"))
     return jsonify({"ok": ok, "message": msg}), (200 if ok else 400)
+
+
+@app.post("/api/positions/integrity/ack")
+def api_position_integrity_ack():
+    """Task 149: INCOMPLETE pozisyonu 'görüldü / manuel kapatıldı'
+    olarak onayla. Yalnız GERÇEKTEN INCOMPLETE_POSITION_DATA olan
+    kayıt onaylanabilir (fail-closed); ack audit dosyasına
+    operator_ack olarak düşer ve kayıt aktif listeden çıkar."""
+    body = request.get_json(silent=True) or {}
+    symbol = str(body.get("symbol") or "").strip().upper()
+    if not symbol:
+        return jsonify({"ok": False,
+                        "message": "SYMBOL_REQUIRED"}), 400
+    try:
+        st, _ = read_json(STATE_PATH)
+    except Exception:
+        st = None
+    pos = (st or {}).get("position")
+    if not isinstance(pos, dict) or \
+            str(pos.get("symbol") or "").upper() != symbol:
+        return jsonify({
+            "ok": False, "message": "POSITION_NOT_FOUND",
+            "detail": "Aktif kayıtta bu sembol yok — onay gereksiz."
+        }), 404
+    cfg, _cfg_err = load_config()
+    try:
+        stale_h = float((cfg or {}).get(
+            "position_stale_hours") or 0)
+    except (TypeError, ValueError):
+        stale_h = 0
+    cls = _classify_legacy_position(
+        pos, st or {}, stale_hours=stale_h or None)
+    if cls.get("status") != "INCOMPLETE_POSITION_DATA":
+        return jsonify({
+            "ok": False, "message": "NOT_INCOMPLETE",
+            "detail": f"Kayıt durumu {cls.get('status')} — yalnız "
+                      "INCOMPLETE_POSITION_DATA onaylanabilir."
+        }), 409
+    try:
+        _record_position_ack(pos, session.get("username")
+                             or "operator")
+    except Exception as exc:  # ack yazılamadı — sessiz geçilmez
+        return jsonify({
+            "ok": False, "message": "ACK_WRITE_FAILED",
+            "detail": f"Onay kalıcılaştırılamadı: {exc}"}), 500
+    return jsonify({"ok": True, "symbol": symbol})
 
 
 @app.get("/api/operation-control/overview")

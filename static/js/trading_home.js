@@ -298,8 +298,15 @@
         "<td>—</td><td>" + esc(duration(p.opened_at)) + "</td>" +
         "<td>—</td><td>—</td><td>—</td><td>—</td>" +
         statusCell(p.position_status) + "<td>" +
-        "<button class=\"th-btn\" data-close=\"" + esc(p.position_id) +
-        "\" data-symbol=\"" + esc(p.symbol) + "\">Kapat</button>" +
+        // Task 149: INCOMPLETE kayıt kapatılamaz — operatör onu
+        // "görüldü / manuel kapatıldı" olarak onaylayıp listeden
+        // çıkarabilir (audit geçmişinde kalır).
+        (p.position_status === "INCOMPLETE_POSITION_DATA" ?
+          "<button class=\"th-btn\" data-ack-symbol=\"" +
+          esc(p.symbol) + "\">Onayla / Manuel Kapat</button>" :
+          "<button class=\"th-btn\" data-close=\"" +
+          esc(p.position_id) + "\" data-symbol=\"" + esc(p.symbol) +
+          "\">Kapat</button>") +
         "</td></tr>";
     }).concat(dual.map(function (p) {
       var nv = parseFloat(p.notional_usdt);
@@ -623,6 +630,33 @@
     var b = ev.target.closest ? ev.target.closest(
       "button[data-close]") : null;
     if (b) confirmClose(b.dataset.close, b.dataset.symbol);
+    // Task 149: INCOMPLETE kaydın operatör onayı (görüldü /
+    // manuel kapatıldı) — audit'e operator_ack düşer, kayıt aktif
+    // listeden çıkar.
+    var a = ev.target.closest ? ev.target.closest(
+      "button[data-ack-symbol]") : null;
+    if (a) {
+      var sym = a.dataset.ackSymbol;
+      if (!window.confirm(sym + " kaydı 'görüldü / manuel " +
+          "kapatıldı' olarak işaretlenecek ve aktif listeden " +
+          "çıkarılacak. Denetim geçmişinde görünür kalır. " +
+          "Onaylıyor musunuz?")) return;
+      a.disabled = true;
+      fetch("/api/positions/integrity/ack", {
+        method: "POST",
+        headers: { "Content-Type": "application/json",
+                   "X-CSRFToken": window.TH_CSRF },
+        body: JSON.stringify({ symbol: sym })
+      }).then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok) {
+            window.alert("Onaylanamadı: " +
+                         (d.detail || d.message || ""));
+            a.disabled = false;
+          } else { refresh(); }
+        })
+        .catch(function () { a.disabled = false; });
+    }
   });
 
   // ── İki model (CORE / OPPORTUNITY) — tek kanonik snapshot ─────

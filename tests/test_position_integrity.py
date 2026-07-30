@@ -299,6 +299,107 @@ class TestIntegrityPanelWarnings:
         assert "showWarnings(warns)" in js[idx:idx + 400]
 
 
+# ── Task 149: operatör onayı (görüldü / manuel kapatıldı) ──────────
+
+class TestOperatorAck:
+    @pytest.fixture()
+    def ackmod(self, tmp_path, monkeypatch, appmod):
+        monkeypatch.setattr(appmod, "POSITION_ACK_PATH",
+                            tmp_path / "acks.json")
+        monkeypatch.setattr(appmod, "STATE_PATH",
+                            tmp_path / "state.json")
+        monkeypatch.setattr(appmod, "load_config",
+                            lambda: ({}, None))
+        return appmod
+
+    def _write_state(self, appmod, state: dict):
+        appmod.STATE_PATH.write_text(
+            json.dumps(state), encoding="utf-8")
+
+    INCOMPLETE = {"symbol": "ONDOUSDT", "side": "LONG",
+                  "opened_at": "2026-07-29T10:00:00+00:00"}
+
+    def test_ack_writes_audit_and_store(self, ackmod):
+        ackmod._record_position_ack(dict(self.INCOMPLETE), "op1")
+        rec = json.loads(ackmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()[-1])
+        assert rec["reason"] == "operator_ack"
+        assert rec["symbol"] == "ONDOUSDT"
+        assert "op1" in rec["detail"]
+        assert ackmod._position_ack_active(dict(self.INCOMPLETE))
+
+    def test_ack_suppresses_panel_warning(self, ackmod):
+        self._write_state(ackmod, {"position": dict(self.INCOMPLETE),
+                                   "trades": []})
+        assert ackmod._position_integrity_panel()["warnings"]
+        ackmod._record_position_ack(dict(self.INCOMPLETE), "op1")
+        panel = ackmod._position_integrity_panel()
+        assert panel["warnings"] == []
+        # Audit geçmişinde görünür kalır.
+        assert any(r["reason"] == "operator_ack"
+                   for r in panel["recent_audit"])
+
+    def test_ack_scoped_to_record_new_position_reappears(self,
+                                                         ackmod):
+        ackmod._record_position_ack(dict(self.INCOMPLETE), "op1")
+        newer = dict(self.INCOMPLETE,
+                     opened_at="2026-07-30T09:00:00+00:00")
+        assert not ackmod._position_ack_active(newer)
+
+    def test_endpoint_acks_incomplete_position(self, ackmod):
+        self._write_state(ackmod, {"position": dict(self.INCOMPLETE),
+                                   "trades": []})
+        ackmod.app.config["TESTING"] = True
+        ackmod.app.config["WTF_CSRF_ENABLED"] = False
+        with ackmod.app.test_client() as c:
+            r = c.post("/api/positions/integrity/ack",
+                       json={"symbol": "ONDOUSDT"})
+        assert r.status_code == 200 and r.get_json()["ok"]
+        assert ackmod._position_ack_active(dict(self.INCOMPLETE))
+
+    def test_endpoint_rejects_healthy_position(self, ackmod):
+        self._write_state(ackmod, {
+            "position": {"symbol": "ONDOUSDT", "entry": 0.95,
+                         "quantity": 10, "opened_at": _iso(0.5)},
+            "trades": []})
+        ackmod.app.config["TESTING"] = True
+        ackmod.app.config["WTF_CSRF_ENABLED"] = False
+        with ackmod.app.test_client() as c:
+            r = c.post("/api/positions/integrity/ack",
+                       json={"symbol": "ONDOUSDT"})
+        assert r.status_code == 409
+        assert r.get_json()["message"] == "NOT_INCOMPLETE"
+
+    def test_endpoint_rejects_unknown_symbol(self, ackmod):
+        self._write_state(ackmod, {"position": None, "trades": []})
+        ackmod.app.config["TESTING"] = True
+        ackmod.app.config["WTF_CSRF_ENABLED"] = False
+        with ackmod.app.test_client() as c:
+            r = c.post("/api/positions/integrity/ack",
+                       json={"symbol": "XUSDT"})
+        assert r.status_code == 404
+
+    def test_endpoint_requires_symbol(self, ackmod):
+        ackmod.app.config["TESTING"] = True
+        ackmod.app.config["WTF_CSRF_ENABLED"] = False
+        with ackmod.app.test_client() as c:
+            r = c.post("/api/positions/integrity/ack", json={})
+        assert r.status_code == 400
+
+    def test_operation_raw_excludes_acked_incomplete(self):
+        # _operation_raw acked INCOMPLETE kaydı aktif listeye almaz
+        # (kaynak kodu sözleşmesi — davranış birim testleri yukarıda).
+        src = (ROOT / "app.py").read_text(encoding="utf-8")
+        assert "_position_ack_active(_pos)" in src
+
+    def test_js_has_ack_button_and_endpoint(self):
+        js = (ROOT / "static/js/trading_home.js").read_text(
+            encoding="utf-8")
+        assert "Onayla / Manuel Kapat" in js
+        assert "/api/positions/integrity/ack" in js
+        assert "data-ack-symbol" in js
+
+
 # ── Dual-model pozisyon durumu + exit korumaları ───────────────────
 
 @pytest.fixture()
