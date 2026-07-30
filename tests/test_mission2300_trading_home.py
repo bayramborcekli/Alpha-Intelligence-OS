@@ -275,7 +275,12 @@ class TestTrades:
     def test_only_dialog_buttons_in_template(self):
         # Şablondaki tek düğmeler onay diyaloğuna aittir (value=
         # ile method=dialog formunu kapatır); dekoratif düğme yok.
+        # İstisna: th-orphan-clean (Task 145) yetim kayıt temizleme
+        # eylem düğmesidir — dekoratif değil, JS'te korumalı akışa
+        # bağlıdır (bilinçli genişletme).
         for match in re.finditer(r"<button[^>]*>", TEMPLATE):
+            if 'id="th-orphan-clean"' in match.group(0):
+                continue
             assert 'value="' in match.group(0), match.group(0)
 
     def test_duration_helper(self):

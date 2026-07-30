@@ -298,12 +298,21 @@
         "<td>—</td><td>" + esc(duration(p.opened_at)) + "</td>" +
         "<td>—</td><td>—</td><td>—</td><td>—</td>" +
         statusCell(p.position_status) + "<td>" +
-        // Task 149: INCOMPLETE kayıt kapatılamaz — operatör onu
-        // "görüldü / manuel kapatıldı" olarak onaylayıp listeden
-        // çıkarabilir (audit geçmişinde kalır).
+        // Eksik pozisyonda "Kapat" HİÇ gösterilmez. Temizlenebilir
+        // eksik kayıt (entry+quantity yok, runtime/ledger karşılığı
+        // yok) yalnız "Kayıttan Kaldır" + "Ayrıntı" alır; diğer
+        // eksik kayıtlar Task 149 onay akışını kullanır.
         (p.position_status === "INCOMPLETE_POSITION_DATA" ?
-          "<button class=\"th-btn\" data-ack-symbol=\"" +
-          esc(p.symbol) + "\">Onayla / Manuel Kapat</button>" :
+          (p.cleanup_eligible ?
+            "<button class=\"th-btn\" data-clean-symbol=\"" +
+            esc(p.symbol) + "\">Kayıttan Kaldır</button> " +
+            "<button class=\"th-btn\" data-detail-symbol=\"" +
+            esc(p.symbol) + "\" data-detail-entry=\"" +
+            esc(dash(p.entry_price)) + "\" data-detail-qty=\"" +
+            esc(dash(p.quantity)) + "\" data-detail-opened=\"" +
+            esc(p.opened_at || "UNKNOWN") + "\">Ayrıntı</button>" :
+            "<button class=\"th-btn\" data-ack-symbol=\"" +
+            esc(p.symbol) + "\">Onayla / Manuel Kapat</button>") :
           "<button class=\"th-btn\" data-close=\"" +
           esc(p.position_id) + "\" data-symbol=\"" + esc(p.symbol) +
           "\">Kapat</button>") +
@@ -636,6 +645,70 @@
     // Task 149: INCOMPLETE kaydın operatör onayı (görüldü /
     // manuel kapatıldı) — audit'e operator_ack düşer, kayıt aktif
     // listeden çıkar.
+    // Kapatılamaz eksik legacy kayıt: "Kayıttan Kaldır" — kullanıcı
+    // sembolü YAZARAK onaylar; backend 409/422/500 cevapları sessizce
+    // yutulmaz, gerçek reason code + çözüm gösterilir.
+    var cbtn = ev.target.closest ? ev.target.closest(
+      "button[data-clean-symbol]") : null;
+    if (cbtn) {
+      var csym = cbtn.dataset.cleanSymbol;
+      var typed = window.prompt(
+        csym + " kaydı state dosyasından KALICI olarak " +
+        "kaldırılacak. Bu bir kapatma değildir (miktar/fiyat verisi " +
+        "yok — kapatma hesaplanamaz); yalnız kayıt bütünlüğü " +
+        "temizliğidir. Onay için sembolü aynen yazın:");
+      if (typed === null) return;
+      if (String(typed).trim().toUpperCase() !== csym.toUpperCase()) {
+        window.alert("Onay metni uyuşmadı — temizlik yapılmadı.");
+        return;
+      }
+      cbtn.disabled = true;
+      fetch("/api/state/orphan-position/clean", {
+        method: "POST",
+        headers: { "Content-Type": "application/json",
+                   "X-CSRFToken": window.TH_CSRF },
+        body: JSON.stringify({ confirm: true, symbol: csym })
+      }).then(function (r) {
+        return r.json().then(function (d) {
+          return { st: r.status, d: d };
+        });
+      }).then(function (o) {
+        if (o.d && o.d.ok) {
+          window.alert(csym + " kaydı temizlendi (önceki durum: " +
+            (o.d.previous_status || "UNKNOWN") +
+            "). Denetim geçmişine POSITION_RECORD_CLEANED yazıldı.");
+          refresh();
+          return;
+        }
+        var code = (o.d && o.d.code) || "HTTP_" + o.st;
+        var fix = code === "CLEANUP_REQUIRES_CONTROLLER_PAUSE" ?
+          " Çözüm: otomasyonu/botu durdurun, sonra tekrar deneyin." :
+          (code === "NOT_CLEANABLE" ?
+            " Çözüm: kayıt kısmen geçerli — Onayla akışını kullanın." :
+            "");
+        window.alert("Kaldırılamadı [" + code + "]: " +
+          ((o.d && o.d.error) || "sunucu hatası") + fix);
+        cbtn.disabled = false;
+      }).catch(function () {
+        window.alert("Kaldırılamadı: sunucuya ulaşılamadı.");
+        cbtn.disabled = false;
+      });
+      return;
+    }
+    var dbtn = ev.target.closest ? ev.target.closest(
+      "button[data-detail-symbol]") : null;
+    if (dbtn) {
+      window.alert(
+        dbtn.dataset.detailSymbol + " — eksik pozisyon kaydı\n" +
+        "Durum: Veri Eksik (temizlenebilir)\n" +
+        "Giriş fiyatı: " + (dbtn.dataset.detailEntry || "—") + "\n" +
+        "Miktar: " + (dbtn.dataset.detailQty || "—") + "\n" +
+        "Açılış: " + (dbtn.dataset.detailOpened || "UNKNOWN") + "\n" +
+        "Miktar ve giriş fiyatı olmadığı için kapatma hesaplanamaz; " +
+        "tek güvenli işlem kayıttan kaldırmaktır. Runtime ve " +
+        "işlem defterinde karşılığı yoktur.");
+      return;
+    }
     var a = ev.target.closest ? ev.target.closest(
       "button[data-ack-symbol]") : null;
     if (a) {

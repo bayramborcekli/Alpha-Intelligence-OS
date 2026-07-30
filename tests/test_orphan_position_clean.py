@@ -53,6 +53,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(appmod, "POSITION_AUDIT_PATH",
                         tmp_path / "audit.jsonl")
     monkeypatch.setattr(appmod, "bot_running", lambda: False)
+    monkeypatch.setattr(appmod, "DUAL_RUNTIME_PATH",
+                        tmp_path / "dual_model_runtime.json")
     monkeypatch.setattr(appmod, "_get_main_config", lambda: {})
     monkeypatch.setattr(appmod.auth, "check_rate_limit",
                         lambda ip: (True, 0))
@@ -101,29 +103,113 @@ class TestCleanEndpoint:
         assert st["balance"] == 1000.0 and len(st["trades"]) == 1
         recs = [json.loads(x) for x in env["app"].POSITION_AUDIT_PATH
                 .read_text(encoding="utf-8").strip().splitlines()]
-        assert recs[-1]["reason"] == "CLEANED"
+        assert recs[-1]["reason"] == "POSITION_RECORD_CLEANED"
         assert recs[-1]["symbol"] == "ONDOUSDT"
+        assert recs[-1]["source"] == "legacy"
+        assert "previous_status=ORPHAN_POSITION" in recs[-1]["detail"]
 
     def test_healthy_position_never_deleted(self, env):
         env["state_path"].write_text(json.dumps(_healthy_state()),
                                      encoding="utf-8")
         r = env["client"].post(self.URL, json={
             "symbol": "ONDOUSDT", "confirm": True})
-        assert r.status_code == 409
+        # NOT_CLEANABLE: sağlıklı (OPEN) kayıt kanıt listesiyle 422
+        # reddedilir — sessiz yutma yok.
+        assert r.status_code == 422
+        assert r.get_json()["code"] == "NOT_CLEANABLE"
         st = json.loads(env["state_path"].read_text(encoding="utf-8"))
         assert st["position"] is not None  # pozisyona dokunulmadı
 
-    def test_incomplete_position_never_deleted(self, env):
+    def test_partially_valid_incomplete_never_deleted(self, env):
+        # Entry mevcut, quantity eksik → kısmen geçerli: SİLİNMEZ
+        # (422 + NOT_CLEANABLE, kanıt listesiyle — sessiz yutma yok).
         st = _orphan_state()
-        st["position"] = {"symbol": "ONDOUSDT",
-                          "opened_at": _iso(5)}  # entry/quantity yok
+        st["position"] = {"symbol": "ONDOUSDT", "entry": 0.95,
+                          "opened_at": _iso(5)}  # quantity yok
         st["trades"] = []
         env["state_path"].write_text(json.dumps(st), encoding="utf-8")
         r = env["client"].post(self.URL, json={
             "symbol": "ONDOUSDT", "confirm": True})
-        assert r.status_code == 409
+        assert r.status_code == 422
+        body = r.get_json()
+        assert body["code"] == "NOT_CLEANABLE"
+        assert body["evidence"]
         st2 = json.loads(env["state_path"].read_text(encoding="utf-8"))
         assert st2["position"] is not None
+
+    def _incomplete_cleanable_state(self) -> dict:
+        # ONDOUSDT senaryosu: entry+quantity yok, ledger karşılığı yok
+        st = _orphan_state()
+        st["position"] = {"symbol": "ONDOUSDT",
+                          "opened_at": _iso(5)}
+        st["trades"] = [{"symbol": "BTCUSDT", "closed_at": _iso(2)}]
+        return st
+
+    def test_incomplete_cleanable_removed_and_audited(self, env):
+        st = self._incomplete_cleanable_state()
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        r = env["client"].post(self.URL, json={
+            "symbol": "ONDOUSDT", "confirm": True})
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["ok"] is True
+        assert body["previous_status"] == "INCOMPLETE_POSITION_DATA"
+        assert body["cleanup_status"] == \
+            "INCOMPLETE_POSITION_DATA_CLEANABLE"
+        st2 = json.loads(env["state_path"].read_text(encoding="utf-8"))
+        assert st2["position"] is None
+        # Diğer veriler korunur.
+        assert st2["balance"] == 1000.0 and len(st2["trades"]) == 1
+        recs = [json.loads(x) for x in env["app"].POSITION_AUDIT_PATH
+                .read_text(encoding="utf-8").strip().splitlines()]
+        last = recs[-1]
+        assert last["reason"] == "POSITION_RECORD_CLEANED"
+        assert last["symbol"] == "ONDOUSDT"
+        assert last["source"] == "legacy"
+        assert "previous_status=INCOMPLETE_POSITION_DATA" in \
+            last["detail"]
+        # Restart eşdeğeri: state yeniden okunduğunda kayıt geri
+        # gelmez (dosyada position null).
+        assert env["app"]._detect_orphan_state_position() is None
+
+    def test_incomplete_blocked_by_runtime_counterpart(self, env,
+                                                       tmp_path):
+        # dual_model_runtime'da aynı sembol açıksa fail-closed.
+        (tmp_path / "dual_model_runtime.json").write_text(
+            json.dumps({"positions": {"ONDOUSDT": {"entry": 1.0}}}),
+            encoding="utf-8")
+        st = self._incomplete_cleanable_state()
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        r = env["client"].post(self.URL, json={
+            "symbol": "ONDOUSDT", "confirm": True})
+        assert r.status_code == 422
+        assert any("dual_model_runtime" in e
+                   for e in r.get_json()["evidence"])
+
+    def test_incomplete_blocked_by_open_ledger(self, env):
+        st = self._incomplete_cleanable_state()
+        st["trades"].append({"symbol": "ONDOUSDT"})  # kapanmamış
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        r = env["client"].post(self.URL, json={
+            "symbol": "ONDOUSDT", "confirm": True})
+        assert r.status_code == 422
+        st2 = json.loads(env["state_path"].read_text(encoding="utf-8"))
+        assert st2["position"] is not None
+
+    def test_bot_running_reason_code(self, env, monkeypatch):
+        monkeypatch.setattr(env["app"], "bot_running", lambda: True)
+        st = self._incomplete_cleanable_state()
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        r = env["client"].post(self.URL, json={
+            "symbol": "ONDOUSDT", "confirm": True})
+        assert r.status_code == 409
+        assert r.get_json()["code"] == \
+            "CLEANUP_REQUIRES_CONTROLLER_PAUSE"
+        # Bot durdurulunca aynı istek başarılı olur.
+        monkeypatch.setattr(env["app"], "bot_running", lambda: False)
+        r2 = env["client"].post(self.URL, json={
+            "symbol": "ONDOUSDT", "confirm": True})
+        assert r2.status_code == 200
 
     def test_rejected_while_bot_running(self, env, monkeypatch):
         monkeypatch.setattr(env["app"], "bot_running", lambda: True)
@@ -179,6 +265,15 @@ class TestStatusExposure:
         assert "/api/state/orphan-position/clean" in js
         assert "orphan_position" in js
         assert "confirm: true" in js
+        # Temizlenebilir eksik kayıt: Kapat YOK; Kayıttan Kaldır +
+        # Ayrıntı var; hata kodları sessizce yutulmaz.
+        assert "data-clean-symbol" in js
+        assert "Kayıttan Kaldır" in js
+        assert "data-detail-symbol" in js
+        assert "CLEANUP_REQUIRES_CONTROLLER_PAUSE" in js
+        assert "NOT_CLEANABLE" in js
+        appsrc = (ROOT / "app.py").read_text(encoding="utf-8")
+        assert '"cleanup_eligible"' in appsrc
         html = (ROOT / "templates/trading_home.html").read_text(
             encoding="utf-8")
         assert "th-orphan-banner" in html

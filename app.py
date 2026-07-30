@@ -89,6 +89,7 @@ csrf = CSRFProtect(app)
 ROOT        = ROOT_DIR
 CONFIG_PATH = ROOT / "alpha20_v1" / "config.json"
 STATE_PATH  = ROOT / "alpha20_v1" / "state.json"
+DUAL_RUNTIME_PATH = ROOT / "alpha20_v1" / "dual_model_runtime.json"
 LOG_PATH    = ROOT / "alpha20_v1" / "alpha20.log"
 BOT_PATH    = ROOT / "alpha20_v1" / "alpha20.py"
 PID_PATH    = ROOT / "alpha20_v1" / ".bot.pid"
@@ -3367,7 +3368,18 @@ def _operation_raw() -> dict[str, Any]:
                 _position_ack_active(_pos):
             pass
         elif _cls["status"] != "ORPHAN_POSITION":
+            # Kapatılamaz eksik kayıt (entry+quantity yok, runtime/
+            # ledger karşılığı yok) UI'da "Kapat" yerine "Kayıttan
+            # Kaldır" alsın diye temizlenebilirlik bayrağı taşır.
+            _cleanup_ok = False
+            if _cls["status"] == "INCOMPLETE_POSITION_DATA":
+                try:
+                    _cleanup_ok = bool(_legacy_cleanup_eligibility(
+                        _pos, _st or {}, _cls)["cleanable"])
+                except Exception:
+                    _cleanup_ok = False
             raw["positions"].append({
+                "cleanup_eligible": _cleanup_ok,
                 # BÜYÜK harf: close ucu position_id.upper() ile arar —
                 # küçük harfli id kapatma akışını kırar (review bulgusu)
                 "position_id": f"PAPER-{_pos['symbol']}",
@@ -3804,6 +3816,66 @@ def _classify_legacy_position(pos: dict, state: dict,
                 "entry": entry, "quantity": quantity}
 
     return {"status": "OPEN", "entry": entry, "quantity": quantity}
+
+def _legacy_cleanup_eligibility(pos: dict, state: dict,
+                                cls: dict) -> dict:
+    """Legacy kaydın state.json'dan GÜVENLE silinebilirliğini belirle.
+
+    Temizlenebilir durumlar:
+    - ORPHAN_POSITION (trades'te kapanışı var — mevcut sözleşme)
+    - INCOMPLETE_POSITION_DATA_CLEANABLE: entry VE quantity yok,
+      dual_model_runtime'da aynı sembolde açık pozisyon yok ve
+      ledger'da (state.trades) kapanmamış karşılığı yok. Bu kayıtla
+      kapatma HESAPLANAMAZ (miktar/fiyat yok) — tek dürüst işlem
+      kayıt bütünlüğü temizliğidir. Koşullardan biri sağlanmazsa
+      fail-closed: temizlenemez (kanıt listesiyle döner)."""
+    status = cls.get("status")
+    if status == "ORPHAN_POSITION":
+        return {"cleanable": True, "status": "ORPHAN_POSITION",
+                "evidence": ["trades'te kapanış kaydı var"]}
+    if status != "INCOMPLETE_POSITION_DATA":
+        return {"cleanable": False, "status": status,
+                "evidence": [f"durum {status} — temizlik kapsamı dışı"]}
+    symbol = str(pos.get("symbol") or "").upper()
+    evidence, blockers = [], []
+    if cls.get("entry") is None and cls.get("quantity") is None:
+        evidence.append("geçerli entry ve quantity yok — kapatma "
+                        "hesaplanamaz")
+    else:
+        blockers.append("entry veya quantity mevcut — kayıt kısmen "
+                        "geçerli, silinmez (Onayla akışını kullanın)")
+    try:
+        rt, _ = read_json(DUAL_RUNTIME_PATH)
+        dm_open = [s for s in ((rt or {}).get("positions") or {})
+                   if str(s).upper() == symbol]
+    except Exception:
+        dm_open = None
+    if dm_open:
+        blockers.append("dual_model_runtime'da aynı sembolde açık "
+                        "pozisyon var")
+    elif dm_open is None:
+        blockers.append("dual_model_runtime okunamadı — fail-closed")
+    else:
+        evidence.append("dual_model_runtime karşılığı yok")
+    open_ledger = False
+    for t in (state.get("trades") or []):
+        if isinstance(t, dict) and \
+                str(t.get("symbol") or "").upper() == symbol and \
+                not (t.get("closed_at") or t.get("time")):
+            open_ledger = True
+            break
+    if open_ledger:
+        blockers.append("ledger'da kapanmamış işlem karşılığı var")
+    else:
+        evidence.append("ledger'da açık işlem karşılığı yok")
+    if blockers:
+        return {"cleanable": False,
+                "status": "INCOMPLETE_POSITION_DATA",
+                "evidence": blockers}
+    return {"cleanable": True,
+            "status": "INCOMPLETE_POSITION_DATA_CLEANABLE",
+            "evidence": evidence}
+
 
 def _detect_orphan_state_position() -> dict | None:
     """state.json'daki legacy pozisyon ORPHAN_POSITION ise özetini döndür.
@@ -5484,9 +5556,14 @@ def api_state_orphan_position_clean():
     if not allowed:
         return _api_error(f"Çok fazla deneme; {secs} sn bekleyin.", 429)
     if bot_running():
-        return _api_error(
-            "Bot çalışırken state.json temizlenemez (yazma yarışı). "
-            "Önce botu durdurun.", 409)
+        # Açık reason code: UI bunu operatöre çözümle birlikte
+        # gösterir (sessiz yutma yasak — spec §7).
+        return jsonify({
+            "error": "Bot/otomasyon çalışırken state.json "
+                     "temizlenemez (yazma yarışı). Önce botu "
+                     "durdurun, sonra tekrar deneyin.",
+            "code": "CLEANUP_REQUIRES_CONTROLLER_PAUSE",
+            "request_id": getattr(g, "request_id", "")}), 409
     body = request.get_json(silent=True) or {}
     if body.get("confirm") is not True:
         return _api_error(
@@ -5532,10 +5609,25 @@ def api_state_orphan_position_clean():
                     stale_h = 0
                 cls = _classify_legacy_position(
                     pos, state, stale_hours=stale_h or None)
-                if cls["status"] != "ORPHAN_POSITION":
-                    return _api_error(
-                        "Kayıt ORPHAN değil (" + cls["status"] + ") — "
-                        "sağlıklı/eksik pozisyon panelden silinemez.", 409)
+                # ORPHAN'a ek olarak KAPATILAMAZ eksik kayıt da
+                # temizlenebilir: entry+quantity yok, runtime ve
+                # ledger karşılığı yok (INCOMPLETE_POSITION_DATA_
+                # CLEANABLE). Sağlıklı/kısmen geçerli kayıt fail-closed
+                # reddedilir — kanıt listesi cevapta döner.
+                elig = _legacy_cleanup_eligibility(pos, state, cls)
+                if not elig["cleanable"]:
+                    return jsonify({
+                        "error": "Kayıt temizlenemez (" +
+                                 str(elig["status"]) + "): " +
+                                 "; ".join(elig["evidence"]),
+                        "code": "NOT_CLEANABLE",
+                        "status": elig["status"],
+                        "evidence": elig["evidence"],
+                        "request_id": getattr(g, "request_id",
+                                              "")}), 422
+                previous_status = cls["status"]
+                cleanup_status = elig["status"]
+                evidence = elig["evidence"]
                 state["position"] = None
                 atomic_write_json(STATE_PATH, state)
             finally:
@@ -5544,10 +5636,17 @@ def api_state_orphan_position_clean():
         return _api_error(
             f"state.json güncellenemedi ({type(exc).__name__}).", 500)
     _audit_position_integrity(
-        symbol, "CLEANED",
-        "ORPHAN_POSITION kaydı operatör onayıyla state.json'dan "
-        "temizlendi (opened_at=" + repr(pos.get("opened_at")) + ")")
+        symbol, "POSITION_RECORD_CLEANED",
+        "action=POSITION_RECORD_CLEANED symbol=" + symbol +
+        " source=legacy previous_status=" + str(previous_status) +
+        " cleanup_status=" + str(cleanup_status) +
+        " reason=" + "; ".join(evidence) +
+        " opened_at=" + repr(pos.get("opened_at")),
+        source="legacy")
     slog.log_event(slog.STARTUP, ip=ip,
                    username=session.get("username", ""),
-                   detail=f"orphan position cleaned: {symbol}")
-    return jsonify({"ok": True, "cleaned": True, "symbol": symbol})
+                   detail=f"position record cleaned: {symbol} "
+                          f"({previous_status})")
+    return jsonify({"ok": True, "cleaned": True, "symbol": symbol,
+                    "previous_status": previous_status,
+                    "cleanup_status": cleanup_status})
