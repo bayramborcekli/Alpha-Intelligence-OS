@@ -3446,6 +3446,21 @@ def _parse_ts(value) -> datetime | None:
         return None
 
 
+# Task 157: sembol başına in-memory son-durum önbelleği — dosya tail
+# penceresi ne kadar dolarsa dolsun aynı worker içindeki tekrarlar
+# dosyaya hiç inmeden yutulur. Anahtar (dosya yolu, sembol) —
+# testlerde POSITION_AUDIT_PATH monkeypatch'lenince önbellek
+# sızıntısı olmaz. Değer: {"reason": str, "sources": set[str]}.
+# Çok worker'lı gunicorn'da her worker kendi önbelleğini taşır;
+# worker'lar arası dedupe için dosya tail taraması (aşağıda,
+# _AUDIT_TAIL_BYTES) ikinci hat olarak korunur.
+_AUDIT_DEDUP_CACHE: dict[tuple[str, str], dict] = {}
+_AUDIT_DEDUP_LOCK = threading.Lock()
+# Task 157: 4096 bayt onlarca sembol dönüşümlü yazınca taşıyordu —
+# pencere 64KB'a çıkarıldı (satır ~150-200 bayt → yüzlerce kayıt).
+_AUDIT_TAIL_BYTES = 65536
+
+
 def _audit_position_integrity(symbol: str, status: str,
                               detail: str,
                               source: str =
@@ -3460,7 +3475,27 @@ def _audit_position_integrity(symbol: str, status: str,
     penceresindeki güncel aynı-durum serisine bakar — legacy ve
     dual-model kaynakları dönüşümlü aynı INCOMPLETE'i yazsa bile
     her kaynaktan yalnız İLK kayıt (durum değişikliği bilgisi)
-    tutulur; sonraki dönüşümlü tekrarlar yutulur."""
+    tutulur; sonraki dönüşümlü tekrarlar yutulur.
+
+    Task 157: sembol başına in-memory önbellek + 64KB tail —
+    onlarca sembol dönüşümlü yazsa bile bir sembolün serisi
+    pencereden taşıp dedupe kaçırmaz."""
+    _cache_key = (str(POSITION_AUDIT_PATH), symbol)
+    with _AUDIT_DEDUP_LOCK:
+        _ent = _AUDIT_DEDUP_CACHE.get(_cache_key)
+        if (_ent is not None and _ent.get("reason") == status
+                and source in _ent.get("sources", ())):
+            # Çok worker'lı gunicorn: başka worker araya farklı bir
+            # reason yazmış olabilir (seri kırılması). Kısa devre
+            # yalnız dosya DEĞİŞMEMİŞSE güvenlidir — boyut cache'e
+            # yazıldığı andakiyle aynıysa dışarıdan yazım olmamıştır.
+            try:
+                _now_size = POSITION_AUDIT_PATH.stat().st_size
+            except OSError:
+                _now_size = -1
+            if _now_size == _ent.get("size"):
+                return  # dosya bayatlamadı — dosyaya inmeden yut
+            # Dosya değişti: önbelleğe güvenme, tail taramasına düş.
     try:
         try:
             import fcntl as _fl
@@ -3472,7 +3507,7 @@ def _audit_position_integrity(symbol: str, status: str,
             try:
                 fh.seek(0, 2)
                 size = fh.tell()
-                fh.seek(max(0, size - 4096))
+                fh.seek(max(0, size - _AUDIT_TAIL_BYTES))
                 tail = fh.read().strip().splitlines()
                 # Task 153: dedupe kıyası source'u da içerir —
                 # farklı kaynaklı (legacy vs dual-model) İLK kayıt
@@ -3500,15 +3535,28 @@ def _audit_position_integrity(symbol: str, status: str,
                     if _src == source:
                         _dup = True
                         break
-                if _dup:
-                    return
+                if not _dup:
+                    fh.seek(0, 2)
+                    fh.write(json.dumps({
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "symbol": symbol, "reason": status,
+                        "detail": detail,
+                        "source": source,
+                    }, ensure_ascii=False) + "\n")
+                # Task 157: önbelleği güncelle — hem yazımda hem
+                # dosyadan tespit edilen dup'ta; reason değiştiyse
+                # kaynak kümesi sıfırlanır (seri kırılma semantiği).
+                # 'size' flock ALTINDA okunan güncel boyuttur; kısa
+                # devre bu boyut değişmediği sürece geçerlidir.
                 fh.seek(0, 2)
-                fh.write(json.dumps({
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                    "symbol": symbol, "reason": status,
-                    "detail": detail,
-                    "source": source,
-                }, ensure_ascii=False) + "\n")
+                _size_now = fh.tell()
+                with _AUDIT_DEDUP_LOCK:
+                    _ent = _AUDIT_DEDUP_CACHE.get(_cache_key)
+                    if _ent is None or _ent.get("reason") != status:
+                        _ent = {"reason": status, "sources": set()}
+                        _AUDIT_DEDUP_CACHE[_cache_key] = _ent
+                    _ent["sources"].add(source)
+                    _ent["size"] = _size_now
             finally:
                 _fl.flock(fh.fileno(), _fl.LOCK_UN)
     except Exception:  # audit hatası snapshot'ı düşürmez

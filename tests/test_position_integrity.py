@@ -211,6 +211,100 @@ class TestLegacyClassification:
             encoding="utf-8").strip().splitlines()
         assert len(lines) == 2  # üçüncü yazım yutuldu
 
+    # ── Task 157: çok sembollü dönüşümlü yazım tail'i taşırmasın ────
+
+    def test_audit_many_symbols_interleaved_no_bloat(self, appmod):
+        # 80 sembol dönüşümlü olarak aynı durumu tekrar tekrar
+        # yazar; toplam hacim eski 4KB tail penceresini kat kat
+        # aşar. Dedupe yine de kaçmaz: sembol başına tek kayıt.
+        syms = [f"S{i:03d}USDT" for i in range(80)]
+        for _round in range(4):
+            for s in syms:
+                appmod._audit_position_integrity(
+                    s, "INCOMPLETE_POSITION_DATA", "x" * 120,
+                    source="legacy_state_position")
+        lines = appmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == len(syms)
+        recs = [json.loads(x) for x in lines]
+        assert {r["symbol"] for r in recs} == set(syms)
+
+    def test_audit_dedupe_survives_cache_loss(self, appmod):
+        # Worker restart / başka worker senaryosu: in-memory önbellek
+        # boşaltılsa bile büyütülmüş tail penceresi (>=64KB) çok
+        # sembollü dönüşümlü yazımda dedupe'u dosyadan yakalar.
+        assert appmod._AUDIT_TAIL_BYTES >= 65536
+        syms = [f"W{i:03d}USDT" for i in range(60)]
+        for _round in range(3):
+            for s in syms:
+                appmod._audit_position_integrity(
+                    s, "INCOMPLETE_POSITION_DATA", "y" * 120,
+                    source="dual_model_position")
+            appmod._AUDIT_DEDUP_CACHE.clear()  # önbellek kaybı
+        lines = appmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == len(syms)
+
+    def test_audit_stale_cache_external_streak_break(self, appmod):
+        # Başka worker'ın araya farklı reason yazması (seri kırılması)
+        # bu worker'ın bayat önbelleğiyle YUTULMAZ: dosya boyutu
+        # değiştiği için kısa devre düşer, tail taraması yeniden
+        # yazıma izin verir.
+        appmod._audit_position_integrity(
+            "EXTUSDT", "INCOMPLETE_POSITION_DATA", "a",
+            source="legacy_state_position")
+        # Dışarıdan (başka worker) seri kıran kayıt eklenir.
+        with appmod.POSITION_AUDIT_PATH.open(
+                "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({
+                "ts": _iso(0), "symbol": "EXTUSDT",
+                "reason": "ORPHAN_POSITION", "detail": "ext",
+                "source": "legacy_state_position"}) + "\n")
+        appmod._audit_position_integrity(
+            "EXTUSDT", "INCOMPLETE_POSITION_DATA", "c",
+            source="legacy_state_position")
+        lines = appmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == 3
+        assert json.loads(lines[-1])["detail"] == "c"
+
+    def test_audit_cache_shortcircuit_only_when_file_unchanged(
+            self, appmod):
+        # Dosya değişmemişken tekrar → kısa devre yutar; başka
+        # sembolün araya yazması dosyayı değiştirir ama tail taraması
+        # yine dup bulur — dosya şişmez.
+        appmod._audit_position_integrity(
+            "FRUSDT", "STALE_POSITION", "a",
+            source="legacy_state_position")
+        appmod._audit_position_integrity(
+            "FRUSDT", "STALE_POSITION", "b",
+            source="legacy_state_position")  # kısa devre
+        appmod._audit_position_integrity(
+            "OTHUSDT", "STALE_POSITION", "o",
+            source="legacy_state_position")  # dosyayı değiştirir
+        appmod._audit_position_integrity(
+            "FRUSDT", "STALE_POSITION", "c",
+            source="legacy_state_position")  # tail dup yakalar
+        lines = appmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == 2
+
+    def test_audit_cache_respects_streak_break(self, appmod):
+        # Önbellek seri-kırılma semantiğini bozmaz: reason değişince
+        # aynı symbol+reason+source yeniden yazılabilir.
+        appmod._audit_position_integrity(
+            "CBUSDT", "INCOMPLETE_POSITION_DATA", "a",
+            source="legacy_state_position")
+        appmod._audit_position_integrity(
+            "CBUSDT", "ORPHAN_POSITION", "b",
+            source="legacy_state_position")
+        appmod._audit_position_integrity(
+            "CBUSDT", "INCOMPLETE_POSITION_DATA", "c",
+            source="legacy_state_position")
+        lines = appmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == 3
+
     def test_orphan_excluded_from_overview_source(self):
         # _operation_raw ORPHAN'ı aktif listeye almaz (kaynak kodu
         # sözleşmesi — davranış birim testleri yukarıda).
