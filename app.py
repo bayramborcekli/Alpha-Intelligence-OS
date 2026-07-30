@@ -3349,7 +3349,9 @@ def _operation_raw() -> dict[str, Any]:
         _pos = None
     if isinstance(_pos, dict) and _pos.get("symbol"):
         raw["positions"].append({
-            "position_id": f"paper-{_pos['symbol']}",
+            # BÜYÜK harf: close ucu position_id.upper() ile arar —
+            # küçük harfli id kapatma akışını kırar (review bulgusu)
+            "position_id": f"PAPER-{_pos['symbol']}",
             "symbol": _pos.get("symbol"),
             "market": "SPOT",
             "side": _pos.get("side"),

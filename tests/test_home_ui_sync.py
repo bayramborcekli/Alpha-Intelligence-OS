@@ -83,6 +83,22 @@ class TestSingleSnapshotConsistency:
         assert pos["side"] == "SHORT"
         assert pos["execution_mode"] == "PAPER"
 
+    def test_position_id_survives_close_lookup(self, client,
+                                               universe5):
+        """Close ucu position_id.upper() ile arar — id zaten büyük
+        harf olmalı, yoksa kapatma UNKNOWN_TARGET döner."""
+        data = _overview(client)
+        pid = data["positions"][0]["position_id"]
+        assert pid == pid.upper() == "PAPER-ESPUSDT"
+        # UNKNOWN_TARGET olmamalı (doğrulama katmanı başka nedenle
+        # reddedebilir ama pozisyon BULUNMALI)
+        r = client.post(
+            f"/api/operation-control/positions/{pid}/close",
+            json={"reason": "t", "confirm_phrase": "x",
+                  "idempotency_key": "k1"})
+        body = r.get_json() or {}
+        assert "UNKNOWN_TARGET" not in json.dumps(body)
+
     def test_no_contradiction_within_snapshot(self, client,
                                               universe5):
         """Tek snapshot içinde: pozisyon sembolü evrende olmalı,
