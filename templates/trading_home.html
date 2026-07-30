@@ -235,6 +235,39 @@
           <tr><td colspan="7" class="th-skel">Yükleniyor…</td></tr>
         </tbody>
       </table>
+
+      <!-- ── Task 130: ayrı performans metrik kartları (CORE vs
+           OPPORTUNITY) + toplam portföy sonucu + ret nedenleri —
+           aynı kanonik /api/dual-model/state snapshot'ından ────── -->
+      <h3 style="font-size:.75rem;margin:12px 0 4px">
+        Model Performansı (PAPER)</h3>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"
+           id="th-dm-metrics">
+        <div class="th-card" style="flex:1;min-width:230px;
+             padding:8px" id="th-dm-metrics-core"
+             aria-label="CORE model performans metrikleri">
+          <b style="font-size:.72rem">CORE — ALPHA CORE SCALP</b>
+          <div class="th-empty" style="font-size:.72rem">
+            Yükleniyor…</div>
+        </div>
+        <div class="th-card" style="flex:1;min-width:230px;
+             padding:8px" id="th-dm-metrics-opp"
+             aria-label="OPPORTUNITY model performans metrikleri">
+          <b style="font-size:.72rem">OPPORTUNITY — ALPHA
+            OPPORTUNITY BURST</b>
+          <div class="th-empty" style="font-size:.72rem">
+            Yükleniyor…</div>
+        </div>
+      </div>
+      <div style="font-size:.75rem;margin:8px 0 2px">
+        <b>Toplam Portföy Sonucu (net)</b>
+        <span id="th-dm-portfolio" class="th-unknown">UNKNOWN</span>
+        <span style="color:var(--muted,#8b949e)">USDT</span>
+      </div>
+      <h3 style="font-size:.75rem;margin:8px 0 2px">Ret Nedenleri
+        Dökümü</h3>
+      <div id="th-dm-rejections" style="font-size:.72rem"
+           class="th-empty">Yükleniyor…</div>
     </section>
   </div>
 

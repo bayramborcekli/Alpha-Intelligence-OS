@@ -512,6 +512,16 @@
       "<tr><td colspan=\"7\" class=\"th-empty\">Fırsat taraması " +
       "henüz koşmadı.</td></tr>";
     renderDualPositions(d.positions || []);
+
+    // ── Task 130: ayrı performans metrik kartları ────────────────
+    renderDualMetrics(d);
+  }
+
+  function fmtMetric(v, suffix) {
+    if (v === null || v === undefined) {
+      return "<span class=\"th-unknown\">UNKNOWN</span>";
+    }
+    return esc(String(v)) + (suffix || "");
   }
 
   function fmtNum(v, dp) {
@@ -623,3 +633,107 @@
   refresh();
   setInterval(refresh, POLL_MS);
 })();
+
+  function fmtPnl(v) {
+    if (v === null || v === undefined) {
+      return "<span class=\"th-unknown\">UNKNOWN</span>";
+    }
+    var cls = v > 0 ? "th-profit" : v < 0 ? "th-loss" : "";
+    return "<span class=\"" + cls + "\">" +
+      (v > 0 ? "+" : "") + esc(String(v)) + "</span>";
+  }
+
+  var REJECT_LABELS = {
+    NO_SIGNAL: "Sinyal yok",
+    LOW_CONFIDENCE: "Düşük güven",
+    SPREAD_TOO_HIGH: "Spread çok yüksek",
+    LOW_BOOK_DEPTH: "Yetersiz emir defteri derinliği",
+    LOW_LIQUIDITY: "Düşük likidite",
+    SLIPPAGE_TOO_HIGH: "Kayma çok yüksek",
+    FEE_DRAG: "Ücret yükü",
+    EXPECTED_EDGE_TOO_LOW: "Beklenen edge çok düşük",
+    MOMENTUM_EXHAUSTED: "Momentum tükendi",
+    FALSE_BREAKOUT_RISK: "Sahte kırılım riski",
+    RISK_LIMIT: "Risk limiti",
+    POSITION_LIMIT: "Pozisyon limiti dolu",
+    COOLDOWN: "Bekleme süresi (cooldown)",
+    DUPLICATE_POSITION: "Yinelenen pozisyon",
+    DUPLICATE_MODEL_OWNERSHIP: "Sembol diğer modelde",
+    DATA_QUALITY: "Veri kalitesi"
+  };
+
+  function renderDualMetrics(d) {
+    var coreCard = document.getElementById("th-dm-metrics-core");
+    var oppCard = document.getElementById("th-dm-metrics-opp");
+    var rej = document.getElementById("th-dm-rejections");
+    if (!coreCard || !oppCard) return;
+    var metrics = (d && d.metrics) || {};
+    var mCore = metrics.ALPHA_CORE_SCALP || null;
+    var mOpp = metrics.ALPHA_OPPORTUNITY_BURST || null;
+    coreCard.innerHTML =
+      "<b style=\"font-size:.72rem\">CORE — ALPHA CORE SCALP</b>" +
+      metricCardBody(mCore);
+    oppCard.innerHTML =
+      "<b style=\"font-size:.72rem\">OPPORTUNITY — ALPHA " +
+      "OPPORTUNITY BURST</b>" + metricCardBody(mOpp);
+    var pf = document.getElementById("th-dm-portfolio");
+    if (pf) {
+      var v = d ? d.portfolio_net_pnl : null;
+      if (v === null || v === undefined) {
+        pf.textContent = "UNKNOWN";
+        pf.className = "th-unknown";
+      } else {
+        pf.textContent = (v > 0 ? "+" : "") + v;
+        pf.className = v > 0 ? "th-profit" : v < 0 ? "th-loss" : "";
+      }
+    }
+    if (rej) {
+      if (!d) {
+        rej.innerHTML = "<span class=\"th-unknown\">UNKNOWN</span>";
+      } else {
+        var parts = [];
+        [["CORE", mCore], ["OPPORTUNITY", mOpp]].forEach(function (e) {
+          var reasons = (e[1] && e[1].rejection_reasons) || {};
+          var keys = Object.keys(reasons).sort(function (a, b) {
+            return reasons[b] - reasons[a];
+          });
+          if (!keys.length) return;
+          parts.push("<div><b>" + e[0] + ":</b> " +
+            keys.map(function (k) {
+              return esc(REJECT_LABELS[k] || k) + " × " +
+                reasons[k];
+            }).join(", ") + "</div>");
+        });
+        rej.className = "";
+        rej.innerHTML = parts.join("") ||
+          "<span class=\"th-empty\">Henüz ret kaydı yok.</span>";
+      }
+    }
+  }
+
+  function metricCardBody(m) {
+    if (!m) {
+      return "<div class=\"th-empty\">UNKNOWN</div>";
+    }
+    var rows = [
+      ["Taranan Sembol", fmtMetric(m.scanned_symbols)],
+      ["Aday Sinyal", fmtMetric(m.candidates)],
+      ["Açık Pozisyon", fmtMetric(m.opened_positions)],
+      ["Kapanan İşlem", fmtMetric(m.closed_positions)],
+      ["İşlem/Gün", fmtMetric(m.trades_per_day)],
+      ["Kazanç Oranı", fmtMetric(m.win_rate, "%")],
+      ["Brüt PnL", fmtPnl(m.gross_pnl)],
+      ["Ücretler", fmtMetric(m.fees)],
+      ["Kayma (Slippage)", fmtMetric(m.slippage)],
+      ["Net PnL", fmtPnl(m.net_pnl)],
+      ["Ort. Tutma (dk)", fmtMetric(m.average_hold_minutes)],
+      ["Profit Factor", fmtMetric(m.profit_factor)],
+      ["Maks. Drawdown", fmtMetric(m.max_drawdown)],
+      ["Beklenti/İşlem", fmtPnl(m.expectancy_per_trade)]
+    ];
+    return rows.map(function (r) {
+      return "<div style=\"display:flex;justify-content:" +
+        "space-between;gap:8px\"><span>" + r[0] + "</span><span>" +
+        r[1] + "</span></div>";
+    }).join("");
+  }
