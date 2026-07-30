@@ -202,6 +202,18 @@
     <span id="th-sc-risk" class="th-unknown">UNKNOWN</span></div>
 </div>
 
+<!-- ── Yetim (ORPHAN) legacy kayıt bildirimi — Task 145 ──────────
+     state.json'daki ORPHAN_POSITION artığı aktif listede görünmez;
+     burada bildirilir ve operatör onayıyla tek tıkla temizlenir. -->
+<section id="th-orphan-banner" class="th-card" style="display:none;
+    margin-bottom:10px;border:1px solid #d29922"
+    aria-labelledby="th-h-orphan">
+  <h2 id="th-h-orphan" style="color:#d29922">Yetim Kayıt Tespit Edildi</h2>
+  <p id="th-orphan-text" style="margin:.4rem 0"></p>
+  <button id="th-orphan-clean" class="th-btn">Kaydı Temizle</button>
+  <span id="th-orphan-result" style="margin-left:8px;font-size:.8rem"></span>
+</section>
+
 <div class="th-main">
   <div>
     <!-- ── AKTİF İŞLEMLER: en büyük alan (klasik + model, tek tablo) ── -->

@@ -120,95 +120,6 @@ class TestRouteSurface:
 
     # 1500.1 ÖNCESİNDEN beri var olan yazma rotaları (sabit anlık görüntü)
     ALLOWED_WRITE_ROUTES = {
-        "/adaptive/auto-paper", "/adaptive/enable", "/adaptive/kill-switch",
-        "/adaptive/learn-now", "/adaptive/mode", "/adaptive/settings",
-        "/adaptive/unlock", "/api/v1/auth/login", "/api/v1/auth/logout",
-        "/api/v1/refresh", "/api/v1/risk/simulator", "/bot/start",
-        "/bot/stop", "/coins/add", "/coins/delete", "/coins/move",
-        "/coins/preset", "/login", "/settings", "/setup/hash",
-        # Kurulum sihirbazı (görev #43/#48/#49): parola hash kaydı,
-        # auth öncesi tek seferlik kurulum — bilinçli genişletme.
-        "/setup/save",
-        "/smart/analyze", "/smart/apply", "/smart/coin-action",
-        "/smart/mode", "/smart/pin", "/smart/restore", "/smart/settings",
-        # Mission 1600 / Agent 04: Automation manuel tetik (CSRF+auth
-        # korumalı; append yalnız Core üzerinden — bilinçli genişletme)
-        "/api/automation/run", "/api/v1/automation/run",
-        # Mission 2300 / Agent 03: Hesaplarım kayıt defteri (CSRF+auth
-        # korumalı; yalnız sunum meta verisi — sır saklamaz, işlem
-        # mantığına dokunmaz — bilinçli genişletme)
-        # Windows parola değiştirme (görev #63; CSRF+auth korumalı,
-        # local_admin.json atomic güncelleme — bilinçli genişletme)
-        "/settings/password",
-        # Windows exchange API anahtarı girişi (yerel güvenli depo;
-        # Replit'te 403 REPLIT_ENV; sır asla yanıtta dönmez —
-        # bilinçli genişletme)
-        "/api/accounts/<account_id>/credentials",
-        "/api/accounts/<account_id>/connect",
-        # MASTER INTEGRATION: risk profili seçimi (CSRF+auth korumalı;
-        # yalnız git dışı yerel tercih deposu + bellek-içi adaptive
-        # override — config.json'a yazmaz, emir GÖNDERMEZ) ve PAPER
-        # PIPELINE TEST (açık onay ifadesi zorunlu; sentetik, TEST
-        # etiketli ayrı ledger; gerçek emir yolu yok) — bilinçli
-        # genişletme.
-        "/api/risk-profile",
-        "/api/paper/pipeline-test",
-        "/api/accounts/<account_id>/disconnect",
-        "/api/accounts/<account_id>/primary",
-        "/api/accounts/<account_id>/edit",
-        "/api/accounts/<account_id>/test",
-        "/api/accounts/<account_id>/sync",
-        # Bot Kontrolü paneli: yürütme modu seçimi (CSRF+auth korumalı;
-        # LIVE fail-closed reddedilir — bilinçli genişletme)
-        "/execution/mode",
-        # Mission 2200 / Agent 01: Operation Control Center yazma uçları
-        # (CSRF+auth korumalı; tamamı Mission 2100 kontrollü yürütme
-        # hattına bağlanır — bilinçli genişletme)
-        "/api/operation-control/automation/<command>",
-        "/api/operation-control/symbols/<symbol>/<command>",
-        "/api/operation-control/positions/<position_id>/close",
-        "/api/operation-control/global/stop-new-entries",
-        "/api/operation-control/global/request-close-all",
-        "/api/operation-control/global/kill-switch",
-        # Binance Connection Agent (CSRF+auth+rate-limit korumalı;
-        # connect/disconnect Replit'te 403 REPLIT_ENV; secret hiçbir
-        # yanıt/log/snapshot'a yazılmaz; salt-okunur izin politikası —
-        # bilinçli genişletme, tam rota eşleşmesi, wildcard yok)
-        "/api/integrations/binance/global/connect",
-        "/api/integrations/binance/global/test",
-        "/api/integrations/binance/global/disconnect",
-        "/api/integrations/binance/tr/connect",
-        "/api/integrations/binance/tr/test",
-        "/api/integrations/binance/tr/disconnect",
-        # PAPER acil durdurma güvenli temizleme (CSRF+auth+rate-limit
-        # korumalı; Replit/non-Windows'ta 403; yalnız PAPER; risk
-        # kaynaklı durdurma reddedilir; temizlik öncesi otomatik yedek;
-        # canlı emir yolu AÇMAZ — bilinçli genişletme, tam rota,
-        # wildcard yok)
-        "/api/automation/paper-emergency-stop/clear",
-        # Windows Runtime Recovery Agent koşusu (yalnız yerel Windows;
-        # Replit/public'te 403; CSRF+auth+rate-limit — bilinçli genişletme)
-        "/api/agents/windows-runtime/run",
-        # Dual-model MANUAL_CLOSE (PAPER-only, CSRF+auth korumalı;
-        # yalnız git dışı runtime store'a yazar — bilinçli genişletme)
-        "/api/dual-model/close",
-        # AI Öğrenme Merkezi: challenger'ı KULLANICI ONAYIYLA terfi
-        # ettirir (AUTO_SHADOW; auto-promote kapalı). Yalnız git dışı
-        # dual_learning_state.json'a yazar; risk tavanı/API izni/emir
-        # yolu AÇMAZ; hazırlık PROMOTED değilse 409 — bilinçli
-        # genişletme, tam rota, wildcard yok.
-        "/api/dual-model/learning/promote",
-        # Strateji Laboratuvarı üst seviye operatör kontrolleri
-        # (durdur/devam, üretim duraklat, auto-promote dondur,
-        # champion'a dön, challenger iptal, emergency stop).
-        # CSRF+auth korumalı; yalnız git dışı strategy_lab/dual_learning
-        # state'ine yazar; risk tavanı/API izni/emir yolu AÇMAZ;
-        # LIVE ORDERS DISABLED — bilinçli genişletme, tam rota.
-        # ("strategy" adı bilinçli dışarıda: Mission 1800 sözleşmesi
-        # strategy rotalarını read-only kilitler.)
-        "/api/lab/control",
-    }
-
     def test_no_new_write_routes(self):
         offenders = []
         for rule in flask_app.app.url_map.iter_rules():
@@ -223,30 +134,19 @@ class TestRouteSurface:
                 assert not ({"POST", "PUT", "PATCH", "DELETE"}
                             & set(rule.methods)), rule.rule
 
-    EXPECTED_INTEL_ROUTES = {
-        "/intelligence",
-        "/api/intelligence", "/api/v1/intelligence",
-        "/api/intelligence/summary", "/api/v1/intelligence/summary",
-        "/api/intelligence/insights", "/api/v1/intelligence/insights",
-        "/api/intelligence/recommendations",
-        "/api/v1/intelligence/recommendations",
-        "/api/intelligence/status", "/api/v1/intelligence/status",
-        "/api/intelligence/settings", "/api/v1/intelligence/settings",
-        # Mission 1700 / Agent 04: Portfolio Intelligence (GET-only,
-        # salt-okunur) — yüzey bilinçli olarak genişletildi.
-        "/api/portfolio/intelligence", "/api/v1/portfolio/intelligence",
-        # Mission 1700 / Agent 05: UI sayfası (GET-only).
-        "/portfolio-intelligence",
-        # Mission 1700 / Agent 06: Export uçları (GET-only).
-        "/api/portfolio/intelligence/export/json",
-        "/api/v1/portfolio/intelligence/export/json",
-        "/api/portfolio/intelligence/export/csv",
-        "/api/v1/portfolio/intelligence/export/csv",
-        # Mission 1800 / Agent 04: Strategy Intelligence (GET-only,
-        # advisory-only) — yüzey bilinçli olarak genişletildi.
-        "/api/strategy/intelligence", "/api/v1/strategy/intelligence",
-        # Mission 1800 / Agent 05: UI sayfası (GET-only).
-        "/strategy-intelligence",
+    def test_intelligence_route_set_exact(self):
+        """Tüm takma adlar VAR ve fazladan intelligence rotası YOK."""
+        paths = {r.rule for r in flask_app.app.url_map.iter_rules()
+                 if "intelligence" in r.rule}
+        assert paths == self.EXPECTED_INTEL_ROUTES, (
+            paths ^ self.EXPECTED_INTEL_ROUTES)
+
+    def test_intelligence_routes_method_contract(self):
+        """Her intelligence rotası yalnızca GET+HEAD+OPTIONS sunar."""
+        for rule in flask_app.app.url_map.iter_rules():
+            if "intelligence" in rule.rule:
+                assert set(rule.methods) <= {"GET", "HEAD", "OPTIONS"}, \
+                    (rule.rule, sorted(rule.methods))
     }
 
     def test_intelligence_route_set_exact(self):

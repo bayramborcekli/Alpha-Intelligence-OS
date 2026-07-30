@@ -942,8 +942,9 @@
     bindDmClose(tb, list);
   }
 
-  // ── Yoklama ────────────────────────────────────────────────────
+  var orphanBusy = false;
 
+  var orphanBusy = false;
   var inflight = false;
 
   function refresh() {
@@ -988,6 +989,8 @@
         });
         showWarnings(warns);
       }
+      // Task 145: ORPHAN legacy kaydı bildirimi + tek tık temizleme.
+      renderOrphan(st ? st.orphan_position : null);
       // /api/paper/state zarfı düz JSON'dur (ok/data zarfı yok).
       var paper = r[7].http === 200 ? r[7].body : null;
       var dual = r[6].body && r[6].body.ok ? r[6].body.data : null;
@@ -1284,3 +1287,24 @@
     }).join("");
   }
 })();
+
+    var symbol = btn.dataset.symbol || "";
+
+  function renderOrphan(o) {
+    var box = document.getElementById("th-orphan-banner");
+    var txt = document.getElementById("th-orphan-text");
+    var btn = document.getElementById("th-orphan-clean");
+    if (!box || !txt || !btn) return;
+    if (!o || !o.symbol) { box.style.display = "none"; return; }
+    box.style.display = "block";
+    txt.textContent = o.symbol + " için kapanmış bir işlemin artık " +
+      "kaydı state dosyasında duruyor (açılış: " +
+      (o.opened_at || "UNKNOWN") + "). Bu kayıt aktif pozisyon " +
+      "DEĞİLDİR; güvenle temizlenebilir.";
+    btn.dataset.symbol = o.symbol;
+  }
+
+    var btn = ev.target && ev.target.id === "th-orphan-clean" ?
+      ev.target : null;
+
+    var out = document.getElementById("th-orphan-result");

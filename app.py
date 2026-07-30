@@ -3735,7 +3735,34 @@ def _classify_legacy_position(pos: dict, state: dict,
 
     return {"status": "OPEN", "entry": entry, "quantity": quantity}
 
+def _detect_orphan_state_position() -> dict | None:
+    """state.json'daki legacy pozisyon ORPHAN_POSITION ise özetini döndür.
 
+    Panelde 'Yetim Kayıt' bildirimi + tek tık temizleme için tek
+    kanonik tespit yolu — sınıflandırma _classify_legacy_position ile
+    aynıdır (çelişki imkânsız). Sağlıklı/eksik/bayat kayıt için None."""
+    try:
+        state, _ = read_json(STATE_PATH)
+        pos = (state or {}).get("position")
+        if not (isinstance(pos, dict) and pos.get("symbol")):
+            return None
+        try:
+            cfg = _get_main_config()
+        except Exception:
+            cfg = {}
+        try:
+            stale_h = float((cfg or {}).get("position_stale_hours") or 0)
+        except (TypeError, ValueError):
+            stale_h = 0
+        cls = _classify_legacy_position(
+            pos, state or {}, stale_hours=stale_h or None)
+        if cls["status"] != "ORPHAN_POSITION":
+            return None
+        return {"symbol": str(pos.get("symbol")),
+                "opened_at": pos.get("opened_at"),
+                "entry": cls["entry"], "quantity": cls["quantity"]}
+    except Exception:
+        return None
 def _operation_snapshot():
     service = get_operation_service()
     return _build_operation_snapshot(
@@ -4685,6 +4712,9 @@ def api_operation_status():
     _pi = _position_integrity_panel()
     data["position_integrity_warnings"] = _pi["warnings"]
     data["position_integrity_audit"] = _pi["recent_audit"]
+    # Task 145: ORPHAN tespitli legacy state.json kaydı panelde
+    # bildirim + tek tık temizleme için status'a eklenir (yoksa None).
+    data["orphan_position"] = _detect_orphan_state_position()
     payload, status = _oca.read_envelope(
         data, snapshot, g.get("request_id", "-"),
         snapshot.generated_at)
@@ -5340,20 +5370,86 @@ def _get_main_config() -> dict[str, Any]:
     cfg, _ = load_config()
     return cfg or DEFAULT_CONFIG
 
+@app.post("/api/state/orphan-position/clean")
+def api_state_orphan_position_clean():
+    """ORPHAN tespitli legacy kaydı state.json'dan GÜVENLE temizle.
 
-if __name__ == "__main__":
-    # Başlangıç güvenlik kontrolleri
-    validate_startup_config()
-    enforce_paper_mode_lock()
-    # Akıllı seçim otomatik döngüsü
-    um.start_auto_loop(_get_main_config)
-    # Task 109: kayıtlı anahtar varsa açılışta arka planda bağlantı testi
-    from services import binance_connection as _bc_startup
-    _bc_startup.start_startup_tests_async()
-    # Uyarlanabilir motor — yalnızca config'de enabled=true ise
-    cfg0 = _get_main_config()
-    if cfg0.get("adaptive_system", {}).get("enabled", False):
-        ac.start_controller_loop()
-    port    = int(os.environ.get("PORT", "5000"))
-    _debug  = os.environ.get("FLASK_ENV", "").lower() == "development"
-    app.run(host="0.0.0.0", port=port, debug=_debug)
+    Korumalar: oturum (_security_gate) + CSRF (CSRFProtect) + rate
+    limit + açık onay (confirm=true) + sembol eşleşmesi. Bot yazma
+    yarışı: bot çalışırken reddedilir (state.json'u bot da yazıyor);
+    silme flock altında taze read-modify-write + atomik replace ile
+    yapılır ve YALNIZ yeniden sınıflandırma ORPHAN_POSITION derse
+    uygulanır — sağlıklı pozisyon yanlışlıkla silinemez. Temizlik
+    audit zincirine CLEANED olarak yazılır."""
+    ip = auth.get_client_ip()
+    allowed, secs = auth.check_rate_limit(ip)
+    if not allowed:
+        return _api_error(f"Çok fazla deneme; {secs} sn bekleyin.", 429)
+    if bot_running():
+        return _api_error(
+            "Bot çalışırken state.json temizlenemez (yazma yarışı). "
+            "Önce botu durdurun.", 409)
+    body = request.get_json(silent=True) or {}
+    if body.get("confirm") is not True:
+        return _api_error(
+            "Temizlik için açık onay gerekir (confirm=true).", 400)
+    req_symbol = str(body.get("symbol") or "").strip().upper()
+    if not req_symbol:
+        return _api_error("symbol alanı zorunludur.", 400)
+    try:
+        try:
+            import fcntl as _fl
+        except ImportError:  # Windows
+            sys.path.insert(0, str(ROOT / "alpha20_v1"))
+            import portable_flock as _fl  # type: ignore
+        # Kilit ayrı dosyada: state.json'un kendisi atomik replace ile
+        # değiştirildiğinden dosya üzerindeki flock inode değişiminde
+        # anlamını yitirir.
+        lock_path = STATE_PATH.with_name(".state.clean.lock")
+        with lock_path.open("a+", encoding="utf-8") as lk:
+            _fl.flock(lk.fileno(), _fl.LOCK_EX)
+            try:
+                # Taze oku + yeniden sınıflandır — bayat snapshot'a
+                # güvenilmez; yalnız ORPHAN kanıtı varsa silinir.
+                state, err = read_json(STATE_PATH)
+                if err or state is None:
+                    return _api_error(f"state.json okunamadı: {err}", 500)
+                pos = state.get("position")
+                if not (isinstance(pos, dict) and pos.get("symbol")):
+                    return _api_error(
+                        "state.json'da temizlenecek pozisyon kaydı yok.",
+                        409)
+                symbol = str(pos.get("symbol"))
+                if symbol.upper() != req_symbol:
+                    return _api_error(
+                        f"Sembol uyuşmuyor: kayıtta {symbol} var.", 409)
+                try:
+                    cfg = _get_main_config()
+                except Exception:
+                    cfg = {}
+                try:
+                    stale_h = float(
+                        (cfg or {}).get("position_stale_hours") or 0)
+                except (TypeError, ValueError):
+                    stale_h = 0
+                cls = _classify_legacy_position(
+                    pos, state, stale_hours=stale_h or None)
+                if cls["status"] != "ORPHAN_POSITION":
+                    return _api_error(
+                        "Kayıt ORPHAN değil (" + cls["status"] + ") — "
+                        "sağlıklı/eksik pozisyon panelden silinemez.", 409)
+                state["position"] = None
+                atomic_write_json(STATE_PATH, state)
+            finally:
+                _fl.flock(lk.fileno(), _fl.LOCK_UN)
+    except OSError as exc:
+        return _api_error(
+            f"state.json güncellenemedi ({type(exc).__name__}).", 500)
+    _audit_position_integrity(
+        symbol, "CLEANED",
+        "ORPHAN_POSITION kaydı operatör onayıyla state.json'dan "
+        "temizlendi (opened_at=" + repr(pos.get("opened_at")) + ")")
+    slog.log_event(slog.STARTUP, ip=ip,
+                   username=session.get("username", ""),
+                   detail=f"orphan position cleaned: {symbol}")
+    return jsonify({"ok": True, "cleaned": True, "symbol": symbol})
