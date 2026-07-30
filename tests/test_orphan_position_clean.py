@@ -355,6 +355,89 @@ class TestStaleAckCleanup:
         assert recs[-1]["reason"] == "operator_ack_clear_failed"
 
 
+class TestNormalCloseAckPrune:
+    """Task 161: normal kapanan pozisyonların ack'ları birikmesin."""
+
+    def _write_acks(self, env, acks: dict) -> None:
+        env["app"].POSITION_ACK_PATH.write_text(
+            json.dumps(acks), encoding="utf-8")
+
+    def _read_acks(self, env) -> dict:
+        return json.loads(env["app"].POSITION_ACK_PATH.read_text(
+            encoding="utf-8"))
+
+    def test_closed_symbol_ack_dropped_active_kept(self, env):
+        appmod = env["app"]
+        st = _healthy_state()  # aktif pozisyon: ONDOUSDT
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        active_key = appmod._position_ack_key(st["position"])
+        self._write_acks(env, {
+            "ONDOUSDT": active_key,           # aktif — korunmalı
+            "BTCUSDT": "BTCUSDT|'2026-01-01'",  # kapanmış — düşmeli
+        })
+        removed = appmod._prune_stale_position_acks()
+        assert removed == 1
+        acks = self._read_acks(env)
+        assert acks == {"ONDOUSDT": active_key}
+        # Audit kaydı yazıldı.
+        recs = [json.loads(x) for x in appmod.POSITION_AUDIT_PATH
+                .read_text(encoding="utf-8").strip().splitlines()]
+        assert recs[-1]["reason"] == "operator_ack_cleared"
+        assert recs[-1]["symbol"] == "BTCUSDT"
+
+    def test_no_position_drops_all_acks(self, env):
+        st = _healthy_state()
+        st["position"] = None
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        self._write_acks(env, {"ONDOUSDT": "ONDOUSDT|'x'"})
+        assert env["app"]._prune_stale_position_acks() == 1
+        assert self._read_acks(env) == {}
+
+    def test_same_symbol_new_opened_at_dropped(self, env):
+        # Aynı sembol yeniden açıldı ama farklı opened_at —
+        # eski ack bayat sayılır ve düşer.
+        appmod = env["app"]
+        st = _healthy_state()
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        old_pos = {"symbol": "ONDOUSDT", "opened_at": _iso(100)}
+        self._write_acks(env, {
+            "ONDOUSDT": appmod._position_ack_key(old_pos)})
+        assert appmod._prune_stale_position_acks() == 1
+        assert self._read_acks(env) == {}
+
+    def test_state_unreadable_is_failsafe_noop(self, env):
+        env["state_path"].write_text("{bozuk json", encoding="utf-8")
+        self._write_acks(env, {"ONDOUSDT": "ONDOUSDT|'x'"})
+        assert env["app"]._prune_stale_position_acks() == 0
+        assert "ONDOUSDT" in self._read_acks(env)
+
+    def test_missing_ack_file_noop(self, env):
+        env["state_path"].write_text(json.dumps(_healthy_state()),
+                                     encoding="utf-8")
+        assert env["app"]._prune_stale_position_acks() == 0
+
+    def test_panel_triggers_prune(self, env):
+        # Periyodik tetik: panel yoklaması bayat ack'ları düşürür.
+        st = _healthy_state()
+        st["position"] = None
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        self._write_acks(env, {"ETHUSDT": "ETHUSDT|'y'"})
+        env["app"]._position_integrity_panel()
+        assert self._read_acks(env) == {}
+
+    def test_prune_failure_does_not_break_panel(self, env,
+                                                monkeypatch):
+        env["state_path"].write_text(json.dumps(_healthy_state()),
+                                     encoding="utf-8")
+
+        def _boom():
+            raise OSError("disk")
+        monkeypatch.setattr(env["app"],
+                            "_prune_stale_position_acks", _boom)
+        out = env["app"]._position_integrity_panel()
+        assert "warnings" in out  # panel düşmedi
+
+
 class TestStatusExposure:
     def test_status_source_contract(self):
         src = (ROOT / "app.py").read_text(encoding="utf-8")

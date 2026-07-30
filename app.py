@@ -3661,6 +3661,69 @@ def _clear_position_ack(symbol: str) -> bool:
             _fl.flock(fh.fileno(), _fl.LOCK_UN)
 
 
+def _prune_stale_position_acks() -> int:
+    """Kapanmış pozisyonların ack kayıtlarını temizle (Task 161).
+
+    Task 160 yalnız 'Kayıttan Kaldır' akışını kapsıyordu; pozisyon
+    normal yoldan (bot kapatınca) sonlandığında ack kaydı dosyada
+    sonsuza dek kalıyordu. Burada state.json'daki GÜNCEL pozisyonla
+    eşleşmeyen tüm ack'lar düşürülür: aynı sembol ama farklı
+    opened_at (yeni pozisyon) veya artık hiç pozisyon yok.
+
+    Fail-safe: state okunamazsa HİÇBİR ack silinmez (yanlışlıkla
+    aktif onayı düşürmek, bayat kaydı tutmaktan daha kötü).
+    Worker-safe: flock altında read-modify-write.
+    Dönüş: silinen kayıt sayısı."""
+    if not POSITION_ACK_PATH.exists():
+        return 0
+    try:
+        st, _ = read_json(STATE_PATH)
+    except Exception:
+        return 0  # state okunamadı — fail-safe, dokunma
+    if not isinstance(st, dict):
+        return 0
+    pos = st.get("position")
+    active_key = None
+    active_symbol = None
+    if isinstance(pos, dict) and pos.get("symbol"):
+        active_symbol = str(pos.get("symbol"))
+        active_key = _position_ack_key(pos)
+    try:
+        import fcntl as _fl
+    except ImportError:  # Windows
+        sys.path.insert(0, str(ROOT / "alpha20_v1"))
+        import portable_flock as _fl  # type: ignore
+    removed = 0
+    with POSITION_ACK_PATH.open("a+", encoding="utf-8") as fh:
+        _fl.flock(fh.fileno(), _fl.LOCK_EX)
+        try:
+            fh.seek(0)
+            try:
+                acks = json.loads(fh.read() or "{}")
+                if not isinstance(acks, dict):
+                    acks = {}
+            except ValueError:
+                acks = {}
+            stale = [s for s, key in acks.items()
+                     if not (s == active_symbol and key == active_key)]
+            if not stale:
+                return 0
+            for s in stale:
+                del acks[s]
+                removed += 1
+            fh.seek(0)
+            fh.truncate()
+            fh.write(json.dumps(acks, ensure_ascii=False, indent=2))
+        finally:
+            _fl.flock(fh.fileno(), _fl.LOCK_UN)
+    for s in stale:
+        _audit_position_integrity(
+            s, "operator_ack_cleared",
+            "Bayat operatör onayı temizlendi (Task 161): pozisyon "
+            "artık aktif değil — kayıt birikmesi önlendi")
+    return removed
+
+
 # Task 144: panel banner'ında gösterilecek son audit kaydı sayısı.
 POSITION_AUDIT_RECENT_LIMIT = 20
 
@@ -3766,6 +3829,12 @@ def _position_integrity_panel() -> dict:
     banner sonraki yenilemede kendiliğinden kaybolur. Son N audit
     kaydı da geçmiş görünürlüğü için birlikte döndürülür."""
     warnings: list[str] = []
+    # Task 161: her panel yoklamasında bayat ack'lar (kapanmış /
+    # değişmiş pozisyonlar) temizlenir — dosya sınırsız büyümez.
+    try:
+        _prune_stale_position_acks()
+    except Exception:
+        pass  # temizlik hatası paneli düşürmez
     try:
         st, _ = read_json(STATE_PATH)
         pos = (st or {}).get("position")
