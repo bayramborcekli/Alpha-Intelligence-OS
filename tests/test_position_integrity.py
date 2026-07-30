@@ -195,6 +195,78 @@ class TestIntegrityPanelWarnings:
         assert panel["warnings"] == []
         assert panel["recent_audit"]  # geçmiş hâlâ okunabilir
 
+    # ── Task 150: uzun süre çözümsüz INCOMPLETE → KRİTİK uyarı ─────
+
+    def _write_audit(self, appmod, recs):
+        with appmod.POSITION_AUDIT_PATH.open(
+                "w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r) + "\n")
+
+    def _incomplete_state(self, appmod):
+        self._write_state(appmod, {
+            "position": {"symbol": "XUSDT", "opened_at": _iso(1)},
+            "trades": [],
+        })
+
+    def test_incomplete_escalates_after_threshold(self, panelmod):
+        self._incomplete_state(panelmod)
+        self._write_audit(panelmod, [{
+            "ts": _iso(6), "symbol": "XUSDT",
+            "reason": "INCOMPLETE_POSITION_DATA", "detail": "d"}])
+        panel = panelmod._position_integrity_panel()
+        assert len(panel["warnings"]) == 1
+        w = panel["warnings"][0]
+        assert w.startswith("KRİTİK:")
+        assert "saattir çözümsüz" in w and "XUSDT" in w
+
+    def test_incomplete_fresh_not_escalated(self, panelmod):
+        self._incomplete_state(panelmod)
+        self._write_audit(panelmod, [{
+            "ts": _iso(1), "symbol": "XUSDT",
+            "reason": "INCOMPLETE_POSITION_DATA", "detail": "d"}])
+        w = panelmod._position_integrity_panel()["warnings"][0]
+        assert not w.startswith("KRİTİK:")
+        assert "Eksik pozisyon verisi" in w
+
+    def test_incomplete_threshold_configurable(self, panelmod,
+                                               monkeypatch):
+        # position_stale_hours yükseltme eşiğini de belirler.
+        monkeypatch.setattr(panelmod, "load_config",
+                            lambda: ({"position_stale_hours": 10}, None))
+        self._incomplete_state(panelmod)
+        self._write_audit(panelmod, [{
+            "ts": _iso(6), "symbol": "XUSDT",
+            "reason": "INCOMPLETE_POSITION_DATA", "detail": "d"}])
+        w = panelmod._position_integrity_panel()["warnings"][0]
+        assert not w.startswith("KRİTİK:")  # 6h < 10h eşiği
+
+    def test_broken_streak_not_escalated(self, panelmod):
+        # Sembolün EN YENİ audit kaydı farklı durumdaysa seri
+        # kırılmıştır — eski INCOMPLETE kaydına dayanıp yükseltilmez.
+        self._incomplete_state(panelmod)
+        self._write_audit(panelmod, [
+            {"ts": _iso(9), "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d"},
+            {"ts": _iso(8), "symbol": "XUSDT",
+             "reason": "ORPHAN_POSITION", "detail": "d"},
+        ])
+        w = panelmod._position_integrity_panel()["warnings"][0]
+        assert not w.startswith("KRİTİK:")
+
+    def test_incomplete_since_reads_streak_start(self, panelmod):
+        ts = _iso(7)
+        self._write_audit(panelmod, [
+            {"ts": _iso(9), "symbol": "YUSDT",
+             "reason": "STALE_POSITION", "detail": "d"},
+            {"ts": ts, "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d"},
+        ])
+        since = panelmod._incomplete_since("XUSDT")
+        assert since is not None and since.isoformat() == ts
+        assert panelmod._incomplete_since("YUSDT") is None
+        assert panelmod._incomplete_since("ZUSDT") is None
+
     def test_healthy_position_no_warning(self, panelmod):
         self._write_state(panelmod, {
             "position": {"symbol": "ONDOUSDT", "entry": 0.95,

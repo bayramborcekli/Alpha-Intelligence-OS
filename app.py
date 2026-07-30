@@ -3405,6 +3405,12 @@ POSITION_AUDIT_PATH = ROOT / "alpha20_v1" / \
 # anahtarıyla ayarlanabilir.
 LEGACY_POSITION_STALE_HOURS = 24.0
 
+# Task 150: INCOMPLETE kaydı bu eşikten uzun süre çözümsüz kalırsa
+# panel uyarısı KRİTİK seviyesine yükseltilir. Eşik smart_config
+# 'position_stale_hours' anahtarıyla ayarlanabilir; ayarlanmamışsa
+# 4 saat (INCOMPLETE zaten anormaldir — 24h beklenmez).
+INCOMPLETE_ALERT_HOURS = 4.0
+
 
 def _parse_ts(value) -> datetime | None:
     """ISO string VEYA epoch sayısını timezone'lu datetime'a çevir;
@@ -3497,6 +3503,23 @@ def _recent_position_audit(
     return out
 
 
+def _incomplete_since(symbol: str) -> datetime | None:
+    """Sembolün GÜNCEL INCOMPLETE serisinin başlangıç zamanı.
+
+    Audit dosyası ardışık aynı sembol+durum kayıtlarını dedupe
+    ettiğinden, sembolün EN YENİ kaydı INCOMPLETE ise o kaydın ts'i
+    serinin ilk tespit anıdır. En yeni kaydı farklı bir duruma
+    geçmişse seri kırılmıştır → None (yanlış pozitif yükseltme yok).
+    """
+    for rec in _recent_position_audit(limit=200):
+        if rec.get("symbol") != symbol:
+            continue
+        if rec.get("reason") == "INCOMPLETE_POSITION_DATA":
+            return _parse_ts(rec.get("ts"))
+        return None
+    return None
+
+
 def _position_integrity_panel() -> dict:
     """Task 144: yetim/bayat pozisyon tespitleri panel banner'ı için.
 
@@ -3527,10 +3550,30 @@ def _position_integrity_panel() -> dict:
                             rec.get("reason") == status:
                         detail = str(rec.get("detail") or "")
                         break
-                warnings.append(
-                    f"{label}: {pos.get('symbol')}"
-                    + (f" — {detail}" if detail else "")
-                    + " (ayrıntı: pozisyon bütünlüğü denetim kaydı)")
+                msg = (f"{label}: {pos.get('symbol')}"
+                       + (f" — {detail}" if detail else "")
+                       + " (ayrıntı: pozisyon bütünlüğü denetim kaydı)")
+                # Task 150: INCOMPLETE eşikten uzun süredir çözümsüz
+                # kalıyorsa uyarı KRİTİK seviyeye yükseltilir. İlk
+                # tespit anı audit serisinden okunur; her yoklamada
+                # sunucu tarafında yeniden hesaplandığı için sayfa
+                # yenilemede / yeni oturumda kaybolmaz.
+                if status == "INCOMPLETE_POSITION_DATA":
+                    since = _incomplete_since(str(pos.get("symbol")))
+                    alert_h = stale_h if stale_h and stale_h > 0 \
+                        else INCOMPLETE_ALERT_HOURS
+                    if since is not None:
+                        age_h = (datetime.now(timezone.utc) -
+                                 since).total_seconds() / 3600
+                        if age_h > alert_h:
+                            msg = (f"KRİTİK: {label}: "
+                                   f"{pos.get('symbol')} — "
+                                   f"{age_h:.1f} saattir çözümsüz "
+                                   f"(eşik {alert_h:g}h). Kaydı "
+                                   "inceleyin/temizleyin"
+                                   + (f" — {detail}" if detail
+                                      else ""))
+                warnings.append(msg)
     except Exception:
         # Denetim uyarısı üretilemezse panel düşmez; audit geçmişi
         # yine de döner.
