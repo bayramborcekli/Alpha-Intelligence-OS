@@ -549,6 +549,7 @@ def try_open_position(symbol: str, model: str, sig: dict,
             "sl": entry * (1 - m["sl_pct"] / 100),
             "trailing_pct": m["trailing_pct"],
             "peak": entry,
+            "trough": entry,  # MAE kanıtı için en düşük görülen fiyat
             "max_hold_minutes": m["max_hold_minutes"],
             "opened_at": _now_iso(), "opened_ts": now,
             "confidence": sig["confidence"],
@@ -575,7 +576,19 @@ def _build_trade(p: dict, price: float, result: str,
     gross = (price - p["entry"]) * p["quantity"]
     fee = (p["entry"] + price) * p["quantity"] * FEE_RATE
     slip = price * p["quantity"] * 0.0002
+    # MFE/MAE kanıtı (Strategy Lab zarar/kâr-yakalama analizi için).
+    # peak/trough izlenmemişse (eski kayıt) alanlar None — analiz
+    # katmanı bunu DATA_QUALITY (kanıt eksik) olarak işler, UYDURMAZ.
+    peak = p.get("peak")
+    trough = p.get("trough")
+    entry = p["entry"]
+    mfe_pct = round((float(peak) / entry - 1) * 100, 4) \
+        if isinstance(peak, (int, float)) and entry > 0 else None
+    mae_pct = round((1 - float(trough) / entry) * 100, 4) \
+        if isinstance(trough, (int, float)) and entry > 0 else None
     return {
+        "peak_price": peak, "trough_price": trough,
+        "mfe_pct": mfe_pct, "mae_pct": mae_pct,
         "trade_id": uuid.uuid4().hex[:16],
         "config_version": p.get("config_version", "BASE"),
         "notional_usdt": p.get("notional_usdt"),
@@ -677,6 +690,7 @@ def monitor_positions(price_of: Callable[[str], float | None],
             if price is None:
                 continue
             p["peak"] = max(p.get("peak", p["entry"]), price)
+            p["trough"] = min(p.get("trough", p["entry"]), price)
             trail_stop = p["peak"] * (1 - p["trailing_pct"] / 100)
             held_min = (now - p["opened_ts"]) / 60
             result = None

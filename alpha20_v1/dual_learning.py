@@ -208,6 +208,9 @@ def normalize_trade(t: dict) -> dict:
         "volatility": t.get("volatility_pct"),
         "volume_ratio": t.get("vol_ratio"),
         "hold_duration": t.get("hold_minutes"),
+        # MFE/MAE kanıtı (Strategy Lab): eski kayıtlarda None kalır
+        "mfe_pct": t.get("mfe_pct"),
+        "mae_pct": t.get("mae_pct"),
         "configuration_version": t.get("config_version", "BASE"),
         "learning_version": 1,
     }

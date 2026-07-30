@@ -198,6 +198,15 @@ class TestRouteSurface:
         # yolu AÇMAZ; hazırlık PROMOTED değilse 409 — bilinçli
         # genişletme, tam rota, wildcard yok.
         "/api/dual-model/learning/promote",
+        # Strateji Laboratuvarı üst seviye operatör kontrolleri
+        # (durdur/devam, üretim duraklat, auto-promote dondur,
+        # champion'a dön, challenger iptal, emergency stop).
+        # CSRF+auth korumalı; yalnız git dışı strategy_lab/dual_learning
+        # state'ine yazar; risk tavanı/API izni/emir yolu AÇMAZ;
+        # LIVE ORDERS DISABLED — bilinçli genişletme, tam rota.
+        # ("strategy" adı bilinçli dışarıda: Mission 1800 sözleşmesi
+        # strategy rotalarını read-only kilitler.)
+        "/api/lab/control",
     }
 
     def test_no_new_write_routes(self):

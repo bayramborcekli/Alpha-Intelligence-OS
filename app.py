@@ -4627,6 +4627,32 @@ def api_dual_model_learning_promote():
     return jsonify({"ok": ok, "result": result}), (200 if ok else 409)
 
 
+@app.get("/api/strategy-lab/status")
+def api_strategy_lab_status():
+    """Strateji Laboratuvarı — GERÇEK lab durumu (sahte veri yok).
+    Veri yoksa NOT_EVALUATED kodları döner. LIVE ORDERS DISABLED."""
+    import strategy_lab as _sl
+    return jsonify({"ok": True, "data": _sl.status()})
+
+
+@app.post("/api/lab/control")  # NOT: "strategy" içeremez — Mission
+# 1800 sözleşmesi strategy rotalarını read-only kilitler (bilinçli ad)
+def api_strategy_lab_control():
+    """Operatörün üst seviye lab kontrolleri (durdur/devam, üretim
+    duraklat, auto-promote dondur, champion'a dön, challenger iptal,
+    emergency stop). Yalnız git dışı lab/öğrenme state'ine yazar;
+    risk tavanlarına, API izinlerine veya emir yollarına DOKUNMAZ.
+    LIVE ORDERS DISABLED — buradan canlı emir açılamaz."""
+    import strategy_lab as _sl
+    body = request.get_json(silent=True) or {}
+    action = str(body.get("action") or "").strip().upper()
+    if action not in _sl.CONTROL_ACTIONS:
+        return jsonify({"ok": False, "message": "UNKNOWN_ACTION"}), 400
+    result = _sl.control(action, actor=_operation_actor(),
+                         model=body.get("model"))
+    return jsonify(result), (200 if result.get("ok") else 400)
+
+
 @app.post("/api/dual-model/close")
 def api_dual_model_close():
     """Operatörün güvenli MANUAL_CLOSE'u (yalnız PAPER pozisyonu).

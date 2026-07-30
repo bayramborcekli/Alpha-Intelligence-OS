@@ -927,7 +927,9 @@
       get("/api/dual-model/state"),
       get("/api/paper/state"),
       // AI Öğrenme Merkezi — gerçek öğrenme state'i (sahte veri yok)
-      get("/api/dual-model/learning")
+      get("/api/dual-model/learning"),
+      // Strateji Laboratuvarı — gerçek lab state'i (sahte veri yok)
+      get("/api/strategy-lab/status")
     ]).then(function (r) {
       function data(i, key) {
         var b = r[i].body;
@@ -971,6 +973,8 @@
                fmtSigned(dual.portfolio_net_pnl, "USDT") : null,
                dual ? pnlClass(dual.portfolio_net_pnl) : "");
       renderLearning(r[8].body && r[8].body.ok ? r[8].body.data : null);
+      renderStrategyLab(r[9].body && r[9].body.ok ?
+                        r[9].body.data : null);
       inflight = false;
     }, function () { inflight = false; });
   }
@@ -1045,6 +1049,94 @@
           esc(m.last_rollback.reason || "")) : "") +
         "<div style=\"font-size:.7rem;margin-top:4px\">" +
         "Challenger: " + chHtml + "</div>";
+    });
+  }
+
+  // ── Strateji Laboratuvarı: /api/strategy-lab/status ──────────────
+  // Uydurma değer basılmaz; backend kodları aynen gösterilir
+  // (NOT_EVALUATED / STRATEGY_LAB_CIRCUIT_BREAKER). LIVE ORDERS
+  // DISABLED — lab yalnız Paper/etiket katmanıdır.
+  function renderStrategyLab(l) {
+    var mode = document.getElementById("th-lab-mode");
+    if (mode) {
+      if (!l) {
+        mode.textContent = "UNKNOWN";
+        mode.className = "th-unknown";
+      } else {
+        var c = l.controls || {};
+        mode.textContent =
+          (c.emergency_stop ? "EMERGENCY STOP" :
+           c.lab_enabled === false ? "DURDURULDU" : "AKTİF") +
+          " · LIVE ORDERS " + esc(l.live_orders || "DISABLED");
+        mode.className = c.emergency_stop || c.lab_enabled === false ?
+          "th-unknown" : "";
+      }
+    }
+    var sum = document.getElementById("th-lab-summary");
+    if (sum) {
+      if (!l || !l.totals) {
+        sum.textContent = "UNKNOWN — lab durumu alınamadı";
+        sum.className = "th-unknown";
+      } else {
+        var t = l.totals;
+        sum.className = "";
+        sum.textContent =
+          "Üretilen: " + t.generated + " · Test edilen: " + t.tested +
+          " · Reddedilen: " + t.rejected + " · Terfi: " + t.promoted +
+          " · Aktif challenger: " + t.active_challengers +
+          " · Canlıya uygun: " + t.live_eligible +
+          " · Rollback: " + t.rollbacks +
+          (l.last_cycle ? " · Son çevrim: " +
+            String(l.last_cycle).slice(0, 16).replace("T", " ") :
+            " · Son çevrim: yok");
+      }
+    }
+    var cards = { "th-lab-core": "ALPHA_CORE_SCALP",
+                  "th-lab-opp": "ALPHA_OPPORTUNITY_BURST" };
+    Object.keys(cards).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var title = id === "th-lab-core" ? "CORE" : "OPPORTUNITY";
+      if (!l || !l.models || !l.models[cards[id]]) {
+        el.innerHTML = "<b style=\"font-size:.72rem\">" + title +
+          "</b><div class=\"th-unknown\" style=\"font-size:.72rem\">" +
+          "UNKNOWN — lab durumu alınamadı</div>";
+        return;
+      }
+      var m = l.models[cards[id]];
+      function row(k, v) {
+        return "<div class=\"row\" style=\"display:flex;" +
+          "justify-content:space-between;font-size:.7rem\"><span>" +
+          k + "</span><span>" + v + "</span></div>";
+      }
+      var cand = (m.active_candidates || []).map(function (c) {
+        return esc(c.id) + " · " + esc(c.stage) +
+          " (" + esc(c.method || "?") + ")";
+      });
+      var ld = m.loss_diagnosis || {};
+      var pc = m.profit_capture || {};
+      var le_ = m.live_eligibility || {};
+      el.innerHTML = "<b style=\"font-size:.72rem\">" + title + "</b>" +
+        row("Jenerasyon", esc(m.generation != null ?
+          m.generation : "NOT_EVALUATED")) +
+        row("Devre Kesici", esc(m.circuit_breaker ||
+          "NOT_EVALUATED")) +
+        row("Graveyard", esc(m.graveyard_size != null ?
+          m.graveyard_size : 0)) +
+        row("En Sık Zarar Nedeni", esc(ld.most_frequent ||
+          "NOT_EVALUATED")) +
+        row("En Pahalı Zarar Nedeni", esc(ld.most_expensive ||
+          "NOT_EVALUATED")) +
+        row("Kâr Yakalama (ort.)", pc.avg_captured_ratio != null ?
+          esc(pc.avg_captured_ratio) : "NOT_EVALUATED") +
+        row("Erken / Geç Çıkış", esc((pc.early_exits || 0) + " / " +
+          (pc.late_exits || 0))) +
+        row("Canlıya Uygunluk", esc(le_.status || "NOT_EVALUATED")) +
+        row("Champion / Challenger", esc(m.dl_champion || "BASE") +
+          " / " + esc(m.dl_challenger || "—")) +
+        "<div style=\"font-size:.7rem;margin-top:4px\">" +
+        "Aktif adaylar: " + (cand.length ? cand.join("<br>") :
+          "<span class=\"th-unknown\">yok</span>") + "</div>";
     });
   }
 

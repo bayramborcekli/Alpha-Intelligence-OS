@@ -1,0 +1,601 @@
+YENİ ANA GÖREV — CONTINUOUS STRATEGY LAB
+OTONOM STRATEJİ ÜRETİMİ, ÖN TEST, PAPER TERFİSİ VE KONTROLLÜ CANLIYA HAZIRLIK
+
+AMAÇ
+
+Alpha Intelligence OS yalnız mevcut CORE ve OPPORTUNITY parametrelerini ayarlayan sistem olarak kalmayacak.
+
+Arka planda sürekli:
+
+- yeni strateji adayları üreten
+- geçmiş ve ileri-zaman testleri yapan
+- Paper/Shadow ortamında gerçek piyasa akışıyla doğrulayan
+- başarısız adayları eleyen
+- başarılı challenger’ları champion’a terfi ettiren
+- terfi sonrası performansı izleyen
+- kötüleşmede otomatik rollback yapan
+
+bir Continuous Strategy Lab kurulacak.
+
+ÖNEMLİ:
+
+Bu görev gerçek emirleri doğrudan açmayacak.
+LIVE ORDERS varsayılan olarak DISABLED kalacak.
+
+Canlıya terfi altyapısı hazırlanabilir; ancak gerçek emir yolu yalnız ayrı, açık ve son kullanıcı kontrollü aktivasyonla açılabilir.
+
+--------------------------------------------------
+1. STRATEJİ ÜRETİM MOTORU
+--------------------------------------------------
+
+Sistem mevcut strateji ailesinden kontrollü adaylar üretsin.
+
+Aday üretim alanları:
+
+- min_confidence
+- minimum_expected_net_edge
+- take_profit_pct
+- stop_loss_pct
+- trailing_activation_pct
+- trailing_distance_pct
+- max_hold_minutes
+- cooldown_minutes
+- spread_limit
+- slippage_limit
+- volatility filters
+- volume filters
+- momentum weight
+- breakout weight
+- reversal weight
+- regime weight
+- liquidity weight
+- signal confirmation count
+- profit lock threshold
+- giveback threshold
+- time-based exit
+- signal weakening exit
+
+Kaynak kodu rastgele yeniden yazmasın.
+
+Yalnız izin verilen strateji şablonları ve güvenli parametre alanları içinde aday üretsin.
+
+Her aday şu kimliklerle kaydedilsin:
+
+- strategy_candidate_id
+- parent_strategy_id
+- generation
+- model_family
+- parameters
+- created_reason
+- hypothesis
+- expected_improvement
+- risk_notes
+- data_version
+- code_version
+
+--------------------------------------------------
+2. ADAY ÜRETİM YÖNTEMLERİ
+--------------------------------------------------
+
+Birden fazla kontrollü yöntem desteklensin:
+
+- küçük parametre mutasyonu
+- kötü performans teşhisine dayalı değişiklik
+- başarılı geçmiş stratejilerin çapraz kombinasyonu
+- rejim bazlı varyant
+- fee-drag azaltıcı varyant
+- profit-giveback azaltıcı varyant
+- loss-reduction varyantı
+- max-profit-capture varyantı
+
+Aynı anda sınırsız strateji üretme.
+
+Her jenerasyonda model başına sınırlı aday sayısı olsun.
+
+Duplicate veya anlamsız adaylar elensin.
+
+--------------------------------------------------
+3. ZARAR NEDENİ ANALİZİ
+--------------------------------------------------
+
+Her kapanan işlem için sistem açıklanabilir zarar nedeni üretmeli.
+
+Örnek reason code’lar:
+
+- LOW_QUALITY_ENTRY
+- FALSE_BREAKOUT
+- MOMENTUM_EXHAUSTED
+- SIGNAL_REVERSAL
+- STOP_TOO_TIGHT
+- STOP_TOO_WIDE
+- TP_TOO_FAR
+- TP_TOO_SMALL
+- TRAILING_TOO_EARLY
+- TRAILING_TOO_LATE
+- PROFIT_GIVEBACK
+- HOLD_TOO_LONG
+- HOLD_TOO_SHORT
+- FEE_DRAG
+- SLIPPAGE_DRAG
+- SPREAD_SPIKE
+- REGIME_MISMATCH
+- LIQUIDITY_FAILURE
+- VOLATILITY_SHOCK
+- SYMBOL_SPECIFIC_FAILURE
+- DATA_QUALITY_FAILURE
+
+Her neden şu kanıtlarla kaydedilsin:
+
+- entry snapshot
+- exit snapshot
+- MFE
+- MAE
+- maximum net profit reached
+- final net pnl
+- profit giveback
+- hold duration
+- signal strength change
+- market regime
+- fee/slippage impact
+- counterfactual exits
+
+--------------------------------------------------
+4. “YETERLİ KÂR ALDIM MI?” ANALİZİ
+--------------------------------------------------
+
+Her işlemde hesapla:
+
+- maximum gross profit
+- maximum net profit after fee/slippage
+- realized net profit
+- captured_profit_ratio
+- missed_profit
+- profit_giveback
+- time_to_peak
+- time_from_peak_to_exit
+
+Örnek:
+
+captured_profit_ratio =
+realized_net_profit / maximum_net_profit
+
+Sistem şu teşhisleri üretebilsin:
+
+- PROFIT_CAPTURE_GOOD
+- EXIT_TOO_EARLY
+- EXIT_TOO_LATE
+- EXCESSIVE_GIVEBACK
+- TP_NOT_REACHED_BUT_OPTIMAL_EXIT_PASSED
+- STRONG_MOMENTUM_CORRECTLY_HELD
+
+Tek işlemle strateji değişikliği yapılmasın; model ve rejim bazında yeterli örneklem beklensin.
+
+--------------------------------------------------
+5. MAKSİMUM KÂR HEDEFİ
+--------------------------------------------------
+
+Sistem sabit “en yüksek kârı yakalama” hedefi kullanmamalı.
+
+Çünkü gelecekteki zirve işlem anında bilinemez.
+
+Doğru hedef:
+
+- beklenen net getiriyi artırmak
+- kâr geri vermeyi azaltmak
+- büyük kazançların makul bölümünü yakalamak
+- işlem maliyetini azaltmak
+- drawdown’ı sınırlamak
+
+Ana optimizasyon hedefi çoklu skor olmalı:
+
+- net expectancy
+- profit factor
+- net pnl
+- maximum drawdown
+- captured profit ratio
+- fee drag
+- slippage drag
+- stability across regimes
+- symbol diversification
+- trade frequency
+
+Tek başına net PnL veya win rate optimize edilmesin.
+
+--------------------------------------------------
+6. AŞAMALI ÖN TEST
+--------------------------------------------------
+
+Her strateji adayı aşağıdaki aşamalardan geçsin:
+
+STAGE 0 — STATIC VALIDATION
+- parametre sınırları
+- risk sınırları
+- güvenlik izin listesi
+- duplicate kontrolü
+- veri kalitesi
+
+STAGE 1 — HISTORICAL BACKTEST
+- geçmiş veri
+- fee
+- slippage
+- spread
+- gecikme varsayımı
+- kısmi dolum modeli
+- farklı piyasa rejimleri
+
+STAGE 2 — WALK-FORWARD
+- eğitim ve doğrulama zaman olarak ayrılmalı
+- gelecek bilgi sızıntısı olmamalı
+- rolling window kullanılmalı
+
+STAGE 3 — OUT-OF-SAMPLE
+- daha önce görülmemiş dönem
+- parametre değişikliği yapılmadan test
+
+STAGE 4 — PAPER SHADOW
+- gerçek zamanlı piyasa verisi
+- sanal emir
+- gerçek spread/fee/slippage tahmini
+- mevcut champion ile aynı anda karşılaştırma
+
+STAGE 5 — PAPER CHALLENGER
+- ayrı Paper pozisyonları
+- kendi config_version
+- kendi ledger’ı
+- kendi risk sınırı
+
+STAGE 6 — LIVE CANARY ELIGIBLE
+- yalnız tüm kapılar geçilirse
+- gerçek emir otomatik açılmaz
+- “canlıya uygun” durumu üretir
+
+--------------------------------------------------
+7. VERİ SIZINTISI VE OVERFITTING KORUMASI
+--------------------------------------------------
+
+Mutlaka engelle:
+
+- gelecekteki fiyatı karar anında kullanma
+- aynı veride üretim ve doğrulama
+- en iyi geçmiş sonucu seçip genelleme
+- yalnız kazanan coinleri değerlendirme
+- başarısız adayları geçmişten silme
+- test sayısı arttıkça tesadüfi başarı
+- tek rejime aşırı uyum
+- tek sembole bağımlılık
+
+Kullanılacak kontroller:
+
+- strict time split
+- walk-forward
+- untouched holdout set
+- minimum sample size
+- multiple-regime coverage
+- symbol concentration limit
+- stability score
+- complexity penalty
+- multiple-testing penalty
+
+--------------------------------------------------
+8. CHAMPION / CHALLENGER / GRAVEYARD
+--------------------------------------------------
+
+Her model ailesinde:
+
+- Champion
+- Active Challengers
+- Rejected Candidates
+- Rolled-back Versions
+- Strategy Graveyard
+
+bulunsun.
+
+Başarısız adaylar silinmesin.
+
+Neden başarısız oldukları kaydedilsin ki sistem aynı kötü stratejiyi tekrar üretmesin.
+
+--------------------------------------------------
+9. PAPER TERFİ KURALLARI
+--------------------------------------------------
+
+Bir aday Paper Champion’a yalnız şu koşullarda terfi etsin:
+
+- minimum işlem sayısı
+- pozitif net expectancy
+- champion’dan anlamlı daha iyi expectancy
+- profit factor iyileşmesi
+- max drawdown kabul sınırında
+- fee drag artmamış
+- slippage artmamış
+- captured profit ratio daha iyi veya kabul edilebilir
+- sonuç tek sembole bağlı değil
+- sonuç tek rejime bağlı değil
+- walk-forward başarılı
+- holdout başarılı
+- Paper Shadow başarılı
+- veri kalitesi temiz
+- risk ihlali yok
+
+AUTO_PROMOTE_WITH_GUARDS Paper katmanında açık olabilir.
+
+--------------------------------------------------
+10. CANLIYA TERFİ KAPILARI
+--------------------------------------------------
+
+Paper başarısı doğrudan canlı emir anlamına gelmesin.
+
+Canlıya uygunluk için ayrıca:
+
+- minimum Paper işlem sayısı
+- minimum Paper çalışma günü
+- farklı piyasa rejimi kapsaması
+- beklenen net kârın maliyetlerden anlamlı büyük olması
+- drawdown sınırı
+- ardışık zarar sınırı
+- bağlantı ve fiyat veri sağlığı
+- order execution simulator başarısı
+- latency/slippage stress test
+- restart recovery testi
+- rollback testi
+- kill-switch testi
+
+zorunlu olsun.
+
+Son durum:
+
+LIVE_ELIGIBLE
+
+olarak işaretlenebilir.
+
+Ancak gerçek emir:
+
+LIVE_ENABLED
+
+olmaz.
+
+Gerçek emir açılması ayrı güvenlik sınırı ve kullanıcı kontrolü gerektirir.
+
+--------------------------------------------------
+11. KÜÇÜK SERMAYELİ CANARY
+--------------------------------------------------
+
+Canlı aşama ileride açılırsa doğrudan tam sermaye kullanılmasın.
+
+Aşamalar:
+
+- LIVE_CANARY_1: minimum izin verilen notional
+- LIVE_CANARY_2: sınırlı sermaye
+- LIVE_LIMITED
+- LIVE_PRODUCTION
+
+Her aşamada ayrı başarı kriteri ve minimum bekleme süresi olsun.
+
+Kötüleşmede otomatik olarak bir önceki aşamaya dönsün veya LIVE_PAUSED olsun.
+
+--------------------------------------------------
+12. OTOMATİK ROLLBACK
+--------------------------------------------------
+
+Aşağıdaki durumlarda otomatik geri dön:
+
+- negative expectancy
+- drawdown breach
+- fee drag spike
+- slippage spike
+- profit giveback deterioration
+- captured profit ratio collapse
+- consecutive loss breach
+- regime instability
+- symbol concentration
+- data quality failure
+- execution failure
+- transport failure
+- system error
+
+Rollback açık pozisyonları kontrolsüz kapatmasın.
+
+Yeni girişleri durdursun veya önceki champion’a yönlendirsin.
+
+--------------------------------------------------
+13. STRATEJİ ÜRETİM FRENI
+--------------------------------------------------
+
+Aşağıdaki durumlarda yeni strateji üretimi veya terfi dursun:
+
+- art arda başarısız challenger
+- veri kalitesi düşük
+- piyasa verisi kesintili
+- SSL/transport hatası
+- çok az işlem
+- rejim belirsiz
+- aşırı volatilite
+- runtime tutarsızlığı
+- risk motoru kırmızı
+- Git/runtime corruption
+
+Durum:
+
+STRATEGY_LAB_CIRCUIT_BREAKER
+
+--------------------------------------------------
+14. PANEL — STRATEJİ LABORATUVARI
+--------------------------------------------------
+
+Kullanıcıya ham yüzlerce parametre yerine şu özetler gösterilsin:
+
+ÜST ÖZET:
+- Üretilen toplam strateji
+- Test edilen strateji
+- Reddedilen strateji
+- Paper’a terfi eden
+- Başarılı terfi
+- Rollback
+- Aktif challenger
+- Canlıya uygun aday
+- Terfilerin toplam net katkısı
+- Ortalama expectancy iyileşmesi
+
+AKTİF ADAYLAR:
+- model
+- strategy version
+- current stage
+- sample size
+- expectancy
+- profit factor
+- drawdown
+- captured profit ratio
+- fee drag
+- confidence
+- next gate
+
+TERFİ GEÇMİŞİ:
+- eski champion
+- yeni champion
+- gerekçe
+- test sonuçları
+- Paper sonucu
+- terfi sonrası sonuç
+- rollback olup olmadığı
+- net katkı
+
+ZARAR ANALİZİ:
+- en sık zarar nedeni
+- en pahalı zarar nedeni
+- model bazlı zarar
+- sembol bazlı zarar
+- rejim bazlı zarar
+- fee/slippage kaynaklı kayıp
+
+KÂR YAKALAMA:
+- maximum net profit
+- realized net profit
+- captured profit ratio
+- missed upside
+- profit giveback
+- erken çıkış sayısı
+- geç çıkış sayısı
+
+--------------------------------------------------
+15. KULLANICI KONTROLLERİ
+--------------------------------------------------
+
+Kullanıcıya yalnız üst seviye kontroller ver:
+
+- Strategy Lab durdur
+- Yeni aday üretimini durdur
+- Paper auto-promote dondur
+- Canlıya uygunluk değerlendirmesini durdur
+- Önceki champion’a dön
+- Tüm challenger’ları iptal et
+- Modeli Paper Only yap
+- Emergency Stop
+
+Kullanıcı her aday için teknik parametre onayı vermek zorunda kalmasın.
+
+--------------------------------------------------
+16. API VE KAYIT
+--------------------------------------------------
+
+Mevcut dual_learning altyapısını genişlet.
+
+Paralel ve kopuk ikinci öğrenme sistemi kurma.
+
+Runtime state Git dışında ve atomic olmalı.
+
+Kayıtlar:
+
+- strategy_candidates
+- evaluation_runs
+- stage_results
+- promotion_history
+- rollback_history
+- live_eligibility_history
+- loss_diagnosis
+- profit_capture_metrics
+- candidate_lineage
+- rejected_candidate_memory
+
+Her karar açıklanabilir ve sürümlü olmalı.
+
+--------------------------------------------------
+17. TESTLER
+--------------------------------------------------
+
+En az:
+
+1. Aday güvenli parametre sınırlarında üretilir.
+2. Güvenlik parametreleri değiştirilemez.
+3. Gelecek bilgi sızıntısı yoktur.
+4. Training ve holdout ayrıdır.
+5. Walk-forward çalışır.
+6. Fee/slippage hesaba katılır.
+7. Tek sembole bağlı aday reddedilir.
+8. Tek rejime bağlı aday reddedilir.
+9. Düşük örneklemde terfi olmaz.
+10. Kötü backtest adayı Paper’a geçmez.
+11. Backtest iyi, Paper kötü aday reddedilir.
+12. İyi Paper challenger terfi eder.
+13. Terfi sonrası gözlem başlar.
+14. Kötüleşmede rollback olur.
+15. Başarısız strateji graveyard’a gider.
+16. Aynı başarısız aday tekrar üretilmez.
+17. MFE/MAE doğru hesaplanır.
+18. Captured profit ratio doğru hesaplanır.
+19. Profit giveback doğru hesaplanır.
+20. Zarar nedeni doğru sınıflandırılır.
+21. SSL/veri kesintisinde lab durur.
+22. Circuit breaker çalışır.
+23. Restart sonrası state korunur.
+24. Panel gerçek değerleri gösterir.
+25. LIVE ORDERS DISABLED korunur.
+
+--------------------------------------------------
+18. KABUL KRİTERLERİ
+--------------------------------------------------
+
+- Sistem arka planda strateji adayları üretiyor.
+- Adaylar geçmiş, walk-forward, holdout ve Paper aşamalarından geçiyor.
+- Başarısızlar otomatik eleniyor.
+- Başarılılar Paper champion’a otomatik terfi edebiliyor.
+- Sistem zarar nedenini açıklıyor.
+- Maksimum net kâr ve gerçekleşen net kârı karşılaştırıyor.
+- Kârın ne kadarını yakaladığını ölçüyor.
+- Erken/geç çıkış davranışından öğreniyor.
+- Terfi sonuçları panelde ölçülüyor.
+- Kötüleşmede rollback çalışıyor.
+- Başarısız stratejiler hafızada tutuluyor.
+- Canlıya uygunluk ayrı aşama olarak hesaplanıyor.
+- Gerçek canlı emir otomatik açılmıyor.
+- LIVE ORDERS DISABLED korunuyor.
+
+--------------------------------------------------
+19. TESLİM RAPORU
+--------------------------------------------------
+
+Finalde paylaş:
+
+1. Mevcut öğrenme mimarisi
+2. Strategy Lab veri akışı
+3. Aday üretim yöntemleri
+4. Ön test aşamaları
+5. Walk-forward ve holdout ayrımı
+6. Zarar nedeni motoru
+7. MFE/MAE ve profit capture
+8. Paper terfi kuralları
+9. Live eligibility kuralları
+10. Canary mimarisi
+11. Rollback ve circuit breaker
+12. Panel alanları
+13. Hedefli test sonuçları
+14. Tam paket sonucu
+15. Windows doğrulama
+16. git status
+17. commit hash
+
+KAPSAM SINIRI
+
+Bu görevde gerçek canlı emir etkinleştirilmeyecek.
+
+Önce strateji üretim, ön test, Paper auto-promotion ve live eligibility altyapısı tamamlanıp saha kanıtı üretilecek.
+
+Gerçek LIVE activation daha sonra ayrı güvenlik kabulü ve açık kullanıcı kararıyla yapılacak.

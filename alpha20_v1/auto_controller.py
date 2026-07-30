@@ -681,6 +681,19 @@ def start_controller_loop() -> bool:
                         log.warning(
                             "Dual öğrenme köprü hatası: %s", exc)
 
+                    # Continuous Strategy Lab: dual_learning uzantısı,
+                    # kendi interval/devre-kesici denetimi içinde —
+                    # ikinci paralel scheduler DEĞİLDİR. LIVE ORDERS
+                    # DISABLED — lab gerçek emir açamaz.
+                    try:
+                        sl = le.run_strategy_lab_cycle(adaptive_cfg)
+                        if sl:
+                            _update_status(
+                                last_strategy_lab=sl.get("ran_at"))
+                    except Exception as exc:
+                        log.warning(
+                            "Strategy Lab köprü hatası: %s", exc)
+
                     scan_s = RUNTIME_SCAN_SECONDS.get(
                         "value", int(cfg.get("scan_seconds", 60)))
                     _update_status(

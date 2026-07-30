@@ -371,6 +371,24 @@ def run_dual_learning_update(
         return None
 
 
+def run_strategy_lab_cycle(
+    adaptive_cfg: dict[str, Any],
+    force: bool = False,
+) -> dict[str, Any] | None:
+    """Continuous Strategy Lab köprüsü. dual_learning altyapısının
+    uzantısıdır; ayrı scheduler DEĞİLDİR — auto_controller döngüsünden
+    dual_learning köprüsünün ardından çağrılır; uygunluk (interval,
+    devre kesici, kontroller) strategy_lab içinde denetlenir."""
+    try:
+        import strategy_lab as _sl
+        return _sl.run_cycle(adaptive_cfg, force=force)
+    except Exception as exc:
+        import logging
+        logging.getLogger("learning_engine").warning(
+            "strategy_lab köprü hatası: %s", exc)
+        return None
+
+
 def run_learning_update(
     adaptive_cfg: dict[str, Any],
     force: bool = False,

@@ -156,6 +156,10 @@ alpha20_v1/dual_learning_state.json
 alpha20_v1/dual_learning_state.lock
 alpha20_v1/.dual_learning_state.json.*.tmp
 alpha20_v1/dual_learning_history.jsonl
+alpha20_v1/strategy_lab_state.json
+alpha20_v1/strategy_lab_state.lock
+alpha20_v1/.strategy_lab_state.json.*.tmp
+alpha20_v1/strategy_lab_history.jsonl
 
 # Yetim/eksik pozisyon tespiti audit kaydı (git dışı)
 alpha20_v1/position_integrity_audit.jsonl
