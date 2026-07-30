@@ -290,10 +290,11 @@ class TestIntegrityPanelWarnings:
             {"ts": ts, "symbol": "XUSDT",
              "reason": "INCOMPLETE_POSITION_DATA", "detail": "d"},
         ])
-        since = panelmod._incomplete_since("XUSDT")
+        since, exact = panelmod._incomplete_since("XUSDT")
         assert since is not None and since.isoformat() == ts
-        assert panelmod._incomplete_since("YUSDT") is None
-        assert panelmod._incomplete_since("ZUSDT") is None
+        assert exact
+        assert panelmod._incomplete_since("YUSDT")[0] is None
+        assert panelmod._incomplete_since("ZUSDT")[0] is None
 
     def test_incomplete_since_alternating_sources_oldest(
             self, panelmod):
@@ -311,8 +312,9 @@ class TestIntegrityPanelWarnings:
              "reason": "INCOMPLETE_POSITION_DATA", "detail": "d",
              "source": "legacy_state_position"},
         ])
-        since = panelmod._incomplete_since("XUSDT")
+        since, exact = panelmod._incomplete_since("XUSDT")
         assert since is not None and since.isoformat() == oldest
+        assert exact
 
     def test_incomplete_since_streak_broken_by_other_reason(
             self, panelmod):
@@ -331,8 +333,9 @@ class TestIntegrityPanelWarnings:
              "reason": "INCOMPLETE_POSITION_DATA", "detail": "d",
              "source": "legacy_state_position"},
         ])
-        since = panelmod._incomplete_since("XUSDT")
+        since, exact = panelmod._incomplete_since("XUSDT")
         assert since is not None and since.isoformat() == restart
+        assert exact
 
     def test_incomplete_since_other_symbols_do_not_break(
             self, panelmod):
@@ -346,8 +349,74 @@ class TestIntegrityPanelWarnings:
              "reason": "INCOMPLETE_POSITION_DATA", "detail": "d",
              "source": "dual_model_position"},
         ])
-        since = panelmod._incomplete_since("XUSDT")
+        since, exact = panelmod._incomplete_since("XUSDT")
         assert since is not None and since.isoformat() == oldest
+        assert exact
+
+    # ── Task 155: seri tail penceresini aşarsa süre kısalmasın ─────
+
+    def test_incomplete_since_long_streak_lower_bound(self, panelmod):
+        # Seri başlangıcı 16KB tail penceresinin DIŞINDA kalır:
+        # pencere içindeki en eski INCOMPLETE ts'i döner ama
+        # exact=False (alt-sınır) — süre yanlış "kesin" gösterilmez.
+        recs = [{"ts": _iso(200 - i * 0.01), "symbol": "XUSDT",
+                 "reason": "INCOMPLETE_POSITION_DATA",
+                 "detail": "x" * 80,
+                 "source": ("legacy_state_position" if i % 2 == 0
+                            else "dual_model_position")}
+                for i in range(600)]  # >> 16KB ve >200 kayıt
+        self._write_audit(panelmod, recs)
+        since, exact = panelmod._incomplete_since("XUSDT")
+        assert since is not None
+        assert not exact  # dürüst alt-sınır etiketi
+        # Dönen ts pencere içindeki en eski kayıttır — en yeni
+        # kayıttan kesinlikle daha eskidir (sayaç sıfırlanmadı).
+        newest = panelmod._parse_ts(recs[-1]["ts"])
+        assert since < newest
+
+    def test_incomplete_since_exact_when_streak_breaks_in_window(
+            self, panelmod):
+        # Dosya pencereden büyük ama seri pencere İÇİNDE kırılıyor:
+        # başlangıç kesin bilinir → exact=True.
+        old = [{"ts": _iso(300), "symbol": "PADUSDT",
+                "reason": "STALE_POSITION", "detail": "y" * 100}
+               for _ in range(300)]  # dolgu: dosyayı 16KB üstüne it
+        start = _iso(6)
+        recs = old + [
+            {"ts": _iso(7), "symbol": "XUSDT",
+             "reason": "ORPHAN_POSITION", "detail": "d"},
+            {"ts": start, "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d"},
+        ]
+        self._write_audit(panelmod, recs)
+        since, exact = panelmod._incomplete_since("XUSDT")
+        assert since is not None and since.isoformat() == start
+        assert exact
+
+    def test_long_streak_critical_uses_en_az_label(self, panelmod):
+        # Uçtan uca: pencereyi aşan uzun seride KRİTİK uyarı
+        # "en az X saattir" alt-sınır etiketiyle görünür.
+        self._incomplete_state(panelmod)
+        recs = [{"ts": _iso(50 - i * 0.01), "symbol": "XUSDT",
+                 "reason": "INCOMPLETE_POSITION_DATA",
+                 "detail": "x" * 80,
+                 "source": ("legacy_state_position" if i % 2 == 0
+                            else "dual_model_position")}
+                for i in range(600)]
+        self._write_audit(panelmod, recs)
+        w = panelmod._position_integrity_panel()["warnings"][0]
+        assert w.startswith("KRİTİK:")
+        assert "en az" in w and "saattir çözümsüz" in w
+
+    def test_exact_streak_has_no_en_az_label(self, panelmod):
+        # Küçük dosyada başlangıç kesin — "en az" etiketi YOK.
+        self._incomplete_state(panelmod)
+        self._write_audit(panelmod, [{
+            "ts": _iso(6), "symbol": "XUSDT",
+            "reason": "INCOMPLETE_POSITION_DATA", "detail": "d"}])
+        w = panelmod._position_integrity_panel()["warnings"][0]
+        assert w.startswith("KRİTİK:")
+        assert "en az" not in w
 
     def test_alternating_sources_escalate_critical(self, panelmod):
         # Uçtan uca: dönüşümlü yazımlara rağmen KRİTİK eşiği ilk

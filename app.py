@@ -3559,22 +3559,31 @@ _POSITION_AUDIT_LABELS_TR.setdefault(
 
 
 def _recent_position_audit(
-        limit: int = POSITION_AUDIT_RECENT_LIMIT) -> list[dict]:
+        limit: int = POSITION_AUDIT_RECENT_LIMIT,
+        with_truncation: bool = False) -> list[dict] | tuple[list[dict], bool]:
     """Son N audit kaydını tail-read ile döndür (en yeni önce).
 
     Tam dosya asla okunmaz (dosya büyüse de sabit maliyet);
-    bozuk satırlar sessizce atlanır."""
+    bozuk satırlar sessizce atlanır.
+
+    with_truncation=True ise (kayıtlar, truncated) döner: truncated,
+    pencere dışında daha eski kayıtların KALMIŞ olabileceğini belirtir
+    (dosya tail penceresinden büyük veya limit dolmadan satır bitmedi).
+    """
+    truncated = False
     try:
         with POSITION_AUDIT_PATH.open("rb") as fh:
             fh.seek(0, 2)
             size = fh.tell()
+            if size > 16384:
+                truncated = True
             fh.seek(max(0, size - 16384))
             lines = fh.read().decode(
                 "utf-8", "replace").strip().splitlines()
     except OSError:
-        return []
+        return ([], False) if with_truncation else []
     out: list[dict] = []
-    for ln in reversed(lines):
+    for i, ln in enumerate(reversed(lines)):
         try:
             rec = json.loads(ln)
         except ValueError:
@@ -3582,12 +3591,14 @@ def _recent_position_audit(
         if isinstance(rec, dict) and rec.get("symbol"):
             out.append(rec)
         if len(out) >= limit:
+            if i + 1 < len(lines):
+                truncated = True  # pencerede okunmamış eski satır var
             break
-    return out
+    return (out, truncated) if with_truncation else out
 
 
-def _incomplete_since(symbol: str) -> datetime | None:
-    """Sembolün GÜNCEL INCOMPLETE serisinin başlangıç zamanı.
+def _incomplete_since(symbol: str) -> tuple[datetime | None, bool]:
+    """Sembolün GÜNCEL INCOMPLETE serisinin başlangıcı → (ts, exact).
 
     Task 154: dedupe artık symbol+reason+source üçlüsüyle yapıldığı
     için aynı sembolün INCOMPLETE durumu farklı kaynaklardan (legacy
@@ -3597,18 +3608,31 @@ def _incomplete_since(symbol: str) -> datetime | None:
     en yeni kaydı INCOMPLETE ise, kaynaktan bağımsız olarak geriye
     doğru kesintisiz INCOMPLETE serisinin EN ESKİ kaydının ts'i
     döndürülür. Sembolün araya giren farklı-durum kaydı seriyi kırar;
-    en yeni kayıt INCOMPLETE değilse None (yanlış pozitif yok).
+    en yeni kayıt INCOMPLETE değilse (None, True) (yanlış pozitif yok).
+
+    Task 155: okuma tail penceresiyle sınırlıdır (son ~16KB / 200
+    kayıt). Seri pencerenin en eski kaydına kadar kesintisiz sürüyor
+    ve dosyada pencere dışında daha eski kayıt kalmışsa, gerçek
+    başlangıç daha da eski OLABİLİR — bu durumda exact=False döner
+    ve çağıran süreyi "en az X saattir" alt-sınırı olarak etiketler.
+    Süre asla olduğundan uzun gösterilmez, yalnız dürüstçe
+    "en az" denir.
     """
     since: datetime | None = None
-    for rec in _recent_position_audit(limit=200):
+    broken = False
+    recs, truncated = _recent_position_audit(
+        limit=200, with_truncation=True)
+    for rec in recs:
         if rec.get("symbol") != symbol:
             continue
         if rec.get("reason") != "INCOMPLETE_POSITION_DATA":
+            broken = True
             break  # seri kırıldı — o ana kadarki başlangıç geçerli
         ts = _parse_ts(rec.get("ts"))
         if ts is not None:
             since = ts  # en-yeni-önce gezildiğinden en eski kazanır
-    return since
+    exact = broken or not truncated or since is None
+    return since, exact
 
 
 def _position_integrity_panel() -> dict:
@@ -3654,16 +3678,22 @@ def _position_integrity_panel() -> dict:
                 # sunucu tarafında yeniden hesaplandığı için sayfa
                 # yenilemede / yeni oturumda kaybolmaz.
                 if status == "INCOMPLETE_POSITION_DATA":
-                    since = _incomplete_since(str(pos.get("symbol")))
+                    since, exact = _incomplete_since(
+                        str(pos.get("symbol")))
                     alert_h = stale_h if stale_h and stale_h > 0 \
                         else INCOMPLETE_ALERT_HOURS
                     if since is not None:
                         age_h = (datetime.now(timezone.utc) -
                                  since).total_seconds() / 3600
                         if age_h > alert_h:
+                            # Task 155: seri başlangıcı tail
+                            # penceresini aşıyor olabilir — süre
+                            # dürüst alt-sınır olarak etiketlenir.
+                            dur = (f"{age_h:.1f} saattir" if exact
+                                   else f"en az {age_h:.1f} saattir")
                             msg = (f"KRİTİK: {label}: "
                                    f"{pos.get('symbol')} — "
-                                   f"{age_h:.1f} saattir çözümsüz "
+                                   f"{dur} çözümsüz "
                                    f"(eşik {alert_h:g}h). Kaydı "
                                    "inceleyin/temizleyin"
                                    + (f" — {detail}" if detail
