@@ -56,6 +56,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(appmod, "DUAL_RUNTIME_PATH",
                         tmp_path / "dual_model_runtime.json")
     monkeypatch.setattr(appmod, "_get_main_config", lambda: {})
+    monkeypatch.setattr(appmod, "POSITION_ACK_PATH",
+                        tmp_path / "position_integrity_acks.json")
     monkeypatch.setattr(appmod.auth, "check_rate_limit",
                         lambda ip: (True, 0))
     appmod.app.config["TESTING"] = True
@@ -275,6 +277,82 @@ class TestCleanEndpoint:
         r = env["client"].post(self.URL, json={
             "symbol": "ONDOUSDT", "confirm": True})
         assert r.status_code == 429
+
+
+class TestStaleAckCleanup:
+    """Task 160: temizlik sonrası bayat ack birikmesin."""
+    URL = "/api/state/orphan-position/clean"
+
+    def _write_ack(self, env, pos: dict) -> None:
+        appmod = env["app"]
+        appmod.POSITION_ACK_PATH.write_text(json.dumps({
+            str(pos["symbol"]): appmod._position_ack_key(pos)}),
+            encoding="utf-8")
+
+    def test_clean_removes_symbol_ack(self, env):
+        st = _orphan_state()
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        self._write_ack(env, st["position"])
+        # Diğer sembolün ack'ı korunmalı.
+        acks = json.loads(env["app"].POSITION_ACK_PATH.read_text(
+            encoding="utf-8"))
+        acks["BTCUSDT"] = "BTCUSDT|'x'"
+        env["app"].POSITION_ACK_PATH.write_text(
+            json.dumps(acks), encoding="utf-8")
+        r = env["client"].post(self.URL, json={
+            "symbol": "ONDOUSDT", "confirm": True})
+        assert r.status_code == 200
+        acks2 = json.loads(env["app"].POSITION_ACK_PATH.read_text(
+            encoding="utf-8"))
+        assert "ONDOUSDT" not in acks2
+        assert "BTCUSDT" in acks2  # başka sembole dokunulmadı
+        recs = [json.loads(x) for x in env["app"].POSITION_AUDIT_PATH
+                .read_text(encoding="utf-8").strip().splitlines()]
+        assert recs[-1]["reason"] == "operator_ack_cleared"
+        assert recs[-1]["symbol"] == "ONDOUSDT"
+
+    def test_clean_without_ack_no_extra_audit(self, env):
+        env["state_path"].write_text(json.dumps(_orphan_state()),
+                                     encoding="utf-8")
+        r = env["client"].post(self.URL, json={
+            "symbol": "ONDOUSDT", "confirm": True})
+        assert r.status_code == 200
+        recs = [json.loads(x) for x in env["app"].POSITION_AUDIT_PATH
+                .read_text(encoding="utf-8").strip().splitlines()]
+        assert recs[-1]["reason"] == "POSITION_RECORD_CLEANED"
+
+    def test_new_incomplete_not_masked_after_clean(self, env):
+        # 1) Ack'lı eksik kayıt temizlenir.
+        st = _orphan_state()
+        st["position"] = {"symbol": "ONDOUSDT", "opened_at": _iso(5)}
+        st["trades"] = [{"symbol": "BTCUSDT", "closed_at": _iso(2)}]
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        self._write_ack(env, st["position"])
+        r = env["client"].post(self.URL, json={
+            "symbol": "ONDOUSDT", "confirm": True})
+        assert r.status_code == 200
+        # 2) AYNI sembolde yeni eksik pozisyon — ack maskeleyemez.
+        new_pos = {"symbol": "ONDOUSDT", "opened_at": _iso(1)}
+        assert env["app"]._position_ack_active(new_pos) is False
+        # Eski opened_at ile bile ack artık aktif değil (silindi).
+        assert env["app"]._position_ack_active(
+            st["position"]) is False
+
+    def test_ack_clear_failure_is_audited_not_fatal(self, env,
+                                                    monkeypatch):
+        st = _orphan_state()
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        self._write_ack(env, st["position"])
+
+        def _boom(symbol):
+            raise OSError("disk")
+        monkeypatch.setattr(env["app"], "_clear_position_ack", _boom)
+        r = env["client"].post(self.URL, json={
+            "symbol": "ONDOUSDT", "confirm": True})
+        assert r.status_code == 200  # temizlik başarısı geri alınmaz
+        recs = [json.loads(x) for x in env["app"].POSITION_AUDIT_PATH
+                .read_text(encoding="utf-8").strip().splitlines()]
+        assert recs[-1]["reason"] == "operator_ack_clear_failed"
 
 
 class TestStatusExposure:

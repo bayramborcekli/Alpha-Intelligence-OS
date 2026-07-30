@@ -3625,6 +3625,42 @@ def _record_position_ack(pos: dict, actor: str) -> None:
         "kayıt aktif listeden çıkarıldı")
 
 
+def _clear_position_ack(symbol: str) -> bool:
+    """Sembolün ack kaydını sil (Task 160).
+
+    POSITION_RECORD_CLEANED sonrası bayat ack birikmesin: aynı
+    sembolde ileride açılacak yeni pozisyonun INCOMPLETE durumunu
+    eski onay maskeleyemesin. Worker-safe: flock altında
+    read-modify-write. Dönüş: kayıt gerçekten silindi mi."""
+    symbol = str(symbol or "")
+    if not symbol or not POSITION_ACK_PATH.exists():
+        return False
+    try:
+        import fcntl as _fl
+    except ImportError:  # Windows
+        sys.path.insert(0, str(ROOT / "alpha20_v1"))
+        import portable_flock as _fl  # type: ignore
+    with POSITION_ACK_PATH.open("a+", encoding="utf-8") as fh:
+        _fl.flock(fh.fileno(), _fl.LOCK_EX)
+        try:
+            fh.seek(0)
+            try:
+                acks = json.loads(fh.read() or "{}")
+                if not isinstance(acks, dict):
+                    acks = {}
+            except ValueError:
+                acks = {}
+            if symbol not in acks:
+                return False
+            del acks[symbol]
+            fh.seek(0)
+            fh.truncate()
+            fh.write(json.dumps(acks, ensure_ascii=False, indent=2))
+            return True
+        finally:
+            _fl.flock(fh.fileno(), _fl.LOCK_UN)
+
+
 # Task 144: panel banner'ında gösterilecek son audit kaydı sayısı.
 POSITION_AUDIT_RECENT_LIMIT = 20
 
@@ -3637,6 +3673,11 @@ _POSITION_AUDIT_LABELS_TR = {
 # dolayısıyla uyarı banner'ı tetiklemez (Task 149).
 _POSITION_AUDIT_LABELS_TR.setdefault(
     "operator_ack", "Operatör onayı (görüldü / manuel kapatıldı)")
+# Task 160: yalnız görüntüleme etiketleri — banner tetiklemez.
+_POSITION_AUDIT_LABELS_TR.setdefault(
+    "operator_ack_cleared", "Bayat operatör onayı temizlendi")
+_POSITION_AUDIT_LABELS_TR.setdefault(
+    "operator_ack_clear_failed", "Operatör onayı temizlenemedi")
 
 
 def _recent_position_audit(
@@ -5701,6 +5742,22 @@ def api_state_orphan_position_clean():
         " reason=" + "; ".join(evidence) +
         " opened_at=" + repr(pos.get("opened_at")),
         source="legacy")
+    # Task 160: temizlenen sembolün operatör ack kaydı da silinir —
+    # bayat ack ileride aynı sembolde açılacak yeni pozisyonun
+    # INCOMPLETE durumunu maskelemesin. Ack silinemezse temizlik
+    # başarısı geri alınmaz; durum audit'e yazılır (sessiz yutma yok).
+    try:
+        if _clear_position_ack(symbol):
+            _audit_position_integrity(
+                symbol, "operator_ack_cleared",
+                "Bayat operatör onayı temizlendi (kayıt "
+                "POSITION_RECORD_CLEANED ile silindi)",
+                source="legacy")
+    except Exception as exc:
+        _audit_position_integrity(
+            symbol, "operator_ack_clear_failed",
+            "Ack kaydı temizlenemedi (" + type(exc).__name__ +
+            ") — bayat ack kalmış olabilir", source="legacy")
     slog.log_event(slog.STARTUP, ip=ip,
                    username=session.get("username", ""),
                    detail=f"position record cleaned: {symbol} "
