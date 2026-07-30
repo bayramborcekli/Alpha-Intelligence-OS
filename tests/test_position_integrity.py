@@ -135,6 +135,34 @@ class TestLegacyClassification:
             encoding="utf-8").strip().splitlines()
         assert len(lines) == 1
 
+    def test_audit_no_dedupe_across_sources(self, appmod):
+        # Task 153: symbol+reason aynı olsa da source farklıysa
+        # ikinci kayıt yutulmaz (legacy vs dual-model operator_ack).
+        appmod._audit_position_integrity(
+            "ONDOUSDT", "operator_ack", "legacy ack",
+            source="legacy_state_position")
+        appmod._audit_position_integrity(
+            "ONDOUSDT", "operator_ack", "dual ack",
+            source="dual_model_position")
+        lines = appmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == 2
+        recs = [json.loads(x) for x in lines]
+        assert {r["source"] for r in recs} == {
+            "legacy_state_position", "dual_model_position"}
+
+    def test_audit_dedupes_same_source(self, appmod):
+        # Aynı symbol+reason+source ardışık gelirse hâlâ tek kayıt.
+        appmod._audit_position_integrity(
+            "ONDOUSDT", "operator_ack", "a",
+            source="dual_model_position")
+        appmod._audit_position_integrity(
+            "ONDOUSDT", "operator_ack", "b",
+            source="dual_model_position")
+        lines = appmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == 1
+
     def test_orphan_excluded_from_overview_source(self):
         # _operation_raw ORPHAN'ı aktif listeye almaz (kaynak kodu
         # sözleşmesi — davranış birim testleri yukarıda).

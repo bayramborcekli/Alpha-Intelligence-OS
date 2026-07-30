@@ -3457,8 +3457,17 @@ def _audit_position_integrity(symbol: str, status: str,
                 fh.seek(max(0, size - 4096))
                 tail = fh.read().strip().splitlines()
                 last = json.loads(tail[-1]) if tail else None
+                # Task 153: dedupe kıyası source'u da içerir —
+                # farklı kaynaklı (legacy vs dual-model) ardışık
+                # kayıtlar yutulmaz. Eski kayıtlarda source alanı
+                # yoktur; geriye uyum için legacy varsayılan sayılır
+                # (KRİTİK süre serisi migrasyonda kırılmasın).
+                _last_src = (last or {}).get(
+                    "source", "legacy_state_position") \
+                    or "legacy_state_position"
                 if last and last.get("symbol") == symbol and \
-                        last.get("reason") == status:
+                        last.get("reason") == status and \
+                        _last_src == source:
                     return
                 fh.seek(0, 2)
                 fh.write(json.dumps({
