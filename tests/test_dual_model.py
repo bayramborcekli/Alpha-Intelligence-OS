@@ -478,6 +478,9 @@ def test_record_startup_failure_writes_last_error():
 class _Resp:
     status_code = 200
 
+    def __init__(self, status_code: int = 200):
+        self.status_code = status_code
+
     def raise_for_status(self):
         pass
 
@@ -520,6 +523,50 @@ def test_guarded_get_ssl_exhaustion_raises_diagnosed_error(monkeypatch):
     monkeypatch.setattr(requests, "get", _get)
     with pytest.raises(RuntimeError):
         dm._guarded_get("/api/v3/ticker/price", retries=1)
+
+
+def test_guarded_get_429_never_retried_registers_backoff(monkeypatch):
+    """429 yanıtı ASLA retry edilmez (ban riski): TEK istek atılır,
+    paylaşımlı geri çekilmeye kaydedilir ve RateLimited fırlatılır."""
+    import requests
+    import alpha20 as a20
+    _no_backoff(monkeypatch)
+    calls = {"n": 0}
+    registered = {"args": None}
+
+    def _get(url, params=None, timeout=None):
+        calls["n"] += 1
+        return _Resp(status_code=429)
+
+    monkeypatch.setattr(requests, "get", _get)
+    monkeypatch.setattr(a20, "rate_limit_remaining", lambda: 0.0)
+    monkeypatch.setattr(
+        a20, "register_rate_limit",
+        lambda code, resp: registered.__setitem__("args", (code, resp)))
+    with pytest.raises(dm.RateLimited):
+        dm._guarded_get("/api/v3/ticker/price", retries=5)
+    assert calls["n"] == 1, "429 retry edildi — ban riski!"
+    assert registered["args"] is not None
+    assert registered["args"][0] == 429
+
+
+def test_guarded_get_418_never_retried(monkeypatch):
+    """418 (IP ban uyarısı) da tek istek + RateLimited — retry yok."""
+    import requests
+    import alpha20 as a20
+    _no_backoff(monkeypatch)
+    calls = {"n": 0}
+
+    def _get(url, params=None, timeout=None):
+        calls["n"] += 1
+        return _Resp(status_code=418)
+
+    monkeypatch.setattr(requests, "get", _get)
+    monkeypatch.setattr(a20, "rate_limit_remaining", lambda: 0.0)
+    monkeypatch.setattr(a20, "register_rate_limit", lambda c, r: None)
+    with pytest.raises(dm.RateLimited):
+        dm._guarded_get("/api/v3/ticker/price", retries=5)
+    assert calls["n"] == 1
 
 
 def test_monitor_price_failure_defers_exits_and_sets_last_error(
