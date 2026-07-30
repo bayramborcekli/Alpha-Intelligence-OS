@@ -67,24 +67,31 @@ def _now_iso() -> str:
 
 # ── TCP / EPP ──────────────────────────────────────────────────────
 
+def _num(v: Any) -> float | None:
+    """Sayısal geçerlilik: eksik/bozuk girdi None — sıfır İKAMESİ YOK."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return float(v) if math.isfinite(float(v)) else None
+
+
 def compute_tcp(sig: dict, klines: list[list]) -> float | None:
-    """Trend devam ihtimali 0-100. Girdi yoksa None (uydurma yok)."""
-    if not klines or len(klines) < 12:
+    """Trend devam ihtimali 0-100. Zorunlu girdi (klines, vol_ratio,
+    rsi) eksikse None (uydurma yok)."""
+    vol_ratio = _num(sig.get("vol_ratio"))
+    rsi = _num(sig.get("rsi"))
+    if not klines or len(klines) < 12 or vol_ratio is None \
+            or rsi is None:
         return None
     closes = [float(k[4]) for k in klines]
     ups = sum(1 for i in range(-10, 0)
               if closes[i] > closes[i - 1])
     persistence = ups / 10.0                         # 0..1
-    vol_ratio = float(sig.get("vol_ratio") or 0.0)
     vol_score = _clamp((vol_ratio - 1.0) / 1.5)       # 1.0→0, 2.5→1
     mom = (closes[-1] - closes[-6]) / closes[-6] * 100 \
         if closes[-6] else 0.0
     mom_score = _clamp(mom / 0.5)                     # %0.5 mom → tam
-    rsi = sig.get("rsi")
-    rsi_score = 0.5
-    if isinstance(rsi, (int, float)):
-        # 50-70 sağlıklı devam bölgesi; >80 tükenme, <40 zayıf
-        rsi_score = _clamp(1 - abs(rsi - 60) / 30)
+    # 50-70 sağlıklı devam bölgesi; >80 tükenme, <40 zayıf
+    rsi_score = _clamp(1 - abs(rsi - 60) / 30)
     tcp = (persistence * 0.35 + vol_score * 0.25 +
            mom_score * 0.25 + rsi_score * 0.15) * 100
     return round(tcp, 2)
@@ -178,22 +185,27 @@ def score_candidate(row: dict, sig: dict, klines: list[list],
     reasons: list[str] = []
     comps: dict[str, float | None] = {}
 
-    spread = float(row.get("spread_pct") or 0.0)
-    slippage = spread * 0.75
-    cp = _dm.cost_profile(model_cfg, slippage)
-    cost = cp["round_trip_cost_pct"]
-    gross = float(sig.get("expected_gross_edge_pct") or 0.0)
-    net_after_cost = gross - cost
+    spread = _num(row.get("spread_pct"))
+    gross = _num(sig.get("expected_gross_edge_pct"))
+    cost = None
+    if spread is not None:
+        cp = _dm.cost_profile(model_cfg, spread * 0.75)
+        cost = cp["round_trip_cost_pct"]
 
-    # 1) Maliyet-sonrası beklenen hareket
-    comps["cost_after_move"] = _clamp(net_after_cost / max(cost, 1e-9)
-                                      / 1.5)
-    if net_after_cost <= 0:
-        reasons.append("COST_NOT_COVERED")
+    # 1) Maliyet-sonrası beklenen hareket — girdi eksikse None
+    if cost is not None and gross is not None and cost > 0:
+        net_after_cost = gross - cost
+        comps["cost_after_move"] = _clamp(net_after_cost / cost / 1.5)
+        if net_after_cost <= 0:
+            reasons.append("COST_NOT_COVERED")
+    else:
+        comps["cost_after_move"] = None
+        reasons.append("DATA_QUALITY")
 
     # 2-3) Devam + ilk net kâr ihtimali
     tcp = compute_tcp(sig, klines)
-    epp = compute_epp(tcp, gross, cost)
+    epp = compute_epp(tcp, gross, cost) \
+        if gross is not None and cost is not None else None
     comps["continuation"] = (tcp / 100) if tcp is not None else None
     comps["early_profit"] = (epp / 100) if epp is not None else None
 
@@ -215,10 +227,11 @@ def score_candidate(row: dict, sig: dict, klines: list[list],
         reasons.append("DATA_QUALITY")
 
     # 6) Göreli güç + BTC hizası + rejim
-    btc = ctx.get("btc_change_pct")
-    chg = float(row.get("change_pct") or 0.0)
-    if isinstance(btc, (int, float)):
-        comps["relative_strength"] = _clamp((chg - btc) / 3 + 0.5)
+    btc = _num(ctx.get("btc_change_pct"))
+    chg = _num(row.get("change_pct"))
+    if btc is not None:
+        comps["relative_strength"] = _clamp((chg - btc) / 3 + 0.5) \
+            if chg is not None else None
         comps["btc_alignment"] = 1.0 if btc >= 0 else 0.0
         if btc < -0.5:
             reasons.append("BTC_MISALIGNED")
@@ -227,28 +240,38 @@ def score_candidate(row: dict, sig: dict, klines: list[list],
         comps["btc_alignment"] = None
 
     # 7) Volatilite kalitesi: maliyeti taşıyacak kadar var, SL'yi
-    # gürültüyle vuracak kadar aşırı değil
-    volat = float(row.get("volatility_pct") or 0.0)
-    lo, hi = cost * 8, cost * 60
-    comps["volatility_quality"] = _clamp(
-        (volat - lo) / max(lo, 1e-9)) if volat < lo * 2 else \
-        (_clamp(1 - (volat - hi) / hi) if volat > hi else 1.0)
-    if volat < lo:
-        reasons.append("LOW_VOL_QUALITY")
+    # gürültüyle vuracak kadar aşırı değil (girdi eksikse None)
+    volat = _num(row.get("volatility_pct"))
+    if volat is not None and cost is not None and cost > 0:
+        lo, hi = cost * 8, cost * 60
+        comps["volatility_quality"] = _clamp(
+            (volat - lo) / lo) if volat < lo * 2 else \
+            (_clamp(1 - (volat - hi) / hi) if volat > hi else 1.0)
+        if volat < lo:
+            reasons.append("LOW_VOL_QUALITY")
+    else:
+        comps["volatility_quality"] = None
 
     # 8) Spread / likidite / hacim doğrulaması
     max_spread = float(model_cfg.get("max_spread_pct") or 0.05)
-    comps["spread"] = _clamp(1 - spread / max(max_spread, 1e-9))
-    if spread > cost * 0.5:
-        reasons.append("SPREAD_COST_HEAVY")
+    if spread is not None:
+        comps["spread"] = _clamp(1 - spread / max(max_spread, 1e-9))
+        if cost is not None and spread > cost * 0.5:
+            reasons.append("SPREAD_COST_HEAVY")
+    else:
+        comps["spread"] = None
     min_vol = float(model_cfg.get("min_volume_usdt") or 1)
+    vol_usdt = _num(row.get("volume_usdt"))
     comps["liquidity"] = _clamp(
-        math.log10(max(float(row.get("volume_usdt") or 1), 1) /
-                   min_vol) / 1.0 + 0.5)
-    vr = float(sig.get("vol_ratio") or 0.0)
-    comps["volume_confirmation"] = _clamp((vr - 1.0) / 1.0)
-    if vr < 1.2:
-        reasons.append("NO_VOLUME_CONFIRMATION")
+        math.log10(max(vol_usdt, 1) / min_vol) / 1.0 + 0.5) \
+        if vol_usdt is not None else None
+    vr = _num(sig.get("vol_ratio"))
+    if vr is not None:
+        comps["volume_confirmation"] = _clamp((vr - 1.0) / 1.0)
+        if vr < 1.2:
+            reasons.append("NO_VOLUME_CONFIRMATION")
+    else:
+        comps["volume_confirmation"] = None
 
     # 9) Sembol/model gerçek geçmişi + beklenen geri-verme
     hs = history_stats(ctx.get("trades") or [], row.get("symbol", ""),
@@ -319,20 +342,29 @@ def score_candidate(row: dict, sig: dict, klines: list[list],
 # ── Gölge kalıcılığı (append-only, flock, sınırlı büyüme) ─────────
 
 def append_shadow(record: dict, path: Path = SHADOW_PATH) -> bool:
-    """Gölge skoru dosyaya ekle; dosya sınırı aşınca eski kayıtları
-    kırp (flock altında). Yazılamazsa False — sessiz uydurma yok."""
+    """Gölge skoru dosyaya ekle; sınır aşılınca eski kayıtları kırp.
+
+    Kilit, replace edilen JSONL üzerinde DEĞİL ayrı kalıcı .lock
+    dosyasında tutulur (çok worker'da inode değişse de kayıt
+    kaybolmaz); kırpma PID'e özgü temp + fsync + atomik replace ile.
+    Yazılamazsa False — sessiz uydurma yok."""
+    lock_path = str(path) + ".lock"
     try:
-        with open(path, "a+", encoding="utf-8") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            f.write(json.dumps(record, ensure_ascii=False,
-                               separators=(",", ":")) + "\n")
-            f.flush()
-            if f.tell() > SHADOW_MAX_BYTES:
-                f.seek(0)
-                lines = f.read().splitlines()[-SHADOW_KEEP_LINES:]
-                tmp = str(path) + ".tmp"
+        with open(lock_path, "a") as lk:
+            fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False,
+                                   separators=(",", ":")) + "\n")
+                f.flush()
+                size = f.tell()
+            if size > SHADOW_MAX_BYTES:
+                with open(path, "r", encoding="utf-8") as f:
+                    lines = f.read().splitlines()[-SHADOW_KEEP_LINES:]
+                tmp = f"{path}.{os.getpid()}.tmp"
                 with open(tmp, "w", encoding="utf-8") as g:
                     g.write("\n".join(lines) + "\n")
+                    g.flush()
+                    os.fsync(g.fileno())
                 os.replace(tmp, path)
         return True
     except OSError as exc:
@@ -435,43 +467,63 @@ def predictor_stats(scores: list[float | None],
 
 # ── Never-profitable + rapor ──────────────────────────────────────
 
+def _trade_cost_pct(t: dict, fallback: float) -> float:
+    """İşlemin GERÇEK maliyeti (%): fees+slippage / notional.
+    Alanlar yoksa varsayılan üst-sınır tahmini (dürüst fallback)."""
+    fees = _num(t.get("fees"))
+    slip = _num(t.get("slippage"))
+    notional = _num(t.get("notional_usdt"))
+    if fees is not None and slip is not None and notional and \
+            notional > 0:
+        return (fees + slip) / notional * 100
+    return fallback
+
+
 def classify_never_profitable(t: dict, cost_pct: float) -> dict | None:
-    """İşlem HİÇ net kâra ulaşmadıysa nedeni grupla (kayıttan kanıtla
-    ayrılabilen gruplar; giriş bağlamı olmayan nedenler PROSPEKTİF)."""
+    """İşlem HİÇ net kâra ulaşmadıysa GÖZLEMLENEBİLİR davranış grubu.
+
+    Etiketler MFE/MAE'nin kanıtladığıyla SINIRLIDIR (nedensellik
+    iddiası yok): hareket hiç gelmedi / hareket maliyetin altında
+    kaldı / kâra değdi geri verildi / ters hareket baskındı.
+    Maliyet, işlemin KENDİ fee+slippage kaydından hesaplanır."""
     net = t.get("net_pnl")
     mfe = t.get("mfe_pct")
     if net is None or float(net) > 0:
         return None
     if not isinstance(mfe, (int, float)):
         return {"cause": "DATA_QUALITY", "net_pnl": net,
-                "note": "MFE kaydı yok — neden kanıtlanamaz"}
+                "note": "MFE kaydı yok — davranış kanıtlanamaz"}
     mae = t.get("mae_pct")
-    if mfe <= cost_pct:
+    cost = _trade_cost_pct(t, cost_pct)
+    if mfe <= cost:
         if mfe <= 0.02:
-            cause = "NO_FAVORABLE_MOVE"   # trend ölümü / geç giriş
+            cause = "NO_FAVORABLE_MOVE"    # lehte hareket hiç gelmedi
         else:
-            cause = "FEE_SPREAD_DOMINANT"  # hareket maliyeti örtmedi
+            cause = "MOVE_BELOW_COST"      # hareket maliyetin altında
     else:
         cause = "PROFIT_GIVEBACK"          # net kâra değdi, geri verdi
-    if isinstance(mae, (int, float)) and mae > mfe * 2 and \
-            cause == "NO_FAVORABLE_MOVE":
-        cause = "WRONG_TIMING"             # önce ters hareket
+    if isinstance(mae, (int, float)) and mae > max(mfe, 0.02) * 2 \
+            and cause == "NO_FAVORABLE_MOVE":
+        cause = "ADVERSE_MOVE_DOMINANT"    # ters hareket baskındı
     return {"cause": cause, "mfe_pct": mfe, "mae_pct": mae,
-            "net_pnl": net}
+            "cost_pct": round(cost, 4), "net_pnl": net}
 
 
 def prevention_rule(cause: str) -> str:
     return {
-        "NO_FAVORABLE_MOVE": "Giriş anında devam kanıtı yoktu — TCP "
-        "düşük adaylar gölgede işaretlenir (STALE_BREAKOUT / "
-        "NO_VOLUME_CONFIRMATION).",
-        "FEE_SPREAD_DOMINANT": "Beklenen hareket maliyeti örtmüyordu "
-        "— COST_NOT_COVERED nedeni giriş öncesi görünür.",
-        "PROFIT_GIVEBACK": "Kâr yakalanamadı — EXPECTED_GIVEBACK_HIGH "
-        "bileşeni ve erken-pencere izleri (30/60/90/180 sn) bunu "
-        "önceden ölçer.",
-        "WRONG_TIMING": "Önce ters hareket — LOCAL_TOP_HIGH_RISK ve "
-        "BTC_MISALIGNED nedenleri zamanlama riskini işaretler.",
+        "NO_FAVORABLE_MOVE": "Giriş sonrası lehte hareket hiç "
+        "gözlenmedi — gölgede TCP düşük / STALE_BREAKOUT / "
+        "NO_VOLUME_CONFIRMATION işaretli adaylar bu grupla "
+        "karşılaştırılır.",
+        "MOVE_BELOW_COST": "Gözlenen en iyi hareket işlemin kendi "
+        "maliyetinin altında kaldı — COST_NOT_COVERED nedeni giriş "
+        "öncesi görünür.",
+        "PROFIT_GIVEBACK": "Net kâra değildi ama geri verildi — "
+        "EXPECTED_GIVEBACK_HIGH bileşeni ve erken-pencere izleri "
+        "(30/60/90/180 sn) bunu ölçer.",
+        "ADVERSE_MOVE_DOMINANT": "Ters hareket lehte hareketi "
+        "domine etti — LOCAL_TOP_HIGH_RISK ve BTC_MISALIGNED gölge "
+        "nedenleriyle korelasyonu raporda izlenir.",
         "DATA_QUALITY": "Kanıt eksik — MFE/MAE izleme zorunlu kalır.",
     }.get(cause, "")
 
@@ -529,9 +581,14 @@ def build_report(trades: list[dict], cost_pct_default: float = 0.23,
                                              dict)]
     early_rows = []
     for sec in ("30", "60", "90", "180"):
+        # Gecikmeli ölçüm ayıklama: iz, eşikten en çok %50 geç
+        # alınmışsa sayılır (at_sec kaydı olmayan eski iz sayılmaz).
         rows = [(t["early_marks"][sec],
                  1 if float(t["net_pnl"]) > 0 else 0)
-                for t in early if sec in t["early_marks"]]
+                for t in early if sec in t["early_marks"]
+                and isinstance(t["early_marks"][sec].get("at_sec"),
+                               (int, float))
+                and t["early_marks"][sec]["at_sec"] <= int(sec) * 1.5]
         if not rows:
             early_rows.append({"window_sec": int(sec), "n": 0})
             continue

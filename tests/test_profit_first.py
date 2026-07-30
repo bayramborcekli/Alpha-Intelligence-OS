@@ -92,6 +92,25 @@ class TestScores:
         assert s["tcp"] is None and s["epp"] is None
         assert "DATA_QUALITY" in s["reasons"]
 
+    def test_missing_inputs_yield_none_not_fabrication(self):
+        # Mimar bulgusu: eksik girdi 0/1 İKAMESİYLE skorlanamaz.
+        cfg = dm.get_config()
+        row = {"symbol": "TESTUSDT"}  # spread/hacim/volatilite yok
+        sig = {"side": "LONG", "confidence": 70}  # edge/rsi/vr yok
+        s = pf.score_candidate(row, sig, _klines(), dm.MODEL_CORE,
+                               cfg["core"], {"trades": []})
+        assert s["tcp"] is None and s["epp"] is None
+        for k in ("cost_after_move", "volatility_quality", "spread",
+                  "liquidity", "volume_confirmation"):
+            assert s["components"][k] is None
+        assert "DATA_QUALITY" in s["reasons"]
+        assert "COST_NOT_COVERED" not in s["reasons"]
+        assert "LOW_VOL_QUALITY" not in s["reasons"]
+
+    def test_tcp_requires_rsi_and_vol_ratio(self):
+        assert pf.compute_tcp({"vol_ratio": 1.5}, _klines()) is None
+        assert pf.compute_tcp({"rsi": 55}, _klines()) is None
+
 
 class TestStats:
     def test_roc_auc_perfect_and_inverse(self):
@@ -125,10 +144,10 @@ class TestNeverProfitable:
     def test_groups(self):
         c = pf.classify_never_profitable(
             {"net_pnl": -0.3, "mfe_pct": 0.0, "mae_pct": 0.4}, 0.23)
-        assert c["cause"] == "WRONG_TIMING"
+        assert c["cause"] == "ADVERSE_MOVE_DOMINANT"
         c = pf.classify_never_profitable(
             {"net_pnl": -0.3, "mfe_pct": 0.1, "mae_pct": 0.1}, 0.23)
-        assert c["cause"] == "FEE_SPREAD_DOMINANT"
+        assert c["cause"] == "MOVE_BELOW_COST"
         c = pf.classify_never_profitable(
             {"net_pnl": -0.3, "mfe_pct": 0.8, "mae_pct": 0.1}, 0.23)
         assert c["cause"] == "PROFIT_GIVEBACK"
@@ -136,9 +155,20 @@ class TestNeverProfitable:
             {"net_pnl": -0.3}, 0.23)
         assert c["cause"] == "DATA_QUALITY" and c["net_pnl"] == -0.3
 
+    def test_uses_trades_own_cost_not_default(self):
+        # İşlemin kendi fee+slippage'ı: (0.05+0.01)/50*100 = %0.12
+        # mfe 0.15 > 0.12 → PROFIT_GIVEBACK (varsayılan 0.23 ile
+        # MOVE_BELOW_COST olurdu — gerçek maliyet kazanır)
+        c = pf.classify_never_profitable(
+            {"net_pnl": -0.1, "mfe_pct": 0.15, "mae_pct": 0.05,
+             "fees": 0.05, "slippage": 0.01, "notional_usdt": 50.0},
+            0.23)
+        assert c["cause"] == "PROFIT_GIVEBACK"
+        assert c["cost_pct"] == pytest.approx(0.12)
+
     def test_prevention_rule_nonempty(self):
-        for cause in ("NO_FAVORABLE_MOVE", "FEE_SPREAD_DOMINANT",
-                      "PROFIT_GIVEBACK", "WRONG_TIMING",
+        for cause in ("NO_FAVORABLE_MOVE", "MOVE_BELOW_COST",
+                      "PROFIT_GIVEBACK", "ADVERSE_MOVE_DOMINANT",
                       "DATA_QUALITY"):
             assert pf.prevention_rule(cause)
 
@@ -150,6 +180,17 @@ class TestShadowFile:
         assert pf.append_shadow({"a": 2}, p)
         rows = pf.read_shadow(10, p)
         assert [r["a"] for r in rows] == [1, 2]
+        # Kilit ayrı kalıcı dosyada (replace edilen JSONL'de değil)
+        assert (tmp_path / "shadow.jsonl.lock").exists()
+
+    def test_trim_keeps_tail(self, tmp_path, monkeypatch):
+        p = tmp_path / "shadow.jsonl"
+        monkeypatch.setattr(pf, "SHADOW_MAX_BYTES", 200)
+        monkeypatch.setattr(pf, "SHADOW_KEEP_LINES", 3)
+        for i in range(30):
+            assert pf.append_shadow({"i": i}, p)
+        rows = pf.read_shadow(100, p)
+        assert len(rows) < 30 and rows[-1]["i"] == 29
 
     def test_read_missing_returns_empty(self, tmp_path):
         assert pf.read_shadow(10, tmp_path / "yok.jsonl") == []
@@ -199,10 +240,10 @@ class TestIntegration:
         dm.monitor_positions(lambda s: 100.1, cfg, now=1065.0)
         p = state["positions"]["TESTUSDT"]
         assert "30" in p["early_marks"] and "60" in p["early_marks"]
-        assert "180" in p["early_marks"] or "180" not in p[
-            "early_marks"]  # 180 sn henüz dolmadı
-        assert "180" not in p["early_marks"]
+        assert "180" not in p["early_marks"]  # 180 sn henüz dolmadı
         assert p["early_marks"]["30"]["mfe"] == pytest.approx(0.1)
+        # Gecikmeli ölçüm dürüstlüğü: gerçek ölçüm anı kaydedilir
+        assert p["early_marks"]["30"]["at_sec"] == pytest.approx(65.0)
         # TP'ye taşı → kapanışta trade gölge + izleri taşır
         dm.monitor_positions(lambda s: 101.0, cfg, now=1200.0)
         assert not state["positions"]
@@ -236,7 +277,10 @@ class TestReport:
              "net_edge_pct": 0.5,
              "shadow_scores": {"pfs": 70.0, "tcp": 60.0, "epp": 55.0,
                                "local_top": {"dist_high_20_pct": 0.5}},
-             "early_marks": {"30": {"mfe": 0.2, "mae": 0.0}}},
+             "early_marks": {"30": {"mfe": 0.2, "mae": 0.0,
+                                    "at_sec": 31.0},
+                             "60": {"mfe": 0.2, "mae": 0.0,
+                                    "at_sec": 300.0}}},  # geç → elenir
         ]
         rep = pf.build_report(trades, shadow_limit=0)
         assert rep["closed_trades"] == 2

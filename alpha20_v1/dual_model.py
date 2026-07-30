@@ -797,10 +797,15 @@ def monitor_positions(price_of: Callable[[str], float | None],
                     key = str(th)
                     if held_sec >= th and key not in marks:
                         e = p["entry"]
+                        # at_sec: ölçümün GERÇEK anı — poll aralığı
+                        # yüzünden eşikten geç olabilir; analiz katmanı
+                        # gecikmeli ölçümü bununla ayıklar (uydurmasız
+                        # gecikmeli-ölçüm semantiği).
                         marks[key] = {
                             "mfe": round((p["peak"] / e - 1) * 100, 4),
                             "mae": round((1 - p["trough"] / e) * 100,
-                                         4)}
+                                         4),
+                            "at_sec": round(held_sec, 1)}
             result = None
             if price >= p["tp"]:
                 result = "TP"
