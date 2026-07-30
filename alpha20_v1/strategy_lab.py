@@ -664,6 +664,8 @@ def install_as_challenger(model: str, cand: dict) -> bool:
     """Adayı dual_learning challenger yuvasına yerleştir (yuva boşsa)."""
     installed = {"ok": False}
 
+    base = _base_params(model)  # UI sözleşmesi: parameter/old/new
+
     def _mut(s: dict) -> None:
         ms = dl._model_state(s, model)
         if ms.get("challenger") is not None:
@@ -673,7 +675,8 @@ def install_as_challenger(model: str, cand: dict) -> bool:
             "overrides": cand["parameters"],
             "created_at": _now_iso(),
             "source": "STRATEGY_LAB",
-            "changes": [{"param": k, "to": v}
+            "changes": [{"parameter": k, "old": base.get(k),
+                         "new": v}
                         for k, v in cand["parameters"].items()],
             "shadow": None,
         }
@@ -789,9 +792,22 @@ def run_cycle(adaptive_cfg: dict | None = None,
             dataset = ms.get("dataset") or []
             losses = [r for r in dataset
                       if float(r.get("net_pnl") or 0) < 0]
+            # Panel raporlaması tüm veri üzerinden; ADAY ÜRETİMİ ise
+            # SIZINTI OLMASIN diye holdout HARİÇ pencereden beslenir
+            # (holdout tasarımı da etkileyemez — untouched).
             ml["loss_diagnosis"] = aggregate_loss_diagnosis(losses)
             ml["profit_capture"] = aggregate_profit_capture(
                 dataset, int(d["min_capture_sample"]))
+            _split = split_dataset(dataset)
+            gen_window = _split["train"] + _split["walk"]
+            gen_loss = aggregate_loss_diagnosis(
+                [r for r in gen_window
+                 if float(r.get("net_pnl") or 0) < 0])
+            gen_capture = aggregate_profit_capture(
+                gen_window, int(d["min_capture_sample"]))
+            gen_diagnosis = dl.diagnose(
+                dl.compute_model_metrics(gen_window),
+                dl.DEFAULT_THRESHOLDS)
             cb = evaluate_circuit_breaker(ml, dataset, rt_err, cfg)
             ml["circuit_breaker"] = cb
             actions: list[str] = []
@@ -803,8 +819,7 @@ def run_cycle(adaptive_cfg: dict | None = None,
                     len(active) < MAX_ACTIVE_CANDIDATES and \
                     len(dataset) >= d["min_dataset_stage1"]:
                 new = generate_candidates(
-                    model, ml, ms.get("diagnosis"),
-                    ml["loss_diagnosis"], ml["profit_capture"])
+                    model, ml, gen_diagnosis, gen_loss, gen_capture)
                 if new:
                     ml["generation"] += 1
                     for cd in new[:MAX_ACTIVE_CANDIDATES - len(active)]:
@@ -832,6 +847,7 @@ def run_cycle(adaptive_cfg: dict | None = None,
                         if not c["auto_promote_frozen"] and \
                                 install_as_challenger(model, cd):
                             cd["stage"] = "STAGE5_PAPER_CHALLENGER"
+                            cd["installed_as_challenger"] = True
                             ml["candidates_tested_total"] += 1
                             actions.append(f"CHALLENGER:{cid}")
                         # yuva doluysa beklemede kalır
@@ -857,12 +873,20 @@ def run_cycle(adaptive_cfg: dict | None = None,
                     del ml["candidates"][cid]
                     actions.append(f"REJECTED:{cid}")
 
-            # STAGE5 sonuç takibi: dl terfi/ret geçmişinden senkron
+            # STAGE5 sonuç takibi: dl state'i TAZE oku — çevrim içinde
+            # yapılan kurulum/terfi bayat snapshot'la yanlış "düştü"
+            # sayılmasın (mimar bulgusu). Yalnız kurulumu doğrulanmış
+            # adaylar başarısız challenger sayılır.
+            ms_fresh = (dl._load_state().get("models") or {}).get(
+                model, {})
             for cid, cd in list(ml["candidates"].items()):
                 if cd.get("stage") != "STAGE5_PAPER_CHALLENGER":
                     continue
-                champ_v = ((ms.get("champion") or {}).get("version"))
-                chal = ms.get("challenger")
+                if not cd.get("installed_as_challenger"):
+                    continue  # kurulum doğrulanmadan hüküm verilmez
+                champ_v = ((ms_fresh.get("champion") or
+                            {}).get("version"))
+                chal = ms_fresh.get("challenger")
                 if champ_v == cid:
                     cd["status"] = "PROMOTED"
                     cd["stage"] = "STAGE6_LIVE_ELIGIBLE"

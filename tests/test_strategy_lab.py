@@ -528,6 +528,60 @@ class TestControlsAndWiring:
         assert "strategy_lab_state.json" in gi
         assert "strategy_lab_history.jsonl" in gi
 
+    def test_changes_schema_matches_ui_contract(self, iso,
+                                                monkeypatch):
+        # Mimar bulgusu: UI renderLearning parameter/old/new bekler
+        monkeypatch.setattr(sl, "_base_params", lambda m: _base_params())
+        assert sl.install_as_challenger(dl.MODEL_CORE, _cand())
+        chal = dl._load_state()["models"][dl.MODEL_CORE]["challenger"]
+        for ch in chal["changes"]:
+            assert set(ch) == {"parameter", "old", "new"}
+
+    def test_stage5_fresh_read_no_false_drop(self, iso, monkeypatch):
+        # Mimar bulgusu: aynı çevrimde kurulan challenger bayat
+        # snapshot yüzünden DL_CHALLENGER_DROPPED sayılmamalı.
+        monkeypatch.setattr(sl, "_base_params", lambda m: _base_params())
+        _seed_dl(_dataset(100))
+        cd = _cand(stage="STAGE5_PAPER_CHALLENGER")
+        cd["installed_as_challenger"] = True
+        assert sl.install_as_challenger(dl.MODEL_CORE, cd)
+
+        def _m(s):
+            ml = sl._model_lab(s, dl.MODEL_CORE)
+            ml["candidates"][cd["strategy_candidate_id"]] = cd
+        sl._update_state(_m)
+        sl.run_cycle({"strategy_lab": {}}, force=True)
+        ml = sl._load_state()["models"][dl.MODEL_CORE]
+        got = ml["candidates"].get(cd["strategy_candidate_id"])
+        assert got and got["status"] == "ACTIVE"
+        assert ml["consecutive_failed_challengers"] == 0
+
+    def test_uninstalled_stage5_not_counted_failed(self, iso,
+                                                   monkeypatch):
+        monkeypatch.setattr(sl, "_base_params", lambda m: _base_params())
+        _seed_dl(_dataset(100))
+        cd = _cand(stage="STAGE5_PAPER_CHALLENGER")
+        # installed_as_challenger YOK — kurulum doğrulanmamış
+
+        def _m(s):
+            ml = sl._model_lab(s, dl.MODEL_CORE)
+            ml["candidates"][cd["strategy_candidate_id"]] = cd
+        sl._update_state(_m)
+        sl.run_cycle({"strategy_lab": {}}, force=True)
+        ml = sl._load_state()["models"][dl.MODEL_CORE]
+        assert ml["consecutive_failed_challengers"] == 0
+        assert cd["strategy_candidate_id"] in ml["candidates"]
+
+    def test_generation_inputs_exclude_holdout(self):
+        # Mimar bulgusu: aday üretimi holdout'tan beslenemez —
+        # run_cycle kaynağında üretim girdileri gen_window'dan gelir.
+        src = Path(sl.__file__).read_text(encoding="utf-8")
+        blk = src.split("def run_cycle")[1]
+        assert 'gen_window = _split["train"] + _split["walk"]' in blk
+        assert "generate_candidates(\n" \
+               "                    model, ml, gen_diagnosis, " \
+               "gen_loss, gen_capture)" in blk
+
     def test_bridge_single_trigger_point(self):
         # Lab yalnız auto_controller döngüsünden tetiklenir
         ac = (ROOT / "alpha20_v1/auto_controller.py").read_text(
