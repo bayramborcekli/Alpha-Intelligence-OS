@@ -123,8 +123,13 @@ class TestExecutionQuality:
            "side": "LONG", "last": 100.0}
 
     def test_pass_produces_positive_net_edge(self):
+        # Maliyet-sonrası sözleşme: varsayılan CORE yapısı (TP .45 /
+        # SL .30) net RR kapısını geçemez; geçiş testi maliyet-uyumlu
+        # TP/SL ile yapılır (net kapılar test_cost_aware_gates.py'de).
+        cfg = dm.get_config(None)
+        cfg["core"]["tp_pct"], cfg["core"]["sl_pct"] = 1.0, 0.40
         ok, reason, net = dm.execution_quality_gate(
-            self.ROW, self.SIG, dm.MODEL_CORE, CFG)
+            self.ROW, self.SIG, dm.MODEL_CORE, cfg)
         assert ok and reason is None and net > 0
 
     @pytest.mark.parametrize("row,sig,expected", [
@@ -144,17 +149,24 @@ class TestExecutionQuality:
     def test_opportunity_wider_tolerance(self):
         row = {**self.ROW, "spread_pct": 0.07, "volume_usdt": 10e6,
                "trade_count": 30000}
+        # Maliyet-uyumlu TP/SL: tolerans farkı (spread/likidite)
+        # net-yapı kapısından bağımsız test edilir.
+        cfg = dm.get_config(None)
+        for sec in ("core", "opportunity"):
+            cfg[sec]["tp_pct"], cfg[sec]["sl_pct"] = 1.2, 0.40
         ok_core, r_core, _ = dm.execution_quality_gate(
-            row, self.SIG, dm.MODEL_CORE, CFG)
+            row, self.SIG, dm.MODEL_CORE, cfg)
         ok_opp, _, _ = dm.execution_quality_gate(
-            row, self.SIG, dm.MODEL_OPP, CFG)
+            row, self.SIG, dm.MODEL_OPP, cfg)
         assert not ok_core and ok_opp  # farklı sınırlar
 
     def test_all_reason_codes_defined(self):
         for code in ("NO_SIGNAL", "DUPLICATE_MODEL_OWNERSHIP",
                      "DATA_QUALITY", "COOLDOWN", "POSITION_LIMIT"):
             assert code in dm.REASON_CODES
-        assert len(dm.REASON_CODES) == 16
+        # +3: maliyet-sonrası kapılar (NET_TP_NON_POSITIVE,
+        # NET_REWARD_RISK_TOO_LOW, EDGE_BELOW_COST_MULTIPLE)
+        assert len(dm.REASON_CODES) == 19
 
 
 class TestOwnership:

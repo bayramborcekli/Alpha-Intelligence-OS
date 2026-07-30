@@ -1287,6 +1287,9 @@
     SLIPPAGE_TOO_HIGH: "Kayma çok yüksek",
     FEE_DRAG: "Ücret yükü",
     EXPECTED_EDGE_TOO_LOW: "Beklenen edge çok düşük",
+    NET_TP_NON_POSITIVE: "Net TP maliyet sonrası negatif",
+    NET_REWARD_RISK_TOO_LOW: "Net ödül/risk < 1,20",
+    EDGE_BELOW_COST_MULTIPLE: "Edge maliyetin 1,5 katının altında",
     MOMENTUM_EXHAUSTED: "Momentum tükendi",
     FALSE_BREAKOUT_RISK: "Sahte kırılım riski",
     RISK_LIMIT: "Risk limiti",
@@ -1305,12 +1308,44 @@
     var metrics = (d && d.metrics) || {};
     var mCore = metrics.ALPHA_CORE_SCALP || null;
     var mOpp = metrics.ALPHA_OPPORTUNITY_BURST || null;
+    // Maliyet-sonrası TP/SL profili: gross/net TP-SL, round-trip
+    // maliyet, net ödül/risk, başabaş win-rate. Veri yoksa UNKNOWN —
+    // uydurma değer gösterilmez.
+    function pct(v) {
+      return (v === null || v === undefined) ? "UNKNOWN"
+        : (Number(v).toFixed(2) + "%");
+    }
+    function costBlock(cp) {
+      if (!cp) {
+        return "<div style=\"font-size:.68rem;margin-top:6px\">" +
+          "<b>Maliyet Profili:</b> " +
+          "<span class=\"th-unknown\">UNKNOWN</span></div>";
+      }
+      var rr = cp.net_reward_risk;
+      var rrTxt = (rr === null || rr === undefined) ? "UNKNOWN"
+        : Number(rr).toFixed(2);
+      var rrBad = (rr !== null && rr !== undefined && rr < 1.2);
+      return "<div style=\"font-size:.68rem;margin-top:6px;" +
+        "border-top:1px solid rgba(128,128,128,.25);padding-top:4px\">" +
+        "<b>Maliyet-Sonrası Yapı</b><br>" +
+        "Gross TP " + pct(cp.gross_tp_pct) +
+        " · Gross SL " + pct(cp.gross_sl_pct) +
+        " · Round-trip maliyet " + pct(cp.round_trip_cost_pct) +
+        "<br>Net TP " + pct(cp.net_tp_pct) +
+        " · Net SL " + pct(cp.net_sl_pct) +
+        " · Net R/R <b class=\"" + (rrBad ? "th-loss" : "th-profit") +
+        "\">" + rrTxt + "</b>" +
+        "<br>Başabaş win-rate " +
+        pct(cp.break_even_win_rate_pct) + "</div>";
+    }
+    var cps = (d && d.cost_profiles) || null;
     coreCard.innerHTML =
       "<b style=\"font-size:.72rem\">CORE — ALPHA CORE SCALP</b>" +
-      metricCardBody(mCore);
+      metricCardBody(mCore) + costBlock(cps && cps.core);
     oppCard.innerHTML =
       "<b style=\"font-size:.72rem\">OPPORTUNITY — ALPHA " +
-      "OPPORTUNITY BURST</b>" + metricCardBody(mOpp);
+      "OPPORTUNITY BURST</b>" + metricCardBody(mOpp) +
+      costBlock(cps && cps.opportunity);
     var pf = document.getElementById("th-dm-portfolio");
     if (pf) {
       var v = d ? d.portfolio_net_pnl : null;

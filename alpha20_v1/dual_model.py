@@ -49,7 +49,10 @@ REASON_CODES = (
     "FEE_DRAG", "EXPECTED_EDGE_TOO_LOW", "MOMENTUM_EXHAUSTED",
     "FALSE_BREAKOUT_RISK", "RISK_LIMIT", "POSITION_LIMIT",
     "COOLDOWN", "DUPLICATE_POSITION", "DUPLICATE_MODEL_OWNERSHIP",
-    "DATA_QUALITY")
+    "DATA_QUALITY",
+    # Maliyet-sonrası TP/SL kapıları (net yapı sözleşmesi)
+    "NET_TP_NON_POSITIVE", "NET_REWARD_RISK_TOO_LOW",
+    "EDGE_BELOW_COST_MULTIPLE")
 
 FEE_RATE = 0.001  # tek yön; gidiş-dönüş 2x
 
@@ -65,6 +68,12 @@ DEFAULTS: dict[str, Any] = {
         "trailing_pct": 0.20,
         "min_confidence": 60,
         "max_slippage_pct": 0.03,
+        # Maliyet-sonrası giriş kapıları (net TP/SL sözleşmesi):
+        # net_tp = tp - roundtrip, net_sl = sl + roundtrip;
+        # net_tp<=0 veya net_rr<1.20 veya beklenen net edge
+        # < roundtrip×1.5 ise giriş REDDEDİLİR.
+        "min_net_reward_risk": 1.20,
+        "min_edge_cost_multiple": 1.5,
         "max_open_positions": 2,
         "position_usdt": 100.0,
         "refresh_seconds": 300,     # liste yenileme 5 dk
@@ -82,6 +91,9 @@ DEFAULTS: dict[str, Any] = {
         "trailing_pct": 0.35,
         "min_confidence": 55,
         "max_slippage_pct": 0.08,
+        # Maliyet-sonrası giriş kapıları — CORE ile aynı sözleşme.
+        "min_net_reward_risk": 1.20,
+        "min_edge_cost_multiple": 1.5,
         "max_open_positions": 2,
         "position_usdt": 50.0,      # CORE'dan küçük
         "refresh_seconds": 180,     # 2-5 dk havuz yenileme
@@ -435,6 +447,36 @@ def evaluate_signal(symbol: str, klines: list[list],
             "vwap": vwap, "last": last}
 
 
+def cost_profile(m: dict, slippage_pct: float | None = None) -> dict:
+    """Maliyet-sonrası TP/SL profili — TEK hesap noktası.
+
+    slippage_pct verilmezse max_slippage_pct ÜST SINIR tahmini
+    kullanılır (panelde dürüst kötü-senaryo gösterimi); giriş
+    kapısında işlemin gerçek spread tahmini geçirilir.
+    round_trip_cost = gidiş-dönüş komisyon + slippage tahmini.
+    break_even_win_rate = net_sl / (net_tp + net_sl)."""
+    tp = float(m.get("tp_pct") or 0.0)
+    sl = float(m.get("sl_pct") or 0.0)
+    slip = float(m.get("max_slippage_pct") or 0.0) \
+        if slippage_pct is None else float(slippage_pct)
+    cost = FEE_RATE * 2 * 100 + slip
+    net_tp = tp - cost
+    net_sl = sl + cost
+    rr = (net_tp / net_sl) if net_sl > 0 else None
+    be = (net_sl / (net_tp + net_sl) * 100) \
+        if net_tp > 0 and net_sl > 0 else None
+    return {
+        "gross_tp_pct": round(tp, 4),
+        "gross_sl_pct": round(sl, 4),
+        "round_trip_cost_pct": round(cost, 4),
+        "net_tp_pct": round(net_tp, 4),
+        "net_sl_pct": round(net_sl, 4),
+        "net_reward_risk": round(rr, 4) if rr is not None else None,
+        "break_even_win_rate_pct":
+            round(be, 2) if be is not None else None,
+    }
+
+
 def execution_quality_gate(row: dict, sig: dict, model: str,
                            cfg: dict) -> tuple[bool, str | None, float]:
     """Zorunlu kalite kapıları → (geçti, reason_code, net_edge_pct)."""
@@ -457,6 +499,17 @@ def execution_quality_gate(row: dict, sig: dict, model: str,
         return False, "FEE_DRAG", round(net, 4)
     if net <= 0:
         return False, "EXPECTED_EDGE_TOO_LOW", round(net, 4)
+    # Maliyet-sonrası TP/SL kapıları: komisyon+slippage düşüldükten
+    # sonra ödül/risk yapısı sürdürülebilir değilse giriş YOK.
+    cp = cost_profile(m, slippage_pct)
+    if cp["net_tp_pct"] <= 0:
+        return False, "NET_TP_NON_POSITIVE", round(net, 4)
+    min_rr = float(m.get("min_net_reward_risk", 1.20))
+    if cp["net_reward_risk"] is None or cp["net_reward_risk"] < min_rr:
+        return False, "NET_REWARD_RISK_TOO_LOW", round(net, 4)
+    mult = float(m.get("min_edge_cost_multiple", 1.5))
+    if net < cp["round_trip_cost_pct"] * mult:
+        return False, "EDGE_BELOW_COST_MULTIPLE", round(net, 4)
     return True, None, round(net, 4)
 
 
@@ -842,7 +895,8 @@ def model_metrics(model: str, rt: dict | None = None) -> dict[str, Any]:
     }
 
 
-def snapshot(with_prices: bool = False) -> dict[str, Any]:
+def snapshot(with_prices: bool = False,
+             main_cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     """TEK kanonik snapshot — UI/API/ledger/runtime aynı kaynaktan.
 
     with_prices=True: açık semboller için TAZE fiyat çekilir ve
@@ -890,7 +944,18 @@ def snapshot(with_prices: bool = False) -> dict[str, Any]:
             p["est_slippage"] = None
     core_open = [p for p in positions if p["model"] == MODEL_CORE]
     opp_open = [p for p in positions if p["model"] == MODEL_OPP]
+    # Maliyet-sonrası TP/SL profili (etkin config: kullanıcı ayarı +
+    # champion overlay). Hesap başarısızsa None — uydurma değer yok.
+    try:
+        _cfg = get_config(main_cfg)
+        cost_profiles = {
+            "core": cost_profile(_cfg["core"]),
+            "opportunity": cost_profile(_cfg["opportunity"]),
+        }
+    except Exception:
+        cost_profiles = None
     return {
+        "cost_profiles": cost_profiles,
         "snapshot_version": int(rt.get("updated_ts") or 0),
         "live_orders": "DISABLED",
         "core_list": rt.get("core_list", []),

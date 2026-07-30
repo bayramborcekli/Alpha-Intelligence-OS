@@ -4947,7 +4947,8 @@ def api_dual_model_state():
     ret nedenleri. UI/API/ledger/runtime aynı kaynaktan."""
     import dual_model as _dm
     return jsonify({"ok": True,
-                    "data": _dm.snapshot(with_prices=True)})
+                    "data": _dm.snapshot(with_prices=True,
+                                         main_cfg=_get_main_config())})
 
 
 @app.get("/api/dual-model/learning")

@@ -65,7 +65,24 @@ STAGES = ("STAGE0_STATIC", "STAGE1_HISTORICAL", "STAGE2_WALK_FORWARD",
 GENERATION_METHODS = (
     "PARAM_MUTATION", "DIAGNOSIS_DRIVEN", "CROSSOVER",
     "REGIME_VARIANT", "FEE_DRAG_REDUCER", "GIVEBACK_REDUCER",
-    "LOSS_REDUCTION", "PROFIT_CAPTURE")
+    "LOSS_REDUCTION", "PROFIT_CAPTURE", "COST_STRUCTURE")
+
+# Maliyet-duyarlı TP/SL ızgaraları (net TP/SL sözleşmesi): yalnız
+# maliyet-sonrası net reward/risk >= MIN_NET_REWARD_RISK olan
+# kombinasyonlar aday olur; champion'a DOKUNULMAZ, shadow/paper'da
+# kanıtlanır. Izgara sabittir — rastgele değil, denetlenebilir.
+MIN_NET_REWARD_RISK = 1.20
+COST_GRIDS: dict[str, dict[str, tuple[float, ...]]] = {
+    "ALPHA_CORE_SCALP": {
+        "tp_pct": (0.80, 1.00, 1.20),
+        "sl_pct": (0.35, 0.40, 0.50),
+    },
+    "ALPHA_OPPORTUNITY_BURST": {
+        "tp_pct": (1.00, 1.25, 1.50),
+        "sl_pct": (0.45, 0.55, 0.65),
+    },
+}
+MAX_COST_CANDIDATES_PER_GEN = 2   # jenerasyon başına; kap MAX_… içinde
 
 LOSS_REASON_CODES = (
     "LOW_QUALITY_ENTRY", "FALSE_BREAKOUT", "MOMENTUM_EXHAUSTED",
@@ -299,6 +316,68 @@ def generate_candidates(model: str, ml: dict, diagnosis: dict | None,
 
     out: list[dict] = []
     gen = int(ml.get("generation", 0)) + 1
+
+    # COST_STRUCTURE: sabit maliyet-duyarlı TP/SL ızgarası. Yalnız
+    # maliyet-sonrası net_rr >= MIN_NET_REWARD_RISK kombinasyonlar;
+    # net_rr en yüksekten sıralanır, jenerasyon başına en fazla
+    # MAX_COST_CANDIDATES_PER_GEN (parmak izi eleme döngüler boyunca
+    # ızgarayı tüketir). Parametreler mutasyonsuz, olduğu gibi.
+    import dual_model as _dm
+    grid = COST_GRIDS.get(model)
+    if grid:
+        combos = []
+        for tp in grid["tp_pct"]:
+            for sl in grid["sl_pct"]:
+                cp = _dm.cost_profile(
+                    {"tp_pct": tp, "sl_pct": sl,
+                     "max_slippage_pct": base.get("max_slippage_pct")})
+                rr = cp["net_reward_risk"]
+                if rr is not None and rr >= MIN_NET_REWARD_RISK \
+                        and cp["net_tp_pct"] > 0:
+                    combos.append((rr, tp, sl, cp))
+        combos.sort(key=lambda c: -c[0])
+        added = 0
+        for rr, tp, sl, cp in combos:
+            if added >= MAX_COST_CANDIDATES_PER_GEN or \
+                    len(out) >= MAX_CANDIDATES_PER_GENERATION:
+                break
+            params = dict(base)
+            params["tp_pct"] = tp
+            params["sl_pct"] = sl
+            ok, _why = validate_candidate_params(params)
+            if not ok:
+                continue
+            fp = _fingerprint(model, params)
+            if fp in known:
+                continue
+            known.add(fp)
+            out.append({
+                "strategy_candidate_id": f"{model[:4]}-g{gen}-{fp[:8]}",
+                "parent_strategy_id": "CHAMPION",
+                "generation": gen,
+                "model_family": model,
+                "parameters": params,
+                "fingerprint": fp,
+                "created_reason": "COST_STRUCTURE",
+                "hypothesis": (
+                    f"maliyet-sonrası yapı: TP {tp}% / SL {sl}% → "
+                    f"net RR {rr} (net TP {cp['net_tp_pct']}%, "
+                    f"net SL {cp['net_sl_pct']}%, başabaş WR "
+                    f"{cp['break_even_win_rate_pct']}%)"),
+                "expected_improvement":
+                    "fee drag payı düşer; net expectancy pozitife döner",
+                "risk_notes": "izin listesi içinde; güvenlik tavanları "
+                              "sabit; champion'a dokunulmaz",
+                "cost_profile": cp,
+                "data_version": None,
+                "code_version": CODE_VERSION,
+                "created_at": _now_iso(),
+                "stage": "STAGE0_STATIC",
+                "status": "ACTIVE",
+                "stage_results": {},
+            })
+            added += 1
+
     for method, seed, direction, hyp in plans:
         if len(out) >= MAX_CANDIDATES_PER_GENERATION:
             break
@@ -643,10 +722,27 @@ def run_stage(cand: dict, model: str, dataset: list[dict],
             better = float(m.get("expectancy_per_trade") or 0) >= \
                 float(champ.get("expectancy_per_trade") or 0)
             ok = better and float(m.get("expectancy_per_trade") or 0) > 0
+            fail_reason = "NOT_BETTER_THAN_CHAMPION"
+            # COST_STRUCTURE adayı: net RR hedefi GERÇEK ileri-zaman
+            # sonuçlarla doğrulanmalı — realized win/loss oranı
+            # (win_loss_ratio) hedefin altındaysa ve PF<=1 ise geçemez.
+            if ok and cand.get("created_reason") == "COST_STRUCTURE":
+                pf = m.get("profit_factor") or 0
+                wlr = m.get("win_loss_ratio")
+                if not (pf and pf > 1):
+                    ok = False
+                    res["cost_gate"] = "PROFIT_FACTOR_NOT_ABOVE_1"
+                elif wlr is not None and wlr < MIN_NET_REWARD_RISK:
+                    ok = False
+                    res["cost_gate"] = "REALIZED_NET_RR_BELOW_TARGET"
+                else:
+                    res["cost_gate"] = "OK"
+                if not ok:
+                    fail_reason = "COST_TARGET_NOT_MET"
             res.update(ok=ok, champion_same_window={
                 "expectancy": champ.get("expectancy_per_trade"),
                 "sample": champ.get("closed_trades")},
-                reason="OK" if ok else "NOT_BETTER_THAN_CHAMPION", **sm)
+                reason="OK" if ok else fail_reason, **sm)
 
     elif stage == "STAGE5_PAPER_CHALLENGER":
         # dual_learning challenger yuvasına devret — terfi kapıları
