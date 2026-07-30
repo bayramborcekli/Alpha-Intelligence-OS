@@ -80,7 +80,12 @@ AGENT_TEST_MODULES = MappingProxyType({
     # HTTP + mock git ile otomatik koşar. AGENT_CHAIN'e girmez
     # (Mission 2100 teslim zinciri dondurulmuştur); kapsam
     # haritasında ayrı anahtar olarak taşınır.
-    "FIELD_TOOLS": ("test_verify_dual_model", "test_verify_scheduler"),
+    # Task 139: Windows saha doğrulayıcı testleri de kayıtlı —
+    # scheduler alan-adı regresyonu (gerçek Flask client) ve
+    # uçtan uca doğrulayıcı akışı sessizce atlanamaz.
+    "FIELD_TOOLS": ("test_verify_dual_model", "test_verify_scheduler",
+                    "test_windows_verify_scheduler",
+                    "test_windows_verify_e2e"),
 })
 
 # Bilinen ve GEREKÇELİ atlamalar — kritik test DEĞİLDİR.
