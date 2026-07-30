@@ -24,7 +24,11 @@ TASARIM İLKELERİ
 """
 from __future__ import annotations
 
-import fcntl
+try:
+    import fcntl
+except ImportError:  # Windows: fcntl yok — taşınabilir kilit kalıbı
+    import portable_flock as fcntl  # type: ignore
+
 import hashlib
 import json
 import logging
