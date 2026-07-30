@@ -19,3 +19,4 @@
 - [Master integration runtime prefs](master-integration-prefs.md) — profil/scan tercihleri git dışı runtime_preferences.json'da; orchestrator hem serve_windows hem gunicorn post_fork'ta uygular; smart_config.json save'lerle mutasyona uğrar, commit öncesi checkout et.
 - [Universe refresh design](universe-refresh-loop.md) — yenileme artık scheduler'dan moddan bağımsız; durum kaynağı smart_config['scheduler_refresh'], smart_log değil; log en-yeni-önce.
 - [Merge push gap](merge-push-gap.md) — görev ajanı merge'leri GitHub'a otomatik push ETMEZ; Windows git pull öncesi origin/main HEAD eşitliğini her seferinde doğrula.
+- [Dual-model PAPER engine](dual-model-engine.md) — CORE/OPPORTUNITY iki-liste mimarisi; tüm istekler paylaşımlı 429 korumasından, arbitraj birleşik kümede, TP/SL yalnız taze fiyatla.
