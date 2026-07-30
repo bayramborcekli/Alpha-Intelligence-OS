@@ -144,24 +144,65 @@ def _now_iso() -> str:
 
 
 # ── Piyasa verisi (yalnız public spot uçları) ──────────────────────
+# Paylaşımlı 429/418 koruması: alpha20'nin dosya-tabanlı geri çekilme
+# durumuna uyulur ve buradaki 429/418'ler oraya KAYDEDİLİR — dual-model
+# sistem geneli anti-ban korumasını atlayamaz.
+
+
+class RateLimited(Exception):
+    """Paylaşımlı geri çekilme aktif — istek atılmadı."""
+
+
+def _guarded_get(path: str, params: dict | None = None,
+                 timeout: int = 10) -> Any:
+    import requests
+    try:
+        import alpha20 as _a20
+        remaining = _a20.rate_limit_remaining()
+    except Exception:
+        _a20, remaining = None, 0.0
+    if remaining > 0:
+        raise RateLimited(f"{remaining:.0f}s geri çekilme")
+    r = requests.get(f"{SPOT_BASE}{path}", params=params,
+                     timeout=timeout)
+    if r.status_code in (429, 418):
+        if _a20 is not None:
+            try:
+                _a20.register_rate_limit(r.status_code, r)
+            except Exception:
+                pass
+        raise RateLimited(f"HTTP {r.status_code}")
+    r.raise_for_status()
+    return r.json()
+
 
 def fetch_spot_tickers() -> list[dict[str, Any]]:
-    import requests
-    r = requests.get(f"{SPOT_BASE}/api/v3/ticker/24hr", timeout=15)
-    r.raise_for_status()
-    data = r.json()
+    data = _guarded_get("/api/v3/ticker/24hr", timeout=15)
     return data if isinstance(data, list) else []
 
 
 def fetch_spot_klines(symbol: str, interval: str = "1m",
                       limit: int = 60) -> list[list]:
-    import requests
-    r = requests.get(f"{SPOT_BASE}/api/v3/klines",
-                     params={"symbol": symbol, "interval": interval,
-                             "limit": limit}, timeout=10)
-    r.raise_for_status()
-    data = r.json()
+    data = _guarded_get("/api/v3/klines",
+                        {"symbol": symbol, "interval": interval,
+                         "limit": limit})
     return data if isinstance(data, list) else []
+
+
+def fetch_spot_prices(symbols: list[str]) -> dict[str, float]:
+    """Açık pozisyon sembolleri için TAZE fiyat (tek toplu istek)."""
+    if not symbols:
+        return {}
+    data = _guarded_get(
+        "/api/v3/ticker/price",
+        {"symbols": json.dumps(symbols, separators=(",", ":"))})
+    out: dict[str, float] = {}
+    for row in data if isinstance(data, list) else []:
+        try:
+            out[row["symbol"]] = float(row["price"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
 
 
 def _ticker_fields(t: dict) -> dict[str, float] | None:
@@ -676,7 +717,11 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                                for r in core + opp}
                 last_refresh = now
             rt = _load_runtime()
-            # 2) Sinyal turları (round-robin batch, rate-limit dostu)
+            # 2) Sinyal turları (round-robin batch, rate-limit dostu).
+            # Adaylar İKİ modelden de toplanır; sahiplik arbitrajı
+            # birleşik kümede TEK seferde çözülür (spec: iki listede
+            # olan sembolde en yüksek net edge kazanır).
+            all_cands: dict[str, list] = {}
             for model, key, tkey, batch in (
                     (MODEL_CORE, "core", "core_list", 4),
                     (MODEL_OPP, "opp", "opportunity_list", 4)):
@@ -695,6 +740,8 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                     sym = row["symbol"]
                     try:
                         kl = fetch_spot_klines(sym)
+                    except RateLimited:
+                        break  # paylaşımlı geri çekilme — tur biter
                     except Exception:
                         record_rejection(sym, model, "DATA_QUALITY")
                         continue
@@ -721,23 +768,32 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                 _update_runtime(_mutc)
                 if key == "core":
                     last_core_sig = now
-                    core_cands = cands
                 else:
                     last_opp_sig = now
-                    opp_cands = cands
-                # 3) Sahiplik + açılış
-                own = resolve_ownership({model: cands})
+                all_cands[model] = cands
+            # 3) Birleşik sahiplik arbitrajı + açılış
+            if all_cands:
+                own = resolve_ownership(all_cands)
                 for rej in own["rejected"]:
                     record_rejection(rej["symbol"], rej["model"],
                                      "DUPLICATE_MODEL_OWNERSHIP")
                 for w in own["winners"]:
                     opened, reason = try_open_position(
-                        w["symbol"], model, w["sig"],
+                        w["symbol"], w["model"], w["sig"],
                         w["net_edge_pct"], cfg, now)
                     if not opened:
-                        record_rejection(w["symbol"], model, reason)
-            # 4) Pozisyon monitörü
-            monitor_positions(price_cache.get, cfg, time.time())
+                        record_rejection(w["symbol"], w["model"],
+                                         reason)
+            # 4) Pozisyon monitörü — açık semboller için TAZE fiyat
+            # (bayat cache ile TP/SL kararı verilmez)
+            open_syms = list(_open_positions(_load_runtime()))
+            if open_syms:
+                try:
+                    price_cache.update(fetch_spot_prices(open_syms))
+                    monitor_positions(price_cache.get, cfg,
+                                      time.time())
+                except RateLimited:
+                    pass  # taze fiyat yoksa çıkış kararı ertelenir
             _STOP.wait(cfg["monitor_seconds"])
         except Exception as exc:  # döngü asla ölmez; hata görünür
             log.error("dual_model döngü hatası: %s", exc)

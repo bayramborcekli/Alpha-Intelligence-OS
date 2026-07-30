@@ -276,6 +276,45 @@ class TestMetricsAndSnapshot:
         assert snap["core_list"][0]["symbol"] == "BTCUSDT"
 
 
+class TestRateLimitGuard:
+    """Dual-model istekleri paylaşımlı 429/418 korumasına uyar."""
+
+    def test_backoff_blocks_request(self, monkeypatch):
+        import alpha20 as a20
+        monkeypatch.setattr(a20, "rate_limit_remaining",
+                            lambda now=None: 42.0)
+        with pytest.raises(dm.RateLimited):
+            dm.fetch_spot_klines("BTCUSDT")
+
+    def test_429_registered_to_shared_state(self, monkeypatch):
+        import alpha20 as a20
+        seen = {}
+        monkeypatch.setattr(a20, "rate_limit_remaining",
+                            lambda now=None: 0.0)
+        monkeypatch.setattr(
+            a20, "register_rate_limit",
+            lambda status, response=None, now=None:
+            seen.setdefault("status", status) or 60.0)
+
+        class Resp:
+            status_code = 429
+        import requests
+        monkeypatch.setattr(requests, "get",
+                            lambda *a, **k: Resp())
+        with pytest.raises(dm.RateLimited):
+            dm.fetch_spot_tickers()
+        assert seen["status"] == 429
+
+    def test_fetch_spot_prices_parses_batch(self, monkeypatch):
+        monkeypatch.setattr(dm, "_guarded_get",
+                            lambda *a, **k: [
+                                {"symbol": "AUSDT", "price": "1.5"},
+                                {"symbol": "BUSDT", "price": "x"}])
+        assert dm.fetch_spot_prices(["AUSDT", "BUSDT"]) == {
+            "AUSDT": 1.5}
+        assert dm.fetch_spot_prices([]) == {}
+
+
 class TestGitCleanAndSafety:
     def test_runtime_paths_gitignored(self):
         gi = (ROOT / ".gitignore").read_text(encoding="utf-8")
