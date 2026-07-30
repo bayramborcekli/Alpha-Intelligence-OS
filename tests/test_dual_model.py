@@ -464,3 +464,10 @@ class TestApiAndUi:
             encoding="utf-8")
         assert "/api/dual-model/state" in js
         assert "renderDualModel" in js
+
+
+def test_record_startup_failure_writes_last_error():
+    """Windows başlangıç hatası panele görünür: last_error yazılır."""
+    dm.record_startup_failure("DUAL_MODEL_LOOP_NOT_STARTED: test")
+    rt = dm._load_runtime()
+    assert rt["last_error"] == "DUAL_MODEL_LOOP_NOT_STARTED: test"

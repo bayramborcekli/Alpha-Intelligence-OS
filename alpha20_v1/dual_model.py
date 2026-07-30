@@ -916,6 +916,21 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
             _STOP.wait(15)
 
 
+def record_startup_failure(message: str) -> None:
+    """Loop başlatılamadığında nedeni panele görünür kıl (last_error).
+
+    Yalnız TEK-süreçli girişler (serve_windows) çağırmalı: gunicorn'da
+    kilidi alamayan diğer worker'lar NORMALDİR ve bunu çağırmamalıdır."""
+    def _mut(rt: dict) -> None:
+        rt["last_error"] = message
+
+    try:
+        _update_runtime(_mut)
+    except OSError:
+        log.warning("Dual-model startup hatası runtime'a yazılamadı: %s",
+                    message)
+
+
 def start_dual_model_loop(get_main_config: Callable[[], dict]) -> bool:
     """Süreçler arası flock: yalnız tek worker döngüyü koşturur."""
     global _THREAD

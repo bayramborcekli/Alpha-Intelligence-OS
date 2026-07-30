@@ -304,6 +304,33 @@ def _bootstrap_background_services() -> None:
     except Exception as exc:
         log.warning("AUTOMATION SCHEDULER başlatılamadı: %s", exc)
 
+    # 4c. Dual-model kısa vadeli PAPER modelleri — gunicorn post_fork
+    #     PARİTESİ (bkz. gunicorn.conf.py). Windows'ta post_fork hiç
+    #     koşmadığı için hook burada zorunludur; süreçler arası tek koşu
+    #     dual_model içindeki flock'ta (Windows: portable_flock/msvcrt,
+    #     süreç ölünce kilit otomatik düşer — bayat kilit kalmaz).
+    #     LIVE ORDERS DISABLED. Hata sunucuyu çökertmez.
+    try:
+        import dual_model as _dm
+        if _dm.start_dual_model_loop(_app._get_main_config):
+            log.info("DUAL-MODEL LOOP STARTED (LIVE ORDERS DISABLED)")
+        else:
+            cfg_dm = _dm.get_config(_app._get_main_config())
+            if not cfg_dm.get("enabled", True):
+                log.info("DUAL-MODEL DISABLED (dual_model.enabled=false)")
+            else:
+                msg = ("DUAL_MODEL_LOOP_NOT_STARTED: süreç kilidi "
+                       "alınamadı — başka bir sunucu süreci koşuyor "
+                       "olabilir; listeler yenilenmiyorsa süreçleri "
+                       "kontrol edin.")
+                log.warning(msg)
+                # Yalnız gerçek Windows tek-süreç girişinde panele yaz:
+                # Replit/gunicorn'da kilidi diğer worker tutar (normal).
+                if _reconcile_env_ok():
+                    _dm.record_startup_failure(msg)
+    except Exception as exc:
+        log.warning("DUAL-MODEL başlatılamadı: %s", exc)
+
 
 def _reconcile_env_ok() -> bool:
     """Reconcile ortam kapısı: yalnız yerel Windows (Replit'te no-op).
