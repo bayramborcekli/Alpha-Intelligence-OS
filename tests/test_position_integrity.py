@@ -145,6 +145,88 @@ class TestLegacyClassification:
             "_cls = _classify_legacy_position(")[1][:2000]
 
 
+# ── Task 144: panel banner uyarıları ───────────────────────────────
+
+class TestIntegrityPanelWarnings:
+    @pytest.fixture()
+    def panelmod(self, tmp_path, monkeypatch, appmod):
+        monkeypatch.setattr(appmod, "STATE_PATH",
+                            tmp_path / "state.json")
+        monkeypatch.setattr(appmod, "load_config",
+                            lambda: ({}, None))
+        return appmod
+
+    def _write_state(self, appmod, state: dict):
+        appmod.STATE_PATH.write_text(
+            json.dumps(state), encoding="utf-8")
+
+    def test_orphan_detection_produces_warning(self, panelmod):
+        self._write_state(panelmod, {
+            "position": {"symbol": "ONDOUSDT", "entry": 0.95,
+                         "quantity": 10, "opened_at": _iso(5)},
+            "trades": [{"symbol": "ONDOUSDT", "closed_at": _iso(4)}],
+        })
+        panel = panelmod._position_integrity_panel()
+        assert len(panel["warnings"]) == 1
+        assert "Yetim pozisyon kaydı" in panel["warnings"][0]
+        assert "ONDOUSDT" in panel["warnings"][0]
+        # Son audit kaydı da API'dan okunabilir.
+        assert panel["recent_audit"][0]["reason"] == "ORPHAN_POSITION"
+
+    def test_incomplete_and_stale_labels(self, panelmod):
+        self._write_state(panelmod, {
+            "position": {"symbol": "XUSDT", "opened_at": _iso(1)},
+            "trades": [],
+        })
+        panel = panelmod._position_integrity_panel()
+        assert "Eksik pozisyon verisi" in panel["warnings"][0]
+
+    def test_warning_clears_when_state_cleaned(self, panelmod):
+        self._write_state(panelmod, {
+            "position": {"symbol": "ONDOUSDT", "entry": 0.95,
+                         "quantity": 10, "opened_at": _iso(5)},
+            "trades": [{"symbol": "ONDOUSDT", "closed_at": _iso(4)}],
+        })
+        assert panelmod._position_integrity_panel()["warnings"]
+        # State temizlenince uyarı kendiliğinden kaybolur; audit
+        # geçmişi kaybolmaz.
+        self._write_state(panelmod, {"position": None, "trades": []})
+        panel = panelmod._position_integrity_panel()
+        assert panel["warnings"] == []
+        assert panel["recent_audit"]  # geçmiş hâlâ okunabilir
+
+    def test_healthy_position_no_warning(self, panelmod):
+        self._write_state(panelmod, {
+            "position": {"symbol": "ONDOUSDT", "entry": 0.95,
+                         "quantity": 10, "opened_at": _iso(0.5)},
+            "trades": [],
+        })
+        assert panelmod._position_integrity_panel()["warnings"] == []
+
+    def test_recent_audit_tail_limit(self, panelmod):
+        with panelmod.POSITION_AUDIT_PATH.open("w",
+                                               encoding="utf-8") as fh:
+            for i in range(50):
+                fh.write(json.dumps({
+                    "ts": _iso(1), "symbol": f"S{i}USDT",
+                    "reason": "STALE_POSITION", "detail": "x"}) + "\n")
+        recs = panelmod._recent_position_audit()
+        assert len(recs) == panelmod.POSITION_AUDIT_RECENT_LIMIT
+        assert recs[0]["symbol"] == "S49USDT"  # en yeni önce
+
+    def test_status_endpoint_exposes_fields(self):
+        src = (ROOT / "app.py").read_text(encoding="utf-8")
+        assert 'data["position_integrity_warnings"]' in src
+        assert 'data["position_integrity_audit"]' in src
+
+    def test_js_appends_integrity_warnings_to_banner(self):
+        js = (ROOT / "static/js/trading_home.js").read_text(
+            encoding="utf-8")
+        assert "position_integrity_warnings" in js
+        idx = js.index("position_integrity_warnings")
+        assert "showWarnings(warns)" in js[idx:idx + 400]
+
+
 # ── Dual-model pozisyon durumu + exit korumaları ───────────────────
 
 @pytest.fixture()

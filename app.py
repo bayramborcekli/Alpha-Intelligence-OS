@@ -3459,6 +3459,86 @@ def _audit_position_integrity(symbol: str, status: str,
         pass
 
 
+# Task 144: panel banner'ında gösterilecek son audit kaydı sayısı.
+POSITION_AUDIT_RECENT_LIMIT = 20
+
+_POSITION_AUDIT_LABELS_TR = {
+    "ORPHAN_POSITION": "Yetim pozisyon kaydı",
+    "INCOMPLETE_POSITION_DATA": "Eksik pozisyon verisi",
+    "STALE_POSITION": "Bayat pozisyon",
+}
+
+
+def _recent_position_audit(
+        limit: int = POSITION_AUDIT_RECENT_LIMIT) -> list[dict]:
+    """Son N audit kaydını tail-read ile döndür (en yeni önce).
+
+    Tam dosya asla okunmaz (dosya büyüse de sabit maliyet);
+    bozuk satırlar sessizce atlanır."""
+    try:
+        with POSITION_AUDIT_PATH.open("rb") as fh:
+            fh.seek(0, 2)
+            size = fh.tell()
+            fh.seek(max(0, size - 16384))
+            lines = fh.read().decode(
+                "utf-8", "replace").strip().splitlines()
+    except OSError:
+        return []
+    out: list[dict] = []
+    for ln in reversed(lines):
+        try:
+            rec = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(rec, dict) and rec.get("symbol"):
+            out.append(rec)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _position_integrity_panel() -> dict:
+    """Task 144: yetim/bayat pozisyon tespitleri panel banner'ı için.
+
+    Uyarı YALNIZ tespit hâlâ aktifken üretilir: state.json'daki
+    güncel pozisyon yeniden sınıflandırılır; sorunlu değilse
+    (kayıt temizlenmiş/değişmişse) uyarı listesi boş döner —
+    banner sonraki yenilemede kendiliğinden kaybolur. Son N audit
+    kaydı da geçmiş görünürlüğü için birlikte döndürülür."""
+    warnings: list[str] = []
+    try:
+        st, _ = read_json(STATE_PATH)
+        pos = (st or {}).get("position")
+        if isinstance(pos, dict) and pos.get("symbol"):
+            cfg, _cfg_err = load_config()
+            try:
+                stale_h = float((cfg or {}).get(
+                    "position_stale_hours") or 0)
+            except (TypeError, ValueError):
+                stale_h = 0
+            cls = _classify_legacy_position(
+                pos, st or {}, stale_hours=stale_h or None)
+            status = cls.get("status")
+            if status in _POSITION_AUDIT_LABELS_TR:
+                label = _POSITION_AUDIT_LABELS_TR[status]
+                detail = ""
+                for rec in _recent_position_audit():
+                    if rec.get("symbol") == pos.get("symbol") and \
+                            rec.get("reason") == status:
+                        detail = str(rec.get("detail") or "")
+                        break
+                warnings.append(
+                    f"{label}: {pos.get('symbol')}"
+                    + (f" — {detail}" if detail else "")
+                    + " (ayrıntı: pozisyon bütünlüğü denetim kaydı)")
+    except Exception:
+        # Denetim uyarısı üretilemezse panel düşmez; audit geçmişi
+        # yine de döner.
+        pass
+    return {"warnings": warnings,
+            "recent_audit": _recent_position_audit()}
+
+
 def _classify_legacy_position(pos: dict, state: dict,
                               stale_hours: float | None = None) -> dict:
     """Legacy state.json pozisyonunu dürüst durum koduna ayrıştır.
@@ -4481,6 +4561,11 @@ def api_operation_status():
     # Task 70: Eski Binance env isim uyarıları ana panelde banner olarak
     # gösterilir (yalnız metin; sır değeri asla içermez).
     data["legacy_env_warnings"] = local_env.legacy_name_warnings()
+    # Task 144: yetim/bayat pozisyon tespitleri panel banner'ında
+    # görünür; state temizlenince uyarı kendiliğinden kaybolur.
+    _pi = _position_integrity_panel()
+    data["position_integrity_warnings"] = _pi["warnings"]
+    data["position_integrity_audit"] = _pi["recent_audit"]
     payload, status = _oca.read_envelope(
         data, snapshot, g.get("request_id", "-"),
         snapshot.generated_at)

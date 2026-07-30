@@ -945,6 +945,11 @@
           warns.push("Tarama " + rl.remaining_seconds +
                      " saniye duraklatıldı — " + rl.reason);
         }
+        // Task 144: yetim/bayat pozisyon tespitleri banner olarak
+        // görünür; state temizlenince sonraki yenilemede kaybolur.
+        (st.position_integrity_warnings || []).forEach(function (w) {
+          warns.push(w);
+        });
         showWarnings(warns);
       }
       // /api/paper/state zarfı düz JSON'dur (ok/data zarfı yok).
