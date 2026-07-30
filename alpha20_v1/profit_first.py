@@ -21,7 +21,11 @@ bırakılır ve DATA_QUALITY nedeni eklenir — UYDURMA YOK.
 """
 from __future__ import annotations
 
-import fcntl
+try:
+    import fcntl
+except ImportError:  # Windows: fcntl yok — taşınabilir kilit kalıbı
+    import portable_flock as fcntl  # type: ignore
+
 import json
 import logging
 import math

@@ -345,6 +345,17 @@ class ProductView:
     last_signal_at: str
     last_decision: str
     last_rejection_reason: str
+    # Kanonik karar kaynağı alanları (dual_model_runtime) — sinyal
+    # görünürlüğü görevi. None = veri mevcut değil (uydurulmaz).
+    analyzed_at: str | None = None
+    model: str | None = None
+    decision_state: str | None = None
+    source: str | None = None
+    freshness: str | None = None
+    confidence: float | int | None = None
+    net_reward_risk: float | None = None
+    expected_edge: float | None = None
+    data_quality: str | None = None
 
     def __post_init__(self) -> None:
         for name in ("symbol", "market", "strategy",

@@ -413,11 +413,20 @@ class TestAgent02BannedTerms:
     def test_no_technical_leak_in_template(self, banned):
         assert banned not in TEMPLATE, banned
 
-    @pytest.mark.parametrize("banned", [
-        "ADX", "last_rejection_reason",
-        "last_decision", "signal_state"])
+    # Sinyal görünürlüğü görevi: last_rejection_reason /
+    # last_decision / signal_state alanları artık BİLİNÇLİ olarak
+    # JS'te okunur — kullanıcıya Türkçe karşılıkla (REASON_TR)
+    # gösterilir, ham kod yalnız tooltip/parantez detayında kalır.
+    # Bu yüzden yalnız gerçekten sızmaması gerekenler yasaklı kalır.
+    @pytest.mark.parametrize("banned", ["ADX"])
     def test_no_technical_leak_in_js(self, banned):
         assert banned not in JS, banned
+
+    def test_reason_codes_translated_not_raw(self):
+        # Ham kod tek başına gösterilmez: Türkçe karşılık haritası
+        # mevcut ve kod parantez/tooltip detayında korunur.
+        assert "REASON_TR" in JS
+        assert "Giriş koşulları oluşmadı" in JS
 
 
 class TestAgent02ArchitectFixes:

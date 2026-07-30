@@ -395,9 +395,15 @@ class TestConsolidatedState:
         assert data["automation_mode"] in ("OTONOM", "DANIŞMAN")
         assert data["windows_runtime"] == "RUNNING"
         for s in data["strategies"]:
+            # Sinyal görünürlüğü görevi: kanonik karar alanları
+            # (last_decision/last_rejection_reason/last_analyzed_at/
+            # model) bilinçli eklendi — eski alanlar aynen korunur.
             assert set(s) == {"symbol", "enabled", "run_state",
                               "entry_allowed", "last_signal",
-                              "last_error", "updated_at"}
+                              "last_error", "updated_at",
+                              "last_decision",
+                              "last_rejection_reason",
+                              "last_analyzed_at", "model"}
         assert "ENABLED" in data["strategies_summary"]
 
     def test_consistent_with_operation_status(self, client):

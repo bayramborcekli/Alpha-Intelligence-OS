@@ -195,7 +195,17 @@ def map_product(raw: Mapping,
         last_signal_at=to_text(raw.get("last_signal_at")),
         last_decision=to_text(raw.get("last_decision")),
         last_rejection_reason=to_text(
-            raw.get("last_rejection_reason") or "-"))
+            raw.get("last_rejection_reason") or "-"),
+        # Kanonik karar alanları — yoksa None (uydurma yok)
+        analyzed_at=raw.get("analyzed_at"),
+        model=raw.get("model"),
+        decision_state=raw.get("decision_state"),
+        source=raw.get("source"),
+        freshness=raw.get("freshness"),
+        confidence=raw.get("confidence"),
+        net_reward_risk=raw.get("net_reward_risk"),
+        expected_edge=raw.get("expected_edge"),
+        data_quality=raw.get("data_quality"))
 
 
 def map_signal(raw: Mapping) -> SignalView:

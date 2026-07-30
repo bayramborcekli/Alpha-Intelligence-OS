@@ -877,6 +877,110 @@ def monitor_positions(price_of: Callable[[str], float | None],
     return closed
 
 
+def symbol_status() -> dict:
+    """KANONİK sembol karar durumu — tek doğruluk kaynağı
+    dual_model_runtime.json (rejections + positions + last_refresh).
+
+    Operation Control overview ve /api/paper/state ürün satırları
+    bu haritadan beslenir; aynı karar bilgisi ikinci kez farklı
+    state'te ÜRETİLMEZ. Salt okunur; UNKNOWN yalnız runtime gerçekten
+    okunamıyorsa döner (normal NO_SIGNAL UNKNOWN sayılmaz)."""
+    try:
+        rt = _load_runtime()
+    except Exception as exc:
+        log.error("symbol_status runtime okunamadı: %s", exc)
+        return {"ok": False, "source": "dual_model_runtime",
+                "error": "RUNTIME_UNREADABLE", "symbols": None,
+                "last_refresh": None}
+    out: dict[str, dict] = {}
+    lists = {"CORE": rt.get("core_list") or [],
+             "OPPORTUNITY": rt.get("opportunity_list") or []}
+    for list_name, rows in lists.items():
+        for r in rows:
+            sym = r.get("symbol") if isinstance(r, dict) else None
+            if not sym:
+                continue
+            out.setdefault(sym, {
+                "symbol": sym, "list": list_name, "model": None,
+                "analyzed_at": None, "direction": "NONE",
+                "signal_state": "NOT_ANALYZED",
+                "decision_state": "NOT_ANALYZED",
+                "last_decision": "NOT_ANALYZED",
+                "last_rejection_reason": None,
+                "last_signal_at": None,
+                "confidence": None, "net_reward_risk": None,
+                "expected_edge": None,
+                "data_quality": "OK",
+                "source": "dual_model_runtime"})
+    # En YENİ ret kararı sembol başına seçilir (timestamp kıyası —
+    # eski kayıt yeniyi ezemez; rejections zaten en-yeni-önce prepend
+    # ediliyor ama sıraya güvenmek yerine 'at' kıyaslanır).
+    for rej in (rt.get("rejections") or []):
+        if not isinstance(rej, dict):
+            continue
+        sym = rej.get("symbol")
+        if not sym:
+            continue
+        cur = out.setdefault(sym, {
+            "symbol": sym, "list": None, "model": None,
+            "analyzed_at": None, "direction": "NONE",
+            "signal_state": "NOT_ANALYZED",
+            "decision_state": "NOT_ANALYZED",
+            "last_decision": "NOT_ANALYZED",
+            "last_rejection_reason": None, "last_signal_at": None,
+            "confidence": None, "net_reward_risk": None,
+            "expected_edge": None, "data_quality": "OK",
+            "source": "dual_model_runtime"})
+        at = rej.get("at") or ""
+        if cur["analyzed_at"] and str(cur["analyzed_at"]) >= str(at):
+            continue  # elimizdeki karar daha yeni — ezme
+        reason = rej.get("reason_code") or "UNSPECIFIED"
+        if reason == "NO_SIGNAL":
+            state = "NO_SIGNAL"
+        elif reason == "DATA_QUALITY":
+            state = "DATA_UNAVAILABLE"
+        else:
+            state = "REJECTED"
+        cur.update({
+            "model": rej.get("model"),
+            "analyzed_at": at,
+            "signal_state": state,
+            "decision_state": state,
+            "last_decision": state,
+            "last_rejection_reason": reason,
+            "data_quality": "MISSING" if reason == "DATA_QUALITY"
+            else "OK"})
+        for opt in ("confidence", "net_reward_risk", "expected_edge"):
+            if rej.get(opt) is not None:
+                cur[opt] = rej.get(opt)
+    # Açık pozisyon her kararı ezer: sembol POSITION_OPEN'dır.
+    for sym, p in _open_positions(rt).items():
+        cur = out.setdefault(sym, {
+            "symbol": sym, "list": None, "model": None,
+            "analyzed_at": None, "direction": "NONE",
+            "signal_state": "NOT_ANALYZED",
+            "decision_state": "NOT_ANALYZED",
+            "last_decision": "NOT_ANALYZED",
+            "last_rejection_reason": None, "last_signal_at": None,
+            "confidence": None, "net_reward_risk": None,
+            "expected_edge": None, "data_quality": "OK",
+            "source": "dual_model_runtime"})
+        cur.update({
+            "model": p.get("model"),
+            "direction": "LONG",
+            "signal_state": "POSITION_OPEN",
+            "decision_state": "POSITION_OPEN",
+            "last_decision": "SIGNAL_ACCEPTED",
+            "last_signal_at": p.get("opened_at"),
+            "analyzed_at": p.get("opened_at"),
+            "confidence": p.get("confidence"),
+            "net_reward_risk": p.get("net_reward_risk"),
+            "expected_edge": p.get("net_edge_pct")})
+    last_refresh = rt.get("last_refresh")
+    return {"ok": True, "source": "dual_model_runtime",
+            "last_refresh": last_refresh, "symbols": out}
+
+
 def record_rejection(symbol: str, model: str, reason_code: str) -> None:
     if reason_code not in REASON_CODES:
         reason_code = "DATA_QUALITY"

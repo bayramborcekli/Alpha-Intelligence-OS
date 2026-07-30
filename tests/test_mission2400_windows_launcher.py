@@ -64,7 +64,8 @@ class TestSharedStateModulesUnchangedOnPosix:
         "accounts_registry.py", "operation_control_store.py",
         "automation_engine.py", "intelligence_timeline.py",
         "alpha20_v1/auto_controller.py",
-        "alpha20_v1/strategy_lab.py"])
+        "alpha20_v1/strategy_lab.py",
+        "alpha20_v1/profit_first.py"])
     def test_fallback_import_pattern(self, module):
         src = (ROOT / module).read_text(encoding="utf-8")
         assert "import fcntl" in src

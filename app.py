@@ -3361,6 +3361,13 @@ def _operation_raw() -> dict[str, Any]:
             _stale_h = 0
         _cls = _classify_legacy_position(
             _pos, _st or {}, stale_hours=_stale_h or None)
+        # Savunma hattı: entry/quantity hydrate EDİLEMEDİYSE kayıt
+        # hiçbir koşulda sağlıklı OPEN sayılamaz (Windows LAUSDT
+        # bulgusu — eksik kayıt açık pozisyon sayısını yanıltmasın).
+        if _cls["status"] == "OPEN" and (
+                _cls.get("entry") is None or
+                _cls.get("quantity") is None):
+            _cls["status"] = "INCOMPLETE_POSITION_DATA"
         # Task 149: operatör "görüldü / manuel kapatıldı" onayı
         # verdiyse INCOMPLETE kayıt aktif listeye alınmaz (audit
         # geçmişinde görünür kalır).
@@ -3396,10 +3403,24 @@ def _operation_raw() -> dict[str, Any]:
                 "opened_at": _pos.get("opened_at"),
                 "execution_mode": "PAPER",
             })
+    # KANONİK karar kaynağı: dual_model_runtime (rejections +
+    # positions + last_refresh). UNKNOWN yalnız runtime gerçekten
+    # okunamadığında kalır; normal NO_SIGNAL artık UNKNOWN DEĞİL.
+    sym_status: dict = {}
+    status_ok = False
+    last_refresh = None
+    try:
+        import dual_model as _dm
+        _ss = _dm.symbol_status()
+        status_ok = bool(_ss.get("ok"))
+        sym_status = _ss.get("symbols") or {}
+        last_refresh = _ss.get("last_refresh")
+    except Exception as exc:
+        app.logger.error("symbol_status okunamadı: %s", exc)
     for symbol in _operation_symbols(cfg):
-        raw["products"].append({
+        row = {
             "symbol": symbol,
-            "market": "FUTURES",
+            "market": "SPOT",
             "strategy": "alpha20_v1",
             "signal_state": "UNKNOWN",
             "execution_mode": get_execution_mode(cfg),
@@ -3411,7 +3432,45 @@ def _operation_raw() -> dict[str, Any]:
             "last_signal_at": "UNKNOWN",
             "last_decision": "UNKNOWN",
             "last_rejection_reason": "-",
-        })
+            "analyzed_at": None,
+            "model": None,
+            "decision_state": "UNKNOWN",
+            "source": "dual_model_runtime",
+            "freshness": last_refresh,
+        }
+        if status_ok:
+            st = sym_status.get(symbol)
+            if st:
+                row.update({
+                    "signal_state": st["signal_state"],
+                    "decision_state": st["decision_state"],
+                    "direction": st["direction"],
+                    "last_decision": st["last_decision"],
+                    "last_rejection_reason":
+                        st["last_rejection_reason"] or "-",
+                    "last_signal_at": st["last_signal_at"] or "-",
+                    "analyzed_at": st["analyzed_at"],
+                    "model": st["model"],
+                    "confidence": st.get("confidence"),
+                    "net_reward_risk": st.get("net_reward_risk"),
+                    "expected_edge": st.get("expected_edge"),
+                    "data_quality": st.get("data_quality"),
+                })
+            else:
+                # Runtime okunabildi ama sembol hiç analiz edilmemiş —
+                # bu UNKNOWN değil, açık NOT_ANALYZED durumudur.
+                row.update({"signal_state": "NOT_ANALYZED",
+                            "decision_state": "NOT_ANALYZED",
+                            "direction": "NONE",
+                            "last_decision": "NOT_ANALYZED",
+                            "last_signal_at": "-"})
+            if not row["entry_eligible"] and \
+                    row["signal_state"] not in ("POSITION_OPEN",):
+                row["decision_state"] = "ENTRY_DISABLED" \
+                    if row["decision_state"] in ("NOT_ANALYZED",
+                                                 "UNKNOWN") \
+                    else row["decision_state"]
+        raw["products"].append(row)
     return raw
 
 
@@ -4413,6 +4472,17 @@ def _strategy_states() -> list[dict[str, Any]]:
     ks_active = _operation_kill_switch_active(cfg)
     out: list[dict[str, Any]] = []
     now_iso = datetime.now(timezone.utc).isoformat()
+    # KANONİK karar durumu — overview ile AYNI kaynak (dual_model
+    # runtime). Gereksiz UNKNOWN üretilmez; veri yoksa uydurulmaz.
+    sym_status: dict = {}
+    status_ok = False
+    try:
+        import dual_model as _dm
+        _ss = _dm.symbol_status()
+        status_ok = bool(_ss.get("ok"))
+        sym_status = _ss.get("symbols") or {}
+    except Exception:
+        pass
     for symbol in _operation_symbols(cfg):
         sym_state = svc.symbol_state(symbol).value
         enabled = sym_state == "ENABLED"
@@ -4426,6 +4496,13 @@ def _strategy_states() -> list[dict[str, Any]]:
             run_state = "RUNNING"
         else:
             run_state = "DISABLED"
+        st = sym_status.get(symbol) if status_ok else None
+        # Geriye uyumluluk: last_signal alanı KALIR; kanonik karar
+        # varsa onunla dolar, runtime okunamıyorsa fail-closed UNKNOWN.
+        last_signal = "UNKNOWN"
+        if status_ok:
+            last_signal = st["decision_state"] if st \
+                else "NOT_ANALYZED"
         out.append({
             "symbol": symbol,
             "enabled": enabled,
@@ -4433,7 +4510,15 @@ def _strategy_states() -> list[dict[str, Any]]:
             "entry_allowed": bool(enabled and auto_running
                                   and not svc.stop_new_entries
                                   and not ks_active),
-            "last_signal": "UNKNOWN",
+            "last_signal": last_signal,
+            "last_decision": (st or {}).get("last_decision")
+            if status_ok else "UNKNOWN",
+            "last_rejection_reason":
+                (st or {}).get("last_rejection_reason")
+                if status_ok else None,
+            "last_analyzed_at": (st or {}).get("analyzed_at")
+            if status_ok else None,
+            "model": (st or {}).get("model") if status_ok else None,
             "last_error": None,
             "updated_at": now_iso,
         })
@@ -4531,6 +4616,14 @@ def api_paper_state():
         "signal_candidate_count": signal_candidates,
         "risk_approved_count": risk_approved,
         "paper_intent_count": paper_intents,
+        # Sayaç semantiği NETLEŞTİRİLDİ: üç sayaç da aynı kapsamdan —
+        # son 100 karar kaydında sembol başına EN YENİ karar. Ne tek
+        # çevrim ne kümülatif; kapsam alan adında açıkça belirtilir.
+        # Eski adlar geriye uyumluluk için AYNEN korunur (test 20).
+        "counter_scope": "latest_decision_per_symbol_last_100",
+        "latest_per_symbol_candidates": signal_candidates,
+        "latest_per_symbol_risk_approved": risk_approved,
+        "latest_per_symbol_paper_intents": paper_intents,
         "open_paper_position_count": open_positions,
         "binance_tr": bt,
         "last_complete_analysis": ready["last_complete_analysis"],
@@ -5068,11 +5161,38 @@ def api_profit_first_report():
     Confidence/TCP/EPP/PFS yan yana; never-profitable, erken-pencere
     ve yerel-tepe analizleri GERÇEK kayıtlardan. Gerçek işlem davranışı
     bu uçtan etkilenmez; LIVE ORDERS DISABLED."""
-    import dual_model as _dm
-    import profit_first as _pf
-    rt = _dm._load_runtime()
-    return jsonify({"ok": True,
-                    "data": _pf.build_report(rt.get("trades", []))})
+    # Windows 500 dersi: hata HTML sayfası değil, YAPILANDIRILMIŞ
+    # JSON döner; boş veri 500 değil INSUFFICIENT_DATA'dır.
+    try:
+        import dual_model as _dm
+        import profit_first as _pf
+        rt = _dm._load_runtime()
+        trades = rt.get("trades", [])
+        data = _pf.build_report(trades)
+        # Spec sözleşmesi: bu alanlar HER cevapta mevcut (mevcut
+        # rapor yapısından türetilmiş takma adlar — çift hesap yok).
+        preds = {p.get("name"): p
+                 for p in (data.get("predictor_comparison") or [])
+                 if isinstance(p, dict)}
+        conf = preds.get("confidence") or {}
+        data.setdefault("coverage", data.get("closed_trades", 0))
+        data.setdefault("status", "OK" if trades
+                        else "INSUFFICIENT_DATA")
+        data.setdefault("confidence", conf or None)
+        data.setdefault("tcp", preds.get("tcp") or None)
+        data.setdefault("epp", preds.get("epp") or None)
+        data.setdefault("pfs", preds.get("pfs") or None)
+        data.setdefault("calibration",
+                        conf.get("calibration") if conf else None)
+        data.setdefault("shadow_summary", data.get("shadow"))
+        data.setdefault("live_orders", "DISABLED")
+        return jsonify({"ok": True, "data": data})
+    except Exception as exc:
+        app.logger.exception("profit-first raporu üretilemedi")
+        return jsonify({"ok": False,
+                        "error_code": type(exc).__name__,
+                        "message": str(exc),
+                        "data": None}), 500
 
 
 @app.get("/api/hold-intelligence/report")

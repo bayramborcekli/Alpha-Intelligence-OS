@@ -81,7 +81,10 @@ class TestTriColumnAndBottom:
         assert 'id="th-lists"' in TEMPLATE
         assert 'id="th-markets"' in TEMPLATE
         # Piyasalar tablosu kolonları:
-        for col in ("Fiyat", "24s Değişim", "Hacim (USDT)", "Sinyal"):
+        # Sinyal görünürlüğü görevi: İzlenen Piyasalar artık son
+        # analiz KARARINI gösterir (fiyat/hacim yerine karar sütunları)
+        for col in ("Varlık", "Model", "Sonuç", "Son red nedeni",
+                    "Son analiz", "Giriş durumu"):
             assert col in TEMPLATE, col
         assert "renderMarkets" in JS
 

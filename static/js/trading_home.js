@@ -413,8 +413,19 @@
     // sembol tabloda görünür (üst şerit Evren sayısıyla birebir).
     (products || []).forEach(function (pr) {
       if (openSymbols[pr.symbol]) return;
+      // Gerçek son karar varsa onu göster — "İzleniyor (giriş
+      // kapalı)" yalnız karar verisi gerçekten yokken kalır.
+      var reason = pr.last_rejection_reason;
+      var decided = reason && reason !== "-" &&
+        REASON_TR.hasOwnProperty(reason) ? REASON_TR[reason]
+        : (reason && reason !== "-" ? reason : null);
       if (pr.entry_eligible) {
-        push(pr.symbol, "wait", "Sinyal bekliyor");
+        push(pr.symbol, "wait",
+             decided ? decided + " (" + reason + ")"
+                     : "Sinyal bekliyor");
+      } else if (decided) {
+        push(pr.symbol, "gray",
+             decided + " (" + reason + ") — giriş kapalı");
       } else if (pr.automation_state === "ENABLED") {
         push(pr.symbol, "gray", "İzleniyor");
       } else {
@@ -842,7 +853,9 @@
       "<tr><td colspan=\"6\" class=\"th-empty\">Fırsat taraması " +
       "henüz koşmadı.</td></tr>";
     renderDualPositions(d.positions || []);
-    renderMarkets(d, openBy);
+    // İzlenen Piyasalar artık kanonik karar kaynağından (overview
+    // products = dual_model_runtime kararları) beslenir.
+    renderMarkets(lastProducts, openBy);
     renderMovers(d);
     renderTicker(d);
 
@@ -875,27 +888,69 @@
       n.toFixed(2) + "%</span>";
   }
 
-  function renderMarkets(d, openBy) {
+  // Reason code → açık Türkçe karşılık. Backend kodu tooltip'te
+  // KORUNUR (gizlenmez) — operatör her iki bilgiyi de görür.
+  var REASON_TR = {
+    NO_SIGNAL: "Giriş koşulları oluşmadı",
+    LOW_CONFIDENCE: "Sinyal güveni yetersiz",
+    MOMENTUM_EXHAUSTED: "Momentum tükenmiş",
+    NET_REWARD_RISK_TOO_LOW: "Maliyet sonrası ödül/risk yetersiz",
+    DATA_QUALITY: "Karar verisi yetersiz",
+    FEE_DRAG: "İşlem maliyeti kazancı yutuyor"
+  };
+
+  function reasonCell(code) {
+    if (!code || code === "-") return "—";
+    var tr = REASON_TR[code] || code;
+    return "<span title=\"" + esc(code) + "\">" + esc(tr) +
+      " <small style=\"opacity:.6\">(" + esc(code) + ")</small></span>";
+  }
+
+  function agoCell(iso) {
+    if (!iso || iso === "-" || iso === "UNKNOWN") {
+      return "<span class=\"th-unknown\">—</span>";
+    }
+    var t = Date.parse(iso);
+    if (isNaN(t)) return esc(iso);
+    var s = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (s < 90) return s + " sn önce";
+    if (s < 5400) return Math.round(s / 60) + " dk önce";
+    return Math.round(s / 3600) + " sa önce";
+  }
+
+  // Kanonik son-karar tablosu: kaynak operation overview products
+  // (dual_model_runtime kararları). "İzleniyor" yerine gerçek sonuç.
+  function renderMarkets(products, openBy) {
     var el = document.getElementById("th-markets");
     if (!el) return;
-    var rows = unionRows(d);
+    var rows = products || [];
     if (!rows.length) {
-      el.innerHTML = "<tr><td colspan=\"5\" class=\"th-empty\">" +
-        (d ? "Liste henüz yenilenmedi." : "Veri yok") + "</td></tr>";
+      el.innerHTML = "<tr><td colspan=\"6\" class=\"th-empty\">" +
+        "Veri yok</td></tr>";
       return;
     }
-    rows.sort(function (a, b) {
-      return (b.volume_usdt || 0) - (a.volume_usdt || 0);
-    });
-    el.innerHTML = rows.slice(0, 30).map(function (r) {
-      var pos = openBy && openBy[r.symbol];
+    el.innerHTML = rows.slice(0, 60).map(function (r) {
+      var st = r.decision_state || r.signal_state || "UNKNOWN";
+      var pos = (openBy && openBy[r.symbol]) ||
+        st === "POSITION_OPEN";
+      var resultTxt, cls;
+      if (pos) { resultTxt = "POZİSYONDA"; cls = "exec"; }
+      else if (st === "NO_SIGNAL") { resultTxt = "NO_SIGNAL"; cls = "gray"; }
+      else if (st === "REJECTED") { resultTxt = "REJECTED"; cls = "close"; }
+      else if (st === "DATA_UNAVAILABLE") { resultTxt = "VERİ YOK"; cls = "gray"; }
+      else if (st === "NOT_ANALYZED") { resultTxt = "ANALİZ BEKLİYOR"; cls = "gray"; }
+      else if (st === "ENTRY_DISABLED") { resultTxt = "GİRİŞ KAPALI"; cls = "gray"; }
+      else { resultTxt = esc(st); cls = "gray"; }
+      var entryTxt = pos ? "Pozisyonda"
+        : (r.entry_eligible ? "Uygun" : "Kapalı");
       return "<tr><td><b>" + esc(r.symbol) + "</b></td><td>" +
-        esc(fmtPrice(r.last)) + "</td><td>" + chgCell(r.change_pct) +
-        "</td><td>" + (r.volume_usdt != null ?
-          esc(fmtMoney(r.volume_usdt)) : "—") + "</td><td>" +
-        (pos ? "<span class=\"th-badge exec\">POZİSYONDA</span>"
-             : "<span class=\"th-badge gray\">İZLENİYOR</span>") +
-        "</td></tr>";
+        (r.model ? esc(r.model).replace("ALPHA_CORE_SCALP", "CORE")
+                    .replace("ALPHA_OPPORTUNITY", "OPPORTUNITY")
+                 : "—") + "</td><td>" +
+        "<span class=\"th-badge " + cls + "\">" + resultTxt +
+        "</span></td><td>" + reasonCell(r.last_rejection_reason) +
+        "</td><td>" + agoCell(r.analyzed_at) + "</td><td>" +
+        esc(entryTxt) + "</td></tr>";
     }).join("");
   }
 
@@ -1037,6 +1092,8 @@
 
   var orphanBusy = false;
   var inflight = false;
+  // Son overview products dizisi — İzlenen Piyasalar kanonik kaynağı.
+  var lastProducts = [];
 
   function refresh() {
     if (inflight) return;
@@ -1090,7 +1147,8 @@
       renderStrip(paper);
       renderTrades(data(1, "positions"),
                    dual ? dual.positions : null);
-      renderQueue(data(1, "products"), data(1, "orders"),
+      lastProducts = data(1, "products") || [];
+      renderQueue(lastProducts, data(1, "orders"),
                   data(1, "positions"), data(1, "signals"));
       renderActivity(data(3, "journal"));
       renderWallets(data(4, "accounts"), data(5, "accounts"));

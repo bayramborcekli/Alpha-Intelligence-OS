@@ -1,0 +1,461 @@
+ACİL DÜZELTME — WINDOWS SİNYAL GÖRÜNÜRLÜĞÜ + PROFIT-FIRST 500
+
+GLOBAL_PAUSE: ACTIVE kalacak.
+
+Yalnız bu görev aktif olabilir.
+Başka göreve geçme.
+Follow-up oluşturma.
+markTaskComplete çağırma.
+
+LIVE ORDERS kesinlikle DISABLED kalacak.
+Trading stratejisi, giriş eşikleri, TP/SL ve gerçek Paper davranışı değiştirilmeyecek.
+
+==================================================
+WINDOWS GERÇEK KANITI
+==================================================
+
+PowerShell testinde:
+
+1. Scheduler ve karar zinciri çalışıyor:
+
+- analysis_scheduler = RUNNING
+- controller = RUNNING
+- decision_engine = READY
+- feature_pipeline = READY
+- overall_pipeline = GREEN
+- son analiz ve son karar zamanları ilerliyor
+
+2. Canonical dual-model sistemi gerçek red kararları üretiyor:
+
+recent_rejections içinde:
+
+- NO_SIGNAL
+- LOW_CONFIDENCE
+- MOMENTUM_EXHAUSTED
+- NET_REWARD_RISK_TOO_LOW
+- DATA_QUALITY
+- FEE_DRAG
+
+örnekleri ve güncel timestamp’ler var.
+
+3. Buna rağmen:
+
+GET /api/operation-control/overview
+
+ürünlerde şunları döndürüyor:
+
+- direction = UNKNOWN
+- last_decision = UNKNOWN
+- last_rejection_reason = "-"
+- last_signal_at = UNKNOWN
+- signal_state = UNKNOWN
+
+4. Yani ekranın “İzleniyor / giriş kapalı” göstermesinin nedeni
+sinyal üretiminin durması değil;
+Operation Control overview’ın canonical dual-model runtime kararlarını
+ürün satırlarına bağlamamasıdır.
+
+5. Ek hata:
+
+GET /api/profit-first/report
+→ HTTP 500 Internal Server Error
+
+6. Ek bütünlük sorunu:
+
+operation-control overview hâlâ eksik LAUSDT kaydını açık pozisyon olarak gösteriyor:
+
+- entry_price = null
+- quantity = null
+- current_price = null
+- reconciliation_state = UNKNOWN
+- position_status = OPEN
+
+Bu görev LAUSDT üretim kök nedenini çözmeyecek;
+ancak eksik pozisyonu “sağlıklı açık pozisyon” gibi göstermemeli.
+
+==================================================
+TEK AMAÇ
+==================================================
+
+A. Operation Control ve Trading Home izlenen piyasalar satırlarını
+canonical dual-model runtime kararlarıyla beslemek.
+
+B. Her sembolün son analiz ve red nedenini gerçek zamanlı görünür yapmak.
+
+C. /api/profit-first/report Windows 500 hatasının kesin kök nedenini bulup
+minimum düzeltmeyle HTTP 200 yapmak.
+
+D. Eksik legacy pozisyonun sağlıklı açık pozisyon gibi gösterilmesini engellemek.
+
+Gerçek sinyal üretim mantığını değiştirme.
+
+==================================================
+FAZ 1 — VERİ KAYNAĞI KÖK NEDENİ
+==================================================
+
+Koddan kesin olarak çıkar:
+
+1. /api/operation-control/overview products dizisini hangi fonksiyon oluşturuyor?
+2. Bu fonksiyon hangi runtime/state dosyasını okuyor?
+3. Neden alpha20_v1/dual_model_runtime.json içindeki recent_rejections,
+   candidates ve last_refresh alanlarını kullanmıyor?
+4. trading_home.js “İzlenen Piyasalar” kartını hangi endpoint ve alanlardan besliyor?
+5. /api/paper/state strategies listesi neden last_signal=UNKNOWN döndürüyor?
+6. Canonical karar kaynağı hangisi olmalı?
+
+Tek canonical kaynak belirle:
+
+alpha20_v1/dual_model_runtime.json
+veya dual_model.snapshot/state API’sinin ürettiği aynı canonical veri.
+
+Aynı karar bilgisini ikinci kez farklı state’te üretme.
+
+==================================================
+FAZ 2 — CANONICAL SYMBOL STATUS
+==================================================
+
+Her sembol için canonical durum nesnesi üret:
+
+- symbol
+- model
+- list
+- analyzed_at
+- direction
+- signal_state
+- decision_state
+- entry_eligible
+- last_decision
+- last_rejection_reason
+- last_signal_at
+- confidence mevcutsa
+- net_reward_risk mevcutsa
+- expected_edge mevcutsa
+- data_quality
+- source
+- freshness
+
+Durumlar açık ve ayrık olsun:
+
+- SIGNAL_ACCEPTED
+- CANDIDATE
+- REJECTED
+- NO_SIGNAL
+- NOT_ANALYZED
+- DATA_UNAVAILABLE
+- ENTRY_DISABLED
+- POSITION_OPEN
+
+UNKNOWN yalnız gerçekten veri kaynağı okunamıyorsa kullanılabilir.
+
+Normal `NO_SIGNAL` sonucu UNKNOWN sayılmayacak.
+
+==================================================
+FAZ 3 — RECENT REJECTION EŞLEŞTİRMESİ
+==================================================
+
+dual-model recent_rejections kayıtlarını sembol bazında eşleştir.
+
+Her sembol için en yeni karar seçilsin:
+
+örnek:
+
+BTCUSDT:
+- last_decision = REJECTED
+- last_rejection_reason = NO_SIGNAL
+- analyzed_at = gerçek timestamp
+
+USD1USDT:
+- last_decision = REJECTED
+- last_rejection_reason = LOW_CONFIDENCE
+
+INJUSDT:
+- last_decision = REJECTED
+- last_rejection_reason = MOMENTUM_EXHAUSTED
+
+Karar sıralaması timestamp ile yapılmalı.
+Eski kayıt yeni kaydı ezmemeli.
+
+Farklı modeller aynı sembolü analiz ediyorsa:
+
+- model bilgisi korunmalı
+- en yeni karar seçilmeli
+- gerektiğinde model bazlı alt detay verilmeli
+
+==================================================
+FAZ 4 — UI DÜZELTMESİ
+==================================================
+
+“İzlenen Piyasalar” kartında yalnız:
+
+İzleniyor (giriş kapalı)
+
+yazma.
+
+Aşağıdaki sütunlar gösterilsin:
+
+- Varlık
+- Model
+- Sonuç
+- Son red nedeni
+- Son analiz
+- Giriş durumu
+
+Örnek:
+
+BTCUSDT | CORE | NO_SIGNAL | NO_SIGNAL | 8 sn önce | Uygun değil
+USD1USDT | CORE | REJECTED | LOW_CONFIDENCE | 6 sn önce | Kapalı
+INJUSDT | OPPORTUNITY | REJECTED | MOMENTUM_EXHAUSTED | 12 sn önce | Kapalı
+
+Kullanıcıya açık Türkçe karşılık göster:
+
+NO_SIGNAL:
+“Giriş koşulları oluşmadı”
+
+LOW_CONFIDENCE:
+“Sinyal güveni yetersiz”
+
+MOMENTUM_EXHAUSTED:
+“Momentum tükenmiş”
+
+NET_REWARD_RISK_TOO_LOW:
+“Maliyet sonrası ödül/risk yetersiz”
+
+DATA_QUALITY:
+“Karar verisi yetersiz”
+
+Ancak backend reason code tooltip veya ayrıntıda korunmalı.
+
+Kart başlığı:
+
+İZLENEN PİYASALAR — SON ANALİZ SONUCU
+
+Alt açıklama:
+
+“Bu tablo her sembolün son analiz kararını gösterir.
+Sinyal oluşmaması sistemin durduğu anlamına gelmez.”
+
+==================================================
+FAZ 5 — PAPER STATE TUTARLILIĞI
+==================================================
+
+/api/paper/state içindeki strategies dizisi de aynı canonical symbol status
+üzerinden beslensin.
+
+Şunlar artık gereksiz yere UNKNOWN dönmemeli:
+
+- last_signal
+- updated_at
+- entry_allowed
+- run_state
+
+Ama gerçek veri yoksa uydurma değer üretme.
+
+`last_signal` alanının adı yanıltıcıysa geriye uyumluluğu bozma;
+yanına ekle:
+
+- last_decision
+- last_rejection_reason
+- last_analyzed_at
+
+==================================================
+FAZ 6 — SIGNAL COUNTER SEMANTİĞİ
+==================================================
+
+Şu mevcut çelişkiyi incele:
+
+- signal_candidate_count = 0
+- risk_approved_count = 2
+- paper_intent_count = 0
+
+Bu alanların aynı çevrime mi yoksa kümülatif sayımlara mı ait olduğunu belirle.
+
+Yanlışsa düzelt.
+Doğruysa isimleri ve açıklamaları netleştir:
+
+- current_cycle_candidates
+- current_cycle_risk_approved
+- current_cycle_paper_intents
+veya
+- cumulative_risk_approved
+
+Farklı zaman kapsamındaki sayaçları aynı satırda bağlamsız gösterme.
+
+==================================================
+FAZ 7 — PROFIT-FIRST REPORT 500
+==================================================
+
+GET /api/profit-first/report için:
+
+1. Windows gerçek traceback’i yakala.
+2. İlk exception’ı raporla.
+3. Import, path, lock, JSON schema, timestamp veya serialization
+   sorunlarından hangisi olduğunu kesinleştir.
+4. Yalnız minimum düzeltmeyi uygula.
+5. Hata yutma.
+6. Endpoint fail olursa HTML 500 yerine yapılandırılmış JSON döndür:
+
+{
+  "ok": false,
+  "error_code": "...",
+  "message": "...",
+  "data": null
+}
+
+Başarıda:
+
+HTTP 200
+ok=true
+
+ve aşağıdaki alanlar mevcut olmalı:
+
+- coverage
+- confidence
+- tcp
+- epp
+- pfs
+- calibration
+- shadow_summary
+- live_orders=DISABLED
+
+Veri henüz yoksa 500 verme;
+boş ama geçerli rapor döndür:
+
+coverage = 0
+status = INSUFFICIENT_DATA
+
+==================================================
+FAZ 8 — EKSİK POZİSYON GÖRÜNÜRLÜĞÜ
+==================================================
+
+LAUSDT benzeri kayıt:
+
+- entry_price null
+- quantity null
+- current_price null
+- notional null
+
+ise sağlıklı OPEN pozisyon olarak gösterilmesin.
+
+Durum:
+
+INCOMPLETE_POSITION_DATA
+
+veya mevcut integrity sınıflandırması kullanılmalı.
+
+UI:
+
+- “Yönetiliyor” yazmamalı
+- normal “Kapat” düğmesi göstermemeli
+- açık pozisyon sayısını yanıltmamalı
+
+Bu görev kaydı otomatik silmeyecek.
+Yalnız doğru sınıflandırma ve görünürlük sağlayacak.
+
+==================================================
+YASAKLAR
+==================================================
+
+- Giriş filtrelerini gevşetme
+- NO_SIGNAL sayısını azaltmak için koşulları değiştirme
+- Confidence eşiğini değiştirme
+- TCP/EPP/PFS gerçek girişe bağlama
+- TP/SL değiştirme
+- Strategy Lab aday üretimini zorlamak
+- Champion değiştirme
+- Auto-promote çalıştırma
+- Yeni işlem üretmek için yapay sinyal oluşturma
+- LAUSDT kaydını kanıtsız silme
+- LIVE ORDERS açma
+- #141 veya başka göreve geçme
+
+==================================================
+ZORUNLU TESTLER
+==================================================
+
+1. Scheduler çalışırken güncel recent_rejections okunur
+2. BTCUSDT NO_SIGNAL UI/API’de UNKNOWN olmaz
+3. LOW_CONFIDENCE doğru sembole bağlanır
+4. MOMENTUM_EXHAUSTED doğru sembole bağlanır
+5. En yeni timestamp eski kararı ezer
+6. Model bilgisi korunur
+7. Veri yoksa DATA_UNAVAILABLE döner
+8. Backend okunamazsa fail-closed UNKNOWN kullanılabilir
+9. Operation overview canonical durumları döndürür
+10. Paper state aynı canonical durumu döndürür
+11. Trading Home son red nedenini gösterir
+12. Türkçe açıklama reason code’u gizlemez
+13. Sayaç kapsamları doğru isimlendirilir
+14. /api/profit-first/report Windows’ta HTTP 200
+15. Boş PFDE verisi 500 değil INSUFFICIENT_DATA döndürür
+16. PFDE hata cevabı JSON’dur, HTML değildir
+17. Eksik LAUSDT pozisyonu sağlıklı OPEN sayılmaz
+18. Eksik pozisyonda normal Kapat gösterilmez
+19. Gerçek giriş mantığı değişmez
+20. Existing rejection counters değişmez
+21. LIVE ORDERS DISABLED korunur
+22. Champion değişmez
+23. GLOBAL_PAUSE korunur
+
+==================================================
+WINDOWS GERÇEK KABUL TESTİ
+==================================================
+
+Push sonrası Windows:
+
+git pull
+git rev-parse --short HEAD
+
+Uygulamayı yeniden başlat.
+
+PowerShell:
+
+$base = "http://127.0.0.1:5000"
+
+Invoke-RestMethod "$base/api/operation-control/overview" |
+ConvertTo-Json -Depth 12
+
+Invoke-RestMethod "$base/api/paper/state" |
+ConvertTo-Json -Depth 10
+
+Invoke-RestMethod "$base/api/profit-first/report" |
+ConvertTo-Json -Depth 12
+
+Beklenen:
+
+- operation overview ürünlerinde güncel last_decision var
+- last_rejection_reason "-" değil
+- analyzed_at/last_signal_at gerçek timestamp
+- BTC/ETH/SOL normal NO_SIGNAL ise açıkça NO_SIGNAL
+- profit-first HTTP 200
+- LAUSDT eksik kayıt olarak sınıflı
+- panelde “İzleniyor (giriş kapalı)” yerine gerçek son karar görülüyor
+
+==================================================
+TESLİM RAPORU
+==================================================
+
+1. Kesin kök neden
+2. Operation overview eski veri kaynağı
+3. Canonical veri kaynağı
+4. Değişen dosyalar
+5. Profit-first 500 traceback ve düzeltmesi
+6. API önce/sonra örneği
+7. Panel önce/sonra görüntüsü
+8. Sayaç semantiği
+9. LAUSDT sınıflandırması
+10. Hedefli test sonuçları
+11. Tam regresyon sonucu
+12. Commit hash
+13. Push durumu
+14. Git status
+15. Gerçek işlem davranışının değişmediği kanıtı
+16. Başka görevin çalıştırılmadığı doğrulaması
+
+RAPOR SONU:
+
+GLOBAL_PAUSE: ACTIVE
+ALLOWED_ACTIVE_TARGET: SIGNAL_VISIBILITY_AND_PFDE_FIX_ONLY
+LIVE_ORDERS: DISABLED
+CHAMPION_CHANGED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+BACKGROUND_WORK: STOPPED
