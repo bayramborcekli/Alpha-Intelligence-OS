@@ -1,4 +1,4 @@
-/* Mission 2300 Agent 04 — Trading Home istemcisi (görsel göç).
+/* Trading Home istemcisi — kokpit yerleşimi.
  *
  * Felsefe: kullanıcı trader DEĞİL, portföy sahibidir. Yapay zekâ
  * işlem yapar. Bu sayfa hiçbir teknik gösterge İÇERMEZ.
@@ -6,11 +6,14 @@
  * Kurallar:
  * - Yalnız MEVCUT uçlar kullanılır; backend değişikliği yok.
  * - Yoklama ile güncellenir (bu depoda SSE/WebSocket yasak).
- * - Bilinmeyen değer UNKNOWN; sahte 0 üretilmez.
+ * - Bilinmeyen değer UNKNOWN; sahte 0 üretilmez; kaynak yoksa
+ *   "Veri yok" gösterilir.
  * - Ham kayan nokta ASLA gösterilmez: tüm sayılar tr-TR biçiminde,
  *   merkezî biçimlendiriciden geçer.
  * - Kapat düğmesi mevcut kontrollü kapatma NİYETİ ucuna bağlıdır
  *   (neden + ONAYLIYORUM + idempotency anahtarı zorunlu).
+ * - Tüm widget'lar aynı yoklama turundaki snapshot'lardan beslenir;
+ *   sayaçlar liste satırlarından türetilir (çelişki imkânsız).
  */
 (function () {
   "use strict";
@@ -57,6 +60,13 @@
     return new Date(t).toLocaleTimeString("tr-TR");
   }
 
+  // Sütun boşsa "—": UNKNOWN enflasyonu yerine sade tire (veri
+  // kaynağında alan hiç yoksa). Değer VAR ama alınamadıysa UNKNOWN.
+  function dash(v) {
+    return (v === null || v === undefined || v === "" ||
+            v === "UNKNOWN") ? "—" : esc(v);
+  }
+
   function get(path) {
     return fetch(path, { headers: { "X-CSRFToken": window.TH_CSRF } })
       .then(function (r) {
@@ -73,6 +83,17 @@
       value === "UNKNOWN";
     el.textContent = unknown ? "UNKNOWN" : String(value);
     el.className = unknown ? "th-unknown" : (cls || "");
+  }
+
+  // "Veri yok": bu alan için denetimli kaynak bu turda yanıt vermedi
+  // ya da hiç yok — uydurma değer basılmaz.
+  function setDatum(id, value, cls) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var missing = value === null || value === undefined ||
+      value === "" || value === "UNKNOWN";
+    el.textContent = missing ? "Veri yok" : String(value);
+    el.className = missing ? "th-unknown" : (cls || "");
   }
 
   function pnlClass(v) {
@@ -176,44 +197,106 @@
       dot.setAttribute("aria-label", anyOk ?
         "hesap bağlantısı: bağlı" : "hesap bağlantısı: UNKNOWN");
     }
+    // Sistem & Otomasyon kartı: API durumu aynı hesap snapshot'ından.
+    setDatum("th-sys-api", (accounts && accounts.length)
+      ? (anyOk ? "Bağlı" : "Bağlantı sorunu") : null,
+      anyOk ? "th-profit" : "th-loss");
   }
 
   // ── Aktif işlemler: sayfanın en büyük alanı ────────────────────
+  // Klasik motor pozisyonları + iki model (CORE/OPPORTUNITY) paper
+  // pozisyonları TEK tabloda; her satır kendi kanonik snapshot'ından.
 
-  function renderTrades(positions) {
+  var MODEL_TR = {
+    ALPHA_CORE_SCALP: "ALPHA CORE SCALP",
+    ALPHA_OPPORTUNITY_BURST: "ALPHA OPPORTUNITY BURST"
+  };
+
+  function listTypeOf(model) {
+    if (model === "ALPHA_CORE_SCALP") return "CORE";
+    if (model === "ALPHA_OPPORTUNITY_BURST") return "OPPORTUNITY";
+    return "—";
+  }
+
+  function renderTrades(positions, dmPositions) {
     var tbody = document.querySelector("#th-trades tbody");
     if (!tbody) return;
-    setText("th-active-count",
-            positions ? positions.length : null,
-            positions && positions.length ? "th-profit" : "");
-    if (!positions || !positions.length) {
-      tbody.innerHTML = "<tr><td colspan=\"8\" class=\"th-empty\">" +
+    var legacy = positions || [];
+    var dual = dmPositions || [];
+    var total = legacy.length + dual.length;
+    setText("th-active-count", positions || dmPositions ? total : null,
+            total ? "th-profit" : "");
+    setText("th-sc-open", positions || dmPositions ? total : null,
+            total ? "th-profit" : "");
+    if (!total) {
+      tbody.innerHTML = "<tr><td colspan=\"15\" class=\"th-empty\">" +
         "Şu an açık işlem yok. Yapay zekâ piyasaları izlemeye " +
         "devam ediyor.</td></tr>";
+      setDatum("th-sc-notional",
+               positions || dmPositions ? fmtMoney(0, "USDT") : null);
       return;
     }
     // Sahip diline durum eşlemesi (teknik iç durum sızdırılmaz).
     var STATUS_TR = { OPEN: "Yönetiliyor", SCALING: "Kademelendiriliyor",
       CLOSE_REQUESTED: "Kapatılıyor", WAITING_EXIT: "Çıkış Bekliyor",
       EMERGENCY_EXIT: "Acil Çıkış", CLOSED: "Tamamlandı" };
-    tbody.innerHTML = positions.map(function (p) {
+    var notional = 0, notionalPartial = false;
+    var rows = legacy.map(function (p) {
       var longSide = p.side === "LONG";
+      var nv = parseFloat(p.notional_usdt);
+      if (!isNaN(nv)) { notional += nv; } else { notionalPartial = true; }
       return "<tr><td><b>" + esc(p.symbol) + "</b></td>" +
         "<td class=\"" + (longSide ? "th-long" : "th-short") + "\">" +
         esc(longSide ? "Yükseliş" :
             p.side === "SHORT" ? "Düşüş" : p.side) + "</td>" +
+        "<td>" + dash(p.quantity) + "</td>" +
+        "<td>" + dash(p.notional_usdt != null ?
+                      fmtMoney(p.notional_usdt) : null) + "</td>" +
         "<td>" + esc(fmtPrice(p.entry_price)) + "</td>" +
         "<td>" + esc(fmtPrice(p.current_price)) + "</td>" +
         "<td class=\"" + pnlClass(p.unrealized_pnl) + "\">" +
-        esc(fmtSigned(p.unrealized_pnl, "USDT")) + "</td><td>" +
-        esc(duration(p.opened_at)) + "</td>" +
+        esc(fmtSigned(p.unrealized_pnl, "USDT")) + "</td>" +
+        "<td>—</td><td>" + esc(duration(p.opened_at)) + "</td>" +
+        "<td>—</td><td>—</td><td>—</td><td>—</td>" +
         "<td><span class=\"th-badge wait\">" +
         esc(STATUS_TR[p.position_status] || "Yönetiliyor") +
         "</span></td><td>" +
         "<button class=\"th-btn\" data-close=\"" + esc(p.position_id) +
         "\" data-symbol=\"" + esc(p.symbol) + "\">Kapat</button>" +
         "</td></tr>";
-    }).join("");
+    }).concat(dual.map(function (p) {
+      var nv = parseFloat(p.notional_usdt);
+      if (!isNaN(nv)) { notional += nv; } else { notionalPartial = true; }
+      return "<tr><td><b>" + esc(p.symbol) + "</b></td>" +
+        "<td class=\"th-long\">Yükseliş</td>" +
+        "<td>" + dash(p.quantity != null ?
+                      fmtPrice(p.quantity) : null) + "</td>" +
+        "<td>" + dash(p.notional_usdt != null ?
+                      fmtMoney(p.notional_usdt) : null) + "</td>" +
+        "<td>" + esc(fmtPrice(p.entry)) + "</td>" +
+        "<td>" + esc(fmtPrice(p.current_price)) + "</td>" +
+        "<td class=\"" + pnlClass(p.unrealized_net_pnl) + "\">" +
+        esc(fmtSigned(p.unrealized_net_pnl, "USDT")) + "</td>" +
+        "<td class=\"" + pnlClass(p.unrealized_pnl_pct) + "\">" +
+        (p.unrealized_pnl_pct != null ?
+          esc(fmtSigned(p.unrealized_pnl_pct)) + "%" : "UNKNOWN") +
+        "</td>" +
+        "<td>" + esc(duration(p.opened_at)) + "</td>" +
+        "<td>" + esc(fmtPrice(p.tp)) + "</td>" +
+        "<td>" + esc(fmtPrice(p.sl)) + "</td>" +
+        "<td>" + dash(MODEL_TR[p.model]) + "</td>" +
+        "<td>" + esc(listTypeOf(p.model)) + "</td>" +
+        "<td><span class=\"th-badge exec\">Yönetiliyor</span></td>" +
+        "<td><button class=\"th-btn th-dm-close\" data-symbol=\"" +
+        esc(p.symbol) + "\">Kapat</button></td></tr>";
+    }));
+    tbody.innerHTML = rows.join("");
+    bindDmClose(tbody, dual);
+    // Toplam pozisyon değeri: bilinen tutarların toplamı; herhangi
+    // bir satır fiyatlanamadıysa "en az X (kısmi)" dürüstlüğü.
+    var txt = fmtMoney(notional, "USDT");
+    setDatum("th-sc-notional",
+             notionalPartial ? "en az " + txt + " (kısmi)" : txt);
   }
 
   // ── Sıradaki işlemler — mevcut anlık görüntüden türetilir ──────
@@ -334,19 +417,58 @@
     }).join("");
   }
 
+  // ── Üst şerit pipeline hücreleri — /api/paper/state ────────────
+
+  var SCHED_TR = { RUNNING: "Çalışıyor", STOPPED: "Durdu",
+                   ERROR: "Hata" };
+
+  function renderStrip(paper) {
+    if (!paper) {
+      // Uç düşerse bayat değer taze gibi gösterilmez.
+      ["th-strip-pipeline", "th-strip-scheduler", "th-strip-scan",
+       "th-strip-universe", "th-strip-risk",
+       "th-strip-lastanalysis"].forEach(function (id) {
+        setDatum(id, null);
+      });
+      return;
+    }
+    setDatum("th-strip-pipeline", paper.overall_pipeline,
+             paper.overall_pipeline === "OK" ? "th-profit" : "");
+    setDatum("th-strip-scheduler",
+             SCHED_TR[paper.analysis_scheduler] ||
+             paper.analysis_scheduler,
+             paper.analysis_scheduler === "RUNNING" ? "th-profit" : "");
+    setDatum("th-strip-scan", paper.scan_interval != null ?
+             paper.scan_interval + " dk" : null);
+    setDatum("th-strip-universe", paper.universe_size);
+    setDatum("th-strip-risk", paper.selected_risk_profile);
+    setDatum("th-strip-lastanalysis",
+             paper.last_complete_analysis ?
+             fmtTime(paper.last_complete_analysis) : null);
+    setDatum("th-sys-data", paper.market_data_status,
+             paper.market_data_status === "OK" ? "th-profit" : "");
+  }
+
   // ── Üst çubuk + AI paneli ──────────────────────────────────────
 
-  function renderTop(status, portfolio, products) {
+  function renderTop(status, portfolio, products, paper) {
     if (portfolio) {
       setText("th-portfolio-value",
               fmtMoney(portfolio.portfolio_value, "USDT"));
       setText("th-daily-pnl",
               fmtSigned(portfolio.daily_pnl, "USDT"),
               pnlClass(portfolio.daily_pnl));
+      setText("th-sc-intraday",
+              fmtSigned(portfolio.daily_pnl, "USDT"),
+              pnlClass(portfolio.daily_pnl));
+      setDatum("th-sc-risk", portfolio.open_risk != null ?
+               fmtMoney(portfolio.open_risk, "USDT") : null);
     } else {
       // Portföy ucu düşerse bayat değer taze gibi gösterilmez.
       setText("th-portfolio-value", null);
       setText("th-daily-pnl", null);
+      setText("th-sc-intraday", null);
+      setDatum("th-sc-risk", null);
     }
     // "Son Güncelleme" yalnız gerçekten veri geldiyse yenilenir.
     if (status || portfolio) {
@@ -361,6 +483,7 @@
       // Üst çubuk bayat değer göstermez; AI paneli de dürüst kalır.
       setText("th-auto-mode", null);
       setText("th-bot-status", "Çevrimdışı", "th-unknown");
+      setDatum("th-sys-auto", null);
       if (aiMode) { aiMode.textContent = "UNKNOWN";
                     aiMode.className = "mode th-unknown"; }
       if (aiSent) aiSent.textContent = "Durum alınamadı.";
@@ -393,6 +516,9 @@
     setText("th-bot-status", badge,
             cls === "err" ? "th-loss" :
             cls === "run" ? "th-profit" : "");
+    setDatum("th-sys-auto", modeLabel + " — " + badge,
+             cls === "err" ? "th-loss" :
+             cls === "run" ? "th-profit" : "");
     if (aiMode) {
       aiMode.textContent = modeLabel;
       aiMode.className = "mode " +
@@ -412,14 +538,9 @@
     // "Uygun Fırsatlar" = GERÇEK sinyal adayları (karar kayıtlarında
     // WATCH/OPEN) — enabled/entry_eligible sembol fırsat DEĞİLDİR.
     // Üç sembol yalnız "Sinyal bekliyor" ise sayı 0 olmalıdır.
-    fetch("/api/paper/state", { credentials: "same-origin" })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) {
-        setText("th-ai-eligible",
-                d && typeof d.signal_candidate_count === "number"
-                  ? d.signal_candidate_count : null);
-      })
-      .catch(function () { setText("th-ai-eligible", null); });
+    setText("th-ai-eligible",
+            paper && typeof paper.signal_candidate_count === "number"
+              ? paper.signal_candidate_count : null);
     setText("th-ai-last", new Date().toLocaleTimeString("tr-TR"));
   }
 
@@ -476,6 +597,9 @@
       badge.textContent = "SAĞLIK: " + label;
       badge.style.background = bg;
       badge.style.color = fg;
+      // Sol menü alt kartı aynı sağlık durumunu yansıtır.
+      var nh = document.getElementById("nav-health");
+      if (nh) nh.textContent = label;
     }
     if (!d) {
       set("KIRMIZI — durum alınamadı", "#f85149", "#0d1117");
@@ -505,7 +629,10 @@
     if (!core || !opp) return;
     if (!d) {
       core.innerHTML = opp.innerHTML =
-        "<tr><td colspan=\"7\" class=\"th-empty\">UNKNOWN</td></tr>";
+        "<tr><td colspan=\"6\" class=\"th-empty\">UNKNOWN</td></tr>";
+      renderMarkets(null, null);
+      renderMovers(null);
+      renderTicker(null);
       return;
     }
     var c = d.counters || {};
@@ -521,7 +648,9 @@
     function stateOf(sym) {
       return openBy[sym] ? "POZİSYONDA" : "İZLENİYOR";
     }
-    core.innerHTML = (d.core_list || []).map(function (r) {
+    // İki listenin sütunları AYNI: Sembol / Sinyal / Spread / Güven /
+    // Model Durumu / Açık Pozisyon (referans tasarım gereği).
+    function listRow(r) {
       var p = openBy[r.symbol];
       return "<tr><td><b>" + esc(r.symbol) + "</b></td><td>" +
         (p ? esc(p.side) : "—") + "</td><td>" +
@@ -530,27 +659,114 @@
         "</td><td>" + stateOf(r.symbol) + "</td><td>" +
         (p ? esc(p.side) + " @" + fmtPrice(p.entry) : "—") +
         "</td></tr>";
-    }).join("") ||
+    }
+    core.innerHTML = (d.core_list || []).map(listRow).join("") ||
       "<tr><td colspan=\"6\" class=\"th-empty\">Liste henüz " +
       "yenilenmedi.</td></tr>";
-    opp.innerHTML = (d.opportunity_list || []).map(function (r) {
-      var p = openBy[r.symbol];
-      return "<tr><td><b>" + esc(r.symbol) + "</b></td><td>" +
-        esc(r.opportunity_type || "—") + "</td><td>" +
-        (r.change_pct != null ? r.change_pct.toFixed(1) + "%" : "—") +
-        "</td><td>" + (r.volatility_pct != null ?
-          r.volatility_pct.toFixed(1) + "%" : "—") +
-        "</td><td>" + (p && p.confidence != null ? p.confidence : "—") +
-        "</td><td>" + (p && p.net_edge_pct != null ?
-          p.net_edge_pct.toFixed(2) + "%" : "—") +
-        "</td><td>" + stateOf(r.symbol) + "</td></tr>";
-    }).join("") ||
-      "<tr><td colspan=\"7\" class=\"th-empty\">Fırsat taraması " +
+    opp.innerHTML = (d.opportunity_list || []).map(listRow).join("") ||
+      "<tr><td colspan=\"6\" class=\"th-empty\">Fırsat taraması " +
       "henüz koşmadı.</td></tr>";
     renderDualPositions(d.positions || []);
+    renderMarkets(d, openBy);
+    renderMovers(d);
+    renderTicker(d);
 
     // ── Task 130: ayrı performans metrik kartları ────────────────
     renderDualMetrics(d);
+  }
+
+  // ── İzlenen Piyasalar / Kazanan-Kaybeden / fiyat şeridi ────────
+  // Kaynak: dual-model snapshot list satırları (Binance 24s ticker
+  // alanları: last / change_pct / volume_usdt). Uydurma veri yok.
+
+  function unionRows(d) {
+    if (!d) return [];
+    var seen = {};
+    return (d.core_list || []).concat(d.opportunity_list || [])
+      .filter(function (r) {
+        if (!r || !r.symbol || seen[r.symbol]) return false;
+        seen[r.symbol] = true;
+        return true;
+      });
+  }
+
+  function chgCell(v) {
+    if (v === null || v === undefined || isNaN(v)) {
+      return "<span class=\"th-unknown\">Veri yok</span>";
+    }
+    var cls = v > 0 ? "th-profit" : v < 0 ? "th-loss" : "";
+    return "<span class=\"" + cls + "\">" + (v > 0 ? "+" : "") +
+      Number(v).toFixed(2) + "%</span>";
+  }
+
+  function renderMarkets(d, openBy) {
+    var el = document.getElementById("th-markets");
+    if (!el) return;
+    var rows = unionRows(d);
+    if (!rows.length) {
+      el.innerHTML = "<tr><td colspan=\"5\" class=\"th-empty\">" +
+        (d ? "Liste henüz yenilenmedi." : "Veri yok") + "</td></tr>";
+      return;
+    }
+    rows.sort(function (a, b) {
+      return (b.volume_usdt || 0) - (a.volume_usdt || 0);
+    });
+    el.innerHTML = rows.slice(0, 30).map(function (r) {
+      var pos = openBy && openBy[r.symbol];
+      return "<tr><td><b>" + esc(r.symbol) + "</b></td><td>" +
+        esc(fmtPrice(r.last)) + "</td><td>" + chgCell(r.change_pct) +
+        "</td><td>" + (r.volume_usdt != null ?
+          esc(fmtMoney(r.volume_usdt)) : "—") + "</td><td>" +
+        (pos ? "<span class=\"th-badge exec\">POZİSYONDA</span>"
+             : "<span class=\"th-badge gray\">İZLENİYOR</span>") +
+        "</td></tr>";
+    }).join("");
+  }
+
+  function renderMovers(d) {
+    var g = document.getElementById("th-gainers");
+    var l = document.getElementById("th-losers");
+    if (!g || !l) return;
+    var rows = unionRows(d).filter(function (r) {
+      return typeof r.change_pct === "number";
+    });
+    if (!rows.length) {
+      g.className = l.className = "th-empty";
+      g.textContent = l.textContent = "Veri yok";
+      return;
+    }
+    rows.sort(function (a, b) { return b.change_pct - a.change_pct; });
+    function block(title, list) {
+      return "<b style=\"font-size:.68rem;color:#8b949e;" +
+        "text-transform:uppercase\">" + title + "</b>" +
+        list.map(function (r) {
+          return "<div class=\"th-kv\"><span><b>" + esc(r.symbol) +
+            "</b></span><span>" + esc(fmtPrice(r.last)) + " · " +
+            chgCell(r.change_pct) + "</span></div>";
+        }).join("");
+    }
+    g.className = ""; l.className = "";
+    g.innerHTML = block("En Çok Kazananlar", rows.slice(0, 4));
+    l.innerHTML = block("En Çok Kaybedenler",
+                        rows.slice(-4).reverse());
+  }
+
+  function renderTicker(d) {
+    var el = document.getElementById("th-ticker");
+    if (!el) return;
+    var rows = unionRows(d);
+    if (!rows.length) {
+      el.innerHTML = "<span class=\"th-unknown\">Veri yok</span>";
+      return;
+    }
+    rows.sort(function (a, b) {
+      return (b.volume_usdt || 0) - (a.volume_usdt || 0);
+    });
+    el.innerHTML = rows.slice(0, 10).map(function (r) {
+      return "<span class=\"tk\"><b>" + esc(r.symbol) + "</b>" +
+        esc(fmtPrice(r.last)) + " " + chgCell(r.change_pct) +
+        "</span>";
+    }).join("");
   }
 
   function fmtMetric(v, suffix) {
@@ -563,6 +779,47 @@
   function fmtNum(v, dp) {
     return (v === null || v === undefined || isNaN(v)) ?
       "UNKNOWN" : Number(v).toFixed(dp);
+  }
+
+  // Model pozisyonu kapatma onayı: PAPER MANUAL_CLOSE. Onay metni
+  // tahmini ücret/kayma ve tahmini net PnL'i açıkça gösterir.
+  function dmConfirmText(p) {
+    var lines = [(p && p.symbol) + " pozisyonu kapatılsın mı? (PAPER)"];
+    if (p) {
+      lines.push("Miktar: " + fmtNum(p.quantity, 6));
+      lines.push("Tahmini ücret: " + fmtNum(p.est_fees, 4) + " USDT");
+      lines.push("Tahmini kayma: " + fmtNum(p.est_slippage, 4) +
+                 " USDT");
+      lines.push("Tahmini net PnL: " +
+                 fmtNum(p.unrealized_net_pnl, 4) + " USDT");
+    }
+    return lines.join("\n");
+  }
+
+  function bindDmClose(scope, positions) {
+    var by = {};
+    (positions || []).forEach(function (p) { by[p.symbol] = p; });
+    scope.querySelectorAll(".th-dm-close").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var sym = btn.getAttribute("data-symbol");
+        if (!window.confirm(dmConfirmText(by[sym] ||
+            { symbol: sym }))) return;
+        btn.disabled = true;
+        fetch("/api/dual-model/close", {
+          method: "POST",
+          headers: { "Content-Type": "application/json",
+                     "X-CSRFToken": window.TH_CSRF },
+          body: JSON.stringify({ symbol: sym })
+        }).then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d.ok) {
+              window.alert("Kapatılamadı: " + (d.message || ""));
+              btn.disabled = false;
+            } else { refresh(); }
+          })
+          .catch(function () { btn.disabled = false; });
+      });
+    });
   }
 
   function renderDualPositions(list) {
@@ -591,27 +848,7 @@
         "data-symbol=\"" + esc(p.symbol) + "\">Kapat</button>" +
         "</td></tr>";
     }).join("");
-    tb.querySelectorAll(".th-dm-close").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var sym = btn.getAttribute("data-symbol");
-        if (!window.confirm(sym +
-            " pozisyonu kapatılsın mı? (PAPER)")) return;
-        btn.disabled = true;
-        fetch("/api/dual-model/close", {
-          method: "POST",
-          headers: { "Content-Type": "application/json",
-                     "X-CSRFToken": window.TH_CSRF },
-          body: JSON.stringify({ symbol: sym })
-        }).then(function (r) { return r.json(); })
-          .then(function (d) {
-            if (!d.ok) {
-              window.alert("Kapatılamadı: " + (d.message || ""));
-              btn.disabled = false;
-            } else { refresh(); }
-          })
-          .catch(function () { btn.disabled = false; });
-      });
-    });
+    bindDmClose(tb, list);
   }
 
   // ── Yoklama ────────────────────────────────────────────────────
@@ -630,7 +867,8 @@
       get("/api/operation-control/workspace/journal"),
       get("/api/accounts/wallets"),
       get("/api/accounts"),
-      get("/api/dual-model/state")
+      get("/api/dual-model/state"),
+      get("/api/paper/state")
     ]).then(function (r) {
       function data(i, key) {
         var b = r[i].body;
@@ -650,15 +888,24 @@
         }
         showWarnings(warns);
       }
+      // /api/paper/state zarfı düz JSON'dur (ok/data zarfı yok).
+      var paper = r[7].http === 200 ? r[7].body : null;
+      var dual = r[6].body && r[6].body.ok ? r[6].body.data : null;
       renderTop(r[0].body && r[0].body.ok ? r[0].body.data : null,
-                data(2, "portfolio"), data(1, "products"));
-      renderTrades(data(1, "positions"));
+                data(2, "portfolio"), data(1, "products"), paper);
+      renderStrip(paper);
+      renderTrades(data(1, "positions"),
+                   dual ? dual.positions : null);
       renderQueue(data(1, "products"), data(1, "orders"),
                   data(1, "positions"), data(1, "signals"));
       renderActivity(data(3, "journal"));
       renderWallets(data(4, "accounts"), data(5, "accounts"));
-      renderDualModel(r[6].body && r[6].body.ok ?
-                      r[6].body.data : null);
+      renderDualModel(dual);
+      // Gerçekleşmiş PnL (model, net) — dual snapshot toplamı.
+      setDatum("th-sc-realized", dual &&
+               dual.portfolio_net_pnl != null ?
+               fmtSigned(dual.portfolio_net_pnl, "USDT") : null,
+               dual ? pnlClass(dual.portfolio_net_pnl) : "");
       inflight = false;
     }, function () { inflight = false; });
   }

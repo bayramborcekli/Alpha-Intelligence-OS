@@ -3,7 +3,7 @@
 
 {% block content %}
 <style>
-  /* ── Mission 2300 A04: Binance-stili karanlık finans uygulaması ──
+  /* ── Trading Home kokpit yerleşimi ──
      Sayfa doğrudan finansal bilgiyle açılır: büyük başlık bloğu,
      karşılama afişi ve açıklama paragrafı yok. */
   main.content > h1, main.content > p.sub { display:none; }
@@ -14,12 +14,12 @@
   .th-profit { color:#3fbf7f; font-weight:700; }
   .th-loss { color:#e05656; font-weight:700; }
 
-  /* ── Üst özet çubuğu: tek sürekli yatay satır ── */
+  /* ── Üst durum şeridi: tek sürekli yatay satır ── */
   #th-topbar { position:sticky; top:0; z-index:30; display:flex;
       align-items:stretch; gap:0; background:#12161d;
       border:1px solid var(--border,#30363d); border-radius:10px;
       padding:8px 6px; overflow-x:auto; }
-  #th-topbar .cell { padding:2px 18px; min-width:104px;
+  #th-topbar .cell { padding:2px 14px; min-width:92px;
       border-left:1px solid rgba(48,54,61,.6); }
   #th-topbar .cell:first-child { border-left:none; }
   #th-topbar .brand { display:flex; align-items:center;
@@ -28,7 +28,15 @@
   #th-topbar b { display:block; font-size:.6rem;
       color:var(--muted,#8b949e); text-transform:uppercase;
       letter-spacing:.06em; font-weight:600; }
-  #th-topbar .cell span:last-child { font-size:1rem; font-weight:700; }
+  #th-topbar .cell span:last-child { font-size:.92rem; font-weight:700; }
+  .th-pill { display:inline-flex; align-items:center; border-radius:999px;
+      padding:3px 10px; font-size:.66rem; font-weight:800;
+      letter-spacing:.04em; white-space:nowrap; align-self:center;
+      margin:0 4px; }
+  .th-pill.paper { background:rgba(63,191,127,.14); color:#3fbf7f;
+      border:1px solid rgba(63,191,127,.4); }
+  .th-pill.nolive { background:rgba(224,86,86,.12); color:#e05656;
+      border:1px solid rgba(224,86,86,.4); }
 
   /* ── Kişisel hesap şeridi: TEK yatay satır ── */
   #th-accounts-strip { display:flex; align-items:center; gap:10px;
@@ -53,11 +61,35 @@
       font-weight:700; color:var(--amber); border:1px solid
       rgba(240,185,11,.45); border-radius:8px; padding:7px 12px; }
 
-  /* ── Ana ızgara: sol %75 işlemler, sağ %25 AI paneli ── */
+  /* ── Özet kart satırı ── */
+  .th-cards { display:grid; gap:10px; margin-top:10px;
+      grid-template-columns:repeat(5, minmax(0,1fr)); }
+  @media (max-width:1100px) {
+    .th-cards { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  .th-cards .th-card { padding:10px 12px; }
+  .th-cards b { display:block; font-size:.6rem; letter-spacing:.06em;
+      text-transform:uppercase; color:var(--muted,#8b949e);
+      font-weight:600; margin-bottom:4px; }
+  .th-cards span { font-size:1.02rem; font-weight:800; }
+
+  /* ── Ana ızgara: sol %75 işlemler, sağ %25 AI + izleme ── */
   .th-main { display:grid; gap:10px; margin-top:10px;
       grid-template-columns:minmax(0,3fr) minmax(230px,1fr);
       align-items:start; }
   @media (max-width:1100px) { .th-main { grid-template-columns:1fr; } }
+
+  /* ── Orta üç kolon: CORE | OPPORTUNITY | İzlenen Piyasalar ── */
+  .th-tricol { display:grid; gap:10px; margin-top:10px;
+      grid-template-columns:repeat(3, minmax(0,1fr)); }
+  @media (max-width:1250px) { .th-tricol { grid-template-columns:1fr; } }
+  .th-bottomrow { display:grid; gap:10px; margin-top:10px;
+      grid-template-columns:repeat(3, minmax(0,1fr)); }
+  @media (max-width:1100px) { .th-bottomrow { grid-template-columns:1fr; } }
+  .th-kv { display:flex; justify-content:space-between; gap:8px;
+      font-size:.8rem; padding:5px 0;
+      border-bottom:1px dashed rgba(48,54,61,.6); }
+  .th-kv span:first-child { color:var(--muted,#8b949e); }
+  .th-kv span:last-child { font-weight:700; }
 
   .th-card { background:#12161d; border:1px solid
       var(--border,#30363d); border-radius:10px; padding:12px 14px; }
@@ -65,13 +97,13 @@
       text-transform:uppercase; color:var(--muted,#8b949e);
       font-weight:600; }
 
-  .th-table { width:100%; border-collapse:collapse; font-size:.85rem; }
-  .th-table th, .th-table td { padding:8px 8px; text-align:right;
+  .th-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+  .th-table th, .th-table td { padding:7px 7px; text-align:right;
       border-bottom:1px solid rgba(48,54,61,.5); white-space:nowrap; }
   .th-table th:first-child, .th-table td:first-child { text-align:left; }
-  .th-table th { color:var(--muted,#8b949e); font-size:.64rem;
+  .th-table th { color:var(--muted,#8b949e); font-size:.62rem;
       text-transform:uppercase; font-weight:600; }
-  .th-table td b { font-size:.95rem; }
+  .th-table td b { font-size:.92rem; }
   .th-empty { color:var(--muted,#8b949e); padding:8px 0;
       font-size:.83rem; }
   .th-skel { color:var(--muted,#8b949e); font-style:italic; }
@@ -93,7 +125,7 @@
   .th-btn:disabled { opacity:.45; cursor:not-allowed; }
 
   /* ── AI durum paneli (sağ) ── */
-  #th-ai .mode { font-size:1.5rem; font-weight:900;
+  #th-ai .mode { font-size:1.3rem; font-weight:900;
       letter-spacing:.04em; margin:2px 0 6px; }
   #th-ai .mode.autonomous { color:#3fbf7f; }
   #th-ai .mode.advisor { color:var(--amber); }
@@ -107,6 +139,13 @@
   #th-ai a.detail { display:inline-block; margin-top:10px;
       font-size:.78rem; color:var(--amber); }
 
+  /* ── Hızlı Bakış fiyat şeridi ── */
+  #th-ticker { display:flex; gap:18px; overflow-x:auto; margin-top:10px;
+      background:#12161d; border:1px solid var(--border,#30363d);
+      border-radius:10px; padding:8px 14px; font-size:.76rem;
+      white-space:nowrap; }
+  #th-ticker .tk b { color:var(--text,#e6edf3); margin-right:6px; }
+
   dialog.th-confirm { background:#12161d; color:inherit;
       border:1px solid var(--border,#30363d); border-radius:10px;
       max-width:420px; }
@@ -116,15 +155,23 @@
       padding:6px 8px; }
 </style>
 
-<!-- ── ÜST ÖZET ÇUBUĞU: tek yatay satır ─────────────────────────── -->
+<!-- ── ÜST DURUM ŞERİDİ: tek yatay satır ─────────────────────────── -->
 <header id="th-topbar" aria-label="Portföy özeti">
   <span class="cell brand">Alpha Intelligence OS</span>
+  <span class="th-pill paper">PAPER</span>
+  <span class="th-pill nolive">CANLI EMİRLER DEVRE DIŞI</span>
   <span class="cell"><b>Portföy</b><span id="th-portfolio-value" class="th-unknown">UNKNOWN</span></span>
   <span class="cell"><b>Bugünkü Kazanç</b><span id="th-daily-pnl" class="th-unknown">UNKNOWN</span></span>
   <span class="cell"><b>Aktif İşlemler</b><span id="th-active-count" class="th-unknown">UNKNOWN</span></span>
   <span class="cell"><b id="th-queue-cell-label">İzlenen Piyasalar</b><span id="th-queued-count" class="th-unknown">UNKNOWN</span></span>
   <span class="cell"><b>Otomasyon Modu</b><span id="th-auto-mode" class="th-unknown">UNKNOWN</span></span>
   <span class="cell"><b>Sistem Durumu</b><span id="th-bot-status" class="th-unknown">UNKNOWN</span></span>
+  <span class="cell"><b>Pipeline</b><span id="th-strip-pipeline" class="th-unknown">Veri yok</span></span>
+  <span class="cell"><b>Analiz Zamanlayıcı</b><span id="th-strip-scheduler" class="th-unknown">Veri yok</span></span>
+  <span class="cell"><b>Tarama Aralığı</b><span id="th-strip-scan" class="th-unknown">Veri yok</span></span>
+  <span class="cell"><b>Evren</b><span id="th-strip-universe" class="th-unknown">Veri yok</span></span>
+  <span class="cell"><b>Risk Profili</b><span id="th-strip-risk" class="th-unknown">Veri yok</span></span>
+  <span class="cell"><b>Son Analiz</b><span id="th-strip-lastanalysis" class="th-unknown">Veri yok</span></span>
   <span class="cell"><b>Son Güncelleme</b><span id="th-last-update" class="th-unknown">UNKNOWN</span></span>
 </header>
 
@@ -141,38 +188,46 @@
     Yönet →</a>
 </section>
 
+<!-- ── ÖZET KARTLARI (ikinci satır) ─────────────────────────────── -->
+<div class="th-cards" aria-label="Pozisyon özeti">
+  <div class="th-card"><b>Aktif Pozisyon</b>
+    <span id="th-sc-open" class="th-unknown">UNKNOWN</span></div>
+  <div class="th-card"><b>Toplam Pozisyon Değeri</b>
+    <span id="th-sc-notional" class="th-unknown">UNKNOWN</span></div>
+  <div class="th-card"><b>Gün İçi PnL</b>
+    <span id="th-sc-intraday" class="th-unknown">UNKNOWN</span></div>
+  <div class="th-card"><b>Gerçekleşmiş PnL (Model, net)</b>
+    <span id="th-sc-realized" class="th-unknown">UNKNOWN</span></div>
+  <div class="th-card"><b>Risk Kullanımı</b>
+    <span id="th-sc-risk" class="th-unknown">UNKNOWN</span></div>
+</div>
+
 <div class="th-main">
   <div>
-    <!-- ── AKTİF İŞLEMLER: en büyük alan ─────────────────────────── -->
+    <!-- ── AKTİF İŞLEMLER: en büyük alan (klasik + model, tek tablo) ── -->
     <section class="th-card" aria-labelledby="th-h-trades">
       <h2 id="th-h-trades">Aktif İşlemler</h2>
+      <div style="overflow-x:auto">
       <table class="th-table" id="th-trades">
         <thead><tr><th scope="col">Varlık</th><th scope="col">Yön</th>
+          <th scope="col">Miktar</th>
+          <th scope="col">Poz. Değeri</th>
           <th scope="col">Giriş Fiyatı</th>
           <th scope="col">Anlık Fiyat</th>
-          <th scope="col">Anlık Kazanç</th><th scope="col">Süre</th>
+          <th scope="col">Anlık Kazanç</th>
+          <th scope="col">PnL %</th><th scope="col">Süre</th>
+          <th scope="col">TP</th><th scope="col">SL</th>
+          <th scope="col">Model</th><th scope="col">Liste</th>
           <th scope="col">Durum</th><th scope="col">İşlem</th></tr>
         </thead>
-        <tbody><tr><td colspan="8" class="th-skel">Yükleniyor…</td>
+        <tbody><tr><td colspan="15" class="th-skel">Yükleniyor…</td>
         </tr></tbody>
       </table>
+      </div>
     </section>
 
-    <!-- ── SIRADAKİ İŞLEMLER ─────────────────────────────────────── -->
-    <section class="th-card" style="margin-top:10px"
-             aria-labelledby="th-h-queue">
-      <h2 id="th-h-queue">İzlenen Piyasalar</h2>
-      <table class="th-table" id="th-queue-table">
-        <thead><tr><th scope="col">Varlık</th><th scope="col">Yön</th>
-          <th scope="col">Durum</th></tr></thead>
-        <tbody id="th-queue" aria-live="polite">
-          <tr><td colspan="3" class="th-skel">Yükleniyor…</td></tr>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- ── İKİ MODEL: CORE LIQUIDITY + OPPORTUNITY (tek kanonik
-         /api/dual-model/state snapshot'ından) ─────────────────── -->
+    <!-- ── İKİ MODEL ayrıntısı: sağlık + pozisyonlar + performans
+         (tek kanonik /api/dual-model/state snapshot'ından) ─────── -->
     <section class="th-card" style="margin-top:10px"
              aria-labelledby="th-h-dual">
       <h2 id="th-h-dual">Kısa Vadeli Modeller
@@ -221,32 +276,6 @@
         </tbody>
       </table>
       </div>
-      <h3 style="font-size:.75rem;margin:6px 0 2px">CORE LIQUIDITY —
-        ALPHA CORE SCALP</h3>
-      <table class="th-table" id="th-dm-core-table">
-        <thead><tr><th scope="col">Sembol</th>
-          <th scope="col">Sinyal</th><th scope="col">Spread</th>
-          <th scope="col">Güven</th>
-          <th scope="col">Model Durumu</th>
-          <th scope="col">Açık Pozisyon</th></tr></thead>
-        <tbody id="th-dm-core">
-          <tr><td colspan="6" class="th-skel">Yükleniyor…</td></tr>
-        </tbody>
-      </table>
-      <h3 style="font-size:.75rem;margin:10px 0 2px">OPPORTUNITY —
-        ALPHA OPPORTUNITY BURST</h3>
-      <table class="th-table" id="th-dm-opp-table">
-        <thead><tr><th scope="col">Sembol</th>
-          <th scope="col">Fırsat Türü</th>
-          <th scope="col">Hacim Artışı</th>
-          <th scope="col">Volatilite</th>
-          <th scope="col">Güven</th>
-          <th scope="col">Beklenen Net Edge</th>
-          <th scope="col">Model Durumu</th></tr></thead>
-        <tbody id="th-dm-opp">
-          <tr><td colspan="7" class="th-skel">Yükleniyor…</td></tr>
-        </tbody>
-      </table>
 
       <!-- ── Task 130: ayrı performans metrik kartları (CORE vs
            OPPORTUNITY) + toplam portföy sonucu + ret nedenleri —
@@ -283,18 +312,118 @@
     </section>
   </div>
 
-  <!-- ── AI DURUM PANELİ (sağ) ───────────────────────────────────── -->
-  <section class="th-card" id="th-ai" aria-labelledby="th-h-ai">
-    <h2 id="th-h-ai">🤖 AI Durumu</h2>
-    <div class="mode" id="th-ai-mode">UNKNOWN</div>
-    <div class="sent" id="th-ai-sentence">Durum alınamadı.</div>
-    <div class="row"><span>İzlenen Piyasalar</span>
-      <span id="th-ai-scanned" class="th-unknown">UNKNOWN</span></div>
-    <div class="row"><span>Uygun Fırsatlar</span>
-      <span id="th-ai-eligible" class="th-unknown">UNKNOWN</span></div>
-    <div class="row"><span>Son Güncelleme</span>
-      <span id="th-ai-last" class="th-unknown">UNKNOWN</span></div>
-    <a class="detail" href="/operation-center">Ayrıntılı Durum →</a>
+  <div>
+    <!-- ── AI DURUM PANELİ (sağ) ─────────────────────────────────── -->
+    <section class="th-card" id="th-ai" aria-labelledby="th-h-ai">
+      <h2 id="th-h-ai">🤖 AI Durumu</h2>
+      <div class="mode" id="th-ai-mode">UNKNOWN</div>
+      <div class="sent" id="th-ai-sentence">Durum alınamadı.</div>
+      <div class="row"><span>İzlenen Piyasalar</span>
+        <span id="th-ai-scanned" class="th-unknown">UNKNOWN</span></div>
+      <div class="row"><span>Uygun Fırsatlar</span>
+        <span id="th-ai-eligible" class="th-unknown">UNKNOWN</span></div>
+      <div class="row"><span>Son Güncelleme</span>
+        <span id="th-ai-last" class="th-unknown">UNKNOWN</span></div>
+      <a class="detail" href="/operation-center">Ayrıntılı Durum →</a>
+    </section>
+
+    <!-- ── MOTOR İZLEME KUYRUĞU (kanonik evren, overview snapshot) ── -->
+    <section class="th-card" style="margin-top:10px"
+             aria-labelledby="th-h-queue">
+      <h2 id="th-h-queue">İzlenen Piyasalar</h2>
+      <table class="th-table" id="th-queue-table">
+        <thead><tr><th scope="col">Varlık</th><th scope="col">Yön</th>
+          <th scope="col">Durum</th></tr></thead>
+        <tbody id="th-queue" aria-live="polite">
+          <tr><td colspan="3" class="th-skel">Yükleniyor…</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+</div>
+
+<!-- ── ORTA ÜÇ KOLON: CORE | OPPORTUNITY | İzlenen Piyasalar ─────── -->
+<div class="th-tricol" id="th-lists">
+  <section class="th-card" aria-labelledby="th-h-core">
+    <h2 id="th-h-core">CORE LIQUIDITY — ALPHA CORE SCALP</h2>
+    <div style="overflow-x:auto">
+    <table class="th-table" id="th-dm-core-table">
+      <thead><tr><th scope="col">Sembol</th>
+        <th scope="col">Sinyal</th><th scope="col">Spread</th>
+        <th scope="col">Güven</th>
+        <th scope="col">Model Durumu</th>
+        <th scope="col">Açık Pozisyon</th></tr></thead>
+      <tbody id="th-dm-core">
+        <tr><td colspan="6" class="th-skel">Yükleniyor…</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+  <section class="th-card" aria-labelledby="th-h-opp">
+    <h2 id="th-h-opp">OPPORTUNITY — ALPHA OPPORTUNITY BURST</h2>
+    <div style="overflow-x:auto">
+    <table class="th-table" id="th-dm-opp-table">
+      <thead><tr><th scope="col">Sembol</th>
+        <th scope="col">Sinyal</th><th scope="col">Spread</th>
+        <th scope="col">Güven</th>
+        <th scope="col">Model Durumu</th>
+        <th scope="col">Açık Pozisyon</th></tr></thead>
+      <tbody id="th-dm-opp">
+        <tr><td colspan="6" class="th-skel">Yükleniyor…</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+  <section class="th-card" id="th-markets-card"
+           aria-labelledby="th-h-markets">
+    <h2 id="th-h-markets">İzlenen Piyasalar (Model Evreni)</h2>
+    <div style="overflow-x:auto">
+    <table class="th-table" id="th-markets-table">
+      <thead><tr><th scope="col">Sembol</th>
+        <th scope="col">Fiyat</th>
+        <th scope="col">24s Değişim</th>
+        <th scope="col">Hacim (USDT)</th>
+        <th scope="col">Sinyal</th></tr></thead>
+      <tbody id="th-markets">
+        <tr><td colspan="5" class="th-skel">Yükleniyor…</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+</div>
+
+<!-- ── ALT KARTLAR: Piyasa Özeti | Kazanan/Kaybeden | Sistem ─────── -->
+<div class="th-bottomrow">
+  <section class="th-card" aria-labelledby="th-h-mkt">
+    <h2 id="th-h-mkt">Piyasa Özeti</h2>
+    <!-- Bu alanlar için panelde denetimli veri kaynağı yok;
+         uydurma değer basılmaz — dürüstçe "Veri yok" gösterilir. -->
+    <div class="th-kv"><span>Toplam Piyasa Değeri</span>
+      <span class="th-unknown">Veri yok</span></div>
+    <div class="th-kv"><span>BTC Dominansı</span>
+      <span class="th-unknown">Veri yok</span></div>
+    <div class="th-kv"><span>Korku &amp; Açgözlülük</span>
+      <span class="th-unknown">Veri yok</span></div>
+    <div class="th-kv"><span>24s Toplam Hacim</span>
+      <span class="th-unknown">Veri yok</span></div>
+  </section>
+  <section class="th-card" aria-labelledby="th-h-movers">
+    <h2 id="th-h-movers">En Çok Kazananlar / Kaybedenler
+      <span style="font-size:.62rem">(izlenen evrende, 24s)</span></h2>
+    <div id="th-gainers" class="th-empty">Veri yok</div>
+    <div id="th-losers" class="th-empty" style="margin-top:8px">
+      Veri yok</div>
+  </section>
+  <section class="th-card" aria-labelledby="th-h-sys">
+    <h2 id="th-h-sys">Sistem &amp; Otomasyon</h2>
+    <div class="th-kv"><span>API Durumu</span>
+      <span id="th-sys-api" class="th-unknown">Veri yok</span></div>
+    <div class="th-kv"><span>Veri Akışı</span>
+      <span id="th-sys-data" class="th-unknown">Veri yok</span></div>
+    <div class="th-kv"><span>Otomasyon</span>
+      <span id="th-sys-auto" class="th-unknown">Veri yok</span></div>
+    <div class="th-kv"><span>Çalışma Süresi</span>
+      <span id="th-sys-uptime" class="th-unknown">Veri yok</span></div>
   </section>
 </div>
 
@@ -354,6 +483,15 @@
     set("th-winrt-pos", d.open_position
         ? (d.open_position.symbol + " " + d.open_position.side +
            " @ " + d.open_position.entry) : "yok");
+    // Sistem & Otomasyon kartı: çalışma süresi aynı runtime yanıtından.
+    if (typeof d.uptime_s === "number") {
+      var s = Math.max(0, Math.floor(d.uptime_s));
+      var hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60);
+      var up = hh >= 24 ? Math.floor(hh / 24) + " gün " + (hh % 24) +
+        " sa" : hh + " sa " + mm + " dk";
+      var upEl = document.getElementById("th-sys-uptime");
+      if (upEl) { upEl.textContent = up; upEl.className = ""; }
+    }
     var notes = [];
     if (d.code_stale)
       notes.push("\u26A0 Eski kod çalışıyor — yeniden başlatın");
@@ -426,6 +564,11 @@
   </table>
 </section>
 
+<!-- ── HIZLI BAKIŞ: ince fiyat şeridi (model evreninden) ─────────── -->
+<div id="th-ticker" aria-label="Hızlı Bakış fiyat şeridi">
+  <span class="th-skel">Yükleniyor…</span>
+</div>
+
 <dialog class="th-confirm" id="th-dialog">
   <form method="dialog">
     <h3>İşlemi Kapat</h3>
@@ -442,5 +585,5 @@
 </dialog>
 
 <script>window.TH_CSRF = "{{ csrf_token() }}";</script>
-<script src="{{ url_for('static', filename='js/trading_home.js') }}"></script>
+<script src="{{ url_for('static', filename='js/trading_home.js') }}?v={{ app_version }}"></script>
 {% endblock %}

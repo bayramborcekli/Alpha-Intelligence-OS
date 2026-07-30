@@ -1,0 +1,242 @@
+TRADING HOME ARAYÜZÜNÜ BU REFERANS GÖRSELE GÖRE YENİDEN TASARLA
+
+Amaç:
+Mevcut Trading Home sayfasını, yüklediğim referans görseldeki profesyonel masaüstü kontrol paneline mümkün olduğunca yakın hale getir.
+
+ÖNEMLİ SINIRLAR
+- Yalnız arayüz ve mevcut verilerin yerleşimi düzenlenecek.
+- Çalışan trading motorları, scheduler, risk motoru, Paper ledger, DPAPI ve API mantığı bozulmayacak.
+- LIVE ORDERS kesinlikle DISABLED kalacak.
+- Uydurma finansal veri gösterilmeyecek.
+- Mevcut kanonik API/snapshot kullanılacak.
+- Veri yoksa “Veri yok” veya uygun reason_code gösterilecek.
+
+1. GENEL TASARIM
+
+- Referanstaki koyu lacivert/siyah profesyonel tema kullanılmalı.
+- Sol tarafta sabit navigasyon menüsü olmalı.
+- Ana içerik masaüstü genişliğini verimli kullanmalı.
+- Gereksiz boşluklar kaldırılmalı.
+- Kart yükseklikleri kompakt olmalı.
+- Tablolar yatay ve okunabilir olmalı.
+- Sayfa 1366×768 ve üzeri ekranlara uygun olmalı.
+- Mobilde responsive davranmalı.
+
+2. SOL MENÜ
+
+Şu menüler gösterilsin:
+
+- Trading Home
+- Portföy
+- Piyasalar
+- İzleme Listeleri
+- Stratejiler
+- AI Tarayıcı
+- Risk Yönetimi
+- Raporlar
+- Otomasyon
+- Ayarlar / Hesaplar
+- Sistem
+
+Alt bölümde küçük kartlar:
+
+- Sistem Sağlığı
+- Sürüm
+- PAPER MODE
+- LIVE ORDERS DISABLED
+
+3. ÜST DURUM ŞERİDİ
+
+Tek satır ve kompakt biçimde:
+
+- PAPER
+- CANLI EMİRLER DEVRE DIŞI
+- Pipeline
+- Analiz zamanlayıcısı
+- Tarama aralığı
+- Evren büyüklüğü
+- Risk profili
+- Son analiz
+- Bildirim / ayar simgeleri
+
+Sağdaki AI Durumu / Danışman kartı küçük ve kompakt olsun:
+
+- çalışma modu
+- aktif modeller
+- uygun piyasa sayısı
+- son öneri
+- son güncelleme
+- Ayrıntılı Durum bağlantısı
+
+4. ÜST ÖZET KARTLARI
+
+Referanstaki gibi tek satırda:
+
+- Portföy Değeri
+- Günlük PnL
+- Açık Pozisyon
+- İzlenen Piyasalar
+- Otomasyon Modu
+- Sistem Durumu
+
+İkinci kompakt satır:
+
+- Aktif Pozisyon
+- Toplam Pozisyon Değeri
+- Gün İçi PnL
+- Gerçekleşmiş PnL
+- Risk Kullanımı
+
+PnL pozitifse yeşil, negatifse kırmızı gösterilsin.
+
+5. AKTİF İŞLEMLER TABLOSU
+
+En görünür ana tablo bu olmalı.
+
+Sütunlar:
+
+- Sembol
+- Yön
+- Miktar
+- Pozisyon Değeri (USDT)
+- Giriş Fiyatı
+- Güncel Fiyat
+- Net PnL (USDT)
+- PnL %
+- Süre
+- TP
+- SL
+- Model
+- Liste Türü
+- Durum
+- İşlem
+
+Her satırda “Kapat” düğmesi olmalı.
+
+Kapat butonuna basıldığında onay penceresi göster:
+
+- sembol
+- yön
+- miktar
+- güncel fiyat
+- tahmini fee
+- tahmini slippage
+- tahmini net PnL
+
+Onay verilirse yalnız PAPER pozisyonu MANUAL_CLOSE ile kapatılmalı.
+
+6. ORTA BÖLÜM — ÜÇ KOLON
+
+Sol tablo:
+
+CORE LIQUIDITY — ALPHA CORE SCALP
+
+Sütunlar:
+
+- Sembol
+- Sinyal
+- Spread %
+- Güven
+- Model Durumu
+- Açık Pozisyon
+
+Orta tablo:
+
+OPPORTUNITY — ALPHA OPPORTUNITY BURST
+
+Sütunlar:
+
+- Sembol
+- Sinyal
+- Spread %
+- Güven
+- Model Durumu
+- Açık Pozisyon
+
+Sağ tablo:
+
+İZLENEN PİYASALAR
+
+Sütunlar:
+
+- Sembol
+- Fiyat
+- 24s Değişim
+- Hacim
+- Sinyal
+
+Listeler aynı kanonik snapshot’tan gelmeli.
+
+7. ALT BÖLÜM
+
+Üç profesyonel kart grubu:
+
+A) Piyasa Özeti
+- Toplam piyasa değeri
+- BTC dominance
+- Korku & Açgözlülük
+- 24s hacim
+
+B) En Çok Kazananlar / Kaybedenler
+- En fazla 3–5 satır
+
+C) Sistem & Otomasyon
+- API durumu
+- Veri akışı
+- Otomasyon
+- Çalışma süresi
+
+En altta ince “Hızlı Bakış” fiyat şeridi olabilir.
+
+8. VERİ TUTARLILIĞI
+
+Aynı snapshot içinde:
+
+- açık pozisyon sayısı == aktif işlem satır sayısı
+- toplam evren == ilgili liste sayıları
+- PnL kartları == ledger hesapları
+- CORE ve OPPORTUNITY sayaçları kendi listeleriyle eşleşmeli
+
+Uyuşmazlık varsa sessizce farklı sayı gösterme; görünür hata durumu üret.
+
+9. MEVCUT VERİLERİ KORU
+
+Yeni sahte veri üretme.
+
+Aşağıdaki mevcut kaynakları kullan:
+
+- /api/dual-model/state
+- /api/operation-control/overview
+- Paper ledger
+- global risk snapshot
+- model performance snapshot
+
+Eksik alan varsa backend DTO’yu güvenli biçimde genişlet; mevcut API sözleşmelerini bozma.
+
+10. KABUL KRİTERLERİ
+
+- Sayfa referans görsele genel yerleşim olarak belirgin biçimde benzemeli.
+- AI Durumu kartı küçük ve üst alanda olmalı.
+- Aktif İşlemler geniş ve kolay okunmalı.
+- Miktar, pozisyon değeri, giriş/güncel fiyat, net PnL ve PnL % görünmeli.
+- CORE ve OPPORTUNITY yan yana gösterilmeli.
+- İzlenen Piyasalar ayrı üçüncü tablo olmalı.
+- Masaüstünde dikey kart yığını kullanılmamalı.
+- 12 saniyelik otomatik güncelleme çalışmalı.
+- Ctrl+F5 gerekmemeli.
+- Dark theme korunmalı.
+- Normal runtime sonunda git status temiz kalmalı.
+- LIVE ORDERS DISABLED korunmalı.
+
+TESLİM RAPORUNDA YAZ
+
+- değişen dosyalar
+- yeni layout yapısı
+- kullanılan API kaynakları
+- aktif işlem tablosu alanları
+- manuel kapatma akışı
+- responsive davranış
+- eklenen testler
+- test sonucu
+- son commit hash
+- GitHub push durumu

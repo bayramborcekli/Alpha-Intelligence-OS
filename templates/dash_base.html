@@ -118,6 +118,12 @@
     <div class="nav">
       <a href="/home" {% if active_page=='trading_home' %}class="active" aria-current="page"{% endif %}>🏡 Trading Home</a>
       <a href="/portfolio" {% if active_page=='portfolio' %}class="active" aria-current="page"{% endif %}>💼 Portföy</a>
+      <a href="/home#th-markets-card">📈 Piyasalar</a>
+      <a href="/home#th-lists">👁️ İzleme Listeleri</a>
+      <a href="/strategy-intelligence">♟️ Stratejiler</a>
+      <a href="/home#th-ai">🛰️ AI Tarayıcı</a>
+      <a href="/risk">⚖️ Risk Yönetimi</a>
+      <a href="/reports">📄 Raporlar</a>
       <a href="/automation" {% if active_page=='automation' %}class="active" aria-current="page"{% endif %}>🤖 Otomasyon</a>
       <a href="/settings/accounts" {% if active_page=='my_accounts' %}class="active" aria-current="page"{% endif %}>⚙️ Ayarlar · Hesaplarım</a>
       <a href="/settings/password" {% if active_page=='change_password' %}class="active" aria-current="page"{% endif %}>🔑 Parolayı Değiştir</a>
@@ -139,6 +145,16 @@
         <a href="/portfolio-intelligence" {% if active_page=='portfolio_intelligence' %}class="active" aria-current="page"{% endif %}>🧭 Portfolio Intel</a>
         <a href="/strategy-intelligence" {% if active_page=='strategy_intelligence' %}class="active" aria-current="page"{% endif %}>♟️ Strategy Intel</a>
       </details>
+      <!-- Alt durum kartçıkları: sürüm + mod rozetleri + model sağlığı
+           (sağlık değeri yalnız Trading Home açıkken beslenir). -->
+      <div style="margin-top:10px;padding:8px 10px;border:1px solid var(--border);
+                  border-radius:8px;font-size:.66rem;color:var(--muted);
+                  display:flex;flex-direction:column;gap:5px">
+        <span>Sistem Sağlığı: <b id="nav-health" style="color:var(--text)">—</b></span>
+        <span>Sürüm: v{{ app_version }}</span>
+        <span style="color:var(--ok);font-weight:700">{{ app_mode }} MODE</span>
+        <span style="color:var(--danger);font-weight:700">LIVE ORDERS DISABLED</span>
+      </div>
     </div>
   </nav>
   <div class="main">
