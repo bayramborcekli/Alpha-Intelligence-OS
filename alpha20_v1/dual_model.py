@@ -877,6 +877,27 @@ def monitor_positions(price_of: Callable[[str], float | None],
     return closed
 
 
+def _ts_utc(value) -> float:
+    """ISO zaman damgasını UTC epoch'a normalize et.
+
+    Lexical string kıyası farklı ofsetlerde ('+03:00' vs 'Z')
+    YANLIŞ kazanan seçer — kıyas her zaman UTC instant üzerinden
+    yapılır. Bozuk/eksik damga fail-closed en-eski sayılır (0.0),
+    böylece geçerli damgalı kaydı asla ezemez."""
+    try:
+        s = str(value).strip()
+        if not s:
+            return 0.0
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    except (ValueError, TypeError):
+        return 0.0
+
+
 def symbol_status() -> dict:
     """KANONİK sembol karar durumu — tek doğruluk kaynağı
     dual_model_runtime.json (rejections + positions + last_refresh).
@@ -932,7 +953,8 @@ def symbol_status() -> dict:
             "expected_edge": None, "data_quality": "OK",
             "source": "dual_model_runtime"})
         at = rej.get("at") or ""
-        if cur["analyzed_at"] and str(cur["analyzed_at"]) >= str(at):
+        if cur["analyzed_at"] and _ts_utc(cur["analyzed_at"]) >= \
+                _ts_utc(at):
             continue  # elimizdeki karar daha yeni — ezme
         reason = rej.get("reason_code") or "UNSPECIFIED"
         if reason == "NO_SIGNAL":

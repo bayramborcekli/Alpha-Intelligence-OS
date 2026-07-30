@@ -86,6 +86,32 @@ class TestSymbolStatus:
         s = dm.symbol_status()["symbols"]["BTCUSDT"]
         assert s["last_rejection_reason"] == "LOW_CONFIDENCE"
 
+    def test_mixed_offsets_compare_as_utc(self, monkeypatch):
+        # Mimar bulgusu: '10:00+03:00' (=07:00Z) lexical kıyasla
+        # '08:00Z'yi yanlış yenerdi — UTC instant kıyası şart.
+        rt = _rt(rejections=[
+            {"symbol": "BTCUSDT", "model": "ALPHA_CORE_SCALP",
+             "reason_code": "NO_SIGNAL",
+             "at": "2026-07-30T10:00:00+03:00"},   # = 07:00 UTC
+            {"symbol": "BTCUSDT", "model": "ALPHA_OPPORTUNITY",
+             "reason_code": "LOW_CONFIDENCE",
+             "at": "2026-07-30T08:00:00Z"}])       # = 08:00 UTC
+        monkeypatch.setattr(dm, "_load_runtime", lambda: rt)
+        s = dm.symbol_status()["symbols"]["BTCUSDT"]
+        assert s["last_rejection_reason"] == "LOW_CONFIDENCE"
+
+    def test_malformed_timestamp_cannot_win(self, monkeypatch):
+        # Bozuk damga fail-closed en-eski sayılır; geçerliyi ezemez.
+        rt = _rt(rejections=[
+            {"symbol": "BTCUSDT", "model": "ALPHA_CORE_SCALP",
+             "reason_code": "LOW_CONFIDENCE",
+             "at": "2026-07-30T08:00:00Z"},
+            {"symbol": "BTCUSDT", "model": "ALPHA_OPPORTUNITY",
+             "reason_code": "NO_SIGNAL", "at": "bozuk-damga"}])
+        monkeypatch.setattr(dm, "_load_runtime", lambda: rt)
+        s = dm.symbol_status()["symbols"]["BTCUSDT"]
+        assert s["last_rejection_reason"] == "LOW_CONFIDENCE"
+
     def test_data_quality_maps_data_unavailable(self, monkeypatch):
         # spec 7: veri yoksa DATA_UNAVAILABLE
         rt = _rt(rejections=[
@@ -252,8 +278,9 @@ class TestProfitFirst500:
         assert r.mimetype == "application/json"
         b = r.get_json()
         assert b["ok"] is False and b["data"] is None
-        assert b["error_code"] == "RuntimeError"
-        assert "windows kilidi" in b["message"]
+        # Mimar bulgusu: ham istisna metni sızdırılmaz — sabit kod
+        assert b["error_code"] == "REPORT_GENERATION_FAILED"
+        assert "windows kilidi" not in b["message"]
 
 
 class TestIncompletePosition:

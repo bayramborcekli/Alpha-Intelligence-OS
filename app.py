@@ -5187,11 +5187,14 @@ def api_profit_first_report():
         data.setdefault("shadow_summary", data.get("shadow"))
         data.setdefault("live_orders", "DISABLED")
         return jsonify({"ok": True, "data": data})
-    except Exception as exc:
+    except Exception:
+        # Ham istisna metni API'ye SIZDIRILMAZ (iç yol/kütüphane
+        # detayı) — sunucu logunda tam iz, istemciye sabit mesaj.
         app.logger.exception("profit-first raporu üretilemedi")
         return jsonify({"ok": False,
-                        "error_code": type(exc).__name__,
-                        "message": str(exc),
+                        "error_code": "REPORT_GENERATION_FAILED",
+                        "message": "Rapor üretilemedi — sunucu "
+                        "günlüklerine bakın.",
                         "data": None}), 500
 
 
