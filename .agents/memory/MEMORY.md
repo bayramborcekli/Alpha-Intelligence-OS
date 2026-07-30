@@ -20,4 +20,5 @@
 - [Universe refresh design](universe-refresh-loop.md) — yenileme artık scheduler'dan moddan bağımsız; durum kaynağı smart_config['scheduler_refresh'], smart_log değil; log en-yeni-önce.
 - [Merge push gap](merge-push-gap.md) — görev ajanı merge'leri GitHub'a otomatik push ETMEZ; Windows git pull öncesi origin/main HEAD eşitliğini her seferinde doğrula.
 - [Dual-model PAPER engine](dual-model-engine.md) — CORE/OPPORTUNITY iki-liste mimarisi; tüm istekler paylaşımlı 429 korumasından, arbitraj birleşik kümede, TP/SL yalnız taze fiyatla.
+- [Dual öğrenme köprüsü](dual-learning-bridge.md) — allowlist+clamp, dürüst GATE_SUBSET_REPLAY gölgesi, çevrim başına tek tetikleme, AUTO_SHADOW/terfi yalnız onayla.
 - [Tam paket bölünmüş koşu](full-suite-split-run.md) — 13.6k+ test tek koşuda summary basmadan sessizce ölüyor; paketi iki yarıda koş, iki summary topla.
