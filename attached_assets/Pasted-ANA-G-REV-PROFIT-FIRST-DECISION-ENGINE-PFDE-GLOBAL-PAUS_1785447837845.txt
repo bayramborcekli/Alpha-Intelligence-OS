@@ -1,0 +1,400 @@
+ANA GÖREV — PROFIT-FIRST DECISION ENGINE (PFDE)
+
+GLOBAL_PAUSE: ACTIVE kalacak.
+
+Yalnız bu görev için çalışma izni veriliyor.
+
+Başka göreve geçme.
+Follow-up oluşturma.
+markTaskComplete çağırma.
+
+==================================================
+AMAÇ
+==================================================
+
+Mevcut sistem:
+
+"Bu sinyal oluştu mu?"
+
+diye karar veriyor.
+
+Yeni sistem önce şu soruyu cevaplayacak:
+
+"Bu işlem gerçekten para kazandırma ihtimali yüksek mi?"
+
+Artık sistemin birinci hedefi:
+
+NET KÂR ÜRETMEK
+
+İkinci hedefi:
+
+Üretilen net kârı korumak.
+
+Komisyonu sıfırlamak hedef değildir.
+
+Komisyon, başarılı işlemin doğal maliyetidir.
+
+==================================================
+FAZ 0
+==================================================
+
+Önce mevcut sistemi incele.
+
+Kanıtla:
+
+1.
+Confidence bugün tam olarak neyi ölçüyor?
+
+2.
+Confidence ile gerçek net PnL korelasyonu nedir?
+
+3.
+Confidence yükseldikçe gerçekten kâr artıyor mu?
+
+4.
+Yüksek confidence işlemlerinin
+
+ortalama
+
+MFE
+
+MAE
+
+Captured Profit
+
+Net PnL
+
+nedir?
+
+5.
+Confidence yerine hangi değişkenler gerçek kârı daha iyi tahmin ediyor?
+
+Kod değiştirmeden raporla.
+
+==================================================
+FAZ 1
+==================================================
+
+Yeni skor:
+
+PFS
+
+(PROFIT FIRST SCORE)
+
+oluştur.
+
+PFS
+
+Confidence'ın yerine geçmeyecek.
+
+Yeni bağımsız skor olacak.
+
+==================================================
+PFS yalnız aşağıdakileri ölçebilir
+
+- maliyet sonrası beklenen hareket
+- ilk net kâr ihtimali
+- expected continuation
+- local top riski
+- breakout freshness
+- relative strength
+- volatility quality
+- spread
+- liquidity
+- slippage
+- volume confirmation
+- BTC alignment
+- symbol geçmişi
+- model geçmişi
+- regime
+- trend continuation
+- expected giveback
+- stablecoin riski
+
+==================================================
+PFS
+
+tek soru soracak:
+
+"Bu işlem
+
+komisyon çıktıktan sonra
+
+gerçek para kazanacak mı?"
+
+==================================================
+FAZ 2
+
+Shadow çalış.
+
+Gerçek sistemi değiştirme.
+
+Her aday için üret:
+
+Confidence
+
+TCP
+
+EPP
+
+PFS
+
+Sonra karşılaştır.
+
+Hangisi
+
+gerçek net PnL'yi
+
+en iyi tahmin ediyor?
+
+ROC
+
+Precision
+
+Recall
+
+Brier
+
+Calibration
+
+hepsi raporlansın.
+
+==================================================
+FAZ 3
+
+Yeni giriş felsefesi
+
+Eski:
+
+Signal
+
+↓
+
+Confidence
+
+↓
+
+Trade
+
+Yeni Shadow:
+
+Signal
+
+↓
+
+TCP
+
+↓
+
+EPP
+
+↓
+
+PFS
+
+↓
+
+Trade
+
+Hangisi daha başarılı
+
+kanıtla.
+
+==================================================
+FAZ 4
+
+İlk 3 dakika
+
+özel çalış.
+
+Kanıtla:
+
+İlk
+
+30 sn
+
+60 sn
+
+90 sn
+
+180 sn
+
+içinde
+
+hangi davranışlar
+
+işlemin
+
+gerçek kazançlı olacağını
+
+önceden söylüyor?
+
+==================================================
+FAZ 5
+
+Yerel tepe
+
+analizi.
+
+Kanıtla:
+
+20 mum
+
+30 mum
+
+50 mum
+
+zirvesine
+
+yakın girişlerin
+
+gerçek başarı oranı.
+
+Yeni reason code:
+
+LOCAL_TOP_HIGH_RISK
+
+==================================================
+FAZ 6
+
+Never profitable
+
+analizi.
+
+İşlem hiç
+
+net kâra ulaşmadıysa
+
+neden?
+
+Grupla:
+
+- yanlış ürün
+
+- yanlış zaman
+
+- düşük volatilite
+
+- geç breakout
+
+- spread
+
+- fee
+
+- trend ölümü
+
+- BTC tersi
+
+- likidite
+
+==================================================
+FAZ 7
+
+En önemli rapor
+
+çıktısı:
+
+Sistem
+
+para kazanamadı
+
+DEMESİN.
+
+Şunu desin:
+
+Bu işlem
+
+neden
+
+para kazanamadı?
+
+Ve
+
+bir daha
+
+aynı hatayı
+
+nasıl engeller?
+
+==================================================
+KABUL ŞARTI
+
+PFS gerçek işlemleri değiştirmez.
+
+Shadow çalışır.
+
+Her işlem için
+
+Confidence
+
+TCP
+
+EPP
+
+PFS
+
+yan yana raporlanır.
+
+Hangisinin
+
+gerçek net kârı
+
+en iyi tahmin ettiği
+
+istatistiksel olarak kanıtlanır.
+
+LIVE ORDERS DISABLED.
+
+Champion değişmez.
+
+GLOBAL_PAUSE korunur.
+
+==================================================
+TESLİM RAPORU
+
+1.
+Confidence analizi
+
+2.
+PFS tasarımı
+
+3.
+Karşılaştırmalı istatistik
+
+4.
+En güçlü tahmin değişkenleri
+
+5.
+En kötü tahmin değişkenleri
+
+6.
+Reason code'lar
+
+7.
+Never profitable analizi
+
+8.
+İlk 3 dakika analizi
+
+9.
+Yerel tepe analizi
+
+10.
+Shadow sonuçları
+
+11.
+Testler
+
+12.
+Commit
+
+13.
+Git status
+
+14.
+Başka hiçbir görevin çalıştırılmadığı doğrulaması
+
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+BACKGROUND_WORK: STOPPED
