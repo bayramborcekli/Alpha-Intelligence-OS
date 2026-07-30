@@ -668,6 +668,40 @@ def manual_close(symbol: str,
     return False, out.get("err", "POSITION_NOT_FOUND")
 
 
+def acknowledge_incomplete(symbol: str) -> tuple[bool, str, dict | None]:
+    """Task 152: operatör onayı — INCOMPLETE_POSITION_DATA kaydı
+    'görüldü / manuel kapatıldı' olarak aktif listeden çıkarılır.
+
+    Fail-closed: alanları GEÇERLİ (yönetilebilir) pozisyon bu yolla
+    silinemez — o yalnız manual_close ile (taze fiyat + trade kaydı)
+    kapatılabilir. Başarıda çıkarılan kaydın kopyası döner (audit
+    detayında kullanılır)."""
+    symbol = str(symbol or "").upper().strip()
+    if not symbol:
+        return False, "SYMBOL_REQUIRED", None
+    out: dict[str, Any] = {}
+
+    def _mut(rt: dict) -> None:
+        pos = _open_positions(rt)
+        p = pos.get(symbol)
+        if not p:
+            out["err"] = "POSITION_NOT_FOUND"
+            return
+        if _position_fields_valid(p):
+            out["err"] = "NOT_INCOMPLETE"
+            return
+        del pos[symbol]
+        rt["positions"] = pos
+        out["removed"] = dict(p)
+
+    _update_runtime(_mut)
+    if "removed" in out:
+        log.info("OPERATOR_ACK %s: eksik-veri kaydı aktif listeden "
+                 "çıkarıldı", symbol)
+        return True, "ACKED", out["removed"]
+    return False, out.get("err", "POSITION_NOT_FOUND"), None
+
+
 def monitor_positions(price_of: Callable[[str], float | None],
                       cfg: dict, now: float | None = None) -> list[dict]:
     """TP/SL/trailing/time-exit kontrolü; kapananlar ledger'a yazılır."""

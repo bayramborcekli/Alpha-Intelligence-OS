@@ -331,13 +331,16 @@
         "<td>" + dash(MODEL_TR[p.model]) + "</td>" +
         "<td>" + esc(listTypeOf(p.model)) + "</td>" +
         statusCell(p.position_status || "ACTIVE") +
-        // Miktar doğrulanamıyorsa Kapat düğmesi devre dışı — backend
-        // de INCOMPLETE_POSITION_DATA ile reddeder (çift koruma).
-        "<td><button class=\"th-btn th-dm-close\" data-symbol=\"" +
-        esc(p.symbol) + "\"" +
+        // Task 152: INCOMPLETE model kaydı kapatılamaz — operatör
+        // onu "görüldü / manuel kapatıldı" olarak onaylayıp aktif
+        // listeden çıkarabilir (audit geçmişinde kalır).
+        "<td>" +
         (p.position_status === "INCOMPLETE_POSITION_DATA" ?
-          " disabled title=\"Pozisyon verisi eksik — kapatılamaz\"" :
-          "") + ">Kapat</button></td></tr>";
+          "<button class=\"th-btn\" data-ack-symbol=\"" +
+          esc(p.symbol) + "\" data-ack-source=\"dual\">" +
+          "Onayla / Manuel Kapat</button>" :
+          "<button class=\"th-btn th-dm-close\" data-symbol=\"" +
+          esc(p.symbol) + "\">Kapat</button>") + "</td></tr>";
     }));
     tbody.innerHTML = rows.join("");
     bindDmClose(tbody, dual);
@@ -646,7 +649,11 @@
         method: "POST",
         headers: { "Content-Type": "application/json",
                    "X-CSRFToken": window.TH_CSRF },
-        body: JSON.stringify({ symbol: sym })
+        // Task 152: dual-model kaydı için source="dual" gönderilir —
+        // backend kaydı runtime aktif listesinden çıkarır.
+        body: JSON.stringify(a.dataset.ackSource ?
+          { symbol: sym, source: a.dataset.ackSource } :
+          { symbol: sym })
       }).then(function (r) { return r.json(); })
         .then(function (d) {
           if (!d.ok) {
@@ -935,8 +942,14 @@
         fmtNum(p.est_fees, 4) + "</td><td>" +
         fmtNum(p.est_slippage, 4) + "</td><td>" +
         fmtPrice(p.tp) + "</td><td>" + fmtPrice(p.sl) +
-        "</td><td><button class=\"th-btn th-dm-close\" " +
-        "data-symbol=\"" + esc(p.symbol) + "\">Kapat</button>" +
+        "</td><td>" +
+        // Task 152: INCOMPLETE kayıt için onay butonu (Kapat yerine)
+        (p.position_status === "INCOMPLETE_POSITION_DATA" ?
+          "<button class=\"th-btn\" data-ack-symbol=\"" +
+          esc(p.symbol) + "\" data-ack-source=\"dual\">" +
+          "Onayla / Manuel Kapat</button>" :
+          "<button class=\"th-btn th-dm-close\" " +
+          "data-symbol=\"" + esc(p.symbol) + "\">Kapat</button>") +
         "</td></tr>";
     }).join("");
     bindDmClose(tb, list);

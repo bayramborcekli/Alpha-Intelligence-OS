@@ -499,6 +499,80 @@ class TestExitGuards:
         assert not ok and msg == "PRICE_UNAVAILABLE"
 
 
+# ── Task 152: dual-model INCOMPLETE kaydının operatör onayı ────────
+
+class TestDualOperatorAck:
+    def _write_rt(self, dmiso, positions):
+        (dmiso / "dual_model_runtime.json").write_text(
+            json.dumps(_rt(positions)))
+
+    def test_ack_removes_incomplete_from_runtime(self, dmiso):
+        bad = _dm_pos(); del bad["quantity"]
+        self._write_rt(dmiso, {"ONDOUSDT": bad})
+        ok, msg, removed = dm.acknowledge_incomplete("ondousdt")
+        assert ok and msg == "ACKED"
+        assert removed["symbol"] == "ONDOUSDT"
+        rt = json.loads(
+            (dmiso / "dual_model_runtime.json").read_text())
+        assert rt["positions"] == {}
+
+    def test_ack_rejects_healthy_position(self, dmiso):
+        self._write_rt(dmiso, {"ONDOUSDT": _dm_pos()})
+        ok, msg, removed = dm.acknowledge_incomplete("ONDOUSDT")
+        assert not ok and msg == "NOT_INCOMPLETE" and removed is None
+        rt = json.loads(
+            (dmiso / "dual_model_runtime.json").read_text())
+        assert "ONDOUSDT" in rt["positions"]  # kayda dokunulmadı
+
+    def test_ack_unknown_symbol(self, dmiso):
+        self._write_rt(dmiso, {})
+        ok, msg, _ = dm.acknowledge_incomplete("NOPEUSDT")
+        assert not ok and msg == "POSITION_NOT_FOUND"
+
+    @pytest.fixture()
+    def client(self, appmod, dmiso):
+        appmod.app.config["TESTING"] = True
+        appmod.app.config["WTF_CSRF_ENABLED"] = False
+        with appmod.app.test_client() as c:
+            yield c
+
+    def test_endpoint_acks_dual_incomplete(self, client, appmod,
+                                           dmiso):
+        bad = _dm_pos(); del bad["quantity"]
+        self._write_rt(dmiso, {"ONDOUSDT": bad})
+        r = client.post("/api/positions/integrity/ack",
+                        json={"symbol": "ONDOUSDT",
+                              "source": "dual"})
+        assert r.status_code == 200 and r.get_json()["ok"]
+        rt = json.loads(
+            (dmiso / "dual_model_runtime.json").read_text())
+        assert rt["positions"] == {}
+        rec = json.loads(appmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()[-1])
+        assert rec["reason"] == "operator_ack"
+        assert rec["symbol"] == "ONDOUSDT"
+        assert rec["source"] == "dual_model_position"
+
+    def test_endpoint_rejects_healthy_dual(self, client, dmiso):
+        self._write_rt(dmiso, {"ONDOUSDT": _dm_pos()})
+        r = client.post("/api/positions/integrity/ack",
+                        json={"symbol": "ONDOUSDT",
+                              "source": "dual"})
+        assert r.status_code == 409
+        assert r.get_json()["message"] == "NOT_INCOMPLETE"
+        rt = json.loads(
+            (dmiso / "dual_model_runtime.json").read_text())
+        assert "ONDOUSDT" in rt["positions"]
+
+    def test_endpoint_dual_unknown_symbol(self, client, dmiso):
+        self._write_rt(dmiso, {})
+        r = client.post("/api/positions/integrity/ack",
+                        json={"symbol": "NOPEUSDT",
+                              "source": "dual"})
+        assert r.status_code == 404
+        assert r.get_json()["message"] == "POSITION_NOT_FOUND"
+
+
 # ── UI sözleşmesi ──────────────────────────────────────────────────
 
 class TestUiContract:
@@ -513,8 +587,9 @@ class TestUiContract:
                 "pozisyon verisi eksik") in js
         # Varsayılan artık körlemesine "Yönetiliyor" değil.
         assert 'STATUS_TR[p.position_status] || "Yönetiliyor"' not in js
-        # Eksik veride Kapat düğmesi devre dışı.
-        assert "disabled title=" in js
+        # Task 152: eksik veride Kapat yerine onay butonu render
+        # edilir (dual kaynağı işaretli).
+        assert 'data-ack-source=\\"dual\\"' in js
 
     def test_gitignore_covers_audit(self):
         gi = (ROOT / ".gitignore").read_text(encoding="utf-8")

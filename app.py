@@ -3435,7 +3435,9 @@ def _parse_ts(value) -> datetime | None:
 
 
 def _audit_position_integrity(symbol: str, status: str,
-                              detail: str) -> None:
+                              detail: str,
+                              source: str =
+                              "legacy_state_position") -> None:
     """Yetim/eksik pozisyon tespitini git dışı audit dosyasına yaz.
 
     Worker-safe: flock ile serileştirilir (Windows'ta portable_flock
@@ -3463,7 +3465,7 @@ def _audit_position_integrity(symbol: str, status: str,
                     "ts": datetime.now(timezone.utc).isoformat(),
                     "symbol": symbol, "reason": status,
                     "detail": detail,
-                    "source": "legacy_state_position",
+                    "source": source,
                 }, ensure_ascii=False) + "\n")
             finally:
                 _fl.flock(fh.fileno(), _fl.LOCK_UN)
@@ -4824,6 +4826,34 @@ def api_position_integrity_ack():
     if not symbol:
         return jsonify({"ok": False,
                         "message": "SYMBOL_REQUIRED"}), 400
+    # Task 152: dual-model (CORE/OPPORTUNITY) INCOMPLETE kaydı da
+    # onaylanabilir — kayıt dual_model_runtime.json aktif listesinden
+    # flock altında çıkarılır (fail-closed: sağlıklı kayıt silinemez)
+    # ve audit'e operator_ack olarak düşer.
+    if str(body.get("source") or "").strip().lower() == "dual":
+        import dual_model as _dm
+        ok, msg, removed = _dm.acknowledge_incomplete(symbol)
+        if not ok:
+            code = 404 if msg == "POSITION_NOT_FOUND" else \
+                409 if msg == "NOT_INCOMPLETE" else 400
+            detail = {
+                "POSITION_NOT_FOUND":
+                    "Model listesinde bu sembol yok — onay gereksiz.",
+                "NOT_INCOMPLETE":
+                    "Kayıt verisi geçerli — yalnız "
+                    "INCOMPLETE_POSITION_DATA onaylanabilir; sağlıklı "
+                    "pozisyon Kapat ile kapatılmalı.",
+            }.get(msg, msg)
+            return jsonify({"ok": False, "message": msg,
+                            "detail": detail}), code
+        actor = session.get("username") or "operator"
+        _audit_position_integrity(
+            symbol, "operator_ack",
+            f"Operatör onayı ({actor}): görüldü / manuel kapatıldı — "
+            f"model={(removed or {}).get('model')} kayıt aktif "
+            "listeden çıkarıldı", source="dual_model_position")
+        return jsonify({"ok": True, "symbol": symbol,
+                        "source": "dual"})
     try:
         st, _ = read_json(STATE_PATH)
     except Exception:
