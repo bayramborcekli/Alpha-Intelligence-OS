@@ -27,7 +27,7 @@ açık talimatla etkinleştirilebilir.
   `/intelligence` sayfası ve `GET /api/intelligence/*` uçları
   (Mission 1500.1; salt-okunur, harici LLM kilitli)
 - `tools/` — görev (mission) betikleri
-- `tests/` — test paketi (`python -m pytest tests/ -q`)
+- `tests/` — test paketi. Tam paket kanıtı için `python tools/run_full_suite.py` kullanın (paket ~13.7k test; tek pytest koşusu summary basmadan sessizce ölebilir — koşucu otomatik böler, summary'siz koşuyu FAIL sayar). Windows: `tools\windows\run_full_suite.cmd`. Tek dosya/alt küme için `python -m pytest tests/... -q` uygundur.
 
 ## Başlatma
 ```
