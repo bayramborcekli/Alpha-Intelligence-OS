@@ -11,4 +11,7 @@ Aktif pozisyon iki kaynaktan gelir: legacy `state.json.position` (overview'a `_c
 - Eksik entry/quantity ile exit YAPILMAZ: dual_model `_position_fields_valid` monitor+manual_close'u fail-closed keser.
 - Audit `position_integrity_audit.jsonl` git dışı, flock + tail-read dedupe (tam dosya okunmaz).
 
+- Kalıcı temizlik sözleşmesi: ORPHAN ya da "kapatılamaz eksik" (entry+quantity yok, runtime+ledger karşılığı yok → INCOMPLETE_POSITION_DATA_CLEANABLE) kayıt tek uçtan (`/api/state/orphan-position/clean`) silinir; runtime dosyası VAR ama okunamazsa fail-closed (yalnız dosya hiç yoksa boş kanıt sayılır); audit eylemi POSITION_RECORD_CLEANED (source=legacy, previous_status). Bot çalışırken 409 CLEANUP_REQUIRES_CONTROLLER_PAUSE; UI eksik pozisyonda "Kapat" asla göstermez.
+- Görev-ajanı merge'leri bekçi testlerinin İÇİNİ bozabilir (Mission 1500.1 ALLOWED_WRITE_ROUTES set içeriği metod gövdesiyle değiştirilmişti) — merge sonrası regresyon dosyalarını derlenebilirlik dahil doğrula.
+
 **How to apply:** Yeni pozisyon kaynağı/alanı eklerken aynı durum sözlüğünü ve fail-closed exit kuralını uygula.
