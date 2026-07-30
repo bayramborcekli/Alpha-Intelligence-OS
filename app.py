@@ -3589,18 +3589,26 @@ def _recent_position_audit(
 def _incomplete_since(symbol: str) -> datetime | None:
     """Sembolün GÜNCEL INCOMPLETE serisinin başlangıç zamanı.
 
-    Audit dosyası ardışık aynı sembol+durum kayıtlarını dedupe
-    ettiğinden, sembolün EN YENİ kaydı INCOMPLETE ise o kaydın ts'i
-    serinin ilk tespit anıdır. En yeni kaydı farklı bir duruma
-    geçmişse seri kırılmıştır → None (yanlış pozitif yükseltme yok).
+    Task 154: dedupe artık symbol+reason+source üçlüsüyle yapıldığı
+    için aynı sembolün INCOMPLETE durumu farklı kaynaklardan (legacy
+    vs dual-model) DÖNÜŞÜMLÜ yazılabilir — her yazım yeni kayıttır.
+    Bu yüzden "en yeni kayıt = serinin başlangıcı" varsayımı KRİTİK
+    süre sayacını her yazımda sıfırlıyordu. Doğru davranış: sembolün
+    en yeni kaydı INCOMPLETE ise, kaynaktan bağımsız olarak geriye
+    doğru kesintisiz INCOMPLETE serisinin EN ESKİ kaydının ts'i
+    döndürülür. Sembolün araya giren farklı-durum kaydı seriyi kırar;
+    en yeni kayıt INCOMPLETE değilse None (yanlış pozitif yok).
     """
+    since: datetime | None = None
     for rec in _recent_position_audit(limit=200):
         if rec.get("symbol") != symbol:
             continue
-        if rec.get("reason") == "INCOMPLETE_POSITION_DATA":
-            return _parse_ts(rec.get("ts"))
-        return None
-    return None
+        if rec.get("reason") != "INCOMPLETE_POSITION_DATA":
+            break  # seri kırıldı — o ana kadarki başlangıç geçerli
+        ts = _parse_ts(rec.get("ts"))
+        if ts is not None:
+            since = ts  # en-yeni-önce gezildiğinden en eski kazanır
+    return since
 
 
 def _position_integrity_panel() -> dict:

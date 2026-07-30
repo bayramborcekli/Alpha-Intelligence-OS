@@ -295,6 +295,75 @@ class TestIntegrityPanelWarnings:
         assert panelmod._incomplete_since("YUSDT") is None
         assert panelmod._incomplete_since("ZUSDT") is None
 
+    def test_incomplete_since_alternating_sources_oldest(
+            self, panelmod):
+        # Task 154: legacy/dual kaynakları dönüşümlü INCOMPLETE
+        # yazarsa seri başlangıcı EN ESKİ kayıttır — sayaç sıfırlanmaz.
+        oldest = _iso(7)
+        self._write_audit(panelmod, [
+            {"ts": oldest, "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d",
+             "source": "legacy_state_position"},
+            {"ts": _iso(5), "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d",
+             "source": "dual_model_position"},
+            {"ts": _iso(3), "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d",
+             "source": "legacy_state_position"},
+        ])
+        since = panelmod._incomplete_since("XUSDT")
+        assert since is not None and since.isoformat() == oldest
+
+    def test_incomplete_since_streak_broken_by_other_reason(
+            self, panelmod):
+        # Araya giren farklı durum kaydı seriyi kırar: yalnız
+        # kesintiden SONRAKİ INCOMPLETE kayıtları sayılır.
+        restart = _iso(4)
+        self._write_audit(panelmod, [
+            {"ts": _iso(9), "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d"},
+            {"ts": _iso(6), "symbol": "XUSDT",
+             "reason": "ORPHAN_POSITION", "detail": "d"},
+            {"ts": restart, "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d",
+             "source": "dual_model_position"},
+            {"ts": _iso(2), "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d",
+             "source": "legacy_state_position"},
+        ])
+        since = panelmod._incomplete_since("XUSDT")
+        assert since is not None and since.isoformat() == restart
+
+    def test_incomplete_since_other_symbols_do_not_break(
+            self, panelmod):
+        oldest = _iso(8)
+        self._write_audit(panelmod, [
+            {"ts": oldest, "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d"},
+            {"ts": _iso(6), "symbol": "YUSDT",
+             "reason": "ORPHAN_POSITION", "detail": "d"},
+            {"ts": _iso(4), "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d",
+             "source": "dual_model_position"},
+        ])
+        since = panelmod._incomplete_since("XUSDT")
+        assert since is not None and since.isoformat() == oldest
+
+    def test_alternating_sources_escalate_critical(self, panelmod):
+        # Uçtan uca: dönüşümlü yazımlara rağmen KRİTİK eşiği ilk
+        # tespit anına göre tetiklenir (Task 154 kabul kriteri).
+        self._incomplete_state(panelmod)
+        self._write_audit(panelmod, [
+            {"ts": _iso(6), "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d",
+             "source": "legacy_state_position"},
+            {"ts": _iso(0.5), "symbol": "XUSDT",
+             "reason": "INCOMPLETE_POSITION_DATA", "detail": "d",
+             "source": "dual_model_position"},
+        ])
+        w = panelmod._position_integrity_panel()["warnings"][0]
+        assert w.startswith("KRİTİK:")
+
     def test_healthy_position_no_warning(self, panelmod):
         self._write_state(panelmod, {
             "position": {"symbol": "ONDOUSDT", "entry": 0.95,
