@@ -3442,7 +3442,13 @@ def _audit_position_integrity(symbol: str, status: str,
 
     Worker-safe: flock ile serileştirilir (Windows'ta portable_flock
     fallback'i). Dedupe tail-read ile (tam dosya okunmaz): aynı
-    sembol+durum ardışık tekrarlanmaz — dosya şişmesin."""
+    sembol+durum ardışık tekrarlanmaz — dosya şişmesin.
+
+    Task 156: kıyas yalnız SON satıra değil, sembolün tail
+    penceresindeki güncel aynı-durum serisine bakar — legacy ve
+    dual-model kaynakları dönüşümlü aynı INCOMPLETE'i yazsa bile
+    her kaynaktan yalnız İLK kayıt (durum değişikliği bilgisi)
+    tutulur; sonraki dönüşümlü tekrarlar yutulur."""
     try:
         try:
             import fcntl as _fl
@@ -3456,18 +3462,33 @@ def _audit_position_integrity(symbol: str, status: str,
                 size = fh.tell()
                 fh.seek(max(0, size - 4096))
                 tail = fh.read().strip().splitlines()
-                last = json.loads(tail[-1]) if tail else None
                 # Task 153: dedupe kıyası source'u da içerir —
-                # farklı kaynaklı (legacy vs dual-model) ardışık
-                # kayıtlar yutulmaz. Eski kayıtlarda source alanı
-                # yoktur; geriye uyum için legacy varsayılan sayılır
+                # farklı kaynaklı (legacy vs dual-model) İLK kayıt
+                # yutulmaz. Eski kayıtlarda source alanı yoktur;
+                # geriye uyum için legacy varsayılan sayılır
                 # (KRİTİK süre serisi migrasyonda kırılmasın).
-                _last_src = (last or {}).get(
-                    "source", "legacy_state_position") \
-                    or "legacy_state_position"
-                if last and last.get("symbol") == symbol and \
-                        last.get("reason") == status and \
-                        _last_src == source:
+                # Task 156: sembolün tail'deki güncel aynı-durum
+                # serisi taranır (yalnız son satır değil) — dönüşümlü
+                # legacy/dual tekrarları da yutulur; seri farklı bir
+                # reason ile kırılmışsa yeniden yazılır (durum
+                # değişikliği bilgisi kaybolmaz).
+                _dup = False
+                for _line in reversed(tail):
+                    try:
+                        _rec = json.loads(_line)
+                    except (ValueError, TypeError):
+                        continue
+                    if _rec.get("symbol") != symbol:
+                        continue
+                    if _rec.get("reason") != status:
+                        break  # seri kırıldı — yeni durum, yaz
+                    _src = _rec.get("source",
+                                    "legacy_state_position") \
+                        or "legacy_state_position"
+                    if _src == source:
+                        _dup = True
+                        break
+                if _dup:
                     return
                 fh.seek(0, 2)
                 fh.write(json.dumps({

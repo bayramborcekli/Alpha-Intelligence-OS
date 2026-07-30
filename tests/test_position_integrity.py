@@ -163,6 +163,54 @@ class TestLegacyClassification:
             encoding="utf-8").strip().splitlines()
         assert len(lines) == 1
 
+    def test_audit_dedupes_alternating_sources(self, appmod):
+        # Task 156: legacy/dual dönüşümlü aynı INCOMPLETE'i yazarsa
+        # her kaynaktan yalnız İLK kayıt tutulur — dosya şişmez.
+        for i in range(6):
+            src = ("legacy_state_position" if i % 2 == 0
+                   else "dual_model_position")
+            appmod._audit_position_integrity(
+                "ONDOUSDT", "INCOMPLETE_POSITION_DATA", f"d{i}",
+                source=src)
+        lines = appmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == 2
+        recs = [json.loads(x) for x in lines]
+        assert {r["source"] for r in recs} == {
+            "legacy_state_position", "dual_model_position"}
+        # İLK yazımlar korunur (durum değişikliği bilgisi kaybolmaz).
+        assert [r["detail"] for r in recs] == ["d0", "d1"]
+
+    def test_audit_streak_break_allows_rewrite(self, appmod):
+        # Farklı reason araya girince seri kırılır: aynı
+        # symbol+reason+source yeniden yazılabilir.
+        appmod._audit_position_integrity(
+            "ONDOUSDT", "INCOMPLETE_POSITION_DATA", "a",
+            source="legacy_state_position")
+        appmod._audit_position_integrity(
+            "ONDOUSDT", "ORPHAN_POSITION", "b",
+            source="legacy_state_position")
+        appmod._audit_position_integrity(
+            "ONDOUSDT", "INCOMPLETE_POSITION_DATA", "c",
+            source="legacy_state_position")
+        lines = appmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == 3
+
+    def test_audit_other_symbol_does_not_break_streak(self, appmod):
+        appmod._audit_position_integrity(
+            "ONDOUSDT", "INCOMPLETE_POSITION_DATA", "a",
+            source="legacy_state_position")
+        appmod._audit_position_integrity(
+            "YUSDT", "ORPHAN_POSITION", "b",
+            source="legacy_state_position")
+        appmod._audit_position_integrity(
+            "ONDOUSDT", "INCOMPLETE_POSITION_DATA", "c",
+            source="legacy_state_position")
+        lines = appmod.POSITION_AUDIT_PATH.read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == 2  # üçüncü yazım yutuldu
+
     def test_orphan_excluded_from_overview_source(self):
         # _operation_raw ORPHAN'ı aktif listeye almaz (kaynak kodu
         # sözleşmesi — davranış birim testleri yukarıda).
