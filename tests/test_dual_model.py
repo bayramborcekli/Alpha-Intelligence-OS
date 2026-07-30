@@ -550,6 +550,35 @@ def test_guarded_get_429_never_retried_registers_backoff(monkeypatch):
     assert registered["args"][0] == 429
 
 
+def test_guarded_get_register_failure_warns_and_still_raises(
+        monkeypatch, caplog):
+    """register_rate_limit patlarsa: sessizce yutulMAZ — WARNING loglanır
+    ve RateLimited yine fırlatılır (diğer worker'lar habersiz kalsa da
+    bu worker geri çekilir)."""
+    import logging
+    import requests
+    import alpha20 as a20
+    _no_backoff(monkeypatch)
+
+    monkeypatch.setattr(requests, "get",
+                        lambda url, params=None, timeout=None:
+                        _Resp(status_code=429))
+    monkeypatch.setattr(a20, "rate_limit_remaining", lambda: 0.0)
+
+    def _boom(code, resp):
+        raise OSError("disk dolu — geri çekilme dosyası yazılamadı")
+
+    monkeypatch.setattr(a20, "register_rate_limit", _boom)
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(dm.RateLimited):
+            dm._guarded_get("/api/v3/ticker/price", retries=5)
+    warnings = [rec for rec in caplog.records
+                if rec.levelno == logging.WARNING
+                and "KAYDI BAŞARISIZ" in rec.getMessage()]
+    assert warnings, "register_rate_limit hatası WARNING loglanmadı"
+    assert "disk dolu" in warnings[0].getMessage()
+
+
 def test_guarded_get_418_never_retried(monkeypatch):
     """418 (IP ban uyarısı) da tek istek + RateLimited — retry yok."""
     import requests

@@ -202,8 +202,12 @@ def _guarded_get(path: str, params: dict | None = None,
         if _a20 is not None:
             try:
                 _a20.register_rate_limit(r.status_code, r)
-            except Exception:
-                pass
+            except Exception as reg_exc:
+                log.warning(
+                    "dual_model 429 geri çekilme KAYDI BAŞARISIZ — diğer "
+                    "worker'lar geri çekilmeden habersiz kalabilir (ban "
+                    "riski) | HTTP %s | %s | %s",
+                    r.status_code, path, reg_exc)
         raise RateLimited(f"HTTP {r.status_code}")
     r.raise_for_status()
     return r.json()
