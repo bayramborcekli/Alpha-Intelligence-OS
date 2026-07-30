@@ -58,6 +58,15 @@ class TestMergedActiveTrades:
         assert "dual ? dual.positions : null" in JS
         assert "legacy.length + dual.length" in JS
 
+    def test_partial_source_outage_is_honest(self):
+        # Kaynaklardan biri düşerse "N (kısmi)"; ikisi de düşerse
+        # UNKNOWN — asla "açık işlem yok" yalanı basılmaz.
+        idx = JS.index("function renderTrades")
+        seg = JS[idx:idx + 1600]
+        assert '" (kısmi)"' in seg
+        assert "pozisyon verisi" in seg  # UNKNOWN satırı
+        assert "bothDown" in seg
+
     def test_dual_close_confirm_shows_costs(self):
         # PAPER MANUAL_CLOSE onayı tahmini ücret/kayma/net PnL içerir.
         idx = JS.index("function dmConfirmText")
@@ -94,6 +103,26 @@ class TestTriColumnAndBottom:
         # Kaynak yalnız dual-model snapshot satırları (change_pct).
         assert "unionRows" in JS
         assert 'id="th-ticker"' in TEMPLATE
+
+    def test_numeric_string_payloads_do_not_crash(self):
+        # Backend sayısal alanı string döndürse bile render kırılmaz:
+        # toFixed'e ham alan değil parseFloat sonucu gider.
+        assert "spread_pct.toFixed" not in JS
+        idx = JS.index("function chgCell")
+        assert "parseFloat" in JS[idx:idx + 200]
+
+    def test_dual_state_outage_clears_all_blocks(self):
+        # /api/dual-model/state düşünce sayaçlar, pozisyon tablosu
+        # ve metrik kartları da UNKNOWN'a döner (bayat blok kalmaz).
+        idx = JS.index("function renderDualModel")
+        seg = JS[idx:JS.index("renderDualHealth", idx) + 2200]
+        assert "th-dm-total-open" in seg
+        assert "durum alınamadı" in seg
+        assert "renderDualMetrics(null)" in seg
+
+    def test_confidence_is_escaped(self):
+        # XSS: innerHTML'e giren confidence alanı esc'ten geçer.
+        assert "esc(p.confidence)" in JS
 
     def test_system_card(self):
         for el in ("th-sys-api", "th-sys-data", "th-sys-auto",

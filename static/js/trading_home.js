@@ -224,16 +224,31 @@
     var legacy = positions || [];
     var dual = dmPositions || [];
     var total = legacy.length + dual.length;
-    setText("th-active-count", positions || dmPositions ? total : null,
-            total ? "th-profit" : "");
-    setText("th-sc-open", positions || dmPositions ? total : null,
-            total ? "th-profit" : "");
+    // Dürüstlük: iki kaynaktan biri düştüyse toplam "N (kısmi)"dir;
+    // ikisi de düştüyse sayı ve tablo UNKNOWN olur — asla
+    // "açık işlem yok" denmez.
+    var partialSrc = (!positions && dmPositions) ||
+                     (positions && !dmPositions);
+    var bothDown = !positions && !dmPositions;
+    var countLabel = bothDown ? null :
+      (partialSrc ? total + " (kısmi)" : total);
+    setText("th-active-count", countLabel, total ? "th-profit" : "");
+    setText("th-sc-open", countLabel, total ? "th-profit" : "");
+    if (bothDown) {
+      tbody.innerHTML = "<tr><td colspan=\"15\" " +
+        "class=\"th-unknown\">UNKNOWN — pozisyon verisi " +
+        "alınamadı.</td></tr>";
+      setDatum("th-sc-notional", null);
+      return;
+    }
     if (!total) {
       tbody.innerHTML = "<tr><td colspan=\"15\" class=\"th-empty\">" +
-        "Şu an açık işlem yok. Yapay zekâ piyasaları izlemeye " +
-        "devam ediyor.</td></tr>";
+        (partialSrc ? "Bilinen kaynakta açık işlem yok (bir veri " +
+          "kaynağı yanıt vermedi)." :
+          "Şu an açık işlem yok. Yapay zekâ piyasaları izlemeye " +
+          "devam ediyor.") + "</td></tr>";
       setDatum("th-sc-notional",
-               positions || dmPositions ? fmtMoney(0, "USDT") : null);
+               partialSrc ? null : fmtMoney(0, "USDT"));
       return;
     }
     // Sahip diline durum eşlemesi (teknik iç durum sızdırılmaz).
@@ -427,7 +442,7 @@
       // Uç düşerse bayat değer taze gibi gösterilmez.
       ["th-strip-pipeline", "th-strip-scheduler", "th-strip-scan",
        "th-strip-universe", "th-strip-risk",
-       "th-strip-lastanalysis"].forEach(function (id) {
+       "th-strip-lastanalysis", "th-sys-data"].forEach(function (id) {
         setDatum(id, null);
       });
       return;
@@ -628,11 +643,23 @@
     var opp = document.getElementById("th-dm-opp");
     if (!core || !opp) return;
     if (!d) {
+      // Uç düşünce HİÇBİR dual-model bloğu bayat kalmaz: sayaçlar,
+      // pozisyon tablosu ve metrik kartları da UNKNOWN'a döner.
       core.innerHTML = opp.innerHTML =
         "<tr><td colspan=\"6\" class=\"th-empty\">UNKNOWN</td></tr>";
+      ["th-dm-core-uni", "th-dm-opp-uni", "th-dm-core-open",
+       "th-dm-opp-open", "th-dm-total-open"].forEach(function (id) {
+        setText(id, null);
+      });
+      var posTb = document.getElementById("th-dm-pos");
+      if (posTb) {
+        posTb.innerHTML = "<tr><td colspan=\"13\" " +
+          "class=\"th-unknown\">UNKNOWN — durum alınamadı</td></tr>";
+      }
       renderMarkets(null, null);
       renderMovers(null);
       renderTicker(null);
+      renderDualMetrics(null);
       return;
     }
     var c = d.counters || {};
@@ -652,10 +679,12 @@
     // Model Durumu / Açık Pozisyon (referans tasarım gereği).
     function listRow(r) {
       var p = openBy[r.symbol];
+      var spread = parseFloat(r.spread_pct);
       return "<tr><td><b>" + esc(r.symbol) + "</b></td><td>" +
         (p ? esc(p.side) : "—") + "</td><td>" +
-        (r.spread_pct != null ? r.spread_pct.toFixed(3) + "%" : "—") +
-        "</td><td>" + (p && p.confidence != null ? p.confidence : "—") +
+        (!isNaN(spread) ? spread.toFixed(3) + "%" : "—") +
+        "</td><td>" + (p && p.confidence != null ?
+          esc(p.confidence) : "—") +
         "</td><td>" + stateOf(r.symbol) + "</td><td>" +
         (p ? esc(p.side) + " @" + fmtPrice(p.entry) : "—") +
         "</td></tr>";
@@ -691,12 +720,13 @@
   }
 
   function chgCell(v) {
-    if (v === null || v === undefined || isNaN(v)) {
+    var n = parseFloat(v);
+    if (v === null || v === undefined || isNaN(n)) {
       return "<span class=\"th-unknown\">Veri yok</span>";
     }
-    var cls = v > 0 ? "th-profit" : v < 0 ? "th-loss" : "";
-    return "<span class=\"" + cls + "\">" + (v > 0 ? "+" : "") +
-      Number(v).toFixed(2) + "%</span>";
+    var cls = n > 0 ? "th-profit" : n < 0 ? "th-loss" : "";
+    return "<span class=\"" + cls + "\">" + (n > 0 ? "+" : "") +
+      n.toFixed(2) + "%</span>";
   }
 
   function renderMarkets(d, openBy) {
@@ -728,7 +758,7 @@
     var l = document.getElementById("th-losers");
     if (!g || !l) return;
     var rows = unionRows(d).filter(function (r) {
-      return typeof r.change_pct === "number";
+      return !isNaN(parseFloat(r.change_pct));
     });
     if (!rows.length) {
       g.className = l.className = "th-empty";
