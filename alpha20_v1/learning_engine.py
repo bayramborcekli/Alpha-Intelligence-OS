@@ -446,10 +446,9 @@ def run_learning_update(
             shadow_result=shadow_result,
         )
 
-    # Dual-model köprüsü: CORE/OPPORTUNITY kapanışları da aynı öğrenme
-    # akışında görülür (ayrı scheduler yok, hata ana motoru düşürmez).
-    dual_result = run_dual_learning_update(adaptive_cfg, force=force)
-
+    # Not: dual-model köprüsü (run_dual_learning_update) buradan
+    # ÇAĞRILMAZ — auto_controller döngüsü her çevrimde tek kez çağırır
+    # (çift tetikleme/gereksiz IO olmasın; uygunluk dual_learning'de).
     return {
         "version":       version,
         "trade_count":   n,
@@ -460,7 +459,6 @@ def run_learning_update(
         "applied":       apply_new,
         "shadow_note":   shadow_note,
         "shadow_result": shadow_result,
-        "dual_learning": dual_result,
     }
 
 

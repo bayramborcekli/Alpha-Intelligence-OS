@@ -404,6 +404,32 @@ class TestIntegrationWiring:
         idx = src.index("run_dual_learning_update")
         assert "Thread(" not in src[idx - 200:idx + 600]
 
+    def test_single_bridge_invocation_per_cycle(self):
+        # Mimar bulgusu: çift tetikleme yok — köprü YALNIZ controller
+        # döngüsünden çağrılır; run_learning_update onu çağırmaz.
+        ctrl = (ROOT / "alpha20_v1/auto_controller.py").read_text(
+            encoding="utf-8")
+        assert ctrl.count("run_dual_learning_update(") == 1
+        le_src = (ROOT / "alpha20_v1/learning_engine.py").read_text(
+            encoding="utf-8")
+        body = le_src[le_src.index("def run_learning_update"):]
+        assert "run_dual_learning_update(" not in body
+
+    def test_concurrent_run_update_counter_safe(self, iso):
+        # Eşzamanlı çağrılar sayaç/state'i bozmaz (flock + atomic).
+        import threading
+        _write_runtime(iso, [_mk_trade(i) for i in range(30)])
+        results = []
+        ts = [threading.Thread(target=lambda: results.append(
+            dl.run_update({"learning_enabled": True}, force=True)))
+            for _ in range(4)]
+        [t.start() for t in ts]; [t.join() for t in ts]
+        state = dl._load_state()
+        # Dedupe: 30 işlem bir kez dataset'e girdi; sayaç sıfırlandı.
+        assert len(state["models"][dl.MODEL_CORE]["dataset"]) == 30
+        assert state["new_trades_since_run"] == 0
+        assert state.get("last_error") is None
+
     def test_bridge_failure_does_not_crash_engine(self, iso,
                                                   monkeypatch):
         import learning_engine as le
