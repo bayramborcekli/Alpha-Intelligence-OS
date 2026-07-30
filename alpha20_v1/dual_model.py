@@ -434,6 +434,29 @@ def _open_positions(rt: dict) -> dict[str, dict]:
     return pos if isinstance(pos, dict) else {}
 
 
+# ── Legacy alpha20 (state.json) pozisyonu — çapraz motor risk birleşimi ──
+LEGACY_STATE_PATH = ROOT / "state.json"
+
+
+def legacy_open_position() -> dict | None:
+    """Eski tek-evren botunun (alpha20.py) açık pozisyonunu oku.
+
+    state.json'daki tekil 'position' anahtarı; yoksa/okunamazsa None.
+    Toplam pozisyon tavanı ve mükerrer-sembol engeli bu pozisyonu da
+    saymalı — iki motor aynı Paper portföyünü paylaşır.
+    """
+    try:
+        if LEGACY_STATE_PATH.exists():
+            with LEGACY_STATE_PATH.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            pos = data.get("position") if isinstance(data, dict) else None
+            if isinstance(pos, dict):
+                return pos
+    except (OSError, json.JSONDecodeError):
+        pass
+    return None
+
+
 def try_open_position(symbol: str, model: str, sig: dict,
                       net_edge_pct: float, cfg: dict,
                       now: float | None = None) -> tuple[bool, str | None]:
@@ -445,14 +468,20 @@ def try_open_position(symbol: str, model: str, sig: dict,
 
     def _mut(rt: dict) -> None:
         pos = _open_positions(rt)
+        legacy = legacy_open_position()
         if symbol in pos:
+            result["reason"] = "DUPLICATE_POSITION"
+            return
+        if legacy is not None and legacy.get("symbol") == symbol:
+            # Eski tek-evren botu aynı sembolde pozisyon tutuyor.
             result["reason"] = "DUPLICATE_POSITION"
             return
         model_open = [p for p in pos.values() if p["model"] == model]
         if len(model_open) >= m["max_open_positions"]:
             result["reason"] = "POSITION_LIMIT"
             return
-        if len(pos) >= cfg["total_max_open_positions"]:
+        total_open = len(pos) + (1 if legacy is not None else 0)
+        if total_open >= cfg["total_max_open_positions"]:
             result["reason"] = "RISK_LIMIT"
             return
         cd = rt.get("cooldowns", {}).get(model)

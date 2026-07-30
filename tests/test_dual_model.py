@@ -22,6 +22,8 @@ import dual_model as dm  # noqa: E402
 def isolate(tmp_path, monkeypatch):
     monkeypatch.setattr(dm, "RUNTIME_PATH",
                         tmp_path / "dual_model_runtime.json")
+    monkeypatch.setattr(dm, "LEGACY_STATE_PATH",
+                        tmp_path / "state.json")
     yield
 
 
@@ -187,6 +189,34 @@ class TestPositions:
         ok, reason = dm.try_open_position("AUSDT", dm.MODEL_OPP,
                                           SIG, 0.3, CFG)
         assert not ok and reason == "DUPLICATE_POSITION"
+
+    def test_legacy_same_symbol_rejected(self):
+        """Eski tek-evren botunun pozisyonu aynı sembolde açılışı engeller."""
+        dm.LEGACY_STATE_PATH.write_text(json.dumps(
+            {"position": {"symbol": "AUSDT", "side": "LONG"}}),
+            encoding="utf-8")
+        ok, reason = dm.try_open_position("AUSDT", dm.MODEL_CORE,
+                                          SIG, 0.3, CFG)
+        assert not ok and reason == "DUPLICATE_POSITION"
+        # Farklı sembol açılabilir
+        assert dm.try_open_position("BUSDT", dm.MODEL_CORE, SIG,
+                                    0.3, CFG)[0]
+
+    def test_legacy_counts_toward_total_cap(self):
+        """Toplam tavan legacy state.json pozisyonunu da sayar."""
+        dm.LEGACY_STATE_PATH.write_text(json.dumps(
+            {"position": {"symbol": "LEGUSDT", "side": "LONG"}}),
+            encoding="utf-8")
+        assert dm.try_open_position("AUSDT", dm.MODEL_CORE, SIG,
+                                    0.3, CFG)[0]
+        assert dm.try_open_position("BUSDT", dm.MODEL_CORE, SIG,
+                                    0.3, CFG)[0]
+        assert dm.try_open_position("CUSDT", dm.MODEL_OPP, SIG,
+                                    0.3, CFG)[0]
+        # 3 dual + 1 legacy = 4 → tavan dolu
+        ok, reason = dm.try_open_position("DUSDT", dm.MODEL_OPP,
+                                          SIG, 0.3, CFG)
+        assert not ok and reason == "RISK_LIMIT"
 
     def test_model_and_total_limits(self):
         for i, s in enumerate(["AUSDT", "BUSDT"]):

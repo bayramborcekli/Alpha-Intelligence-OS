@@ -36,6 +36,8 @@ _TS = datetime.now(timezone.utc).isoformat()
 def _isolate_trade_history(tmp_path, monkeypatch):
     """Testler gerçek trade_history.json dosyasını kirletmesin."""
     monkeypatch.setattr(alpha20, "TRADE_HISTORY_PATH", tmp_path / "trade_history.json")
+    monkeypatch.setattr(alpha20, "DUAL_MODEL_RUNTIME_PATH",
+                        tmp_path / "dual_model_runtime.json")
 
 
 def base_config(**overrides):
@@ -183,6 +185,42 @@ class TestGuards:
         open_paper_position("BTCUSDT", "LONG", details(), cfg, st)
         ok, _ = can_open(cfg, st, symbol="ETHUSDT")
         assert not ok  # max 1 açık pozisyon
+
+    def test_dual_model_same_symbol_rejected(self, tmp_path):
+        """Dual-model motorunun pozisyonu legacy açılışı engeller."""
+        cfg, st = base_config(), fresh_state()
+        (tmp_path / "dual_model_runtime.json").write_text(json.dumps(
+            {"positions": {"BTCUSDT": {"symbol": "BTCUSDT",
+                                       "model": "ALPHA_CORE_SCALP"}}}),
+            encoding="utf-8")
+        ok, reason = can_open(cfg, st, symbol="BTCUSDT")
+        assert not ok
+        assert "dual-model" in reason and "DUPLICATE_POSITION" in reason
+        ok, _ = can_open(cfg, st, symbol="ETHUSDT")
+        assert ok
+
+    def test_dual_model_positions_count_toward_total_cap(self, tmp_path):
+        """Toplam tavan (4) doluysa legacy yeni pozisyon açamaz."""
+        cfg, st = base_config(), fresh_state()
+        positions = {f"S{i}USDT": {"symbol": f"S{i}USDT"} for i in range(4)}
+        (tmp_path / "dual_model_runtime.json").write_text(
+            json.dumps({"positions": positions}), encoding="utf-8")
+        ok, reason = can_open(cfg, st, symbol="BTCUSDT")
+        assert not ok
+        assert "RISK_LIMIT" in reason
+        # Sembolsüz (global) kontrol de bloklanır
+        ok, reason = can_open(cfg, st)
+        assert not ok and "RISK_LIMIT" in reason
+
+    def test_dual_model_cap_from_config(self, tmp_path):
+        cfg = base_config(dual_model={"total_max_open_positions": 2})
+        st = fresh_state()
+        positions = {"AUSDT": {"symbol": "AUSDT"},
+                     "BUSDT": {"symbol": "BUSDT"}}
+        (tmp_path / "dual_model_runtime.json").write_text(
+            json.dumps({"positions": positions}), encoding="utf-8")
+        ok, reason = can_open(cfg, st, symbol="CUSDT")
+        assert not ok and "RISK_LIMIT" in reason
 
     def test_invalid_price_rejected(self):
         cfg, st = base_config(), fresh_state()

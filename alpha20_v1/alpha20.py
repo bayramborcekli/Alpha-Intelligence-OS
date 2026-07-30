@@ -671,6 +671,29 @@ def evaluate_trade_economics(
     }
 
 
+DUAL_MODEL_RUNTIME_PATH = ROOT / "dual_model_runtime.json"
+DUAL_MODEL_TOTAL_MAX_DEFAULT = 4  # dual_model.DEFAULTS["total_max_open_positions"]
+
+
+def dual_model_open_positions() -> dict[str, Any]:
+    """Dual-model motorunun açık pozisyonlarını (sembol→pozisyon) oku.
+
+    Çapraz motor risk birleşimi: legacy bot ile dual-model aynı Paper
+    portföyünü paylaşır; toplam tavan ve mükerrer-sembol engeli iki
+    yönde de uygulanır. Dosya yoksa/okunamazsa boş dict.
+    """
+    try:
+        if DUAL_MODEL_RUNTIME_PATH.exists():
+            with DUAL_MODEL_RUNTIME_PATH.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            pos = data.get("positions") if isinstance(data, dict) else None
+            if isinstance(pos, dict):
+                return pos
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {}
+
+
 def can_open(
     config: dict[str, Any], state: dict[str, Any], symbol: str | None = None
 ) -> tuple[bool, str]:
@@ -679,6 +702,19 @@ def can_open(
         if symbol is not None and position.get("symbol") == symbol:
             return False, f"{symbol} için zaten açık pozisyon var (mükerrer engellendi)."
         return False, "Açık pozisyon var."
+    dual_pos = dual_model_open_positions()
+    if symbol is not None and symbol in dual_pos:
+        return False, (
+            f"{symbol} için dual-model motorunda zaten açık pozisyon var "
+            "(DUPLICATE_POSITION — çapraz motor mükerrer engellendi)."
+        )
+    total_cap = (config.get("dual_model") or {}).get(
+        "total_max_open_positions", DUAL_MODEL_TOTAL_MAX_DEFAULT)
+    if len(dual_pos) + 1 > total_cap:
+        return False, (
+            f"Toplam açık pozisyon tavanı dolu ({len(dual_pos)}/{total_cap} "
+            "dual-model pozisyonu açık — RISK_LIMIT)."
+        )
     if state["consecutive_losses"] >= config["max_consecutive_losses"]:
         return False, "Arka arkaya zarar limiti doldu."
     daily_loss = state["day_start_balance"] - state["balance"]
