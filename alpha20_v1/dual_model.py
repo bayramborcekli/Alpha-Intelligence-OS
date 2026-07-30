@@ -593,6 +593,21 @@ def _build_trade(p: dict, price: float, result: str,
     }
 
 
+def _position_fields_valid(p: dict) -> bool:
+    """Pozisyon kaydında exit/PnL hesabı için zorunlu sayısal alanlar
+    (entry, quantity) pozitif ve sonlu mu? Eksikse pozisyon
+    'Yönetiliyor' sayılamaz ve kapatma/monitor hesap YAPAMAZ."""
+    import math
+    for key in ("entry", "quantity"):
+        try:
+            v = float(p.get(key))
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(v) or v <= 0:
+            return False
+    return True
+
+
 def manual_close(symbol: str,
                  price: float | None = None) -> tuple[bool, str]:
     """Operatör kapatması (PAPER). Fiyat verilmezse TAZE fiyat çekilir;
@@ -618,6 +633,11 @@ def manual_close(symbol: str,
         p = pos.get(symbol)
         if not p:
             out["err"] = "POSITION_NOT_FOUND"
+            return
+        # Miktar/entry doğrulanmadan kapatma İŞLEM YAPMAZ: eksik
+        # veriyle net PnL hesabı uydurma olur — reddet, kayda dokunma.
+        if not _position_fields_valid(p):
+            out["err"] = "INCOMPLETE_POSITION_DATA"
             return
         trade = _build_trade(p, float(price), "MANUAL_CLOSE", now)
         trades = rt.get("trades", [])
@@ -645,6 +665,14 @@ def monitor_positions(price_of: Callable[[str], float | None],
         pos = _open_positions(rt)
         for sym in list(pos):
             p = pos[sym]
+            # Eksik/bozuk kayıtta otomatik çıkış değerlendirmesi
+            # DURDURULUR (KeyError/uydurma PnL yerine dürüst atlama;
+            # snapshot bu kaydı INCOMPLETE_POSITION_DATA gösterir).
+            if not _position_fields_valid(p):
+                rt["last_error"] = (
+                    f"{sym}: çıkış değerlendirmesi durduruldu — "
+                    "pozisyon verisi eksik")
+                continue
             price = price_of(sym)
             if price is None:
                 continue
@@ -786,7 +814,17 @@ def snapshot(with_prices: bool = False) -> dict[str, Any]:
     for p in positions:
         cur = prices.get(p["symbol"])
         p["current_price"] = cur
-        if cur is not None and p["entry"] > 0:
+        # Dürüst durum ayrımı: eksik/bozuk kayıt ACTIVE görünmez;
+        # taze fiyat alınamayan pozisyon PRICE_REFRESH_FAILED olur
+        # (çıkış değerlendirmesi bu durumda koşamaz — UI'da açıkça
+        # söylenir). Uydurma değer üretilmez.
+        if not _position_fields_valid(p):
+            p["position_status"] = "INCOMPLETE_POSITION_DATA"
+        elif with_prices and cur is None:
+            p["position_status"] = "PRICE_REFRESH_FAILED"
+        else:
+            p["position_status"] = "ACTIVE"
+        if cur is not None and _position_fields_valid(p):
             gross = (cur - p["entry"]) * p["quantity"]
             fee = (p["entry"] + cur) * p["quantity"] * FEE_RATE
             slip = cur * p["quantity"] * 0.0002

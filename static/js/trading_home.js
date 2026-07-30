@@ -252,9 +252,33 @@
       return;
     }
     // Sahip diline durum eşlemesi (teknik iç durum sızdırılmaz).
-    var STATUS_TR = { OPEN: "Yönetiliyor", SCALING: "Kademelendiriliyor",
+    var STATUS_TR = { OPEN: "Yönetiliyor", ACTIVE: "Yönetiliyor",
+      SCALING: "Kademelendiriliyor",
       CLOSE_REQUESTED: "Kapatılıyor", WAITING_EXIT: "Çıkış Bekliyor",
-      EMERGENCY_EXIT: "Acil Çıkış", CLOSED: "Tamamlandı" };
+      EMERGENCY_EXIT: "Acil Çıkış", CLOSED: "Tamamlandı",
+      PRICE_REFRESH_FAILED: "Fiyat Alınamadı",
+      RECONCILIATION_REQUIRED: "Mutabakat Gerekli",
+      ORPHAN_POSITION: "Yetim Kayıt",
+      INCOMPLETE_POSITION_DATA: "Veri Eksik",
+      STALE_POSITION: "Bayat Kayıt" };
+    // Bu durumlarda otomatik çıkış değerlendirmesi koşamaz — dürüstçe
+    // söylenir; pozisyon "Yönetiliyor" gibi gösterilmez.
+    var EXIT_BLOCKED = { INCOMPLETE_POSITION_DATA: 1,
+      PRICE_REFRESH_FAILED: 1, STALE_POSITION: 1,
+      RECONCILIATION_REQUIRED: 1, ORPHAN_POSITION: 1 };
+    function statusCell(status) {
+      var known = STATUS_TR[status];
+      var cls = EXIT_BLOCKED[status] ? "warn" :
+        (status === "CLOSED" ? "ok" : "exec");
+      var html = "<td><span class=\"th-badge " + cls + "\">" +
+        esc(known || status || "UNKNOWN") + "</span>";
+      if (EXIT_BLOCKED[status]) {
+        html += "<div class=\"th-unknown\" style=\"font-size:.62rem\">" +
+          "Çıkış değerlendirmesi durduruldu — pozisyon verisi eksik" +
+          "</div>";
+      }
+      return html + "</td>";
+    }
     var notional = 0, notionalPartial = false;
     var rows = legacy.map(function (p) {
       var longSide = p.side === "LONG";
@@ -273,9 +297,7 @@
         esc(fmtSigned(p.unrealized_pnl, "USDT")) + "</td>" +
         "<td>—</td><td>" + esc(duration(p.opened_at)) + "</td>" +
         "<td>—</td><td>—</td><td>—</td><td>—</td>" +
-        "<td><span class=\"th-badge wait\">" +
-        esc(STATUS_TR[p.position_status] || "Yönetiliyor") +
-        "</span></td><td>" +
+        statusCell(p.position_status) + "<td>" +
         "<button class=\"th-btn\" data-close=\"" + esc(p.position_id) +
         "\" data-symbol=\"" + esc(p.symbol) + "\">Kapat</button>" +
         "</td></tr>";
@@ -301,9 +323,14 @@
         "<td>" + esc(fmtPrice(p.sl)) + "</td>" +
         "<td>" + dash(MODEL_TR[p.model]) + "</td>" +
         "<td>" + esc(listTypeOf(p.model)) + "</td>" +
-        "<td><span class=\"th-badge exec\">Yönetiliyor</span></td>" +
+        statusCell(p.position_status || "ACTIVE") +
+        // Miktar doğrulanamıyorsa Kapat düğmesi devre dışı — backend
+        // de INCOMPLETE_POSITION_DATA ile reddeder (çift koruma).
         "<td><button class=\"th-btn th-dm-close\" data-symbol=\"" +
-        esc(p.symbol) + "\">Kapat</button></td></tr>";
+        esc(p.symbol) + "\"" +
+        (p.position_status === "INCOMPLETE_POSITION_DATA" ?
+          " disabled title=\"Pozisyon verisi eksik — kapatılamaz\"" :
+          "") + ">Kapat</button></td></tr>";
     }));
     tbody.innerHTML = rows.join("");
     bindDmClose(tbody, dual);

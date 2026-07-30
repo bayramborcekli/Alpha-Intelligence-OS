@@ -3348,23 +3348,30 @@ def _operation_raw() -> dict[str, Any]:
     except Exception:
         _pos = None
     if isinstance(_pos, dict) and _pos.get("symbol"):
-        raw["positions"].append({
-            # BÜYÜK harf: close ucu position_id.upper() ile arar —
-            # küçük harfli id kapatma akışını kırar (review bulgusu)
-            "position_id": f"PAPER-{_pos['symbol']}",
-            "symbol": _pos.get("symbol"),
-            "market": "SPOT",
-            "side": _pos.get("side"),
-            "position_status": "OPEN",
-            "strategy": "alpha20_v1",
-            "entry_price": _pos.get("entry"),
-            "current_price": _pos.get("entry"),
-            "quantity": _pos.get("quantity"),
-            "stop_loss": _pos.get("stop"),
-            "take_profit": _pos.get("target"),
-            "opened_at": _pos.get("opened_at"),
-            "execution_mode": "PAPER",
-        })
+        # Yetim/eksik pozisyon koruması: eksik alanlar önce alternatif
+        # anahtarlardan hydrate edilir; hâlâ eksikse pozisyon
+        # "Yönetiliyor" (OPEN) DEĞİL, dürüst durum koduyla döner ve
+        # audit kaydı yazılır. Kapanmış (trades'te karşılığı olan)
+        # kayıt ORPHAN_POSITION olarak aktif listeden çıkarılır.
+        _cls = _classify_legacy_position(_pos, _st or {})
+        if _cls["status"] != "ORPHAN_POSITION":
+            raw["positions"].append({
+                # BÜYÜK harf: close ucu position_id.upper() ile arar —
+                # küçük harfli id kapatma akışını kırar (review bulgusu)
+                "position_id": f"PAPER-{_pos['symbol']}",
+                "symbol": _pos.get("symbol"),
+                "market": "SPOT",
+                "side": _pos.get("side"),
+                "position_status": _cls["status"],
+                "strategy": "alpha20_v1",
+                "entry_price": _cls["entry"],
+                "current_price": _cls["entry"],
+                "quantity": _cls["quantity"],
+                "stop_loss": _pos.get("stop"),
+                "take_profit": _pos.get("target"),
+                "opened_at": _pos.get("opened_at"),
+                "execution_mode": "PAPER",
+            })
     for symbol in _operation_symbols(cfg):
         raw["products"].append({
             "symbol": symbol,
@@ -3382,6 +3389,110 @@ def _operation_raw() -> dict[str, Any]:
             "last_rejection_reason": "-",
         })
     return raw
+
+
+POSITION_AUDIT_PATH = ROOT / "alpha20_v1" / \
+    "position_integrity_audit.jsonl"
+# Legacy bot döngüsü dakikalar ölçeğinde çıkış yapar; bu süreden uzun
+# süredir açık görünen kayıt "bayat" sayılır ve operatöre işaretlenir.
+LEGACY_POSITION_STALE_HOURS = 4.0
+
+
+def _audit_position_integrity(symbol: str, status: str,
+                              detail: str) -> None:
+    """Yetim/eksik pozisyon tespitini git dışı audit dosyasına yaz
+    (aynı sembol+durum ardışık tekrarlanmaz — dosya şişmesin)."""
+    try:
+        last = None
+        if POSITION_AUDIT_PATH.exists():
+            lines = POSITION_AUDIT_PATH.read_text(
+                encoding="utf-8").strip().splitlines()
+            if lines:
+                last = json.loads(lines[-1])
+        if last and last.get("symbol") == symbol and \
+                last.get("reason") == status:
+            return
+        with POSITION_AUDIT_PATH.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "symbol": symbol, "reason": status,
+                "detail": detail, "source": "legacy_state_position",
+            }, ensure_ascii=False) + "\n")
+    except Exception:  # audit hatası snapshot'ı düşürmez
+        pass
+
+
+def _classify_legacy_position(pos: dict, state: dict) -> dict:
+    """Legacy state.json pozisyonunu dürüst durum koduna ayrıştır.
+
+    Dönen durumlar: OPEN (sağlıklı) / INCOMPLETE_POSITION_DATA /
+    STALE_POSITION / ORPHAN_POSITION (trades'te kapanışı var —
+    aktif listeye alınmaz). Eksik entry/quantity önce alternatif
+    anahtarlardan hydrate edilir; uydurma değer üretilmez.
+    """
+    symbol = str(pos.get("symbol") or "")
+
+    def _num(*keys):
+        for k in keys:
+            try:
+                v = float(pos.get(k))
+                if v > 0 and v == v and v not in (float("inf"),):
+                    return v
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    entry = _num("entry", "entry_price", "price")
+    quantity = _num("quantity", "qty", "amount")
+    opened_at = pos.get("opened_at")
+
+    # ORPHAN: aynı sembolün trades'te açılıştan SONRA kapanışı varsa
+    # bu kayıt kapanmış bir pozisyonun artığıdır.
+    try:
+        for t in (state.get("trades") or []):
+            if not isinstance(t, dict) or \
+                    t.get("symbol") != symbol:
+                continue
+            closed = t.get("closed_at") or t.get("time") or ""
+            if opened_at and closed and str(closed) >= str(opened_at):
+                _audit_position_integrity(
+                    symbol, "ORPHAN_POSITION",
+                    f"trades kapanışı {closed} >= açılış {opened_at}")
+                return {"status": "ORPHAN_POSITION",
+                        "entry": entry, "quantity": quantity}
+    except Exception:
+        pass
+
+    if entry is None or quantity is None:
+        _audit_position_integrity(
+            symbol, "INCOMPLETE_POSITION_DATA",
+            f"entry={pos.get('entry')!r} "
+            f"quantity={pos.get('quantity')!r} — hydrate başarısız")
+        return {"status": "INCOMPLETE_POSITION_DATA",
+                "entry": entry, "quantity": quantity}
+
+    try:
+        opened = datetime.fromisoformat(
+            str(opened_at).replace("Z", "+00:00"))
+        if opened.tzinfo is None:
+            opened = opened.replace(tzinfo=timezone.utc)
+        age_h = (datetime.now(timezone.utc) -
+                 opened).total_seconds() / 3600
+        if age_h > LEGACY_POSITION_STALE_HOURS:
+            _audit_position_integrity(
+                symbol, "STALE_POSITION",
+                f"{age_h:.1f} saattir açık görünüyor "
+                f"(eşik {LEGACY_POSITION_STALE_HOURS}h)")
+            return {"status": "STALE_POSITION",
+                    "entry": entry, "quantity": quantity}
+    except Exception:
+        _audit_position_integrity(
+            symbol, "INCOMPLETE_POSITION_DATA",
+            f"opened_at çözümlenemedi: {opened_at!r}")
+        return {"status": "INCOMPLETE_POSITION_DATA",
+                "entry": entry, "quantity": quantity}
+
+    return {"status": "OPEN", "entry": entry, "quantity": quantity}
 
 
 def _operation_snapshot():

@@ -430,7 +430,13 @@ class TestAgent02ArchitectFixes:
         assert ".sort(" in JS and "event_time" in JS
 
     def test_unknown_position_status_not_leaked(self):
-        assert 'STATUS_TR[p.position_status] || "Yönetiliyor"' in JS
+        # Yetim/eksik pozisyon düzeltmesi sonrası sözleşme değişti:
+        # bilinmeyen durum artık körlemesine "Yönetiliyor" DEĞİL —
+        # statusCell dürüst kodu gösterir; boş/eksik durum UNKNOWN'dur.
+        assert "function statusCell(status" in JS
+        assert 'esc(known || status || "UNKNOWN")' in JS
+        # Eksik veri durumları "Yönetiliyor" rozetiyle maskelenemez.
+        assert "EXIT_BLOCKED" in JS
 
 
 class TestAgent04ArchitectFixes:
