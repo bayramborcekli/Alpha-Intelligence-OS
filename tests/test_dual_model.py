@@ -471,3 +471,97 @@ def test_record_startup_failure_writes_last_error():
     dm.record_startup_failure("DUAL_MODEL_LOOP_NOT_STARTED: test")
     rt = dm._load_runtime()
     assert rt["last_error"] == "DUAL_MODEL_LOOP_NOT_STARTED: test"
+
+
+# ── Windows SSL/ağ dayanıklılığı (WRONG_VERSION_NUMBER kök nedeni) ──
+
+class _Resp:
+    status_code = 200
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"ok": True}
+
+
+def _no_backoff(monkeypatch):
+    monkeypatch.setattr(dm.time, "sleep", lambda s: None)
+
+
+def test_guarded_get_retries_transient_ssl_error(monkeypatch):
+    """Aralıklı TLS müdahalesi (Windows AV/proxy): ilk deneme SSLError,
+    ikinci deneme geçer — legacy fetch_klines ile aynı davranış."""
+    import requests
+    _no_backoff(monkeypatch)
+    calls = {"n": 0}
+
+    def _get(url, params=None, timeout=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise requests.exceptions.SSLError("WRONG_VERSION_NUMBER")
+        return _Resp()
+
+    monkeypatch.setattr(requests, "get", _get)
+    assert dm._guarded_get("/api/v3/ticker/price") == {"ok": True}
+    assert calls["n"] == 2
+
+
+def test_guarded_get_ssl_exhaustion_raises_diagnosed_error(monkeypatch):
+    """Kalıcı SSL hatası: retry'lar tükenince teşhisli RuntimeError —
+    döngü bunu last_error'a yazar (sessiz ölüm yok, verify kapanmaz)."""
+    import requests
+    _no_backoff(monkeypatch)
+
+    def _get(url, params=None, timeout=None):
+        raise requests.exceptions.SSLError(
+            "[SSL: WRONG_VERSION_NUMBER] wrong version number")
+
+    monkeypatch.setattr(requests, "get", _get)
+    with pytest.raises(RuntimeError):
+        dm._guarded_get("/api/v3/ticker/price", retries=1)
+
+
+def test_monitor_price_failure_defers_exits_and_sets_last_error(
+        monkeypatch):
+    """Fiyat yenileme başarısız → pozisyon KAPANMAZ, çıkış ertelenir,
+    neden last_error'da görünür (sağlık paneli KIRMIZI nedenini gösterir)."""
+    dm._update_runtime(lambda rt: rt.__setitem__("positions", [
+        {"symbol": "EWYBUSDT", "model": dm.MODEL_CORE, "status": "OPEN"}]))
+    monkeypatch.setattr(dm, "fetch_spot_prices",
+                        lambda syms: (_ for _ in ()).throw(
+                            RuntimeError("SSL WRONG_VERSION_NUMBER")))
+    closed = {"n": 0}
+    monkeypatch.setattr(dm, "monitor_positions",
+                        lambda *a, **k: closed.__setitem__("n", 1))
+    fail = dm._monitor_open_positions(["EWYBUSDT"], {}, dm.get_config(),
+                                      False)
+    assert fail is True
+    assert closed["n"] == 0  # TP/SL kararı verilmedi
+    rt = dm._load_runtime()
+    assert str(rt["last_error"]).startswith("PRICE_REFRESH_FAILED")
+    # Toparlanma: taze fiyat gelince kendi hatamız temizlenir
+    monkeypatch.setattr(dm, "fetch_spot_prices",
+                        lambda syms: {"EWYBUSDT": 1.0})
+    fail2 = dm._monitor_open_positions(["EWYBUSDT"], {}, dm.get_config(),
+                                       True)
+    assert fail2 is False
+    assert dm._load_runtime()["last_error"] is None
+
+
+def test_monitor_rate_limited_defers_silently(monkeypatch):
+    """Paylaşımlı geri çekilme: çıkışlar sessizce ertelenir, hata yazılmaz."""
+    monkeypatch.setattr(dm, "fetch_spot_prices",
+                        lambda syms: (_ for _ in ()).throw(
+                            dm.RateLimited("30s")))
+    assert dm._monitor_open_positions(["X"], {}, dm.get_config(),
+                                      False) is False
+    assert dm._load_runtime().get("last_error") is None
+
+
+def test_no_verify_false_in_source():
+    """Doğrulama ASLA kapatılmaz (operatör kuralı)."""
+    src = (ROOT / "alpha20_v1" / "dual_model.py").read_text(
+        encoding="utf-8")
+    assert "verify=False" not in src
+    assert "LIVE ORDERS DISABLED" in src

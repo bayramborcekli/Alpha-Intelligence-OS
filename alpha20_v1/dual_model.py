@@ -153,8 +153,25 @@ class RateLimited(Exception):
     """Paylaşımlı geri çekilme aktif — istek atılmadı."""
 
 
+def _diagnose_net(exc: Exception) -> str:
+    """alpha20'nin çalışan teşhis katmanını yeniden kullan (Windows
+    AV/proxy TLS müdahalesi mesajları dahil)."""
+    import requests
+    try:
+        import alpha20 as _a20
+        if isinstance(exc, requests.exceptions.SSLError):
+            return _a20.diagnose_ssl_error(exc)
+        return _a20.diagnose_network_error(exc)
+    except Exception:
+        return str(exc)
+
+
 def _guarded_get(path: str, params: dict | None = None,
-                 timeout: int = 10) -> Any:
+                 timeout: int = 10, retries: int = 2) -> Any:
+    """Legacy fetch_klines ile AYNI güvenli HTTP katmanı: geçici
+    SSL/ağ hatalarında artan beklemeyle kısa retry (Windows'ta
+    antivirüs/proxy TLS müdahalesi aralıklıdır — tek hata çevrimi
+    düşürmesin). Doğrulama ASLA kapatılmaz (verify hep açık)."""
     import requests
     try:
         import alpha20 as _a20
@@ -163,8 +180,24 @@ def _guarded_get(path: str, params: dict | None = None,
         _a20, remaining = None, 0.0
     if remaining > 0:
         raise RateLimited(f"{remaining:.0f}s geri çekilme")
-    r = requests.get(f"{SPOT_BASE}{path}", params=params,
-                     timeout=timeout)
+    r = None
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            r = requests.get(f"{SPOT_BASE}{path}", params=params,
+                             timeout=timeout)
+            break
+        except (requests.exceptions.SSLError,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout) as exc:
+            last_exc = exc
+            log.warning("dual_model AĞ/SSL hatası | %s | deneme %d/%d "
+                        "| %s", path, attempt + 1, retries + 1,
+                        _diagnose_net(exc))
+        if attempt < retries:
+            time.sleep(1.5 * (attempt + 1))
+    if r is None:
+        raise RuntimeError(_diagnose_net(last_exc)) from last_exc
     if r.status_code in (429, 418):
         if _a20 is not None:
             try:
@@ -791,8 +824,50 @@ def _acquire_file_lock() -> bool:
         return False
 
 
+def _monitor_open_positions(open_syms: list[str],
+                            price_cache: dict[str, float],
+                            cfg: dict, prev_fail: bool) -> bool:
+    """Açık pozisyonları YALNIZ taze fiyatla monitör et.
+
+    Fiyat yenileme başarısızsa (SSL/ağ/rate-limit) çıkış kararları
+    GÜVENLİ biçimde ertelenir ve neden last_error'a yazılır (sağlık
+    panelde görünür). Başarılı turda kendi yazdığımız hata temizlenir.
+    Döndürdüğü bool: bu turda fiyat yenileme başarısız mı."""
+    try:
+        price_cache.update(fetch_spot_prices(open_syms))
+        monitor_positions(price_cache.get, cfg, time.time())
+    except RateLimited:
+        return prev_fail  # geri çekilme — çıkışlar sessizce ertelenir
+    except Exception as exc:
+        msg = (f"PRICE_REFRESH_FAILED: {exc} — çıkış kararları taze "
+               f"fiyat gelene dek ertelendi (pozisyonlar kapatılmadı)")
+        log.warning(msg)
+
+        def _mf(rt: dict) -> None:
+            rt["last_error"] = msg
+
+        try:
+            _update_runtime(_mf)
+        except OSError:
+            pass
+        return True
+    if prev_fail:
+        # Toparlandı: kendi yazdığımız fiyat hatasını temizle.
+        def _mc(rt: dict) -> None:
+            le = rt.get("last_error") or ""
+            if le.startswith("PRICE_REFRESH_FAILED"):
+                rt["last_error"] = None
+
+        try:
+            _update_runtime(_mc)
+        except OSError:
+            pass
+    return False
+
+
 def _loop(get_main_config: Callable[[], dict]) -> None:
     last_refresh = 0.0
+    price_fail_flag = False
     last_core_sig = 0.0
     last_opp_sig = 0.0
     price_cache: dict[str, float] = {}
@@ -896,12 +971,8 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
             # (bayat cache ile TP/SL kararı verilmez)
             open_syms = list(_open_positions(_load_runtime()))
             if open_syms:
-                try:
-                    price_cache.update(fetch_spot_prices(open_syms))
-                    monitor_positions(price_cache.get, cfg,
-                                      time.time())
-                except RateLimited:
-                    pass  # taze fiyat yoksa çıkış kararı ertelenir
+                price_fail_flag = _monitor_open_positions(
+                    open_syms, price_cache, cfg, price_fail_flag)
             _STOP.wait(cfg["monitor_seconds"])
         except Exception as exc:  # döngü asla ölmez; hata görünür
             log.error("dual_model döngü hatası: %s", exc)
