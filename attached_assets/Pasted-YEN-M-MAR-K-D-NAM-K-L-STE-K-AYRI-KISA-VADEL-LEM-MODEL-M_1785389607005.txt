@@ -1,0 +1,250 @@
+YENİ MİMARİ: İKİ DİNAMİK LİSTE + İKİ AYRI KISA VADELİ İŞLEM MODELİ
+
+Mevcut tek likit evren yaklaşımı kaldırılmayacak fakat iki bağımsız işlem hattına ayrılacak.
+
+LIVE ORDERS kesinlikle DISABLED kalacak.
+Tüm çalışmalar yalnız Paper/Shadow modunda yapılacak.
+
+════════════════════════════════════
+1. CORE LIQUIDITY LIST
+════════════════════════════════════
+
+Amaç:
+Yüksek hacimli, dar spreadli ve güçlü emir defterine sahip coinlerde sık ve kısa süreli işlem üretmek.
+
+Sabit coinler:
+- BTCUSDT
+- ETHUSDT
+- SOLUSDT
+
+Dinamik seçim kriterleri:
+- 24 saatlik hacim
+- order-book derinliği
+- spread
+- işlem sıklığı
+- veri kalitesi
+- istikrarlı mum oluşumu
+
+Liste boyutu config üzerinden yönetilsin.
+Başlangıç önerisi: 8–15 sembol.
+
+Model adı:
+ALPHA CORE SCALP
+
+Sinyaller:
+- 1 dakikalık momentum
+- EMA yönü
+- VWAP geri dönüşü
+- kısa vadeli breakout
+- hacim doğrulaması
+- RSI toparlanması
+- order-book imbalance
+
+Döngüler:
+- signal loop: 10–15 saniye
+- position monitor: 3–5 saniye
+- liste yenileme: 5 dakika
+
+Başlangıç Paper parametreleri:
+- TP: %0,25–%0,70
+- SL: %0,20–%0,45
+- maksimum tutma: 15 dakika
+- trailing stop aktif
+- fee ve slippage sonrası pozitif net edge zorunlu
+
+════════════════════════════════════
+2. OPPORTUNITY LIST
+════════════════════════════════════
+
+Amaç:
+Normal likit ana liste dışında kalan fakat kısa süreli güçlü hareket, hacim patlaması veya volatilite genişlemesi gösteren coinleri yakalamak.
+
+Geniş tarama havuzu:
+Uygun Binance USDT çiftleri.
+
+Seçim kriterleri:
+- hacim patlaması
+- son hacmin ortalamaya oranı
+- volatilite artışı
+- kısa vadeli kırılım
+- hızlı trend oluşumu
+- RSI dönüşü
+- fiyat/hacim uyumu
+- order-book imbalance
+- ani likidite girişi
+
+Liste boyutu config üzerinden yönetilsin.
+Başlangıç önerisi: 15–30 sembol.
+
+Model adı:
+ALPHA OPPORTUNITY BURST
+
+Döngüler:
+- opportunity scanner: 20–30 saniye
+- position monitor: 3–5 saniye
+- kapsamlı aday havuzu yenilemesi: 2–5 dakika
+
+Başlangıç Paper parametreleri:
+- TP: %0,40–%1,20
+- SL: %0,30–%0,70
+- maksimum tutma: 20 dakika
+- pozisyon büyüklüğü CORE modelinden daha küçük
+- hızlı time-exit
+- momentum kaybolursa erken çıkış
+- ani spread artışında risk exit
+
+════════════════════════════════════
+3. MİNİMUM EXECUTION QUALITY
+════════════════════════════════════
+
+Fırsat coinleri sırf yükseliyor diye alınmayacak.
+
+Her iki modelde de şu kontroller zorunlu:
+- maksimum spread
+- minimum hacim
+- minimum order-book depth
+- minimum veri kalitesi
+- maksimum tahmini slippage
+- fee sonrası pozitif expected_net_edge
+
+Bu sınırlar iki model için farklı olmalı.
+OPPORTUNITY modeli daha geniş tolerans kullanabilir ancak filtresiz işlem açamaz.
+
+════════════════════════════════════
+4. MODEL SAHİPLİĞİ VE ÇAKIŞMA
+════════════════════════════════════
+
+Bir sembol aynı anda iki model tarafından ayrı pozisyonlarla alınmayacak.
+
+Sembol iki listede de yer alıyorsa:
+- en yüksek net edge üreten model sahipliği alır
+- diğer model DUPLICATE_MODEL_OWNERSHIP nedeniyle geçer
+- karar kaydında hangi modelin seçildiği gösterilir
+
+Coinler koşullara göre listeler arasında geçiş yapabilsin:
+- OPPORTUNITY → CORE
+- CORE → OPPORTUNITY
+- listeden çıkarılma
+
+════════════════════════════════════
+5. AYRI RİSK BÜTÇELERİ
+════════════════════════════════════
+
+Her modelin bağımsız risk bütçesi olsun:
+
+CORE:
+- daha yüksek pozisyon büyüklüğü
+- daha dar stop
+- daha düşük maksimum slippage
+
+OPPORTUNITY:
+- daha küçük pozisyon büyüklüğü
+- daha geniş stop toleransı
+- daha kısa maksimum süre
+- arka arkaya kayıpta hızlı cooldown
+
+Toplam portföy riski ayrıca üst limit ile korunacak.
+
+AGRESİF profil başlangıç önerisi:
+- CORE maksimum 2 açık pozisyon
+- OPPORTUNITY maksimum 2 açık pozisyon
+- toplam maksimum 3 veya 4 pozisyon
+- aynı sembolde yalnız tek pozisyon
+
+════════════════════════════════════
+6. AYRI PERFORMANS ÖLÇÜMÜ
+════════════════════════════════════
+
+Her model için ayrı göster:
+
+- scanned_symbols
+- candidates
+- paper_intents
+- opened_positions
+- closed_positions
+- trades_per_day
+- win_rate
+- gross_pnl
+- fees
+- slippage
+- net_pnl
+- average_hold_minutes
+- profit_factor
+- max_drawdown
+- expectancy_per_trade
+- rejection reasons
+
+CORE ve OPPORTUNITY sonuçları birbirine karıştırılmayacak.
+Toplam portföy sonucu ayrıca gösterilecek.
+
+════════════════════════════════════
+7. UI
+════════════════════════════════════
+
+Trading Home üzerinde iki ayrı tablo:
+
+CORE LIQUIDITY
+- sembol
+- sinyal
+- spread
+- confidence
+- model durumu
+- açık pozisyon
+
+OPPORTUNITY
+- sembol
+- fırsat türü
+- hacim artışı
+- volatilite
+- confidence
+- beklenen net edge
+- model durumu
+
+Üst sayaçlar:
+- Core evren sayısı
+- Opportunity evren sayısı
+- Core açık işlem
+- Opportunity açık işlem
+- toplam açık işlem
+
+Tüm ekranlar aynı kanonik snapshot kullanmalı.
+UI, API, ledger ve runtime pozisyon sayıları birebir eşleşmeli.
+Ctrl+F5 gerekmeden otomatik yenilenmeli.
+
+════════════════════════════════════
+8. RET NEDENLERİ
+════════════════════════════════════
+
+- NO_SIGNAL
+- LOW_CONFIDENCE
+- SPREAD_TOO_HIGH
+- LOW_BOOK_DEPTH
+- LOW_LIQUIDITY
+- SLIPPAGE_TOO_HIGH
+- FEE_DRAG
+- EXPECTED_EDGE_TOO_LOW
+- MOMENTUM_EXHAUSTED
+- FALSE_BREAKOUT_RISK
+- RISK_LIMIT
+- POSITION_LIMIT
+- COOLDOWN
+- DUPLICATE_POSITION
+- DUPLICATE_MODEL_OWNERSHIP
+- DATA_QUALITY
+
+════════════════════════════════════
+9. KABUL KRİTERLERİ
+════════════════════════════════════
+
+- İki ayrı dinamik liste çalışıyor.
+- İki ayrı model bağımsız sinyal üretiyor.
+- Core ve Opportunity işlemleri ledger'da model adıyla kayıtlı.
+- Bir sembolde iki model aynı anda pozisyon açamıyor.
+- Fırsat coinleri geniş havuzdan dinamik bulunuyor.
+- AGRESİF profilde önceki modele göre daha fazla Paper intent oluşuyor.
+- Fee ve slippage bütün işlemlere uygulanıyor.
+- İşlem açılmadığında kesin reason_code gösteriliyor.
+- UI, API, ledger ve runtime tamamen senkron.
+- Runtime verileri Git çalışma ağacını kirletmiyor.
+- Restart sonrası listeler ve açık Paper pozisyonlar korunuyor.
+- LIVE ORDERS: DISABLED.

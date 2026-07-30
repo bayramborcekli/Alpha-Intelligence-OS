@@ -143,3 +143,7 @@ verify_scheduler_report.json
 alpha20_v1/universe_runtime.json
 alpha20_v1/.universe_runtime.json.*.tmp
 alpha20_v1/universe_runtime.lock
+alpha20_v1/dual_model_runtime.json
+alpha20_v1/dual_model_runtime.lock
+alpha20_v1/.dual_model_runtime.json.*.tmp
+alpha20_v1/.dual_model.lock

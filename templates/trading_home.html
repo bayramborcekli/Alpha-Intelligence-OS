@@ -170,6 +170,54 @@
         </tbody>
       </table>
     </section>
+
+    <!-- ── İKİ MODEL: CORE LIQUIDITY + OPPORTUNITY (tek kanonik
+         /api/dual-model/state snapshot'ından) ─────────────────── -->
+    <section class="th-card" style="margin-top:10px"
+             aria-labelledby="th-h-dual">
+      <h2 id="th-h-dual">Kısa Vadeli Modeller
+        <span style="font-size:.68rem;color:var(--muted,#8b949e)">
+          (PAPER — LIVE ORDERS DISABLED)</span></h2>
+      <div id="th-dual-counters" style="display:flex;gap:14px;
+          flex-wrap:wrap;font-size:.72rem;margin:4px 0 8px">
+        <span><b>Core Evren</b> <span id="th-dm-core-uni"
+          class="th-unknown">UNKNOWN</span></span>
+        <span><b>Opportunity Evren</b> <span id="th-dm-opp-uni"
+          class="th-unknown">UNKNOWN</span></span>
+        <span><b>Core Açık</b> <span id="th-dm-core-open"
+          class="th-unknown">UNKNOWN</span></span>
+        <span><b>Opportunity Açık</b> <span id="th-dm-opp-open"
+          class="th-unknown">UNKNOWN</span></span>
+        <span><b>Toplam Açık</b> <span id="th-dm-total-open"
+          class="th-unknown">UNKNOWN</span></span>
+      </div>
+      <h3 style="font-size:.75rem;margin:6px 0 2px">CORE LIQUIDITY —
+        ALPHA CORE SCALP</h3>
+      <table class="th-table" id="th-dm-core-table">
+        <thead><tr><th scope="col">Sembol</th>
+          <th scope="col">Sinyal</th><th scope="col">Spread</th>
+          <th scope="col">Güven</th>
+          <th scope="col">Model Durumu</th>
+          <th scope="col">Açık Pozisyon</th></tr></thead>
+        <tbody id="th-dm-core">
+          <tr><td colspan="6" class="th-skel">Yükleniyor…</td></tr>
+        </tbody>
+      </table>
+      <h3 style="font-size:.75rem;margin:10px 0 2px">OPPORTUNITY —
+        ALPHA OPPORTUNITY BURST</h3>
+      <table class="th-table" id="th-dm-opp-table">
+        <thead><tr><th scope="col">Sembol</th>
+          <th scope="col">Fırsat Türü</th>
+          <th scope="col">Hacim Artışı</th>
+          <th scope="col">Volatilite</th>
+          <th scope="col">Güven</th>
+          <th scope="col">Beklenen Net Edge</th>
+          <th scope="col">Model Durumu</th></tr></thead>
+        <tbody id="th-dm-opp">
+          <tr><td colspan="7" class="th-skel">Yükleniyor…</td></tr>
+        </tbody>
+      </table>
+    </section>
   </div>
 
   <!-- ── AI DURUM PANELİ (sağ) ───────────────────────────────────── -->

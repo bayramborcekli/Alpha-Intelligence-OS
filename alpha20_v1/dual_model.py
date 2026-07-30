@@ -1,0 +1,771 @@
+"""İKİ DİNAMİK LİSTE + İKİ AYRI KISA VADELİ İŞLEM MODELİ (PAPER).
+
+- CORE LIQUIDITY LIST → ALPHA CORE SCALP
+- OPPORTUNITY LIST    → ALPHA OPPORTUNITY BURST
+
+Sözleşmeler:
+- LIVE ORDERS DISABLED — yalnız Paper. Gerçek emir gönderimi YOK.
+- Tüm runtime durumu git dışı kanonik store'da
+  (alpha20_v1/dual_model_runtime.json, flock'lu transaksiyonel yazım)
+  → git çalışma ağacı temiz kalır, restart sonrası listeler ve açık
+  Paper pozisyonlar korunur.
+- Bir sembolde aynı anda TEK pozisyon; iki listede olan sembolde
+  sahipliği en yüksek net edge üreten model alır
+  (DUPLICATE_MODEL_OWNERSHIP diğerine yazılır).
+- Her girişte fee + slippage sonrası pozitif expected_net_edge
+  zorunlu; işlem açılmayan her değerlendirme kesin reason_code üretir.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import threading
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable
+
+try:
+    import fcntl
+except ImportError:  # Windows
+    import portable_flock as fcntl  # type: ignore
+
+log = logging.getLogger("dual_model")
+
+ROOT = Path(__file__).resolve().parent
+RUNTIME_PATH = ROOT / "dual_model_runtime.json"
+LOCK_FILE = ROOT / ".dual_model.lock"
+SPOT_BASE = "https://api.binance.com"
+
+MODEL_CORE = "ALPHA_CORE_SCALP"
+MODEL_OPP = "ALPHA_OPPORTUNITY_BURST"
+MODELS = (MODEL_CORE, MODEL_OPP)
+PINNED = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
+
+REASON_CODES = (
+    "NO_SIGNAL", "LOW_CONFIDENCE", "SPREAD_TOO_HIGH",
+    "LOW_BOOK_DEPTH", "LOW_LIQUIDITY", "SLIPPAGE_TOO_HIGH",
+    "FEE_DRAG", "EXPECTED_EDGE_TOO_LOW", "MOMENTUM_EXHAUSTED",
+    "FALSE_BREAKOUT_RISK", "RISK_LIMIT", "POSITION_LIMIT",
+    "COOLDOWN", "DUPLICATE_POSITION", "DUPLICATE_MODEL_OWNERSHIP",
+    "DATA_QUALITY")
+
+FEE_RATE = 0.001  # tek yön; gidiş-dönüş 2x
+
+DEFAULTS: dict[str, Any] = {
+    "enabled": True,
+    "core": {
+        "list_size": 10,            # 8-15 önerisi
+        "min_volume_usdt": 50_000_000,
+        "max_spread_pct": 0.05,
+        "min_trade_count": 200_000,
+        "tp_pct": 0.45, "sl_pct": 0.30,
+        "max_hold_minutes": 15,
+        "trailing_pct": 0.20,
+        "min_confidence": 60,
+        "max_slippage_pct": 0.03,
+        "max_open_positions": 2,
+        "position_usdt": 100.0,
+        "refresh_seconds": 300,     # liste yenileme 5 dk
+        "signal_seconds": 12,       # 10-15 sn
+    },
+    "opportunity": {
+        "list_size": 20,            # 15-30 önerisi
+        "min_volume_usdt": 5_000_000,
+        "max_spread_pct": 0.15,
+        "min_trade_count": 20_000,
+        "min_volume_burst": 2.0,    # son hacim / ortalama oranı
+        "min_volatility_pct": 1.5,
+        "tp_pct": 0.80, "sl_pct": 0.50,
+        "max_hold_minutes": 20,
+        "trailing_pct": 0.35,
+        "min_confidence": 55,
+        "max_slippage_pct": 0.08,
+        "max_open_positions": 2,
+        "position_usdt": 50.0,      # CORE'dan küçük
+        "refresh_seconds": 180,     # 2-5 dk havuz yenileme
+        "signal_seconds": 25,       # 20-30 sn
+        "cooldown_after_losses": 2,
+        "cooldown_minutes": 15,
+    },
+    "total_max_open_positions": 4,
+    "monitor_seconds": 4,           # 3-5 sn pozisyon monitörü
+}
+
+
+def get_config(main_cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """config.json 'dual_model' bölümü ile varsayılanları birleştir."""
+    cfg = json.loads(json.dumps(DEFAULTS))
+    user = (main_cfg or {}).get("dual_model")
+    if isinstance(user, dict):
+        for key, val in user.items():
+            if isinstance(val, dict) and isinstance(cfg.get(key), dict):
+                cfg[key].update(val)
+            else:
+                cfg[key] = val
+    return cfg
+
+
+# ── Git dışı kanonik runtime store (flock, transaksiyonel) ─────────
+
+def _load_runtime() -> dict[str, Any]:
+    try:
+        if RUNTIME_PATH.exists():
+            with RUNTIME_PATH.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {}
+
+
+def _update_runtime(mutator: Callable[[dict], None]) -> dict[str, Any]:
+    lock_path = RUNTIME_PATH.with_suffix(".lock")
+    with lock_path.open("a+") as lk:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+        try:
+            data = _load_runtime()
+            mutator(data)
+            tmp = RUNTIME_PATH.with_name(
+                f".{RUNTIME_PATH.name}.{os.getpid()}."
+                f"{threading.get_ident()}.tmp")
+            with tmp.open("w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=1)
+            tmp.replace(RUNTIME_PATH)
+            return data
+        finally:
+            fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ── Piyasa verisi (yalnız public spot uçları) ──────────────────────
+
+def fetch_spot_tickers() -> list[dict[str, Any]]:
+    import requests
+    r = requests.get(f"{SPOT_BASE}/api/v3/ticker/24hr", timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    return data if isinstance(data, list) else []
+
+
+def fetch_spot_klines(symbol: str, interval: str = "1m",
+                      limit: int = 60) -> list[list]:
+    import requests
+    r = requests.get(f"{SPOT_BASE}/api/v3/klines",
+                     params={"symbol": symbol, "interval": interval,
+                             "limit": limit}, timeout=10)
+    r.raise_for_status()
+    data = r.json()
+    return data if isinstance(data, list) else []
+
+
+def _ticker_fields(t: dict) -> dict[str, float] | None:
+    try:
+        bid, ask = float(t.get("bidPrice") or 0), float(
+            t.get("askPrice") or 0)
+        last = float(t.get("lastPrice") or 0)
+        high, low = float(t.get("highPrice") or 0), float(
+            t.get("lowPrice") or 0)
+        if last <= 0:
+            return None
+        spread_pct = ((ask - bid) / last * 100) if bid > 0 and \
+            ask > bid else 999.0
+        return {
+            "volume_usdt": float(t.get("quoteVolume") or 0),
+            "trade_count": float(t.get("count") or 0),
+            "spread_pct": spread_pct,
+            "volatility_pct": ((high - low) / low * 100)
+            if low > 0 else 0.0,
+            "change_pct": float(t.get("priceChangePercent") or 0),
+            "last": last,
+        }
+    except (TypeError, ValueError):
+        return None
+
+
+def _eligible_usdt(t: dict) -> bool:
+    s = t.get("symbol", "")
+    return (s.endswith("USDT") and not any(
+        x in s for x in ("UP", "DOWN", "BULL", "BEAR"))
+        and "_" not in s)
+
+
+def build_core_list(tickers: list[dict], cfg: dict) -> list[dict]:
+    """Yüksek hacim + dar spread + sık işlem → CORE listesi.
+
+    BTC/ETH/SOL sabit; kalan slotlar skora göre dolar."""
+    c = cfg["core"]
+    rows = []
+    for t in tickers:
+        if not _eligible_usdt(t):
+            continue
+        f = _ticker_fields(t)
+        if not f:
+            continue
+        f["symbol"] = t["symbol"]
+        pinned = t["symbol"] in PINNED
+        if not pinned and (
+                f["volume_usdt"] < c["min_volume_usdt"]
+                or f["spread_pct"] > c["max_spread_pct"]
+                or f["trade_count"] < c["min_trade_count"]):
+            continue
+        # skor: hacim + işlem sıklığı, dar spread ödülü
+        f["score"] = (f["volume_usdt"] / 1e6 +
+                      f["trade_count"] / 1e4 -
+                      f["spread_pct"] * 100)
+        f["pinned"] = pinned
+        rows.append(f)
+    pinned_rows = [r for r in rows if r["pinned"]]
+    others = sorted((r for r in rows if not r["pinned"]),
+                    key=lambda r: -r["score"])
+    size = max(len(PINNED), int(c["list_size"]))
+    return (pinned_rows + others)[:size]
+
+
+def build_opportunity_list(tickers: list[dict], cfg: dict,
+                           core_symbols: set[str]) -> list[dict]:
+    """Hacim patlaması / volatilite genişlemesi → OPPORTUNITY listesi.
+
+    CORE'daki semboller hariç (listeler ayrık)."""
+    o = cfg["opportunity"]
+    rows = []
+    for t in tickers:
+        if not _eligible_usdt(t) or t["symbol"] in core_symbols:
+            continue
+        f = _ticker_fields(t)
+        if not f:
+            continue
+        if (f["volume_usdt"] < o["min_volume_usdt"]
+                or f["trade_count"] < o["min_trade_count"]
+                or f["spread_pct"] > o["max_spread_pct"]
+                or f["volatility_pct"] < o["min_volatility_pct"]):
+            continue
+        # hacim patlaması proxy'si: işlem yoğunluğu / hacim tabanı +
+        # fiyat hareketi; kesin oran için kline ortalaması sinyal
+        # aşamasında doğrulanır
+        f["symbol"] = t["symbol"]
+        f["burst_score"] = (abs(f["change_pct"]) *
+                            f["volatility_pct"])
+        if f["change_pct"] > 0:
+            f["opportunity_type"] = "VOLUME_BREAKOUT"
+        else:
+            f["opportunity_type"] = "REVERSAL_WATCH"
+        rows.append(f)
+    rows.sort(key=lambda r: -r["burst_score"])
+    return rows[:int(o["list_size"])]
+
+
+# ── Sinyal + execution quality ─────────────────────────────────────
+
+def _ema(vals: list[float], n: int) -> float:
+    if not vals:
+        return 0.0
+    k = 2 / (n + 1)
+    e = vals[0]
+    for v in vals[1:]:
+        e = v * k + e * (1 - k)
+    return e
+
+
+def _rsi(closes: list[float], n: int = 14) -> float:
+    if len(closes) < n + 1:
+        return 50.0
+    gains = losses = 0.0
+    for i in range(-n, 0):
+        d = closes[i] - closes[i - 1]
+        gains += max(d, 0)
+        losses += max(-d, 0)
+    if losses == 0:
+        return 100.0
+    rs = gains / losses
+    return 100 - 100 / (1 + rs)
+
+
+def evaluate_signal(symbol: str, klines: list[list],
+                    model: str) -> dict[str, Any]:
+    """1m klines → sinyal (side/confidence/expected_gross_edge_pct).
+
+    Kural tabanlı, deterministik; her iki model aynı çekirdek
+    göstergeleri farklı ağırlıkla kullanır."""
+    if len(klines) < 30:
+        return {"symbol": symbol, "side": None, "confidence": 0,
+                "reason_code": "DATA_QUALITY"}
+    closes = [float(k[4]) for k in klines]
+    vols = [float(k[5]) for k in klines]
+    last = closes[-1]
+    ema9, ema21 = _ema(closes[-30:], 9), _ema(closes[-30:], 21)
+    rsi = _rsi(closes)
+    # VWAP (pencere)
+    pv = sum(c * v for c, v in zip(closes[-30:], vols[-30:]))
+    vsum = sum(vols[-30:]) or 1.0
+    vwap = pv / vsum
+    mom_pct = (last - closes[-6]) / closes[-6] * 100 \
+        if closes[-6] else 0.0
+    vol_recent = sum(vols[-5:]) / 5
+    vol_base = (sum(vols[-30:-5]) / 25) or 1e-9
+    vol_ratio = vol_recent / vol_base
+    hi20 = max(closes[-21:-1])
+
+    conf = 0
+    side = None
+    if ema9 > ema21 and last > vwap:
+        side = "LONG"
+        conf += 30
+        if mom_pct > 0.05:
+            conf += 15
+        if last > hi20:                     # kısa vadeli breakout
+            conf += 15
+        if vol_ratio >= 1.5:                # hacim doğrulaması
+            conf += 20
+        if 35 <= rsi <= 65:                 # RSI toparlanma bölgesi
+            conf += 10
+        if last <= vwap * 1.004:            # VWAP'a yakın giriş
+            conf += 10
+    if side is None:
+        return {"symbol": symbol, "side": None, "confidence": 0,
+                "reason_code": "NO_SIGNAL", "rsi": rsi,
+                "vol_ratio": vol_ratio}
+    if model == MODEL_OPP and vol_ratio < 1.2:
+        return {"symbol": symbol, "side": None, "confidence": conf,
+                "reason_code": "MOMENTUM_EXHAUSTED"}
+    if last > hi20 and vol_ratio < 1.2:
+        return {"symbol": symbol, "side": None, "confidence": conf,
+                "reason_code": "FALSE_BREAKOUT_RISK"}
+    edge = min(abs(mom_pct) * 0.6 + (vol_ratio - 1) * 0.15, 2.0)
+    return {"symbol": symbol, "side": side, "confidence": min(conf, 100),
+            "expected_gross_edge_pct": round(edge, 4),
+            "rsi": round(rsi, 1), "vol_ratio": round(vol_ratio, 2),
+            "vwap": vwap, "last": last}
+
+
+def execution_quality_gate(row: dict, sig: dict, model: str,
+                           cfg: dict) -> tuple[bool, str | None, float]:
+    """Zorunlu kalite kapıları → (geçti, reason_code, net_edge_pct)."""
+    m = cfg["core"] if model == MODEL_CORE else cfg["opportunity"]
+    if sig.get("confidence", 0) < m["min_confidence"]:
+        return False, "LOW_CONFIDENCE", 0.0
+    if row.get("spread_pct", 999) > m["max_spread_pct"]:
+        return False, "SPREAD_TOO_HIGH", 0.0
+    if row.get("volume_usdt", 0) < m["min_volume_usdt"]:
+        return False, "LOW_LIQUIDITY", 0.0
+    if row.get("trade_count", 0) < m["min_trade_count"]:
+        return False, "LOW_BOOK_DEPTH", 0.0
+    slippage_pct = row.get("spread_pct", 0) * 0.75  # tahmin
+    if slippage_pct > m["max_slippage_pct"]:
+        return False, "SLIPPAGE_TOO_HIGH", 0.0
+    gross = sig.get("expected_gross_edge_pct", 0.0)
+    fee_pct = FEE_RATE * 2 * 100
+    net = gross - fee_pct - slippage_pct
+    if gross <= fee_pct:
+        return False, "FEE_DRAG", round(net, 4)
+    if net <= 0:
+        return False, "EXPECTED_EDGE_TOO_LOW", round(net, 4)
+    return True, None, round(net, 4)
+
+
+# ── Sahiplik, limitler, pozisyon yaşam döngüsü ─────────────────────
+
+def resolve_ownership(candidates: dict[str, dict]) -> dict[str, Any]:
+    """Aynı sembol iki modelden aday olduysa: yüksek net edge kazanır."""
+    by_symbol: dict[str, list] = {}
+    for model, cand in candidates.items():
+        for c in cand:
+            by_symbol.setdefault(c["symbol"], []).append(
+                {**c, "model": model})
+    winners, rejected = [], []
+    for sym, lst in by_symbol.items():
+        lst.sort(key=lambda c: -c["net_edge_pct"])
+        winners.append(lst[0])
+        for loser in lst[1:]:
+            rejected.append({**loser,
+                             "reason_code": "DUPLICATE_MODEL_OWNERSHIP",
+                             "winner_model": lst[0]["model"]})
+    return {"winners": winners, "rejected": rejected}
+
+
+def _open_positions(rt: dict) -> dict[str, dict]:
+    pos = rt.get("positions")
+    return pos if isinstance(pos, dict) else {}
+
+
+def try_open_position(symbol: str, model: str, sig: dict,
+                      net_edge_pct: float, cfg: dict,
+                      now: float | None = None) -> tuple[bool, str | None]:
+    """Limit + cooldown kontrolleriyle Paper pozisyonu aç (LIVE yok)."""
+    m = cfg["core"] if model == MODEL_CORE else cfg["opportunity"]
+    now = now or time.time()
+
+    result: dict[str, Any] = {}
+
+    def _mut(rt: dict) -> None:
+        pos = _open_positions(rt)
+        if symbol in pos:
+            result["reason"] = "DUPLICATE_POSITION"
+            return
+        model_open = [p for p in pos.values() if p["model"] == model]
+        if len(model_open) >= m["max_open_positions"]:
+            result["reason"] = "POSITION_LIMIT"
+            return
+        if len(pos) >= cfg["total_max_open_positions"]:
+            result["reason"] = "RISK_LIMIT"
+            return
+        cd = rt.get("cooldowns", {}).get(model)
+        if cd and now < float(cd):
+            result["reason"] = "COOLDOWN"
+            return
+        entry = float(sig["last"])
+        qty = m["position_usdt"] / entry if entry > 0 else 0.0
+        pos[symbol] = {
+            "symbol": symbol, "model": model, "side": sig["side"],
+            "entry": entry, "quantity": qty,
+            "notional_usdt": m["position_usdt"],
+            "tp": entry * (1 + m["tp_pct"] / 100),
+            "sl": entry * (1 - m["sl_pct"] / 100),
+            "trailing_pct": m["trailing_pct"],
+            "peak": entry,
+            "max_hold_minutes": m["max_hold_minutes"],
+            "opened_at": _now_iso(), "opened_ts": now,
+            "confidence": sig["confidence"],
+            "net_edge_pct": net_edge_pct,
+            "execution_mode": "PAPER",
+        }
+        rt["positions"] = pos
+        result["ok"] = True
+
+    _update_runtime(_mut)
+    if result.get("ok"):
+        log.info("PAPER AÇILDI [%s] %s %s @%.6f", model, symbol,
+                 sig["side"], sig["last"])
+        return True, None
+    return False, result.get("reason", "RISK_LIMIT")
+
+
+def monitor_positions(price_of: Callable[[str], float | None],
+                      cfg: dict, now: float | None = None) -> list[dict]:
+    """TP/SL/trailing/time-exit kontrolü; kapananlar ledger'a yazılır."""
+    now = now or time.time()
+    closed: list[dict] = []
+
+    def _mut(rt: dict) -> None:
+        pos = _open_positions(rt)
+        for sym in list(pos):
+            p = pos[sym]
+            price = price_of(sym)
+            if price is None:
+                continue
+            p["peak"] = max(p.get("peak", p["entry"]), price)
+            trail_stop = p["peak"] * (1 - p["trailing_pct"] / 100)
+            held_min = (now - p["opened_ts"]) / 60
+            result = None
+            if price >= p["tp"]:
+                result = "TP"
+            elif price <= p["sl"]:
+                result = "SL"
+            elif price <= trail_stop and p["peak"] > p["entry"]:
+                result = "TRAILING"
+            elif held_min >= p["max_hold_minutes"]:
+                result = "TIME_EXIT"
+            if not result:
+                continue
+            gross = (price - p["entry"]) * p["quantity"]
+            fee = (p["entry"] + price) * p["quantity"] * FEE_RATE
+            slip = price * p["quantity"] * 0.0002
+            trade = {
+                **{k: p[k] for k in ("symbol", "model", "side",
+                                     "entry", "quantity",
+                                     "opened_at", "confidence")},
+                "exit": price, "result": result,
+                "gross_pnl": round(gross, 6),
+                "fees": round(fee, 6),
+                "slippage": round(slip, 6),
+                "net_pnl": round(gross - fee - slip, 6),
+                "hold_minutes": round(held_min, 2),
+                "closed_at": _now_iso(),
+                "execution_mode": "PAPER",
+            }
+            trades = rt.get("trades", [])
+            trades.insert(0, trade)
+            rt["trades"] = trades[:2000]
+            del pos[sym]
+            closed.append(trade)
+            # OPPORTUNITY: arka arkaya kayıpta cooldown
+            if p["model"] == MODEL_OPP and trade["net_pnl"] < 0:
+                o = cfg["opportunity"]
+                recent = [t for t in trades[:5]
+                          if t["model"] == MODEL_OPP]
+                losses = 0
+                for t in recent:
+                    if t["net_pnl"] < 0:
+                        losses += 1
+                    else:
+                        break
+                if losses >= o["cooldown_after_losses"]:
+                    rt.setdefault("cooldowns", {})[MODEL_OPP] = \
+                        now + o["cooldown_minutes"] * 60
+        rt["positions"] = pos
+
+    _update_runtime(_mut)
+    for t in closed:
+        log.info("PAPER KAPANDI [%s] %s %s net=%.4f", t["model"],
+                 t["symbol"], t["result"], t["net_pnl"])
+    return closed
+
+
+def record_rejection(symbol: str, model: str, reason_code: str) -> None:
+    if reason_code not in REASON_CODES:
+        reason_code = "DATA_QUALITY"
+
+    def _mut(rt: dict) -> None:
+        rej = rt.get("rejections", [])
+        rej.insert(0, {"symbol": symbol, "model": model,
+                       "reason_code": reason_code,
+                       "at": _now_iso()})
+        rt["rejections"] = rej[:300]
+
+    _update_runtime(_mut)
+
+
+# ── Ayrı performans ölçümü ─────────────────────────────────────────
+
+def model_metrics(model: str, rt: dict | None = None) -> dict[str, Any]:
+    rt = rt if rt is not None else _load_runtime()
+    trades = [t for t in rt.get("trades", []) if t["model"] == model]
+    rejections = [r for r in rt.get("rejections", [])
+                  if r["model"] == model]
+    wins = [t for t in trades if t["net_pnl"] > 0]
+    gross = sum(t["gross_pnl"] for t in trades)
+    fees = sum(t["fees"] for t in trades)
+    slip = sum(t["slippage"] for t in trades)
+    net = sum(t["net_pnl"] for t in trades)
+    gains = sum(t["net_pnl"] for t in wins)
+    losses = -sum(t["net_pnl"] for t in trades if t["net_pnl"] < 0)
+    # max drawdown (net_pnl kümülatif, kronolojik)
+    equity, peak, mdd = 0.0, 0.0, 0.0
+    for t in reversed(trades):
+        equity += t["net_pnl"]
+        peak = max(peak, equity)
+        mdd = max(mdd, peak - equity)
+    lst_key = "core_list" if model == MODEL_CORE else "opportunity_list"
+    reasons: dict[str, int] = {}
+    for r in rejections:
+        reasons[r["reason_code"]] = reasons.get(r["reason_code"], 0) + 1
+    open_pos = [p for p in _open_positions(rt).values()
+                if p["model"] == model]
+    day_secs = 86400.0
+    first_ts = None
+    if trades:
+        try:
+            first_ts = datetime.fromisoformat(
+                trades[-1]["closed_at"]).timestamp()
+        except (ValueError, KeyError):
+            first_ts = None
+    span_days = max((time.time() - first_ts) / day_secs, 1 / 24) \
+        if first_ts else None
+    return {
+        "model": model,
+        "scanned_symbols": len(rt.get(lst_key, [])),
+        "candidates": rt.get("last_candidates", {}).get(model, 0),
+        "paper_intents": len(trades) + len(open_pos),
+        "opened_positions": len(open_pos),
+        "closed_positions": len(trades),
+        "trades_per_day": round(len(trades) / span_days, 2)
+        if span_days else 0.0,
+        "win_rate": round(len(wins) / len(trades) * 100, 1)
+        if trades else None,
+        "gross_pnl": round(gross, 4), "fees": round(fees, 4),
+        "slippage": round(slip, 4), "net_pnl": round(net, 4),
+        "average_hold_minutes": round(
+            sum(t["hold_minutes"] for t in trades) / len(trades), 2)
+        if trades else None,
+        "profit_factor": round(gains / losses, 2)
+        if losses > 0 else None,
+        "max_drawdown": round(mdd, 4),
+        "expectancy_per_trade": round(net / len(trades), 4)
+        if trades else None,
+        "rejection_reasons": reasons,
+    }
+
+
+def snapshot() -> dict[str, Any]:
+    """TEK kanonik snapshot — UI/API/ledger/runtime aynı kaynaktan."""
+    rt = _load_runtime()
+    positions = list(_open_positions(rt).values())
+    core_open = [p for p in positions if p["model"] == MODEL_CORE]
+    opp_open = [p for p in positions if p["model"] == MODEL_OPP]
+    return {
+        "snapshot_version": int(rt.get("updated_ts") or 0),
+        "live_orders": "DISABLED",
+        "core_list": rt.get("core_list", []),
+        "opportunity_list": rt.get("opportunity_list", []),
+        "positions": positions,
+        "counters": {
+            "core_universe": len(rt.get("core_list", [])),
+            "opportunity_universe": len(
+                rt.get("opportunity_list", [])),
+            "core_open": len(core_open),
+            "opportunity_open": len(opp_open),
+            "total_open": len(positions),
+        },
+        "metrics": {
+            MODEL_CORE: model_metrics(MODEL_CORE, rt),
+            MODEL_OPP: model_metrics(MODEL_OPP, rt),
+        },
+        "portfolio_net_pnl": round(sum(
+            t["net_pnl"] for t in rt.get("trades", [])), 4),
+        "recent_trades": rt.get("trades", [])[:20],
+        "recent_rejections": rt.get("rejections", [])[:30],
+        "last_refresh": rt.get("last_refresh"),
+        "last_error": rt.get("last_error"),
+    }
+
+
+# ── Arka plan döngüsü (flock: süreçler arası tek koşu) ─────────────
+
+_THREAD: threading.Thread | None = None
+_STOP = threading.Event()
+_lock_fh = None
+
+
+def _acquire_file_lock() -> bool:
+    global _lock_fh
+    try:
+        _lock_fh = LOCK_FILE.open("a+")
+        fcntl.flock(_lock_fh.fileno(),
+                    fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _loop(get_main_config: Callable[[], dict]) -> None:
+    last_refresh = 0.0
+    last_core_sig = 0.0
+    last_opp_sig = 0.0
+    price_cache: dict[str, float] = {}
+    rr = {"core": 0, "opp": 0}
+    while not _STOP.is_set():
+        try:
+            cfg = get_config(get_main_config())
+            if not cfg.get("enabled", True):
+                _STOP.wait(30)
+                continue
+            now = time.time()
+            # 1) Liste yenileme
+            refresh_every = min(cfg["core"]["refresh_seconds"],
+                                cfg["opportunity"]["refresh_seconds"])
+            if now - last_refresh >= refresh_every:
+                tickers = fetch_spot_tickers()
+                core = build_core_list(tickers, cfg)
+                opp = build_opportunity_list(
+                    tickers, cfg, {r["symbol"] for r in core})
+
+                def _mut(rt: dict) -> None:
+                    rt["core_list"] = core
+                    rt["opportunity_list"] = opp
+                    rt["last_refresh"] = _now_iso()
+                    rt["updated_ts"] = int(now)
+                    rt["last_error"] = None
+
+                _update_runtime(_mut)
+                price_cache = {r["symbol"]: r["last"]
+                               for r in core + opp}
+                last_refresh = now
+            rt = _load_runtime()
+            # 2) Sinyal turları (round-robin batch, rate-limit dostu)
+            for model, key, tkey, batch in (
+                    (MODEL_CORE, "core", "core_list", 4),
+                    (MODEL_OPP, "opp", "opportunity_list", 4)):
+                m = cfg["core"] if model == MODEL_CORE \
+                    else cfg["opportunity"]
+                last_t = last_core_sig if key == "core" else last_opp_sig
+                if now - last_t < m["signal_seconds"]:
+                    continue
+                rows = rt.get(tkey, [])
+                if not rows:
+                    continue
+                cands = []
+                i0 = rr[key]
+                for j in range(min(batch, len(rows))):
+                    row = rows[(i0 + j) % len(rows)]
+                    sym = row["symbol"]
+                    try:
+                        kl = fetch_spot_klines(sym)
+                    except Exception:
+                        record_rejection(sym, model, "DATA_QUALITY")
+                        continue
+                    if kl:
+                        price_cache[sym] = float(kl[-1][4])
+                    sig = evaluate_signal(sym, kl, model)
+                    if not sig.get("side"):
+                        record_rejection(sym, model,
+                                         sig.get("reason_code",
+                                                 "NO_SIGNAL"))
+                        continue
+                    ok, reason, net = execution_quality_gate(
+                        row, sig, model, cfg)
+                    if not ok:
+                        record_rejection(sym, model, reason)
+                        continue
+                    cands.append({"symbol": sym, "sig": sig,
+                                  "net_edge_pct": net})
+                rr[key] = (i0 + batch) % max(len(rows), 1)
+
+                def _mutc(rtc: dict, model=model, n=len(cands)) -> None:
+                    rtc.setdefault("last_candidates", {})[model] = n
+
+                _update_runtime(_mutc)
+                if key == "core":
+                    last_core_sig = now
+                    core_cands = cands
+                else:
+                    last_opp_sig = now
+                    opp_cands = cands
+                # 3) Sahiplik + açılış
+                own = resolve_ownership({model: cands})
+                for rej in own["rejected"]:
+                    record_rejection(rej["symbol"], rej["model"],
+                                     "DUPLICATE_MODEL_OWNERSHIP")
+                for w in own["winners"]:
+                    opened, reason = try_open_position(
+                        w["symbol"], model, w["sig"],
+                        w["net_edge_pct"], cfg, now)
+                    if not opened:
+                        record_rejection(w["symbol"], model, reason)
+            # 4) Pozisyon monitörü
+            monitor_positions(price_cache.get, cfg, time.time())
+            _STOP.wait(cfg["monitor_seconds"])
+        except Exception as exc:  # döngü asla ölmez; hata görünür
+            log.error("dual_model döngü hatası: %s", exc)
+
+            def _me(rt: dict) -> None:
+                rt["last_error"] = str(exc)
+
+            try:
+                _update_runtime(_me)
+            except OSError:
+                pass
+            _STOP.wait(15)
+
+
+def start_dual_model_loop(get_main_config: Callable[[], dict]) -> bool:
+    """Süreçler arası flock: yalnız tek worker döngüyü koşturur."""
+    global _THREAD
+    if _THREAD and _THREAD.is_alive():
+        return True
+    if not _acquire_file_lock():
+        return False
+    cfg = get_config(get_main_config())
+    if not cfg.get("enabled", True):
+        return False
+    _STOP.clear()
+    _THREAD = threading.Thread(
+        target=_loop, args=(get_main_config,),
+        name="dual-model-loop", daemon=True)
+    _THREAD.start()
+    log.info("Dual-model PAPER döngüsü başladı (LIVE ORDERS DISABLED).")
+    return True

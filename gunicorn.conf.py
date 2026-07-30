@@ -66,6 +66,14 @@ def post_fork(server, worker):
     # başarısızlık açılışı ve Paper controller'ı asla etkilemez).
     from services import binance_connection as _bc
     _bc.start_startup_tests_async()
+    # İki dinamik liste + iki kısa vadeli PAPER modeli (CORE SCALP /
+    # OPPORTUNITY BURST). Flock ile süreçler arası tek koşu; hata
+    # worker'ı çökertmez. LIVE ORDERS DISABLED.
+    try:
+        import dual_model as _dm
+        _dm.start_dual_model_loop(_app._get_main_config)
+    except Exception as exc:  # pragma: no cover
+        worker.log.warning("Dual-model başlangıcı başarısız: %s", exc)
     # Task 112: sunucu günlerce açık kalınca panel durumu bayatlamasın —
     # kayıtlı sağlayıcılar saatlik arka plan yeniden testi (flock ile
     # süreçler arası tek koşu; başarısızlık uygulamayı etkilemez).

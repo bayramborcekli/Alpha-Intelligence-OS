@@ -399,6 +399,9 @@ class TestAgent02Activity:
 
 
 class TestAgent02BannedTerms:
+    # NOT: "Confidence"/"confidence" yasak listesinden çıkarıldı —
+    # dual-model misyonu (CORE/OPPORTUNITY tabloları) confidence
+    # sütununu açıkça şart koşuyor; şablonda Türkçe "Güven" kullanılır.
     @pytest.mark.parametrize("banned", [
         "ADX", "Confidence", "Güven %", "risk skoru",
         "correlation_id", "JSON.stringify(e", "strategy"])
@@ -406,7 +409,7 @@ class TestAgent02BannedTerms:
         assert banned not in TEMPLATE, banned
 
     @pytest.mark.parametrize("banned", [
-        "ADX", "confidence", "last_rejection_reason",
+        "ADX", "last_rejection_reason",
         "last_decision", "signal_state"])
     def test_no_technical_leak_in_js(self, banned):
         assert banned not in JS, banned

@@ -462,6 +462,57 @@
     if (b) confirmClose(b.dataset.close, b.dataset.symbol);
   });
 
+  // ── İki model (CORE / OPPORTUNITY) — tek kanonik snapshot ─────
+  function renderDualModel(d) {
+    var core = document.getElementById("th-dm-core");
+    var opp = document.getElementById("th-dm-opp");
+    if (!core || !opp) return;
+    if (!d) {
+      core.innerHTML = opp.innerHTML =
+        "<tr><td colspan=\"7\" class=\"th-empty\">UNKNOWN</td></tr>";
+      return;
+    }
+    var c = d.counters || {};
+    setText("th-dm-core-uni", c.core_universe);
+    setText("th-dm-opp-uni", c.opportunity_universe);
+    setText("th-dm-core-open", c.core_open);
+    setText("th-dm-opp-open", c.opportunity_open);
+    setText("th-dm-total-open", c.total_open);
+    var openBy = {};
+    (d.positions || []).forEach(function (p) {
+      openBy[p.symbol] = p;
+    });
+    function stateOf(sym) {
+      return openBy[sym] ? "POZİSYONDA" : "İZLENİYOR";
+    }
+    core.innerHTML = (d.core_list || []).map(function (r) {
+      var p = openBy[r.symbol];
+      return "<tr><td><b>" + esc(r.symbol) + "</b></td><td>" +
+        (p ? esc(p.side) : "—") + "</td><td>" +
+        (r.spread_pct != null ? r.spread_pct.toFixed(3) + "%" : "—") +
+        "</td><td>" + (p && p.confidence != null ? p.confidence : "—") +
+        "</td><td>" + stateOf(r.symbol) + "</td><td>" +
+        (p ? esc(p.side) + " @" + fmtPrice(p.entry) : "—") +
+        "</td></tr>";
+    }).join("") ||
+      "<tr><td colspan=\"6\" class=\"th-empty\">Liste henüz " +
+      "yenilenmedi.</td></tr>";
+    opp.innerHTML = (d.opportunity_list || []).map(function (r) {
+      var p = openBy[r.symbol];
+      return "<tr><td><b>" + esc(r.symbol) + "</b></td><td>" +
+        esc(r.opportunity_type || "—") + "</td><td>" +
+        (r.change_pct != null ? r.change_pct.toFixed(1) + "%" : "—") +
+        "</td><td>" + (r.volatility_pct != null ?
+          r.volatility_pct.toFixed(1) + "%" : "—") +
+        "</td><td>" + (p && p.confidence != null ? p.confidence : "—") +
+        "</td><td>" + (p && p.net_edge_pct != null ?
+          p.net_edge_pct.toFixed(2) + "%" : "—") +
+        "</td><td>" + stateOf(r.symbol) + "</td></tr>";
+    }).join("") ||
+      "<tr><td colspan=\"7\" class=\"th-empty\">Fırsat taraması " +
+      "henüz koşmadı.</td></tr>";
+  }
+
   // ── Yoklama ────────────────────────────────────────────────────
 
   var inflight = false;
@@ -477,7 +528,8 @@
       get("/api/operation-control/workspace/portfolio"),
       get("/api/operation-control/workspace/journal"),
       get("/api/accounts/wallets"),
-      get("/api/accounts")
+      get("/api/accounts"),
+      get("/api/dual-model/state")
     ]).then(function (r) {
       function data(i, key) {
         var b = r[i].body;
@@ -504,6 +556,8 @@
                   data(1, "positions"), data(1, "signals"));
       renderActivity(data(3, "journal"));
       renderWallets(data(4, "accounts"), data(5, "accounts"));
+      renderDualModel(r[6].body && r[6].body.ok ?
+                      r[6].body.data : null);
       inflight = false;
     }, function () { inflight = false; });
   }

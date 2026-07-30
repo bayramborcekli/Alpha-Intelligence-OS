@@ -4354,6 +4354,15 @@ def api_operation_positions():
     return _operation_read("positions")
 
 
+@app.get("/api/dual-model/state")
+def api_dual_model_state():
+    """İki model (CORE SCALP / OPPORTUNITY BURST) — TEK kanonik
+    snapshot: listeler, pozisyonlar, sayaçlar, ayrı metrikler,
+    ret nedenleri. UI/API/ledger/runtime aynı kaynaktan."""
+    import dual_model as _dm
+    return jsonify({"ok": True, "data": _dm.snapshot()})
+
+
 @app.get("/api/operation-control/overview")
 def api_operation_overview():
     """TEK atomik snapshot: products/positions/orders/signals aynı
