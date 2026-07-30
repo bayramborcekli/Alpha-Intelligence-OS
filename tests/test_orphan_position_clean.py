@@ -186,6 +186,30 @@ class TestCleanEndpoint:
         assert any("dual_model_runtime" in e
                    for e in r.get_json()["evidence"])
 
+    def test_corrupt_runtime_file_fail_closed(self, env, tmp_path):
+        # Mimar bulgusu: runtime dosyası VAR ama bozuksa kanıt yok →
+        # fail-closed 422 (fail-open temizlik yasak).
+        (tmp_path / "dual_model_runtime.json").write_text(
+            "{bozuk json", encoding="utf-8")
+        st = self._incomplete_cleanable_state()
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        r = env["client"].post(self.URL, json={
+            "symbol": "ONDOUSDT", "confirm": True})
+        assert r.status_code == 422
+        assert any("okunamadı" in e for e in r.get_json()["evidence"])
+        st2 = json.loads(env["state_path"].read_text(encoding="utf-8"))
+        assert st2["position"] is not None
+
+    def test_missing_runtime_file_is_honest_empty(self, env):
+        # Dosya hiç yoksa dual motor hiç koşmamıştır → karşılık
+        # olamaz; temizlik yapılabilir (test_incomplete_cleanable_*
+        # zaten bu yolu kullanıyor — açık sözleşme testi).
+        st = self._incomplete_cleanable_state()
+        env["state_path"].write_text(json.dumps(st), encoding="utf-8")
+        r = env["client"].post(self.URL, json={
+            "symbol": "ONDOUSDT", "confirm": True})
+        assert r.status_code == 200
+
     def test_incomplete_blocked_by_open_ledger(self, env):
         st = self._incomplete_cleanable_state()
         st["trades"].append({"symbol": "ONDOUSDT"})  # kapanmamış

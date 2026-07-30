@@ -3845,9 +3845,18 @@ def _legacy_cleanup_eligibility(pos: dict, state: dict,
         blockers.append("entry veya quantity mevcut — kayıt kısmen "
                         "geçerli, silinmez (Onayla akışını kullanın)")
     try:
-        rt, _ = read_json(DUAL_RUNTIME_PATH)
-        dm_open = [s for s in ((rt or {}).get("positions") or {})
-                   if str(s).upper() == symbol]
+        rt, rt_err = read_json(DUAL_RUNTIME_PATH)
+        if DUAL_RUNTIME_PATH.exists():
+            # Dosya VAR ama okunamadı/bozuk → kanıt yok, fail-closed.
+            if rt_err or not isinstance(rt, dict):
+                dm_open = None
+            else:
+                dm_open = [s for s in (rt.get("positions") or {})
+                           if str(s).upper() == symbol]
+        else:
+            # Dosya hiç yok: dual motor bu makinede hiç koşmamış —
+            # açık pozisyon karşılığı olamaz (dürüst boş kanıt).
+            dm_open = []
     except Exception:
         dm_open = None
     if dm_open:
