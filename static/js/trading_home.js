@@ -1414,9 +1414,10 @@
   }
 })();
 
-    var symbol = btn.dataset.symbol || "";
-
-  function renderOrphan(o) {
+// ── Yetim kayıt banner'ı — merge'de parçalanan blok yeniden kuruldu.
+// renderOrphan ana IIFE'den çağrılır (global tanım); temizleme
+// butonu ayrı bir click işleyicisiyle çalışır.
+function renderOrphan(o) {
     var box = document.getElementById("th-orphan-banner");
     var txt = document.getElementById("th-orphan-text");
     var btn = document.getElementById("th-orphan-clean");
@@ -1428,9 +1429,50 @@
       (o.opened_at || "UNKNOWN") + "). Bu kayıt aktif pozisyon " +
       "DEĞİLDİR; güvenle temizlenebilir.";
     btn.dataset.symbol = o.symbol;
-  }
+}
 
-    var btn = ev.target && ev.target.id === "th-orphan-clean" ?
-      ev.target : null;
-
-    var out = document.getElementById("th-orphan-result");
+document.addEventListener("click", function (ev) {
+  var btn = ev.target && ev.target.id === "th-orphan-clean" ?
+    ev.target : null;
+  if (!btn) return;
+  var symbol = btn.dataset.symbol || "";
+  var out = document.getElementById("th-orphan-result");
+  if (!symbol) return;
+  if (!window.confirm(symbol + " yetim kaydı state dosyasından " +
+      "kaldırılacak. Bu bir kapatma değildir; yalnız kayıt " +
+      "bütünlüğü temizliğidir. Onaylıyor musunuz?")) return;
+  btn.disabled = true;
+  fetch("/api/state/orphan-position/clean", {
+    method: "POST",
+    headers: { "Content-Type": "application/json",
+               "X-CSRFToken": window.TH_CSRF },
+    body: JSON.stringify({ confirm: true, symbol: symbol })
+  }).then(function (r) {
+    // JSON parse edilemeyen gövde genel mesaja indirgenmez —
+    // gerçek HTTP durum kodu gösterilir.
+    return r.json().then(function (d) {
+      return { st: r.status, d: d };
+    }, function () {
+      return { st: r.status, d: null };
+    });
+  }).then(function (o) {
+    if (o.d && o.d.ok) {
+      if (out) out.textContent = "Temizlendi — denetim geçmişine " +
+        "POSITION_RECORD_CLEANED yazıldı.";
+      var box = document.getElementById("th-orphan-banner");
+      if (box) setTimeout(function () {
+        box.style.display = "none";
+      }, 4000);
+      return;
+    }
+    var code = (o.d && o.d.code) || "HTTP_" + o.st;
+    var fix = code === "CLEANUP_REQUIRES_CONTROLLER_PAUSE" ?
+      " Çözüm: otomasyonu/botu durdurun, sonra tekrar deneyin." : "";
+    if (out) out.textContent = "Kaldırılamadı [" + code + "]: " +
+      ((o.d && o.d.error) || "sunucu hatası") + fix;
+    btn.disabled = false;
+  }).catch(function () {
+    if (out) out.textContent = "Kaldırılamadı: sunucuya ulaşılamadı.";
+    btn.disabled = false;
+  });
+});
