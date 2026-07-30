@@ -140,6 +140,8 @@ alpha20_v1/runtime_preferences.json
 alpha20_v1/runtime_preferences.json.bak
 alpha20_v1/pipeline_test_ledger.jsonl
 verify_scheduler_report.json
+verify_dual_model_report.json
+verify_dual_model_pre.json
 alpha20_v1/universe_runtime.json
 alpha20_v1/.universe_runtime.json.*.tmp
 alpha20_v1/universe_runtime.lock
