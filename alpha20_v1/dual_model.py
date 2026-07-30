@@ -486,6 +486,68 @@ def try_open_position(symbol: str, model: str, sig: dict,
     return False, result.get("reason", "RISK_LIMIT")
 
 
+def _build_trade(p: dict, price: float, result: str,
+                 now: float) -> dict:
+    """Kapanış muhasebesi tek yerde: fee + slippage sonrası net PnL."""
+    gross = (price - p["entry"]) * p["quantity"]
+    fee = (p["entry"] + price) * p["quantity"] * FEE_RATE
+    slip = price * p["quantity"] * 0.0002
+    return {
+        **{k: p[k] for k in ("symbol", "model", "side", "entry",
+                             "quantity", "opened_at", "confidence")},
+        "exit": price, "result": result,
+        "gross_pnl": round(gross, 6),
+        "fees": round(fee, 6),
+        "slippage": round(slip, 6),
+        "net_pnl": round(gross - fee - slip, 6),
+        "hold_minutes": round((now - p["opened_ts"]) / 60, 2),
+        "closed_at": _now_iso(),
+        "execution_mode": "PAPER",
+    }
+
+
+def manual_close(symbol: str,
+                 price: float | None = None) -> tuple[bool, str]:
+    """Operatör kapatması (PAPER). Fiyat verilmezse TAZE fiyat çekilir;
+    taze fiyat alınamazsa kapatma REDDEDİLİR (bayat fiyatla kapanış yok).
+    """
+    symbol = str(symbol or "").upper().strip()
+    if not symbol:
+        return False, "SYMBOL_REQUIRED"
+    if price is None:
+        try:
+            price = fetch_spot_prices([symbol]).get(symbol)
+        except RateLimited as exc:
+            return False, f"RATE_LIMITED: {exc}"
+        except Exception:
+            price = None
+        if price is None:
+            return False, "PRICE_UNAVAILABLE"
+    now = time.time()
+    out: dict[str, Any] = {}
+
+    def _mut(rt: dict) -> None:
+        pos = _open_positions(rt)
+        p = pos.get(symbol)
+        if not p:
+            out["err"] = "POSITION_NOT_FOUND"
+            return
+        trade = _build_trade(p, float(price), "MANUAL_CLOSE", now)
+        trades = rt.get("trades", [])
+        trades.insert(0, trade)
+        rt["trades"] = trades[:2000]
+        del pos[symbol]
+        rt["positions"] = pos
+        out["trade"] = trade
+
+    _update_runtime(_mut)
+    if "trade" in out:
+        log.info("PAPER MANUAL_CLOSE %s net=%.4f", symbol,
+                 out["trade"]["net_pnl"])
+        return True, "CLOSED"
+    return False, out.get("err", "POSITION_NOT_FOUND")
+
+
 def monitor_positions(price_of: Callable[[str], float | None],
                       cfg: dict, now: float | None = None) -> list[dict]:
     """TP/SL/trailing/time-exit kontrolü; kapananlar ledger'a yazılır."""
@@ -513,22 +575,7 @@ def monitor_positions(price_of: Callable[[str], float | None],
                 result = "TIME_EXIT"
             if not result:
                 continue
-            gross = (price - p["entry"]) * p["quantity"]
-            fee = (p["entry"] + price) * p["quantity"] * FEE_RATE
-            slip = price * p["quantity"] * 0.0002
-            trade = {
-                **{k: p[k] for k in ("symbol", "model", "side",
-                                     "entry", "quantity",
-                                     "opened_at", "confidence")},
-                "exit": price, "result": result,
-                "gross_pnl": round(gross, 6),
-                "fees": round(fee, 6),
-                "slippage": round(slip, 6),
-                "net_pnl": round(gross - fee - slip, 6),
-                "hold_minutes": round(held_min, 2),
-                "closed_at": _now_iso(),
-                "execution_mode": "PAPER",
-            }
+            trade = _build_trade(p, price, result, now)
             trades = rt.get("trades", [])
             trades.insert(0, trade)
             rt["trades"] = trades[:2000]
@@ -632,10 +679,42 @@ def model_metrics(model: str, rt: dict | None = None) -> dict[str, Any]:
     }
 
 
-def snapshot() -> dict[str, Any]:
-    """TEK kanonik snapshot — UI/API/ledger/runtime aynı kaynaktan."""
+def snapshot(with_prices: bool = False) -> dict[str, Any]:
+    """TEK kanonik snapshot — UI/API/ledger/runtime aynı kaynaktan.
+
+    with_prices=True: açık semboller için TAZE fiyat çekilir ve
+    current_price / unrealized net PnL / PnL% alanları eklenir.
+    Fiyat alınamazsa alanlar None kalır (UI 'UNKNOWN' gösterir) —
+    bayat/uydurma fiyat asla yazılmaz.
+    """
     rt = _load_runtime()
     positions = list(_open_positions(rt).values())
+    prices: dict[str, float] = {}
+    if with_prices and positions:
+        try:
+            prices = fetch_spot_prices(
+                [p["symbol"] for p in positions])
+        except Exception:
+            prices = {}
+    for p in positions:
+        cur = prices.get(p["symbol"])
+        p["current_price"] = cur
+        if cur is not None and p["entry"] > 0:
+            gross = (cur - p["entry"]) * p["quantity"]
+            fee = (p["entry"] + cur) * p["quantity"] * FEE_RATE
+            slip = cur * p["quantity"] * 0.0002
+            net = gross - fee - slip
+            p["unrealized_net_pnl"] = round(net, 6)
+            p["unrealized_pnl_pct"] = round(
+                net / p["notional_usdt"] * 100, 4) \
+                if p.get("notional_usdt") else None
+            p["est_fees"] = round(fee, 6)
+            p["est_slippage"] = round(slip, 6)
+        else:
+            p["unrealized_net_pnl"] = None
+            p["unrealized_pnl_pct"] = None
+            p["est_fees"] = None
+            p["est_slippage"] = None
     core_open = [p for p in positions if p["model"] == MODEL_CORE]
     opp_open = [p for p in positions if p["model"] == MODEL_OPP]
     return {

@@ -189,6 +189,9 @@ class TestRouteSurface:
         # Windows Runtime Recovery Agent koşusu (yalnız yerel Windows;
         # Replit/public'te 403; CSRF+auth+rate-limit — bilinçli genişletme)
         "/api/agents/windows-runtime/run",
+        # Dual-model MANUAL_CLOSE (PAPER-only, CSRF+auth korumalı;
+        # yalnız git dışı runtime store'a yazar — bilinçli genişletme)
+        "/api/dual-model/close",
     }
 
     def test_no_new_write_routes(self):

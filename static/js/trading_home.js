@@ -511,6 +511,61 @@
     }).join("") ||
       "<tr><td colspan=\"7\" class=\"th-empty\">Fırsat taraması " +
       "henüz koşmadı.</td></tr>";
+    renderDualPositions(d.positions || []);
+  }
+
+  function fmtNum(v, dp) {
+    return (v === null || v === undefined || isNaN(v)) ?
+      "UNKNOWN" : Number(v).toFixed(dp);
+  }
+
+  function renderDualPositions(list) {
+    var tb = document.getElementById("th-dm-pos");
+    if (!tb) return;
+    if (!list.length) {
+      tb.innerHTML = "<tr><td colspan=\"13\" class=\"th-empty\">" +
+        "Açık model pozisyonu yok.</td></tr>";
+      return;
+    }
+    tb.innerHTML = list.map(function (p) {
+      var neg = (p.unrealized_net_pnl || 0) < 0;
+      return "<tr><td><b>" + esc(p.symbol) + "</b></td><td>" +
+        esc(p.model || "—") + "</td><td>" + fmtNum(p.quantity, 6) +
+        "</td><td>" + fmtNum(p.notional_usdt, 2) +
+        "</td><td>" + fmtPrice(p.entry) + "</td><td>" +
+        (p.current_price != null ? fmtPrice(p.current_price) :
+          "UNKNOWN") +
+        "</td><td style=\"color:" + (neg ? "#f85149" : "#3fb950") +
+        "\">" + fmtNum(p.unrealized_net_pnl, 4) + "</td><td>" +
+        fmtNum(p.unrealized_pnl_pct, 2) + "</td><td>" +
+        fmtNum(p.est_fees, 4) + "</td><td>" +
+        fmtNum(p.est_slippage, 4) + "</td><td>" +
+        fmtPrice(p.tp) + "</td><td>" + fmtPrice(p.sl) +
+        "</td><td><button class=\"th-btn th-dm-close\" " +
+        "data-symbol=\"" + esc(p.symbol) + "\">Kapat</button>" +
+        "</td></tr>";
+    }).join("");
+    tb.querySelectorAll(".th-dm-close").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var sym = btn.getAttribute("data-symbol");
+        if (!window.confirm(sym +
+            " pozisyonu kapatılsın mı? (PAPER)")) return;
+        btn.disabled = true;
+        fetch("/api/dual-model/close", {
+          method: "POST",
+          headers: { "Content-Type": "application/json",
+                     "X-CSRFToken": window.TH_CSRF },
+          body: JSON.stringify({ symbol: sym })
+        }).then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d.ok) {
+              window.alert("Kapatılamadı: " + (d.message || ""));
+              btn.disabled = false;
+            } else { refresh(); }
+          })
+          .catch(function () { btn.disabled = false; });
+      });
+    });
   }
 
   // ── Yoklama ────────────────────────────────────────────────────

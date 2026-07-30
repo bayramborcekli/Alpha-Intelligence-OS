@@ -220,6 +220,11 @@ class TestFuturesSurfacesRemoved:
             # doğrudan borsa yazması içermez.
             if p.startswith("/api/operation-control/"):
                 continue
+            # Dual-model misyonu bilinçli genişletme: MANUAL_CLOSE
+            # yalnız git dışı PAPER runtime store'a yazar; borsa
+            # private ucu/imza yok (tests/test_dual_model.py bekçili).
+            if p == "/api/dual-model/close":
+                continue
             if any(w in p for w in ("order", "cancel", "close", "transfer",
                                     "withdraw", "leverage", "margin")):
                 assert p in allowed, f"yasak rota: {rule}"

@@ -315,6 +315,85 @@ class TestRateLimitGuard:
         assert dm.fetch_spot_prices([]) == {}
 
 
+class TestManualCloseAndVisibility:
+    def test_manual_close_with_fresh_price(self, monkeypatch):
+        dm.try_open_position("AUSDT", dm.MODEL_CORE, SIG, 0.3, CFG,
+                             now=1000.0)
+        monkeypatch.setattr(dm, "fetch_spot_prices",
+                            lambda syms: {"AUSDT": 101.0})
+        ok, msg = dm.manual_close("ausdt")  # case-insensitive
+        assert ok and msg == "CLOSED"
+        rt = dm._load_runtime()
+        assert rt["positions"] == {}
+        t = rt["trades"][0]
+        assert t["result"] == "MANUAL_CLOSE"
+        assert t["net_pnl"] < t["gross_pnl"]  # fee+slippage düşüldü
+
+    def test_manual_close_rejected_without_fresh_price(
+            self, monkeypatch):
+        dm.try_open_position("AUSDT", dm.MODEL_CORE, SIG, 0.3, CFG)
+        monkeypatch.setattr(dm, "fetch_spot_prices",
+                            lambda syms: {})
+        ok, msg = dm.manual_close("AUSDT")
+        assert not ok and msg == "PRICE_UNAVAILABLE"
+        assert "AUSDT" in dm._load_runtime()["positions"]
+
+    def test_manual_close_unknown_position(self):
+        ok, msg = dm.manual_close("NOPEUSDT", price=1.0)
+        assert not ok and msg == "POSITION_NOT_FOUND"
+
+    def test_snapshot_with_prices_enriches_positions(
+            self, monkeypatch):
+        dm.try_open_position("AUSDT", dm.MODEL_CORE, SIG, 0.3, CFG)
+        monkeypatch.setattr(dm, "fetch_spot_prices",
+                            lambda syms: {"AUSDT": 102.0})
+        p = dm.snapshot(with_prices=True)["positions"][0]
+        assert p["current_price"] == 102.0
+        for key in ("quantity", "notional_usdt", "entry", "tp",
+                    "sl", "model", "unrealized_net_pnl",
+                    "unrealized_pnl_pct", "est_fees",
+                    "est_slippage"):
+            assert key in p
+        assert p["unrealized_net_pnl"] > 0
+
+    def test_snapshot_unknown_price_stays_none(self, monkeypatch):
+        dm.try_open_position("AUSDT", dm.MODEL_CORE, SIG, 0.3, CFG)
+        monkeypatch.setattr(dm, "fetch_spot_prices",
+                            lambda syms: (_ for _ in ()).throw(
+                                dm.RateLimited("x")))
+        p = dm.snapshot(with_prices=True)["positions"][0]
+        assert p["current_price"] is None
+        assert p["unrealized_net_pnl"] is None  # uydurma fiyat yok
+
+    def test_close_endpoint(self, monkeypatch):
+        import app as app_module
+        dm.try_open_position("AUSDT", dm.MODEL_CORE, SIG, 0.3, CFG)
+        monkeypatch.setattr(dm, "fetch_spot_prices",
+                            lambda syms: {"AUSDT": 100.5})
+        app_module.app.config["TESTING"] = True
+        app_module.app.config["WTF_CSRF_ENABLED"] = False
+        with app_module.app.test_client() as c:
+            with c.session_transaction() as s:
+                s["logged_in"] = True
+                s["username"] = "t"
+            r = c.post("/api/dual-model/close",
+                       json={"symbol": "AUSDT"})
+            assert r.status_code == 200 and r.get_json()["ok"]
+            r2 = c.post("/api/dual-model/close",
+                        json={"symbol": "AUSDT"})
+            assert r2.status_code == 400
+
+    def test_ui_position_table_and_close_button(self):
+        tpl = (ROOT / "templates/trading_home.html").read_text(
+            encoding="utf-8")
+        assert "th-dm-pos-table" in tpl
+        js = (ROOT / "static/js/trading_home.js").read_text(
+            encoding="utf-8")
+        assert "/api/dual-model/close" in js
+        assert "renderDualPositions" in js
+        assert "window.confirm" in js  # kazara kapatmaya karşı
+
+
 class TestGitCleanAndSafety:
     def test_runtime_paths_gitignored(self):
         gi = (ROOT / ".gitignore").read_text(encoding="utf-8")

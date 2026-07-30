@@ -4360,7 +4360,19 @@ def api_dual_model_state():
     snapshot: listeler, pozisyonlar, sayaçlar, ayrı metrikler,
     ret nedenleri. UI/API/ledger/runtime aynı kaynaktan."""
     import dual_model as _dm
-    return jsonify({"ok": True, "data": _dm.snapshot()})
+    return jsonify({"ok": True,
+                    "data": _dm.snapshot(with_prices=True)})
+
+
+@app.post("/api/dual-model/close")
+def api_dual_model_close():
+    """Operatörün güvenli MANUAL_CLOSE'u (yalnız PAPER pozisyonu).
+    Taze fiyat alınamazsa kapatma reddedilir — bayat fiyatla kapanış
+    yapılmaz. LIVE ORDERS DISABLED."""
+    import dual_model as _dm
+    body = request.get_json(silent=True) or {}
+    ok, msg = _dm.manual_close(body.get("symbol"))
+    return jsonify({"ok": ok, "message": msg}), (200 if ok else 400)
 
 
 @app.get("/api/operation-control/overview")
