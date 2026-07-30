@@ -177,7 +177,19 @@
              aria-labelledby="th-h-dual">
       <h2 id="th-h-dual">Kısa Vadeli Modeller
         <span style="font-size:.68rem;color:var(--muted,#8b949e)">
-          (PAPER — LIVE ORDERS DISABLED)</span></h2>
+          (PAPER — LIVE ORDERS DISABLED)</span>
+        <!-- Task 135: dual-model sağlık rozeti — listeler dolu ve
+             hata yoksa YEŞİL, listeler boşsa SARI, last_error /
+             state alınamıyorsa KIRMIZI. -->
+        <span id="th-dm-health" class="th-badge"
+              style="font-size:.68rem;padding:2px 8px;
+                     border-radius:10px;background:#30363d;
+                     color:#8b949e">SAĞLIK: UNKNOWN</span></h2>
+      <div id="th-dm-health-detail" style="font-size:.7rem;
+          color:var(--muted,#8b949e);margin:2px 0 4px">
+        Son yenileme: <span id="th-dm-last-refresh">UNKNOWN</span>
+        <span id="th-dm-last-error" style="color:#f85149"></span>
+      </div>
       <div id="th-dual-counters" style="display:flex;gap:14px;
           flex-wrap:wrap;font-size:.72rem;margin:4px 0 8px">
         <span><b>Core Evren</b> <span id="th-dm-core-uni"

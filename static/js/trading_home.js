@@ -463,7 +463,43 @@
   });
 
   // ── İki model (CORE / OPPORTUNITY) — tek kanonik snapshot ─────
+  // Task 135: dual-model sağlık rozeti — saha koşusu başarısız olursa
+  // operatör panelden görür (manuel verify_dual_model beklenmez).
+  // YEŞİL: her iki liste dolu ve hata yok; SARI: liste(ler) boş;
+  // KIRMIZI: last_error var veya state alınamadı.
+  function renderDualHealth(d) {
+    var badge = document.getElementById("th-dm-health");
+    var lastEl = document.getElementById("th-dm-last-refresh");
+    var errEl = document.getElementById("th-dm-last-error");
+    if (!badge) return;
+    function set(label, bg, fg) {
+      badge.textContent = "SAĞLIK: " + label;
+      badge.style.background = bg;
+      badge.style.color = fg;
+    }
+    if (!d) {
+      set("KIRMIZI — durum alınamadı", "#f85149", "#0d1117");
+      if (lastEl) lastEl.textContent = "UNKNOWN";
+      if (errEl) errEl.textContent =
+        " — /api/dual-model/state yanıt vermedi";
+      return;
+    }
+    if (lastEl) lastEl.textContent = d.last_refresh || "UNKNOWN";
+    if (errEl) errEl.textContent = d.last_error ?
+      " — Son hata: " + d.last_error : "";
+    var c = d.counters || {};
+    var coreOk = (c.core_universe || 0) > 0;
+    var oppOk = (c.opportunity_universe || 0) > 0;
+    if (d.last_error) {
+      set("KIRMIZI — hata", "#f85149", "#0d1117");
+    } else if (coreOk && oppOk) {
+      set("YEŞİL", "#3fb950", "#0d1117");
+    } else {
+      set("SARI — liste(ler) boş", "#d29922", "#0d1117");
+    }
+  }
   function renderDualModel(d) {
+    renderDualHealth(d);
     var core = document.getElementById("th-dm-core");
     var opp = document.getElementById("th-dm-opp");
     if (!core || !opp) return;
@@ -632,7 +668,6 @@
 
   refresh();
   setInterval(refresh, POLL_MS);
-})();
 
   function fmtPnl(v) {
     if (v === null || v === undefined) {
@@ -737,3 +772,4 @@
         r[1] + "</span></div>";
     }).join("");
   }
+})();
