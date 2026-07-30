@@ -144,15 +144,51 @@ class TestCostStructureCandidates:
         assert (1.00, 0.50) not in seen  # rr 1.054 < 1.20
 
 
+def _fwd_rec(i, mfe, mae):
+    return {"exit_time": f"2026-02-{(i % 27) + 1:02d}T00:00:00+00:00",
+            "net_pnl": 0.5, "mfe_pct": mfe, "mae_pct": mae,
+            "symbol": "BTCUSDT"}
+
+
+class TestConservativeReplay:
+    PARAMS = {"tp_pct": 1.0, "sl_pct": 0.4, "max_slippage_pct": 0.03}
+
+    def test_sl_first_conservative_and_pass(self):
+        # 6 TP (mae<sl, mfe>=tp) + 2 SL → WR %75 > başabaş.
+        recs = [_fwd_rec(i, 1.5, 0.1) for i in range(6)] + \
+               [_fwd_rec(i + 6, 1.5, 0.6) for i in range(2)]
+        # mfe>=tp AMA mae>=sl olan işlem SL sayılır (kötü senaryo).
+        out = sl.conservative_exit_replay(recs, self.PARAMS, 5)
+        assert out["ok"] and out["sl_hits"] == 2 and out["tp_hits"] == 6
+
+    def test_undecided_and_missing_not_counted(self):
+        recs = [_fwd_rec(0, 0.5, 0.1),          # ne TP ne SL
+                {"exit_time": "x", "net_pnl": 1}]  # MFE/MAE yok
+        out = sl.conservative_exit_replay(recs, self.PARAMS, 1)
+        assert out["decided_sample"] == 0 and out["skipped"] == 2
+        assert not out["ok"]
+        assert out["reason"] == "FORWARD_PROOF_INSUFFICIENT_SAMPLE"
+
+    def test_win_rate_below_break_even_fails(self):
+        recs = [_fwd_rec(i, 1.5, 0.1) for i in range(3)] + \
+               [_fwd_rec(i + 3, 0.2, 0.6) for i in range(5)]
+        out = sl.conservative_exit_replay(recs, self.PARAMS, 5)
+        assert not out["ok"]
+        assert out["reason"] == "REPLAY_WIN_RATE_BELOW_BREAK_EVEN"
+
+
 class TestStage4RealizedGate:
+    CFG = {"strategy_lab": {"min_shadow_sample": 5}}
+
     def _cand(self):
         return {"strategy_candidate_id": "X", "parameters":
-                {"tp_pct": 1.0, "sl_pct": 0.4},
+                {"tp_pct": 1.0, "sl_pct": 0.4,
+                 "max_slippage_pct": 0.03},
                 "created_reason": "COST_STRUCTURE",
                 "stage": "STAGE4_PAPER_SHADOW",
                 "created_at": "2026-01-01T00:00:00+00:00"}
 
-    def _run(self, monkeypatch, metrics):
+    def _run(self, monkeypatch, metrics, dataset=None):
         monkeypatch.setattr(sl, "_stage_metrics", lambda *a, **k: {
             "method": "GATE_SUBSET_REPLAY", "sample": 80,
             "exit_params_replayable": False, "sufficient": True,
@@ -161,13 +197,16 @@ class TestStage4RealizedGate:
                             lambda *a, **k: {
                                 "expectancy_per_trade": -0.1,
                                 "closed_trades": 80})
-        return sl.run_stage(self._cand(), dl.MODEL_CORE, [],
-                            None, {}, {})
+        return sl.run_stage(self._cand(), dl.MODEL_CORE,
+                            dataset or [], None, {}, self.CFG)
+
+    GOOD_FWD = [_fwd_rec(i, 1.5, 0.1) for i in range(6)] + \
+               [_fwd_rec(i + 6, 0.2, 0.6) for i in range(2)]
 
     def test_pf_not_above_1_fails(self, monkeypatch):
         res = self._run(monkeypatch, {
             "expectancy_per_trade": 0.05, "profit_factor": 0.9,
-            "win_loss_ratio": 1.5})
+            "win_loss_ratio": 1.5}, self.GOOD_FWD)
         assert res["ok"] is False
         assert res["reason"] == "COST_TARGET_NOT_MET"
         assert res["cost_gate"] == "PROFIT_FACTOR_NOT_ABOVE_1"
@@ -175,12 +214,60 @@ class TestStage4RealizedGate:
     def test_realized_rr_below_target_fails(self, monkeypatch):
         res = self._run(monkeypatch, {
             "expectancy_per_trade": 0.05, "profit_factor": 1.4,
-            "win_loss_ratio": 1.05})
+            "win_loss_ratio": 1.05}, self.GOOD_FWD)
         assert res["ok"] is False
         assert res["cost_gate"] == "REALIZED_NET_RR_BELOW_TARGET"
+
+    def test_wlr_unknown_fail_closed(self, monkeypatch):
+        # Mimar bulgusu: WLR hesaplanamıyorsa geçiş YOK (fail-closed).
+        res = self._run(monkeypatch, {
+            "expectancy_per_trade": 0.05, "profit_factor": 1.4,
+            "win_loss_ratio": None}, self.GOOD_FWD)
+        assert res["ok"] is False
+        assert res["cost_gate"] == "REALIZED_NET_RR_BELOW_TARGET"
+
+    def test_no_forward_exit_proof_fails(self, monkeypatch):
+        res = self._run(monkeypatch, {
+            "expectancy_per_trade": 0.05, "profit_factor": 1.4,
+            "win_loss_ratio": 1.35}, dataset=[])
+        assert res["ok"] is False
+        assert res["cost_gate"] == "FORWARD_PROOF_INSUFFICIENT_SAMPLE"
 
     def test_targets_met_passes(self, monkeypatch):
         res = self._run(monkeypatch, {
             "expectancy_per_trade": 0.05, "profit_factor": 1.4,
-            "win_loss_ratio": 1.35})
+            "win_loss_ratio": 1.35}, self.GOOD_FWD)
         assert res["ok"] is True and res["cost_gate"] == "OK"
+        assert res["forward_exit_proof"]["ok"] is True
+
+
+class TestPromotionExitProofGate:
+    """dl terfi kapısı: çıkış paramları oynatılamıyorsa kanıt şart."""
+
+    def _ms(self, proof):
+        sh = {"exit_params_replayable": False, "sample": 100,
+              "metrics": {"expectancy_per_trade": 0.5,
+                          "top_symbol_share": 0.2,
+                          "maximum_drawdown": 1.0, "fee_drag": 0.1}}
+        ch = {"version": "V1", "overrides": {"tp_pct": 1.0},
+              "shadow": sh}
+        if proof is not None:
+            ch["forward_exit_proof"] = proof
+        return {"challenger": ch,
+                "metrics": {"expectancy_per_trade": 0.1,
+                            "maximum_drawdown": 1.0, "fee_drag": 0.2}}
+
+    TH = dict(dl.DEFAULT_THRESHOLDS)
+
+    def test_without_proof_rejected(self):
+        out = dl.evaluate_promotion(self._ms(None), self.TH)
+        assert out["code"] == "REJECTED_INSUFFICIENT_EVIDENCE"
+        assert "forward_exit_proof" in out["detail"]
+
+    def test_failed_proof_rejected(self):
+        out = dl.evaluate_promotion(self._ms({"ok": False}), self.TH)
+        assert out["code"] == "REJECTED_INSUFFICIENT_EVIDENCE"
+
+    def test_with_proof_promoted(self):
+        out = dl.evaluate_promotion(self._ms({"ok": True}), self.TH)
+        assert out["code"] == "PROMOTED"

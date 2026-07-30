@@ -644,6 +644,51 @@ def _stage_metrics(records: list[dict], params: dict,
                     "yalnız ileri-zaman Paper'da kanıtlanır"}
 
 
+def conservative_exit_replay(records: list[dict], params: dict,
+                             min_sample: int) -> dict[str, Any]:
+    """Aday TP/SL'inin MFE/MAE ile MUHAFAZAKÂR ileri-zaman replay'i.
+
+    Kayıt sırası bilinmediğinden iki taraf da dokunduysa SL sayılır
+    (kötü senaryo). MFE/MAE'siz veya karar verilemeyen işlem KANIT
+    DEĞİLDİR — sayılmaz. Geçiş: karar örneklemi >= min_sample VE
+    replay win-rate, maliyet-sonrası başabaş win-rate'in ÜZERİNDE."""
+    import dual_model as _dm
+    tp = float(params.get("tp_pct") or 0)
+    sl = float(params.get("sl_pct") or 0)
+    cp = _dm.cost_profile(params)
+    tp_hits = sl_hits = skipped = 0
+    for r in records:
+        mfe, mae = r.get("mfe_pct"), r.get("mae_pct")
+        if not isinstance(mfe, (int, float)) or \
+                not isinstance(mae, (int, float)):
+            skipped += 1
+            continue
+        if mae >= sl:            # muhafazakâr: önce stop varsayımı
+            sl_hits += 1
+        elif mfe >= tp:
+            tp_hits += 1
+        else:
+            skipped += 1         # aday açısından karar verilemedi
+    decided = tp_hits + sl_hits
+    wr = (tp_hits / decided * 100) if decided else None
+    be = cp["break_even_win_rate_pct"]
+    if decided < min_sample:
+        ok, reason = False, "FORWARD_PROOF_INSUFFICIENT_SAMPLE"
+    elif be is None or wr is None or wr <= be:
+        ok, reason = False, "REPLAY_WIN_RATE_BELOW_BREAK_EVEN"
+    else:
+        ok, reason = True, "OK"
+    return {"ok": ok, "reason": reason,
+            "method": "CONSERVATIVE_MFE_MAE_REPLAY",
+            "decided_sample": decided, "tp_hits": tp_hits,
+            "sl_hits": sl_hits, "skipped": skipped,
+            "replay_win_rate_pct": round(wr, 2) if wr is not None
+            else None,
+            "break_even_win_rate_pct": be,
+            "note": "iki taraf da dokunduysa SL sayıldı (kötü "
+                    "senaryo); karar verilemeyen işlem kanıt değil"}
+
+
 def run_stage(cand: dict, model: str, dataset: list[dict],
               champion_metrics: dict | None, ml: dict,
               cfg: dict) -> dict[str, Any]:
@@ -724,19 +769,31 @@ def run_stage(cand: dict, model: str, dataset: list[dict],
             ok = better and float(m.get("expectancy_per_trade") or 0) > 0
             fail_reason = "NOT_BETTER_THAN_CHAMPION"
             # COST_STRUCTURE adayı: net RR hedefi GERÇEK ileri-zaman
-            # sonuçlarla doğrulanmalı — realized win/loss oranı
-            # (win_loss_ratio) hedefin altındaysa ve PF<=1 ise geçemez.
+            # sonuçlarla doğrulanmalı. Alt küme metrikleri champion
+            # ÇIKIŞLARINI ölçer (GATE_SUBSET_REPLAY) — adayın TP/SL'i
+            # için tek dürüst kanıt MFE/MAE muhafazakâr replay'idir:
+            # her ileri-zaman işlemde önce SL dokunuşu varsayılır
+            # (kötü senaryo); karar verilemeyen işlem sayılmaz.
             if ok and cand.get("created_reason") == "COST_STRUCTURE":
                 pf = m.get("profit_factor") or 0
                 wlr = m.get("win_loss_ratio")
                 if not (pf and pf > 1):
                     ok = False
                     res["cost_gate"] = "PROFIT_FACTOR_NOT_ABOVE_1"
-                elif wlr is not None and wlr < MIN_NET_REWARD_RISK:
+                elif wlr is None or wlr < MIN_NET_REWARD_RISK:
+                    # WLR hesaplanamıyorsa da fail-closed — kanıtsız
+                    # geçiş yok.
                     ok = False
                     res["cost_gate"] = "REALIZED_NET_RR_BELOW_TARGET"
                 else:
-                    res["cost_gate"] = "OK"
+                    proof = conservative_exit_replay(
+                        fwd, params, d["min_shadow_sample"])
+                    res["forward_exit_proof"] = proof
+                    if not proof["ok"]:
+                        ok = False
+                        res["cost_gate"] = proof["reason"]
+                    else:
+                        res["cost_gate"] = "OK"
                 if not ok:
                     fail_reason = "COST_TARGET_NOT_MET"
             res.update(ok=ok, champion_same_window={
@@ -775,6 +832,12 @@ def install_as_challenger(model: str, cand: dict) -> bool:
                          "new": v}
                         for k, v in cand["parameters"].items()],
             "shadow": None,
+            # Çıkış parametreli adayın STAGE4 muhafazakâr MFE/MAE
+            # replay kanıtı — dl terfi kapısı bunu arar (kanıtsız
+            # exit-param challenger PROMOTED olamaz).
+            "forward_exit_proof": (cand.get("stage_results", {})
+                                   .get("STAGE4_PAPER_SHADOW", {})
+                                   .get("forward_exit_proof")),
         }
         installed["ok"] = True
     dl._update_state(_mut)

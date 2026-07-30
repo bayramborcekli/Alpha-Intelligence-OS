@@ -531,6 +531,18 @@ def evaluate_promotion(ms: dict, thresholds: dict) -> dict:
     if sm.get("fee_drag", 0) > champ_m.get("fee_drag", 0) * 1.2 and \
             champ_m.get("fee_drag", 0) > 0:
         return {"code": "REJECTED_FEE_DRAG"}
+    # Çıkış parametreleri (TP/SL/trailing/hold) kayıttan yeniden
+    # oynatılamıyorsa gölge metrikleri champion çıkışlarını ölçer —
+    # adayın kendi çıkış yapısı için ayrı ileri-zaman kanıt şart
+    # (strategy_lab STAGE4 muhafazakâr MFE/MAE replay). Kanıt yoksa
+    # veya geçmediyse terfi hazırlığı verilmez: fail-closed.
+    if sh.get("exit_params_replayable") is False:
+        proof = ch.get("forward_exit_proof")
+        if not (isinstance(proof, dict) and proof.get("ok") is True):
+            return {"code": "REJECTED_INSUFFICIENT_EVIDENCE",
+                    "detail": "çıkış parametreleri kayıttan "
+                              "oynatılamaz; ileri-zaman çıkış kanıtı "
+                              "(forward_exit_proof) yok/geçmedi"}
     return {"code": "PROMOTED"}  # hazır — uygulanması ayrı adım
 
 
