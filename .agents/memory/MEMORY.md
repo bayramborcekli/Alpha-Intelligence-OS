@@ -22,4 +22,5 @@
 - [Dual-model PAPER engine](dual-model-engine.md) — CORE/OPPORTUNITY iki-liste mimarisi; tüm istekler paylaşımlı 429 korumasından, arbitraj birleşik kümede, TP/SL yalnız taze fiyatla.
 - [Dual öğrenme köprüsü](dual-learning-bridge.md) — allowlist+clamp, dürüst GATE_SUBSET_REPLAY gölgesi, çevrim başına tek tetikleme, AUTO_SHADOW/terfi yalnız onayla.
 - [Pozisyon bütünlüğü sözleşmesi](position-integrity.md) — eksik/yetim pozisyon "Yönetiliyor" maskelenemez; zaman kıyası normalize, exit fail-closed, audit flock'lu.
+- [Continuous Strategy Lab](strategy-lab.md) — dual_learning uzantısı; holdout üretimi besleyemez, STAGE5 taze okuma, yazma rotası "strategy" içeremez, LIVE_ENABLED tanımsız.
 - [Tam paket bölünmüş koşu](full-suite-split-run.md) — 13.6k+ test tek koşuda summary basmadan sessizce ölüyor; paketi iki yarıda koş, iki summary topla.
