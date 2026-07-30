@@ -192,6 +192,12 @@ class TestRouteSurface:
         # Dual-model MANUAL_CLOSE (PAPER-only, CSRF+auth korumalı;
         # yalnız git dışı runtime store'a yazar — bilinçli genişletme)
         "/api/dual-model/close",
+        # AI Öğrenme Merkezi: challenger'ı KULLANICI ONAYIYLA terfi
+        # ettirir (AUTO_SHADOW; auto-promote kapalı). Yalnız git dışı
+        # dual_learning_state.json'a yazar; risk tavanı/API izni/emir
+        # yolu AÇMAZ; hazırlık PROMOTED değilse 409 — bilinçli
+        # genişletme, tam rota, wildcard yok.
+        "/api/dual-model/learning/promote",
     }
 
     def test_no_new_write_routes(self):

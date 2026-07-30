@@ -4364,6 +4364,31 @@ def api_dual_model_state():
                     "data": _dm.snapshot(with_prices=True)})
 
 
+@app.get("/api/dual-model/learning")
+def api_dual_model_learning():
+    """AI Öğrenme Merkezi — GERÇEK öğrenme durumu (sahte veri yok).
+    Veri yoksa INSUFFICIENT_DATA / NO_CHALLENGER / NOT_EVALUATED
+    kodları döner. LIVE ORDERS DISABLED değişmez."""
+    import dual_learning as _dl
+    return jsonify({"ok": True, "data": _dl.status()})
+
+
+@app.post("/api/dual-model/learning/promote")
+def api_dual_model_learning_promote():
+    """Challenger'ı KULLANICI ONAYIYLA terfi ettir (AUTO_SHADOW modu;
+    auto-promote varsayılan kapalı). Yalnız git dışı öğrenme state'ine
+    yazar; risk tavanlarına, API izinlerine veya emir yollarına
+    DOKUNMAZ. Terfi ancak hazırlık kodu PROMOTED ise uygulanır."""
+    import dual_learning as _dl
+    body = request.get_json(silent=True) or {}
+    model = str(body.get("model") or "").strip()
+    if model not in _dl.MODELS:
+        return jsonify({"ok": False, "message": "MODEL_REQUIRED"}), 400
+    result = _dl.promote(model, approved_by="OPERATOR")
+    ok = result.get("code") == "PROMOTED"
+    return jsonify({"ok": ok, "result": result}), (200 if ok else 409)
+
+
 @app.post("/api/dual-model/close")
 def api_dual_model_close():
     """Operatörün güvenli MANUAL_CLOSE'u (yalnız PAPER pozisyonu).

@@ -309,6 +309,31 @@
         Dökümü</h3>
       <div id="th-dm-rejections" style="font-size:.72rem"
            class="th-empty">Yükleniyor…</div>
+
+      <!-- ── AI ÖĞRENME MERKEZİ: gerçek backend verisi
+           (/api/dual-model/learning). Sahte veri YOK — veri yoksa
+           INSUFFICIENT_DATA / NO_CHALLENGER / NOT_EVALUATED. ────── -->
+      <h3 style="font-size:.75rem;margin:12px 0 4px"
+          id="th-h-learning">🧠 AI Öğrenme Merkezi
+        <span id="th-learn-mode" class="th-unknown"
+              style="font-weight:400">UNKNOWN</span></h3>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"
+           id="th-learning">
+        <div class="th-card" style="flex:1;min-width:230px;padding:8px"
+             id="th-learn-core"
+             aria-label="CORE öğrenme durumu">
+          <b style="font-size:.72rem">CORE</b>
+          <div class="th-unknown" style="font-size:.72rem">
+            UNKNOWN — öğrenme durumu alınamadı</div>
+        </div>
+        <div class="th-card" style="flex:1;min-width:230px;padding:8px"
+             id="th-learn-opp"
+             aria-label="OPPORTUNITY öğrenme durumu">
+          <b style="font-size:.72rem">OPPORTUNITY</b>
+          <div class="th-unknown" style="font-size:.72rem">
+            UNKNOWN — öğrenme durumu alınamadı</div>
+        </div>
+      </div>
     </section>
   </div>
 

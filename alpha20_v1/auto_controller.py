@@ -668,6 +668,19 @@ def start_controller_loop() -> bool:
                         except Exception as exc:
                             log.warning("Öğrenme motoru hatası: %s", exc)
 
+                    # Dual-model öğrenme köprüsü: her çevrimde UCUZ
+                    # uygunluk kontrolü (interval VEYA yeni kapanan
+                    # işlem eşiği) dual_learning içinde yapılır —
+                    # ikinci paralel scheduler DEĞİLDİR.
+                    try:
+                        dl = le.run_dual_learning_update(adaptive_cfg)
+                        if dl:
+                            _update_status(
+                                last_dual_learning=dl.get("ran_at"))
+                    except Exception as exc:
+                        log.warning(
+                            "Dual öğrenme köprü hatası: %s", exc)
+
                     scan_s = RUNTIME_SCAN_SECONDS.get(
                         "value", int(cfg.get("scan_seconds", 60)))
                     _update_status(

@@ -150,3 +150,9 @@ alpha20_v1/dual_model_runtime.lock
 alpha20_v1/.dual_model_runtime.json.*.tmp
 alpha20_v1/.dual_model.lock
 risk_history.jsonl
+
+# Dual-model öğrenme köprüsü runtime state'i (git dışı)
+alpha20_v1/dual_learning_state.json
+alpha20_v1/dual_learning_state.lock
+alpha20_v1/.dual_learning_state.json.*.tmp
+alpha20_v1/dual_learning_history.jsonl

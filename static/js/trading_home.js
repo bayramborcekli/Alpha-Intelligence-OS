@@ -898,7 +898,9 @@
       get("/api/accounts/wallets"),
       get("/api/accounts"),
       get("/api/dual-model/state"),
-      get("/api/paper/state")
+      get("/api/paper/state"),
+      // AI Öğrenme Merkezi — gerçek öğrenme state'i (sahte veri yok)
+      get("/api/dual-model/learning")
     ]).then(function (r) {
       function data(i, key) {
         var b = r[i].body;
@@ -936,8 +938,82 @@
                dual.portfolio_net_pnl != null ?
                fmtSigned(dual.portfolio_net_pnl, "USDT") : null,
                dual ? pnlClass(dual.portfolio_net_pnl) : "");
+      renderLearning(r[8].body && r[8].body.ok ? r[8].body.data : null);
       inflight = false;
     }, function () { inflight = false; });
+  }
+
+  // ── AI Öğrenme Merkezi: /api/dual-model/learning ─────────────────
+  // Uydurma değer basılmaz; backend kodları aynen gösterilir
+  // (INSUFFICIENT_DATA / NO_CHALLENGER / NOT_EVALUATED).
+  function renderLearning(l) {
+    var mode = document.getElementById("th-learn-mode");
+    if (mode) {
+      mode.textContent = l ? (l.mode || "UNKNOWN") +
+        (l.auto_promote ? " · AUTO_PROMOTE AÇIK" :
+                          " · terfi kullanıcı onayıyla") : "UNKNOWN";
+      mode.className = l ? "" : "th-unknown";
+    }
+    var cards = { "th-learn-core": "ALPHA_CORE_SCALP",
+                  "th-learn-opp": "ALPHA_OPPORTUNITY_BURST" };
+    Object.keys(cards).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var title = id === "th-learn-core" ? "CORE" : "OPPORTUNITY";
+      if (!l || !l.models || !l.models[cards[id]]) {
+        el.innerHTML = "<b style=\"font-size:.72rem\">" + title +
+          "</b><div class=\"th-unknown\" style=\"font-size:.72rem\">" +
+          "UNKNOWN — öğrenme durumu alınamadı</div>";
+        return;
+      }
+      var m = l.models[cards[id]];
+      var diag = m.diagnosis && m.diagnosis.code ?
+        m.diagnosis.code : "NOT_EVALUATED";
+      var diagConf = m.diagnosis && m.diagnosis.confidence ?
+        " (" + m.diagnosis.confidence + ")" : "";
+      var ch = m.challenger;
+      var chHtml;
+      if (!ch) {
+        chHtml = "<span class=\"th-unknown\">NO_CHALLENGER</span>";
+      } else {
+        var parts = (ch.changes || []).map(function (c) {
+          return esc(c.parameter) + ": " + esc(c.old) + " → " +
+            esc(c.new);
+        });
+        chHtml = "<b>" + esc(ch.version) + "</b><br>" +
+          (parts.length ? parts.join("<br>") : "—") +
+          (ch.shadow ? "<br>Gölge örneklem: " +
+            esc(ch.shadow.sample) +
+            (ch.shadow.exit_params_replayable === false ?
+              " (çıkış paramları oynatılamaz)" : "") : "");
+      }
+      function row(k, v) {
+        return "<div class=\"row\" style=\"display:flex;" +
+          "justify-content:space-between;font-size:.7rem\"><span>" +
+          k + "</span><span>" + v + "</span></div>";
+      }
+      el.innerHTML = "<b style=\"font-size:.72rem\">" + title +
+        "</b>" +
+        row("Örneklem", esc(m.sample_size != null ?
+          m.sample_size : "UNKNOWN")) +
+        row("Veri Yeterliliği", esc(m.data_sufficiency ||
+          "INSUFFICIENT_DATA")) +
+        row("Champion", esc((m.champion && m.champion.version) ||
+          "BASE")) +
+        row("Teşhis", esc(diag) + esc(diagConf)) +
+        row("Terfi Hazırlığı", esc(m.promotion_readiness ||
+          "NOT_EVALUATED")) +
+        row("Son Öğrenme", m.last_learning_time ?
+          esc(String(m.last_learning_time).slice(0, 16)
+            .replace("T", " ")) :
+          "<span class=\"th-unknown\">Veri yok</span>") +
+        row("Son İşlem/Aksiyon", esc(m.last_action ||
+          "NOT_EVALUATED")) +
+        (m.last_rollback ? row("Son Rollback",
+          esc(m.last_rollback.reason || "")) : "") +
+        "<div style=\"font-size:.7rem;margin-top:4px\">" +
+        "Challenger: " + chHtml + "</div>";
+    });
   }
 
   window.TH = { refresh: refresh, duration: duration,

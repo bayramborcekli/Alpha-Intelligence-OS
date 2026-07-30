@@ -351,6 +351,26 @@ def _suggest_weights(stats: dict[str, Any], current: dict[str, float]) -> dict[s
     return new_w
 
 
+def run_dual_learning_update(
+    adaptive_cfg: dict[str, Any],
+    force: bool = False,
+) -> dict[str, Any] | None:
+    """Dual-model (CORE/OPPORTUNITY) kapanışlarını mevcut öğrenme
+    akışına bağlayan köprü. Ayrı bir scheduler DEĞİLDİR: bu fonksiyon
+    run_learning_update içinden ve auto_controller döngüsünden
+    çağrılır; uygunluk (interval/yeni işlem eşiği) dual_learning
+    içinde denetlenir."""
+    try:
+        import dual_learning as _dl
+        return _dl.run_update(adaptive_cfg, force=force)
+    except Exception as exc:
+        # Öğrenme köprüsü ana motoru asla düşürmez.
+        import logging
+        logging.getLogger("learning_engine").warning(
+            "dual_learning köprü hatası: %s", exc)
+        return None
+
+
 def run_learning_update(
     adaptive_cfg: dict[str, Any],
     force: bool = False,
@@ -426,6 +446,10 @@ def run_learning_update(
             shadow_result=shadow_result,
         )
 
+    # Dual-model köprüsü: CORE/OPPORTUNITY kapanışları da aynı öğrenme
+    # akışında görülür (ayrı scheduler yok, hata ana motoru düşürmez).
+    dual_result = run_dual_learning_update(adaptive_cfg, force=force)
+
     return {
         "version":       version,
         "trade_count":   n,
@@ -436,6 +460,7 @@ def run_learning_update(
         "applied":       apply_new,
         "shadow_note":   shadow_note,
         "shadow_result": shadow_result,
+        "dual_learning": dual_result,
     }
 
 

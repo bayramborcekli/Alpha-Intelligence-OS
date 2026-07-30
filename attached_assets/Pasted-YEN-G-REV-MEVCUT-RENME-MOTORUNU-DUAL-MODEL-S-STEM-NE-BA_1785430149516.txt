@@ -1,0 +1,602 @@
+YENİ GÖREV — MEVCUT ÖĞRENME MOTORUNU DUAL-MODEL SİSTEMİNE BAĞLA
+
+BAĞLAM
+
+Repository incelendiğinde sistemde sıfırdan kurulması gerekmeyen mevcut bir öğrenme altyapısı bulundu:
+
+- alpha20_v1/learning_engine.py
+- auto_controller / adaptive controller bağlantıları
+- adaptive_risk.py
+- smart_config / strategy weight mekanizmaları
+- performans, shadow doğrulama ve ağırlık geçmişi
+
+Ancak aktif çalışan kısa vadeli modeller:
+
+- ALPHA_CORE_SCALP
+- ALPHA_OPPORTUNITY_BURST
+
+dual_model.py ve dual_model_runtime store üzerinden çalışıyor.
+
+Kritik eksik:
+Dual-model kapanan işlemleri mevcut learning_engine veri akışına bağlı değil. Legacy öğrenme motoru başka state/runtime kaynaklarını kullanıyor. Bu nedenle CORE ve OPPORTUNITY işlemleri gerçekleşiyor, ölçülüyor ve raporlanıyor; fakat sonuçlar mevcut öğrenme motoruna girerek sonraki kararları geliştirmiyor.
+
+AMAÇ
+
+Yeni ve paralel bir optimizer sistemi icat etme.
+
+Repository içindeki mevcut öğrenme, adaptasyon, shadow doğrulama, ağırlık güncelleme ve risk mekanizmalarını koruyarak CORE ve OPPORTUNITY modellerine bağla.
+
+Sistem şu tam döngüyü gerçekleştirmeli:
+
+DUAL-MODEL PAPER SONUÇLARI
+→ VERİ DOĞRULAMA
+→ MODEL BAZLI PERFORMANS ANALİZİ
+→ TEŞHİS
+→ KONTROLLÜ PARAMETRE / AĞIRLIK ÖNERİSİ
+→ CHALLENGER
+→ SHADOW / PAPER DOĞRULAMA
+→ TERFİ VEYA RED
+→ SONRAKİ İŞLEMLERDE UYGULAMA
+→ KÖTÜLEŞMEDE ROLLBACK
+
+LIVE ORDERS kesinlikle DISABLED kalacak.
+
+--------------------------------------------------
+1. ÖNCE MİMARİ KEŞİF YAP
+--------------------------------------------------
+
+Kod değiştirmeden önce mevcut yapıyı haritala.
+
+Aşağıdaki dosya ve kavramları ara:
+
+- learning_engine
+- adaptive_system
+- adaptive_risk
+- auto_controller
+- run_learning_update
+- load_weights
+- save_weights
+- decision weights
+- smart_config
+- strategy performance
+- shadow validation
+- promotion
+- rollback
+- state.json
+- dual_model_runtime
+- trade history
+- closed trades
+- scheduler
+- controller
+- runtime persistence
+
+Net olarak raporla:
+
+1. learning_engine hangi veri kaynağından işlem okuyor?
+2. Hangi metrikleri hesaplıyor?
+3. Hangi ağırlıkları veya parametreleri değiştirebiliyor?
+4. Öğrenme scheduler tarafından gerçekten çağrılıyor mu?
+5. adaptive_system.enabled=false durumu öğrenmeyi tamamen durduruyor mu?
+6. CORE ve OPPORTUNITY kapanışları hangi store’da tutuluyor?
+7. Bu kapanışlar learning_engine tarafından görülüyor mu?
+8. Öğrenilmiş değerler dual_model giriş kararlarında kullanılıyor mu?
+9. Restart sonrası öğrenilmiş state korunuyor mu?
+10. Mevcut shadow/promotion/rollback mantığı gerçek mi, kısmi mi?
+
+Mimari keşif sonucu kısa bir dosya-akış şeması paylaş.
+
+--------------------------------------------------
+2. TEK KANONİK ÖĞRENME VERİ AKIŞI
+--------------------------------------------------
+
+Dual-model kapanan Paper işlemlerini mevcut learning_engine’in kullanabileceği kanonik bir veri katmanına bağla.
+
+Her kapanan işlem en az şu alanları içermeli:
+
+- trade_id
+- model_name
+- strategy_name
+- symbol
+- side
+- entry_time
+- exit_time
+- entry_price
+- exit_price
+- quantity
+- notional
+- gross_pnl
+- fees
+- slippage
+- net_pnl
+- exit_reason
+- signal_type
+- confidence
+- expected_edge
+- market_regime
+- spread
+- volatility
+- volume_ratio
+- hold_duration
+- configuration_version
+- learning_version
+
+CORE ve OPPORTUNITY verileri kesinlikle birbirine karıştırılmamalı.
+
+Önerilen mantık:
+
+- Ortak normalize edilmiş trade record şeması
+- Model adına göre ayrı analiz
+- Mevcut legacy kayıtlarla geriye uyumluluk
+- Duplicate trade engeli
+- Bozuk veya eksik kayıtların öğrenmeye alınmaması
+- Runtime yazımlarında atomic write / file lock
+- Runtime dosyalarının Git dışında kalması
+
+Mevcut çalışan trade kapanış mekanizmasını bozma.
+
+--------------------------------------------------
+3. ÖĞRENME MOTORUNU MODEL BAZLI HALE GETİR
+--------------------------------------------------
+
+Mevcut learning_engine yapısını koru ancak aşağıdaki iki modeli bağımsız öğrenir hale getir:
+
+- ALPHA_CORE_SCALP
+- ALPHA_OPPORTUNITY_BURST
+
+Her model için ayrı tut:
+
+- sample size
+- metrics
+- diagnosis
+- learned weights
+- learned parameters
+- champion version
+- challenger version
+- last learning time
+- next eligible learning time
+- promotion history
+- rollback history
+
+Bir modelin başarısı veya zararı diğer modelin parametrelerini doğrudan değiştirmemeli.
+
+--------------------------------------------------
+4. ÖLÇÜLECEK METRİKLER
+--------------------------------------------------
+
+Her model için en az:
+
+- closed_trades
+- win_rate
+- gross_pnl
+- net_pnl
+- expectancy_per_trade
+- profit_factor
+- average_win
+- average_loss
+- win_loss_ratio
+- maximum_drawdown
+- fee_drag
+- slippage_drag
+- average_hold_duration
+- median_hold_duration
+- exit_reason distribution
+- rejection_reason distribution
+- symbol performance
+- signal_type performance
+- market_regime performance
+- time-of-day performance
+- consecutive_losses
+- turnover / trade frequency
+
+Fee ve slippage mutlaka net performans hesabına dahil edilmeli.
+
+--------------------------------------------------
+5. TEŞHİS MOTORU
+--------------------------------------------------
+
+Öğrenme motoru ölçümlerden açıklanabilir teşhis üretmeli.
+
+Örnek reason code’lar:
+
+- INSUFFICIENT_DATA
+- FEE_DRAG_DOMINANT
+- SLIPPAGE_DRAG_DOMINANT
+- NEGATIVE_EXPECTANCY
+- TP_TOO_SMALL
+- STOP_TOO_TIGHT
+- STOP_TOO_WIDE
+- TRAILING_TOO_EARLY
+- TRAILING_TOO_LATE
+- EXCESSIVE_TRADING
+- LOW_QUALITY_ENTRIES
+- LOW_NET_EDGE
+- FALSE_BREAKOUT_DOMINANT
+- MOMENTUM_EXHAUSTION
+- HOLD_TIME_TOO_SHORT
+- HOLD_TIME_TOO_LONG
+- SYMBOL_CONCENTRATION
+- REGIME_MISMATCH
+- COOLDOWN_TOO_SHORT
+- CONFIDENCE_MIScalibrated
+
+Her teşhis şu kanıtlarla kaydedilmeli:
+
+- supporting metrics
+- sample size
+- confidence level
+- affected model
+- affected parameter
+- expected improvement
+- risk note
+
+--------------------------------------------------
+6. ÖĞRENİLEBİLİR PARAMETRELER
+--------------------------------------------------
+
+İlk aşamada yalnız izin listesinde bulunan değerler değiştirilebilsin.
+
+CORE ve OPPORTUNITY için ayrı:
+
+- min_confidence
+- minimum_expected_net_edge
+- take_profit_pct
+- stop_loss_pct
+- trailing_activation_pct
+- trailing_distance_pct
+- max_hold_minutes
+- cooldown_minutes
+- spread_limit
+- slippage_limit
+- volume_ratio_threshold
+- volatility_threshold
+- momentum_weight
+- breakout_weight
+- reversal_weight
+- regime_weight
+- liquidity_weight
+- paper_history_weight
+
+Kesinlikle öğrenme kapsamına alınmayacaklar:
+
+- LIVE ORDERS kilidi
+- API izinleri
+- emergency stop
+- maksimum sistem riski
+- hesap bağlantıları
+- güvenlik tavanları
+- dosya izinleri
+- authentication
+- gerçek emir gönderme yolları
+
+Kaynak kodu kendi kendine değiştirmesin.
+
+Öğrenme yalnız güvenli config/weight alanlarında çalışsın.
+
+--------------------------------------------------
+7. KÜÇÜK VE KONTROLLÜ DEĞİŞİKLİK
+--------------------------------------------------
+
+Bir öğrenme turunda:
+
+- en fazla 3 parametre değişsin
+- her parametre değişikliği en fazla %5–10 olsun
+- mutlak min/max sınırları config’te sabit olsun
+- aynı parametre cooldown süresi dolmadan tekrar değişmesin
+- düşük örneklemde değişiklik yapılmasın
+- tek coin veya tek işlem sonucuna göre değişiklik yapılmasın
+- son birkaç işleme aşırı uyum engellensin
+
+Minimum veri varsayılanları:
+
+- ilk teşhis: 20 kapanan işlem
+- parametre önerisi: 50 kapanan işlem
+- terfi değerlendirmesi: 75 veya 100 kapanan işlem
+
+Bu değerler config üzerinden değiştirilebilir olsun.
+
+Mevcut düşük işlem sayısında sistem:
+
+INSUFFICIENT_DATA
+
+durumunda kalmalı ve ana parametreleri değiştirmemeli.
+
+--------------------------------------------------
+8. CHAMPION / CHALLENGER
+--------------------------------------------------
+
+Mevcut çalışan config:
+
+- CORE_CHAMPION
+- OPPORTUNITY_CHAMPION
+
+olarak korunmalı.
+
+Öğrenme sonucu doğrudan champion’a yazılmasın.
+
+Önce:
+
+- CORE_CHALLENGER
+- OPPORTUNITY_CHALLENGER
+
+oluşturulsun.
+
+Challenger aynı piyasa verisi üzerinde shadow/Paper olarak değerlendirilmelidir.
+
+Champion ve challenger karşılaştırmasında:
+
+- aynı zaman aralığı
+- mümkün olduğunca aynı piyasa verisi
+- aynı ücret/slippage varsayımları
+- aynı risk tavanları
+- ayrı trade kayıtları
+- ayrı config version
+
+kullanılmalı.
+
+--------------------------------------------------
+9. TERFİ KURALLARI
+--------------------------------------------------
+
+Challenger yalnız yeterli kanıtla terfi edebilsin.
+
+Örnek zorunlu koşullar:
+
+- minimum_closed_trades sağlandı
+- expectancy champion’dan yüksek
+- profit_factor anlamlı biçimde yüksek
+- net_pnl daha iyi
+- max_drawdown kabul sınırını aşmıyor
+- fee_drag kötüleşmemiş
+- slippage kötüleşmemiş
+- tek sembole bağımlı değil
+- tek güne veya tek piyasa rejimine bağımlı değil
+- risk ihlali yok
+- veri kalitesi yeterli
+- sistem hatası yok
+
+Sonuç reason code’ları:
+
+- PROMOTED
+- REJECTED_NO_IMPROVEMENT
+- REJECTED_DRAWDOWN
+- REJECTED_FEE_DRAG
+- REJECTED_CONCENTRATION
+- REJECTED_INSUFFICIENT_EVIDENCE
+- REJECTED_DATA_QUALITY
+- REJECTED_RISK_BREACH
+
+Varsayılan mod:
+
+AUTO_SHADOW
+
+AUTO_PROMOTE varsayılan kapalı olsun.
+
+İlk aşamada terfi kullanıcı onayıyla yapılsın veya mevcut sistemde güvenli auto-promotion zaten varsa onu koru ve varsayılan kapalı tut.
+
+--------------------------------------------------
+10. UYGULAMA KANITI
+--------------------------------------------------
+
+Öğrenilmiş config’in yalnız kaydedilmesi yeterli değil.
+
+Şunları testle kanıtla:
+
+1. Öğrenme bir parametre veya ağırlık değişikliği üretiyor.
+2. Challenger config oluşuyor.
+3. Dual-model yeni karar verirken doğru config version’ı yüklüyor.
+4. Yeni açılan işlemin trade kaydına config_version yazılıyor.
+5. Restart sonrası champion/challenger state korunuyor.
+6. Sonraki işlemler gerçekten öğrenilmiş değeri kullanıyor.
+7. Eski config ile yeni config karışmıyor.
+
+--------------------------------------------------
+11. ROLLBACK
+--------------------------------------------------
+
+Terfi edilen config kötüleşirse otomatik geri dönüş mümkün olmalı.
+
+Rollback tetikleri:
+
+- PERFORMANCE_DEGRADATION
+- DRAWDOWN_BREACH
+- NEGATIVE_EXPECTANCY
+- FEE_DRAG_SPIKE
+- SLIPPAGE_SPIKE
+- DATA_QUALITY_FAILURE
+- RISK_BREACH
+- SYSTEM_ERROR
+
+Rollback:
+
+- önceki champion config’e dönmeli
+- açık pozisyonları zorla kapatmamalı
+- yeni girişlerde eski champion’ı kullanmalı
+- nedenini history’ye yazmalı
+- UI/API’de görünmeli
+
+--------------------------------------------------
+12. SCHEDULER VE ÇALIŞMA DÖNGÜSÜ
+--------------------------------------------------
+
+Öğrenme her işlem sonrası parametre değiştirmemeli.
+
+Öğrenme değerlendirmesi:
+
+- günde en fazla 1 kez
+veya
+- minimum yeni kapanan işlem sayısı oluşunca
+
+çalışmalı.
+
+Mevcut auto_controller/scheduler mimarisi varsa onu kullan.
+
+İkinci paralel scheduler oluşturma.
+
+Şunları açıkça göster:
+
+- learning worker running
+- last learning run
+- next eligible run
+- new trades since last run
+- last diagnosis
+- last action
+- last error
+
+--------------------------------------------------
+13. UI — AI ÖĞRENME DURUMU
+--------------------------------------------------
+
+Mevcut panelde yeni ve gerçek backend verisine bağlı bir “AI Öğrenme Merkezi” bölümü oluştur.
+
+CORE ve OPPORTUNITY için ayrı göster:
+
+- öğrenme aktif/pasif
+- mode
+- sample size
+- data sufficiency
+- active champion
+- active challenger
+- current config version
+- last diagnosis
+- diagnosis confidence
+- önerilen parametre değişiklikleri
+- old value → new value
+- supporting metrics
+- shadow result
+- promotion readiness
+- last promotion
+- last rollback
+- next learning time
+- last_error
+
+UI sahte veri göstermesin.
+
+Backend veri yoksa açıkça:
+
+INSUFFICIENT_DATA
+NOT_EVALUATED
+NO_CHALLENGER
+
+göstersin.
+
+--------------------------------------------------
+14. RUNTIME VE GIT TEMİZLİĞİ
+--------------------------------------------------
+
+Öğrenme state’i Git dışında kalmalı.
+
+Önerilen dosyalar veya mevcut eşdeğerleri:
+
+- learning_runtime.json
+- learning_history.jsonl
+- champion_configs.json
+- challenger_configs.json
+- promotion_history.jsonl
+- rollback_history.jsonl
+
+Mevcut dosya yapısı yeterliyse yeni dosya oluşturma; kanonik mevcut store’u genişlet.
+
+Tüm yazımlar:
+
+- atomic
+- file lock korumalı
+- corruption-safe
+- restart-persistent
+
+olmalı.
+
+Normal çalışma sonunda:
+
+git status --short
+
+temiz kalmalı.
+
+ZIP/yedek sırasında yarım JSON oluşmasını önlemek için atomic replace kullanılmalı.
+
+--------------------------------------------------
+15. TESTLER
+--------------------------------------------------
+
+En az şu testleri ekle:
+
+1. Dual-model kapanan işlem learning dataset’e giriyor.
+2. CORE ve OPPORTUNITY ayrı analiz ediliyor.
+3. Duplicate trade iki kez öğrenilmiyor.
+4. Bozuk kayıt öğrenmeye alınmıyor.
+5. Yetersiz örneklemde parametre değişmiyor.
+6. Teşhis doğru reason code üretiyor.
+7. Değişim %5–10 sınırını aşmıyor.
+8. Aynı anda en fazla 3 parametre değişiyor.
+9. Challenger champion’ı ezmiyor.
+10. Challenger config dual-model tarafından yükleniyor.
+11. Trade kaydı config_version içeriyor.
+12. Kötü challenger terfi etmiyor.
+13. İyi challenger uygun koşullarda terfi edebiliyor.
+14. Drawdown kötüleşmesinde rollback oluyor.
+15. Restart persistence çalışıyor.
+16. Runtime dosyaları Git’i kirletmiyor.
+17. LIVE ORDERS her durumda DISABLED.
+18. Öğrenme güvenlik parametrelerini değiştiremiyor.
+19. API/UI gerçek öğrenme state’ini gösteriyor.
+20. Legacy learning_engine testleri bozulmuyor.
+
+Tam test paketini çalıştır.
+
+--------------------------------------------------
+16. KABUL KRİTERLERİ
+--------------------------------------------------
+
+Görev ancak aşağıdaki kanıtlarla tamamlanmış sayılır:
+
+- Mevcut öğrenme altyapısı korunmuş.
+- Paralel ikinci öğrenme sistemi kurulmamış.
+- CORE ve OPPORTUNITY kapanışları learning_engine tarafından görülüyor.
+- Modeller ayrı ayrı öğreniyor.
+- Yeterli veri yoksa değişiklik yapılmıyor.
+- Teşhis açıklanabilir.
+- Kontrollü challenger config oluşuyor.
+- Shadow/Paper değerlendirmesi çalışıyor.
+- Öğrenilmiş değerler sonraki dual-model kararlarında gerçekten kullanılıyor.
+- Config version trade kaydında görülebiliyor.
+- Promotion kuralları çalışıyor.
+- Rollback çalışıyor.
+- Restart sonrası state korunuyor.
+- UI gerçek öğrenme durumunu gösteriyor.
+- Git çalışma ağacı temiz kalıyor.
+- LIVE ORDERS DISABLED.
+- Gerçek emir gönderme yolu açılmıyor.
+
+--------------------------------------------------
+17. TESLİM RAPORU
+--------------------------------------------------
+
+Final raporda şunları paylaş:
+
+1. Önceki mimari ve eksik bağlantı
+2. Değişen dosyalar
+3. Veri akış diyagramı
+4. CORE öğrenme akışı
+5. OPPORTUNITY öğrenme akışı
+6. Öğrenilebilir parametreler
+7. Sabit güvenlik parametreleri
+8. Champion/challenger mantığı
+9. Promotion kuralları
+10. Rollback kuralları
+11. Runtime store yapısı
+12. UI ekranı/API alanları
+13. Hedefli test sonucu
+14. Tam test sonucu
+15. Windows doğrulama komutları
+16. git status sonucu
+17. Commit hash
+
+ÖNEMLİ SINIRLAR
+
+- LIVE ORDERS DISABLED korunacak.
+- verify=False kullanılmayacak.
+- API anahtarları veya credential katmanı değiştirilmeyecek.
+- Mevcut çalışan Windows başlangıcı bozulmayacak.
+- Mevcut dual-model Paper döngüsü bozulmayacak.
+- Risk motorunun mutlak tavanları öğrenme tarafından değiştirilmeyecek.
+- Kısa örnekleme göre ana strateji güncellenmeyecek.
+- Görev kapsamı dışı UI yenilemesi veya yeni strateji geliştirmesi yapılmayacak.

@@ -104,6 +104,20 @@ def get_config(main_cfg: dict[str, Any] | None = None) -> dict[str, Any]:
                 cfg[key].update(val)
             else:
                 cfg[key] = val
+    # Öğrenilmiş champion overlay'i (dual_learning): yalnız izin
+    # listesindeki, sınır içinde clamplanmış alanlar + config_version.
+    # Öğrenme durumu okunamazsa BASE ile devam edilir (fail-safe).
+    try:
+        import dual_learning as _dl
+        for section, model in (("core", MODEL_CORE),
+                               ("opportunity", MODEL_OPP)):
+            champ = _dl.champion_overrides(model)
+            cfg[section].update(champ.get("overrides") or {})
+            cfg[section]["config_version"] = champ.get(
+                "config_version", "BASE")
+    except Exception:
+        cfg["core"].setdefault("config_version", "BASE")
+        cfg["opportunity"].setdefault("config_version", "BASE")
     return cfg
 
 
@@ -540,6 +554,8 @@ def try_open_position(symbol: str, model: str, sig: dict,
             "confidence": sig["confidence"],
             "net_edge_pct": net_edge_pct,
             "execution_mode": "PAPER",
+            # Öğrenme köprüsü: bu girişte hangi config sürümü etkindi?
+            "config_version": m.get("config_version", "BASE"),
         }
         rt["positions"] = pos
         result["ok"] = True
@@ -555,10 +571,15 @@ def try_open_position(symbol: str, model: str, sig: dict,
 def _build_trade(p: dict, price: float, result: str,
                  now: float) -> dict:
     """Kapanış muhasebesi tek yerde: fee + slippage sonrası net PnL."""
+    import uuid
     gross = (price - p["entry"]) * p["quantity"]
     fee = (p["entry"] + price) * p["quantity"] * FEE_RATE
     slip = price * p["quantity"] * 0.0002
     return {
+        "trade_id": uuid.uuid4().hex[:16],
+        "config_version": p.get("config_version", "BASE"),
+        "notional_usdt": p.get("notional_usdt"),
+        "net_edge_pct": p.get("net_edge_pct"),
         **{k: p[k] for k in ("symbol", "model", "side", "entry",
                              "quantity", "opened_at", "confidence")},
         "exit": price, "result": result,
