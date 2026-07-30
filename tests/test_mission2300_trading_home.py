@@ -299,10 +299,9 @@ class TestQueue:
         assert f"th-badge.{badge}" in TEMPLATE
 
     def test_queue_derived_from_existing_endpoints(self):
-        for endpoint in ("/api/operation-control/products",
-                         "/api/operation-control/orders",
-                         "/api/operation-control/signals"):
-            assert endpoint in JS
+        # UI senkron sözleşmesi: sıra/tablo verisi artık TEK atomik
+        # overview snapshot'ından gelir (ayrı uçlar çelişki üretiyordu)
+        assert "/api/operation-control/overview" in JS
 
 
 # ── Son hareketler ─────────────────────────────────────────────────

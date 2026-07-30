@@ -265,12 +265,16 @@
         push(s.symbol, "prep", "Emir niyeti oluştu"); realPending++;
       }
     });
+    // UI senkron sözleşmesi: products = kanonik etkin evren; HER
+    // sembol tabloda görünür (üst şerit Evren sayısıyla birebir).
     (products || []).forEach(function (pr) {
       if (openSymbols[pr.symbol]) return;
       if (pr.entry_eligible) {
         push(pr.symbol, "wait", "Sinyal bekliyor");
       } else if (pr.automation_state === "ENABLED") {
         push(pr.symbol, "gray", "İzleniyor");
+      } else {
+        push(pr.symbol, "gray", "İzleniyor (giriş kapalı)");
       }
     });
     // Dürüst etiket: gerçek emir/niyet yoksa "Sıradaki İşlemler" denmez —
@@ -467,10 +471,9 @@
     inflight = true;
     Promise.all([
       get("/api/operation-control/status"),
-      get("/api/operation-control/positions"),
-      get("/api/operation-control/orders"),
-      get("/api/operation-control/products"),
-      get("/api/operation-control/signals"),
+      // TEK atomik snapshot: positions/orders/products/signals aynı
+      // sunucu anlık görüntüsünden — widget'lar çelişemez.
+      get("/api/operation-control/overview"),
       get("/api/operation-control/workspace/portfolio"),
       get("/api/operation-control/workspace/journal"),
       get("/api/accounts/wallets"),
@@ -495,12 +498,12 @@
         showWarnings(warns);
       }
       renderTop(r[0].body && r[0].body.ok ? r[0].body.data : null,
-                data(5, "portfolio"), data(3, "products"));
+                data(2, "portfolio"), data(1, "products"));
       renderTrades(data(1, "positions"));
-      renderQueue(data(3, "products"), data(2, "orders"),
-                  data(1, "positions"), data(4, "signals"));
-      renderActivity(data(6, "journal"));
-      renderWallets(data(7, "accounts"), data(8, "accounts"));
+      renderQueue(data(1, "products"), data(1, "orders"),
+                  data(1, "positions"), data(1, "signals"));
+      renderActivity(data(3, "journal"));
+      renderWallets(data(4, "accounts"), data(5, "accounts"));
       inflight = false;
     }, function () { inflight = false; });
   }

@@ -3220,12 +3220,20 @@ _operation_service: OperationControlService | None = None
 
 
 def _operation_symbols(cfg: dict[str, Any] | None) -> tuple[str, ...]:
+    """Kanonik etkin evren: config tabanı + runtime dinamik ekler.
+
+    UI senkron sözleşmesi: üst şerit, İzlenen Piyasalar tablosu ve
+    AI Durumu hepsi bu listeden türetilir — kaynak ayrışması yasak."""
     symbols = (cfg or {}).get("symbols")
     if isinstance(symbols, list):
-        cleaned = tuple(s.strip().upper() for s in symbols
-                        if isinstance(s, str) and s.strip())
+        cleaned = [s.strip().upper() for s in symbols
+                   if isinstance(s, str) and s.strip()]
         if cleaned:
-            return cleaned
+            try:
+                cleaned = um.effective_symbols(cleaned)
+            except Exception:
+                pass  # store okunamazsa taban liste dürüst kalır
+            return tuple(cleaned)
     return ("BTCUSDT",)
 
 
@@ -3331,8 +3339,30 @@ def _operation_raw() -> dict[str, Any]:
         },
     }
     service = get_operation_service()
-    # Spot-only: Futures pozisyon/emir sondası kaldırıldı.
-    # positions ve orders listesi boş kalır (Futures yoktur).
+    # Spot-only: Futures pozisyon/emir sondası kaldırıldı; orders boş.
+    # Pozisyonlar KANONİK Paper ledger'dan (alpha20_v1/state.json) —
+    # Windows Runtime kartıyla aynı kaynak, çelişki imkânsız.
+    try:
+        _st, _ = read_json(STATE_PATH)
+        _pos = (_st or {}).get("position")
+    except Exception:
+        _pos = None
+    if isinstance(_pos, dict) and _pos.get("symbol"):
+        raw["positions"].append({
+            "position_id": f"paper-{_pos['symbol']}",
+            "symbol": _pos.get("symbol"),
+            "market": "SPOT",
+            "side": _pos.get("side"),
+            "position_status": "OPEN",
+            "strategy": "alpha20_v1",
+            "entry_price": _pos.get("entry"),
+            "current_price": _pos.get("entry"),
+            "quantity": _pos.get("quantity"),
+            "stop_loss": _pos.get("stop"),
+            "take_profit": _pos.get("target"),
+            "opened_at": _pos.get("opened_at"),
+            "execution_mode": "PAPER",
+        })
     for symbol in _operation_symbols(cfg):
         raw["products"].append({
             "symbol": symbol,
@@ -4320,6 +4350,23 @@ def api_operation_products():
 @app.get("/api/operation-control/positions")
 def api_operation_positions():
     return _operation_read("positions")
+
+
+@app.get("/api/operation-control/overview")
+def api_operation_overview():
+    """TEK atomik snapshot: products/positions/orders/signals aynı
+    build_snapshot çağrısından gelir — widget'lar arası çelişkili
+    sayaç imkânsız (UI senkron sözleşmesi)."""
+    snapshot = _operation_snapshot()
+    body: dict[str, Any] = {
+        "snapshot_version": snapshot.generated_at}
+    for section in ("products", "positions", "orders", "signals"):
+        body[section] = [_oca.serialize_view(v)
+                         for v in getattr(snapshot, section)]
+    payload, status = _oca.read_envelope(
+        body, snapshot, g.get("request_id", "-"),
+        snapshot.generated_at)
+    return _operation_json(payload, status)
 
 
 @app.get("/api/operation-control/orders")
