@@ -3353,7 +3353,13 @@ def _operation_raw() -> dict[str, Any]:
         # "Yönetiliyor" (OPEN) DEĞİL, dürüst durum koduyla döner ve
         # audit kaydı yazılır. Kapanmış (trades'te karşılığı olan)
         # kayıt ORPHAN_POSITION olarak aktif listeden çıkarılır.
-        _cls = _classify_legacy_position(_pos, _st or {})
+        try:
+            _stale_h = float((cfg or {}).get(
+                "position_stale_hours") or 0)
+        except (TypeError, ValueError):
+            _stale_h = 0
+        _cls = _classify_legacy_position(
+            _pos, _st or {}, stale_hours=_stale_h or None)
         if _cls["status"] != "ORPHAN_POSITION":
             raw["positions"].append({
                 # BÜYÜK harf: close ucu position_id.upper() ile arar —
@@ -3393,36 +3399,68 @@ def _operation_raw() -> dict[str, Any]:
 
 POSITION_AUDIT_PATH = ROOT / "alpha20_v1" / \
     "position_integrity_audit.jsonl"
-# Legacy bot döngüsü dakikalar ölçeğinde çıkış yapar; bu süreden uzun
-# süredir açık görünen kayıt "bayat" sayılır ve operatöre işaretlenir.
-LEGACY_POSITION_STALE_HOURS = 4.0
+# Legacy motorda zaman bazlı max-hold kuralı YOK — pozisyonlar doğal
+# olarak saatler sürebilir (mimar bulgusu: 4h eşiği yanlış alarm
+# üretirdi). Varsayılan 24h; smart_config 'position_stale_hours'
+# anahtarıyla ayarlanabilir.
+LEGACY_POSITION_STALE_HOURS = 24.0
+
+
+def _parse_ts(value) -> datetime | None:
+    """ISO string VEYA epoch sayısını timezone'lu datetime'a çevir;
+    çözümlenemezse None (string kıyası ASLA yapılmaz)."""
+    if value is None:
+        return None
+    try:
+        if isinstance(value, (int, float)) and not isinstance(
+                value, bool):
+            return datetime.fromtimestamp(float(value), timezone.utc)
+        dt = datetime.fromisoformat(
+            str(value).strip().replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
 
 
 def _audit_position_integrity(symbol: str, status: str,
                               detail: str) -> None:
-    """Yetim/eksik pozisyon tespitini git dışı audit dosyasına yaz
-    (aynı sembol+durum ardışık tekrarlanmaz — dosya şişmesin)."""
+    """Yetim/eksik pozisyon tespitini git dışı audit dosyasına yaz.
+
+    Worker-safe: flock ile serileştirilir (Windows'ta portable_flock
+    fallback'i). Dedupe tail-read ile (tam dosya okunmaz): aynı
+    sembol+durum ardışık tekrarlanmaz — dosya şişmesin."""
     try:
-        last = None
-        if POSITION_AUDIT_PATH.exists():
-            lines = POSITION_AUDIT_PATH.read_text(
-                encoding="utf-8").strip().splitlines()
-            if lines:
-                last = json.loads(lines[-1])
-        if last and last.get("symbol") == symbol and \
-                last.get("reason") == status:
-            return
-        with POSITION_AUDIT_PATH.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps({
-                "ts": datetime.now(timezone.utc).isoformat(),
-                "symbol": symbol, "reason": status,
-                "detail": detail, "source": "legacy_state_position",
-            }, ensure_ascii=False) + "\n")
+        try:
+            import fcntl as _fl
+        except ImportError:  # Windows
+            sys.path.insert(0, str(ROOT / "alpha20_v1"))
+            import portable_flock as _fl  # type: ignore
+        with POSITION_AUDIT_PATH.open("a+", encoding="utf-8") as fh:
+            _fl.flock(fh.fileno(), _fl.LOCK_EX)
+            try:
+                fh.seek(0, 2)
+                size = fh.tell()
+                fh.seek(max(0, size - 4096))
+                tail = fh.read().strip().splitlines()
+                last = json.loads(tail[-1]) if tail else None
+                if last and last.get("symbol") == symbol and \
+                        last.get("reason") == status:
+                    return
+                fh.seek(0, 2)
+                fh.write(json.dumps({
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "symbol": symbol, "reason": status,
+                    "detail": detail,
+                    "source": "legacy_state_position",
+                }, ensure_ascii=False) + "\n")
+            finally:
+                _fl.flock(fh.fileno(), _fl.LOCK_UN)
     except Exception:  # audit hatası snapshot'ı düşürmez
         pass
 
 
-def _classify_legacy_position(pos: dict, state: dict) -> dict:
+def _classify_legacy_position(pos: dict, state: dict,
+                              stale_hours: float | None = None) -> dict:
     """Legacy state.json pozisyonunu dürüst durum koduna ayrıştır.
 
     Dönen durumlar: OPEN (sağlıklı) / INCOMPLETE_POSITION_DATA /
@@ -3445,19 +3483,25 @@ def _classify_legacy_position(pos: dict, state: dict) -> dict:
     entry = _num("entry", "entry_price", "price")
     quantity = _num("quantity", "qty", "amount")
     opened_at = pos.get("opened_at")
+    opened_dt = _parse_ts(opened_at)
 
     # ORPHAN: aynı sembolün trades'te açılıştan SONRA kapanışı varsa
-    # bu kayıt kapanmış bir pozisyonun artığıdır.
+    # bu kayıt kapanmış bir pozisyonun artığıdır. Kıyas NORMALİZE
+    # datetime/epoch üzerinden yapılır (string kıyası format
+    # farkında yanlış sonuç üretir — mimar bulgusu); çözümlenemeyen
+    # zaman damgası ORPHAN kanıtı SAYILMAZ.
     try:
         for t in (state.get("trades") or []):
             if not isinstance(t, dict) or \
                     t.get("symbol") != symbol:
                 continue
-            closed = t.get("closed_at") or t.get("time") or ""
-            if opened_at and closed and str(closed) >= str(opened_at):
+            closed_dt = _parse_ts(t.get("closed_at")) or \
+                _parse_ts(t.get("time"))
+            if opened_dt and closed_dt and closed_dt >= opened_dt:
                 _audit_position_integrity(
                     symbol, "ORPHAN_POSITION",
-                    f"trades kapanışı {closed} >= açılış {opened_at}")
+                    f"trades kapanışı {closed_dt.isoformat()} >= "
+                    f"açılış {opened_dt.isoformat()}")
                 return {"status": "ORPHAN_POSITION",
                         "entry": entry, "quantity": quantity}
     except Exception:
@@ -3471,25 +3515,23 @@ def _classify_legacy_position(pos: dict, state: dict) -> dict:
         return {"status": "INCOMPLETE_POSITION_DATA",
                 "entry": entry, "quantity": quantity}
 
-    try:
-        opened = datetime.fromisoformat(
-            str(opened_at).replace("Z", "+00:00"))
-        if opened.tzinfo is None:
-            opened = opened.replace(tzinfo=timezone.utc)
-        age_h = (datetime.now(timezone.utc) -
-                 opened).total_seconds() / 3600
-        if age_h > LEGACY_POSITION_STALE_HOURS:
-            _audit_position_integrity(
-                symbol, "STALE_POSITION",
-                f"{age_h:.1f} saattir açık görünüyor "
-                f"(eşik {LEGACY_POSITION_STALE_HOURS}h)")
-            return {"status": "STALE_POSITION",
-                    "entry": entry, "quantity": quantity}
-    except Exception:
+    if opened_dt is None:
+        # Çözümlenemeyen açılış zamanı → yaş/ORPHAN kıyası imkânsız.
         _audit_position_integrity(
             symbol, "INCOMPLETE_POSITION_DATA",
             f"opened_at çözümlenemedi: {opened_at!r}")
         return {"status": "INCOMPLETE_POSITION_DATA",
+                "entry": entry, "quantity": quantity}
+
+    limit = stale_hours if stale_hours and stale_hours > 0 \
+        else LEGACY_POSITION_STALE_HOURS
+    age_h = (datetime.now(timezone.utc) -
+             opened_dt).total_seconds() / 3600
+    if age_h > limit:
+        _audit_position_integrity(
+            symbol, "STALE_POSITION",
+            f"{age_h:.1f} saattir açık görünüyor (eşik {limit}h)")
+        return {"status": "STALE_POSITION",
                 "entry": entry, "quantity": quantity}
 
     return {"status": "OPEN", "entry": entry, "quantity": quantity}

@@ -76,6 +76,44 @@ class TestLegacyClassification:
             encoding="utf-8").strip().splitlines()[-1])
         assert rec["reason"] == "ORPHAN_POSITION"
 
+    def test_orphan_epoch_timestamp_normalized(self, appmod):
+        # trades 'time' alanı epoch gelse bile kıyas normalize
+        # datetime üzerinden yapılır (string kıyası yok).
+        opened = datetime.now(timezone.utc) - timedelta(hours=5)
+        pos = {"symbol": "ONDOUSDT", "entry": 0.95, "quantity": 10,
+               "opened_at": opened.isoformat()}
+        state = {"trades": [{
+            "symbol": "ONDOUSDT",
+            "time": (opened + timedelta(hours=1)).timestamp()}]}
+        c = appmod._classify_legacy_position(pos, state)
+        assert c["status"] == "ORPHAN_POSITION"
+
+    def test_unparseable_trade_ts_is_not_orphan_proof(self, appmod):
+        pos = {"symbol": "ONDOUSDT", "entry": 0.95, "quantity": 10,
+               "opened_at": _iso(1)}
+        state = {"trades": [{"symbol": "ONDOUSDT",
+                             "closed_at": "zzz-bozuk"}]}
+        c = appmod._classify_legacy_position(pos, state)
+        assert c["status"] == "OPEN"  # yanlış pozitif ORPHAN yok
+
+    def test_stale_threshold_configurable(self, appmod):
+        pos = {"symbol": "ONDOUSDT", "entry": 0.95, "quantity": 10,
+               "opened_at": _iso(2)}
+        c = appmod._classify_legacy_position(pos, {}, stale_hours=1.0)
+        assert c["status"] == "STALE_POSITION"
+        c2 = appmod._classify_legacy_position(pos, {},
+                                              stale_hours=10.0)
+        assert c2["status"] == "OPEN"
+
+    def test_default_stale_threshold_not_aggressive(self, appmod):
+        # Legacy motorda max-hold yok — 5 saatlik sağlıklı pozisyon
+        # varsayılan eşikte bayat sayılmaz (mimar bulgusu).
+        assert appmod.LEGACY_POSITION_STALE_HOURS >= 24
+        pos = {"symbol": "ONDOUSDT", "entry": 0.95, "quantity": 10,
+               "opened_at": _iso(5)}
+        assert appmod._classify_legacy_position(
+            pos, {"trades": []})["status"] == "OPEN"
+
     def test_stale_after_threshold(self, appmod):
         pos = {"symbol": "ONDOUSDT", "entry": 0.95, "quantity": 10,
                "opened_at": _iso(
@@ -104,7 +142,7 @@ class TestLegacyClassification:
         assert '_cls["status"] != "ORPHAN_POSITION"' in src
         assert '"position_status": _cls["status"]' in src
         assert '"position_status": "OPEN"' not in src.split(
-            "_classify_legacy_position(_pos")[1][:2000]
+            "_cls = _classify_legacy_position(")[1][:2000]
 
 
 # ── Dual-model pozisyon durumu + exit korumaları ───────────────────
