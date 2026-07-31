@@ -1,0 +1,988 @@
+# GÖREV 118 — ALPHA KÂRLILIK MİMARİSİ UÇTAN UCA TEST, ONARIM VE PAPER HAZIRLIK
+
+## 1. Ana hedef
+
+Alpha Intelligence OS’un aşağıdaki sorunlarını güncel kaynak kod, çalışma zamanı verileri ve testlerle incele; yeniden üret; kök nedenini kanıtla; yalnız kanıtlanan sorunlara minimal düzeltme uygula:
+
+```text
+1. Yanlış veya düşük kaliteli ürün/coin seçimi
+2. Zararlı, geç veya teyitsiz giriş
+3. Sürekli NO_SIGNAL ve alt nedenlerin belirsizliği
+4. Maliyetlerden sonra kârsız işlemlerin elenmemesi
+5. Pozisyonların doğru zamanda kapatılamaması
+6. Kârın önemli bölümünün geri verilmesi
+7. TCI/TDP veya eşdeğer uyarlanabilir çıkış katmanının eksikliği
+8. SIGNAL → paper pozisyon → kapanış → ledger zincirindeki kopukluklar
+9. Scheduler için GREEN/YELLOW ve RUNNING/STARTUP_FAILED çelişkisi
+10. Binance private-auth hatasının public analiz sağlığını bozması
+11. Kod, çalışan Replit sürümü ve runtime arasında sürüm uyuşmazlığı
+12. Yapılmış değişikliklerin yalnız kodda kalması, uçtan uca doğrulanmaması
+```
+
+Bu görev bir “daha çok sinyal üretme” görevi değildir. Amaç:
+
+```text
+Doğru ürün
+→ doğru giriş
+→ maliyet sonrası yeterli beklenen değer
+→ kontrollü paper pozisyon
+→ zamanında ve net kârı koruyan çıkış
+→ doğrulanabilir ledger ve performans kanıtı
+```
+
+## 2. Değişmez güvenlik sınırları
+
+Görev boyunca:
+
+```text
+EXECUTION_MODE: PAPER/SHADOW ONLY
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+EXCHANGE_WRITE_REQUESTS: 0
+LIVE_ORDER_CREATED: FALSE
+OPEN_LIVE_POSITIONS: 0
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+CHAMPION_CHANGED: FALSE
+```
+
+Kesinlikle yapma:
+
+* Gerçek Binance emri oluşturma, değiştirme veya iptal etme.
+* Borsaya emir amaçlı `POST`, `PUT`, `PATCH` veya `DELETE` gönderme.
+* Global pause kilidini kaldırma.
+* Live-orders kilidini açma.
+* Binance anahtarlarını, izinlerini veya secret’ları değiştirme.
+* Secret, token, API key ya da DPAPI içeriğini yazdırma.
+* Scheduler veya Replit’i başlatma, durdurma ya da yeniden başlatma.
+* Runtime verilerini, paper ledger’ı veya işlem geçmişini silme.
+* Üretim runtime’ına sahte sinyal veya sahte işlem yazma.
+* Sinyal oluşturmak amacıyla eşikleri gevşetme.
+* TP/SL, risk, R/R veya maliyet eşiklerini kanıtsız değiştirme.
+* Universe kapsamını yapay biçimde büyütme veya daraltma.
+* Gelecek verisini kullanan backtest/look-ahead bias oluşturma.
+* Mevcut kullanıcı değişikliklerini geri alma.
+* Commit, push, rollback, rebase veya force işlemi yapma.
+* İlgisiz dosyalara dokunma.
+
+```text
+COMMIT: YASAK
+PUSH: YASAK
+ROLLBACK: YASAK
+RESTART: YASAK
+```
+
+## 3. Çalışma ilkesi
+
+Her sorun için şu sıra zorunludur:
+
+```text
+Gözlem
+→ kaynak zincirini haritalama
+→ hatayı yeniden üretme
+→ patch öncesi başarısız test
+→ minimal düzeltme
+→ hedefli test
+→ ilgili test grubu
+→ mümkünse tam test paketi
+→ Paper/Shadow doğrulaması
+```
+
+Aşağıdakiler birbirinden ayrı sınıflandırılmalıdır:
+
+```text
+CODE_OR_WIRING_BUG
+STATE_OR_WORKER_INCONSISTENCY
+OVER_STRICT_CONFIGURATION
+NORMAL_MARKET_SELECTIVITY
+INSUFFICIENT_DATA
+HISTORICAL_DATA_CONTAMINATION
+UNVERIFIED
+```
+
+Tahmini kök neden gibi raporlama. Dosya, fonksiyon, alan veya testle kanıtlanmayan her sonuç `UNVERIFIED` olmalıdır.
+
+---
+
+# FAZ A — Kaynak, sürüm ve güvenlik doğrulaması
+
+Önce salt-okunur çalıştır:
+
+```bash
+git status --short
+git rev-parse HEAD
+git rev-parse origin/main
+git log -10 --oneline
+git diff --stat
+git ls-files
+```
+
+Ardından doğrula:
+
+* Gerçek uygulama başlangıç dosyası ve import yolu
+* Gunicorn master PID ve worker sayısı
+* Scheduler sahibi PID
+* Scheduler state’inin process-local mı paylaşımlı mı olduğu
+* Operation state store yolu
+* Scheduler snapshot/runtime yolu
+* Paper ledger yolu
+* Universe ve model runtime yolları
+* Aktif strateji ve model kimliği
+* Çalışan kod SHA’sının belirlenip belirlenemediği
+* Son tamamlanmış analiz zamanı
+* Son universe refresh zamanı
+* CORE ve OPPORTUNITY sayıları
+* İzlenen semboller
+* Son sinyal ve ret nedenleri
+* Açık/kapalı paper pozisyon sayıları
+* Global pause ve live-orders kilitleri
+* Son public-market hatası
+* Son private-auth hatası
+* `last_error` alanının güncel mi tarihsel mi olduğu
+
+Runtime dosyaları Git tarafından izleniyorsa silme veya geçmişi değiştirme; yalnız raporla.
+
+Çalışan Replit SHA’sı belirlenemiyorsa:
+
+```text
+RUNNING_VERSION_MATCH: UNVERIFIED
+```
+
+yaz; buna rağmen kaynak ve test incelemesine devam et.
+
+---
+
+# FAZ B — Uçtan uca mimari haritası
+
+Aşağıdaki zinciri dosya, fonksiyon ve veri alanı düzeyinde çıkar:
+
+```text
+Public piyasa verisi
+→ Universe oluşturma
+→ Coin sıralama/seçme
+→ İndikatör üretme
+→ Teknik giriş kapıları
+→ Model kararı/uzlaşması
+→ Maliyet ve net kâr kapıları
+→ Risk kontrolü
+→ SIGNAL/NO_SIGNAL
+→ Paper işlem adayı
+→ Paper pozisyon açılışı
+→ Pozisyon yönetimi
+→ TP/SL/trailing/time/adaptive exit
+→ Paper kapanış
+→ Net P&L
+→ Paper ledger
+→ Performans geri bildirimi
+```
+
+Her aşama için tablo hazırla:
+
+| Aşama | Kaynak dosya/fonksiyon | Girdiler | Çıktılar | Geçiş şartı | Store | Test |
+| ----- | ---------------------- | -------- | -------- | ----------- | ----- | ---- |
+
+Özellikle aşağıdaki politikaların gerçekten çağrı zincirine bağlı olduğunu doğrula:
+
+```text
+RISK_FIRST
+PAPER_FIRST
+CAPITAL_EFFICIENCY
+NET_OVER_COSTS
+NO_LOOKAHEAD
+NO_FORCED_SIGNAL
+```
+
+Kodda bulunan ama gerçek çalışma zincirinden çağrılmayan fonksiyonları `DEAD_OR_UNWIRED` olarak raporla.
+
+---
+
+# FAZ C — Ürün/coin seçimi testi
+
+Universe ve seçim motorunun yalnız mevcut zamanda bilinen verileri kullandığını doğrula.
+
+Kontrol et:
+
+* Likidite
+* Hacim
+* Spread
+* Slippage tahmini
+* Veri yeterliliği
+* Trend uyumu
+* EMA eğimi
+* VWAP ilişkisi
+* Volatilite
+* RSI
+* Momentum
+* Breakout kalitesi
+* Piyasa rejimi
+* Maliyet sonrası beklenen edge
+* Aynı sembolün farklı formatlarla çoğaltılması
+* Stale fiyat veya stale mum kullanımı
+* Eksik mumların yanlışlıkla sıfır kabul edilmesi
+* Gelecek mum bilgisinin kullanılması
+* Sıralama puanı ile işlem kararı arasındaki bağlantı
+
+Patch öncesi test senaryoları:
+
+### C1 — Yüksek hacimli ama pahalı işlem
+
+Spread/slippage nedeniyle net edge yetersiz olan sembol, yalnız hacmi yüksek diye seçilmemelidir.
+
+### C2 — Düşük likidite
+
+Teknik puanı yüksek ancak likiditesi yetersiz sembol işlem adayı olmamalıdır.
+
+### C3 — Stale veri
+
+Eski veriye sahip sembol güncel sembolün önüne geçmemelidir.
+
+### C4 — Determinizm
+
+Aynı snapshot ve config, tekrarlandığında aynı sıralamayı üretmelidir.
+
+### C5 — Look-ahead engeli
+
+Karar zamanından sonraki mumlar kaldırıldığında karar değişmemelidir.
+
+### C6 — Rejim uyumu
+
+Mevcut mimari rejim kullanıyorsa, sembol seçimi ilgili rejim bilgisini doğru kullanmalıdır.
+
+Seçim hatası kanıtlanırsa minimal patch uygula. Yalnız geçmiş sonuçlara bakarak puan ağırlıklarını optimize etme.
+
+---
+
+# FAZ D — Zararlı veya geç giriş testi
+
+Aşağıdaki giriş kapılarını bul ve çağrı zincirinde gerçekten çalıştığını kanıtla:
+
+```text
+EMA_BLOCK
+VWAP_BLOCK
+EMA_VWAP_BLOCK
+MOMENTUM_WEAK
+VOLUME_WEAK
+RSI_OUT_OF_BAND
+BREAKOUT_ABSENT
+FALSE_BREAKOUT_RISK
+LOW_QUALITY_ENTRY
+INSUFFICIENT_DATA
+SPREAD_TOO_HIGH
+SLIPPAGE_TOO_HIGH
+```
+
+Test senaryoları:
+
+### D1 — Trend tersliği
+
+Long sinyal, kanonik trend/EMA yönü tersken reddedilmelidir.
+
+### D2 — VWAP üzerinde teyit yok
+
+Mevcut kabul edilmiş kurala göre VWAP teyidi olmayan giriş reddedilmelidir.
+
+### D3 — Zayıf momentum ve hacim
+
+Tek bir indikatör olumlu olsa bile birleşik giriş kalitesi yetersizse işlem açılmamalıdır.
+
+### D4 — Sahte kırılım
+
+Kırılım varmış gibi görünen ancak devam/hacim teyidi bulunmayan durumda `FALSE_BREAKOUT_RISK` veya mevcut eşdeğer neden üretilmelidir.
+
+### D5 — Geç giriş
+
+Fiyat kabul edilmiş giriş bölgesinden aşırı uzaklaşmışsa sistem geç kalmış girişi kovalamamalıdır.
+
+### D6 — Sağlıklı giriş
+
+Bütün mevcut kapıları geçen deterministik fixture, maliyet ve risk kapılarına ulaşmalıdır. Giriş motoru yanlışlıkla her koşulu `NO_SIGNAL` yapmamalıdır.
+
+Test fixture’larındaki veriler üretim runtime’ına yazılmamalıdır.
+
+---
+
+# FAZ E — NO_SIGNAL kök neden ve görünürlük testi
+
+Son makul sayıdaki güncel çevrim için ret hunisi çıkar:
+
+| Aşama            | Giren | Geçen | Reddedilen | Oran | Başlıca neden |
+| ---------------- | ----: | ----: | ---------: | ---: | ------------- |
+| Universe         |       |       |            |      |               |
+| Veri yeterliliği |       |       |            |      |               |
+| Teknik aday      |       |       |            |      |               |
+| Model uzlaşması  |       |       |            |      |               |
+| Maliyet/net R/R  |       |       |            |      |               |
+| Risk             |       |       |            |      |               |
+| SIGNAL           |       |       |            |      |               |
+
+Şunları izle:
+
+```text
+decision
+reason
+sub_reason
+reason_code
+rejection_stage
+model
+symbol
+timestamp
+snapshot_id
+```
+
+Doğrula:
+
+```text
+Backend üretimi
+→ runtime kaydı
+→ API response
+→ frontend gösterimi
+```
+
+Her satırda yalnız `Giriş koşulları oluşmadı` yazıyorsa gerçek alt nedenin hangi aşamada kaybolduğunu kanıtla.
+
+Regresyon testleri:
+
+1. Her ret, kararlı bir `reason_code/sub_reason` taşımalı.
+2. Alt neden runtime serialization sırasında kaybolmamalı.
+3. API alanı frontend’e ulaşmalı.
+4. Eski istemciler için mevcut alanlar kaldırılmamalı.
+5. Yeni başarılı çevrim, eski hata nedenini aktif hata gibi göstermemeli.
+6. Normal seçicilik ile bağlantı/kod arızası ayrılmalı.
+
+Eşik değiştirerek sinyal üretme. `NO_SIGNAL` gerçek piyasa seçiciliğiyse bunu düzeltilecek hata olarak sınıflandırma.
+
+---
+
+# FAZ F — Maliyet sonrası kâr politikası
+
+Şu hesapların tek kanonik üreticiden geldiğini doğrula:
+
+```text
+entry_price
+target_price
+stop_price
+gross_tp
+gross_sl
+entry_fee
+exit_fee
+spread_cost
+slippage_cost
+round_trip_cost
+net_tp
+net_sl
+net_reward_risk
+expected_edge
+break_even_win_rate
+net_pnl
+```
+
+Aşağıdaki kapıları bul ve gerçek işlem kararına bağlı olduklarını kanıtla:
+
+```text
+FEE_DRAG
+EXPECTED_EDGE_TOO_LOW
+NET_TP_NON_POSITIVE
+NET_REWARD_RISK_TOO_LOW
+EDGE_BELOW_COST_MULTIPLE
+```
+
+Mevcut kabul edilmiş kuralların varlığı doğrulanmalıdır; eşikler değiştirilmemelidir.
+
+Test senaryoları:
+
+1. Brüt olarak kârlı ama maliyet sonrası `net_tp <= 0` olan işlem reddedilmeli.
+2. Net R/R kabul sınırının altında olan işlem reddedilmeli.
+3. Beklenen edge, mevcut maliyet katsayısını karşılamıyorsa reddedilmeli.
+4. Ücret, spread ve slippage iki kez düşülmemeli.
+5. Long ve short hesapları simetrik ve doğru olmalı.
+6. TP/SL kapanışında ledger `net_pnl` ile güncellenmeli.
+7. Frontend brüt sonucu net sonuç gibi göstermemeli.
+8. Başarı ölçümü yalnız brüt kazançla yapılmamalı.
+
+Ondalık hassasiyet ve yuvarlama kurallarını test et.
+
+---
+
+# FAZ G — Pozisyon yönetimi ve zamanında çıkış
+
+Aşağıdaki çıkış mekanizmalarını ayrı ayrı haritala ve test et:
+
+```text
+TAKE_PROFIT
+STOP_LOSS
+TRAILING
+TIME_EXIT
+EMERGENCY_EXIT
+ADAPTIVE_EXIT
+```
+
+Şunları doğrula:
+
+* `auto_controller` gerçekten `manage_position` çağırıyor mu?
+* Her açık paper pozisyon her çevrimde değerlendiriliyor mu?
+* TP ve SL fiyatları girişten doğru yönde mi?
+* Long/short yönleri ters uygulanmış mı?
+* Trailing yalnız gerekli aktivasyon sonrası mı başlıyor?
+* Trailing high-water/low-water mark kalıcı ve kanonik store’da mı?
+* Time-exit mevcut kurala göre çalışıyor mu?
+* Kapanan pozisyon ikinci kez kapatılabiliyor mu?
+* Aynı pozisyon için çift ledger kaydı oluşabiliyor mu?
+* Worker değişince pozisyon yönetim state’i kayboluyor mu?
+* Kapanış fiyatı ve maliyetler deterministik mi?
+
+Testler:
+
+### G1 — TP
+
+Fiyat TP’ye ulaştığında paper pozisyon bir kez kapanmalı ve net P&L kaydedilmelidir.
+
+### G2 — SL
+
+Fiyat SL’ye ulaştığında paper pozisyon bir kez kapanmalıdır.
+
+### G3 — Trailing
+
+Fiyat lehe ilerledikten sonra mevcut trailing kuralına göre geri çekilirse kâr korunmalıdır.
+
+### G4 — Time exit
+
+Mevcut maksimum tutma süresi aşıldığında mevcut kurala göre kapanış değerlendirilmelidir.
+
+### G5 — Yeniden çağrı/idempotency
+
+Aynı snapshot iki kez işlendiğinde çift kapanış veya çift ledger kaydı oluşmamalıdır.
+
+### G6 — Worker bağımsızlığı
+
+Process-local state farklı olsa bile paylaşımlı paper pozisyonun yönetimi tutarlı olmalıdır.
+
+---
+
+# FAZ H — TCI/TDP veya uyarlanabilir çıkış
+
+Önce depoda, commit geçmişinde, dokümantasyonda ve testlerde aşağıdakilerin kabul edilmiş tanımını ara:
+
+```text
+TCI
+TDP
+trend confidence
+trend deterioration
+profit capture
+giveback
+optimal exit
+adaptive exit
+```
+
+Kabul edilmiş formül veya mimari bulunursa onu kanonik referans olarak kullan.
+
+Bulunamazsa:
+
+```text
+TCI_TDP_APPROVED_SPEC: MISSING
+```
+
+olarak işaretle; keyfî formül veya eşik icat etme. Bu durumda yalnız mevcut çıkış motorunun gerekli entegrasyon noktalarını ve önerilen test sözleşmesini hazırla.
+
+Onaylı tanım bulunursa önce test yaz:
+
+1. Pozisyon henüz kârda değilken normal piyasa gürültüsü gereksiz çıkış üretmemeli.
+2. Pozisyon kârdayken trend gücü belirgin biçimde bozulursa mevcut kabul edilmiş koşullarda kâr koruma çıkışı değerlendirilmelidir.
+3. Tek anlık kötü veri uyarlanabilir çıkışı tetiklememeli.
+4. Eski/stale indikatör uyarlanabilir çıkışta kullanılmamalı.
+5. TP ve SL görünürlüğü korunmalı.
+6. Adaptive exit, stop-loss korumasını kaldırmamalı.
+7. Adaptive exit nedeni ledger’a açık kodla yazılmalı.
+8. Long ve short için davranış doğru yönde olmalı.
+9. Aynı karar iki kez işlendiğinde çift kapanış olmamalı.
+10. `EXCESSIVE_GIVEBACK` fixture’ı patch öncesi başarısız, patch sonrası geçer olmalı.
+
+Minimal entegrasyon:
+
+```text
+position snapshot
++ current market snapshot
++ approved TCI/TDP calculation
+→ exit decision
+→ canonical manage_position
+→ paper close
+→ ledger exit_reason
+```
+
+Çıkış eşiklerini geçmiş birkaç işlemi mükemmel gösterecek biçimde curve-fit etme.
+
+---
+
+# FAZ I — Paper işlem zinciri
+
+Test ortamında kontrollü bir sinyal kullanarak:
+
+```text
+SIGNAL
+→ paper aday
+→ paper pozisyon
+→ fiyat güncellemesi
+→ TP/SL/trailing/adaptive çıkış
+→ ücret ve slippage
+→ net P&L
+→ paper ledger
+→ performans kaydı
+```
+
+zincirini uçtan uca çalıştır.
+
+Kurallar:
+
+* Sinyal yalnız fixture/mock içinde oluşturulmalı.
+* Üretim runtime’ına sahte işlem yazılmamalı.
+* Gerçek API anahtarı kullanılmamalı.
+* Network/exchange istemcisi spy/mock ile korunmalı.
+* Her exchange write teşebbüsü testi başarısız yapmalı.
+
+Zorunlu kanıt:
+
+```text
+PAPER_ENTRY_CREATED: TRUE
+PAPER_EXIT_CREATED: TRUE
+PAPER_LEDGER_UPDATED: TRUE
+NET_PNL_CALCULATED: TRUE
+LIVE_ORDER_CREATED: FALSE
+EXCHANGE_WRITE_REQUESTS: 0
+```
+
+Doğal sinyal yoksa üretme. Paper zinciri testle geçiyorsa:
+
+```text
+PAPER_TRADING: ACTIVE_AND_ARMED
+FIRST_NATURAL_PAPER_TRADE: WAITING_FOR_SIGNAL
+```
+
+olarak raporla.
+
+---
+
+# FAZ J — Scheduler ve UI durum tutarlılığı
+
+Üst kanonik çubuk ile ana özet kartı için şu zinciri çıkar:
+
+```text
+UI bileşeni
+→ JavaScript fetch/poll
+→ endpoint
+→ response alanı
+→ backend üreticisi
+→ nihai store
+```
+
+Aranacak metinler:
+
+```text
+Pipeline
+Analiz Zamanlayıcısı
+STARTUP_FAILED
+RUNNING
+Son Analiz
+Veri yok
+GREEN
+YELLOW
+```
+
+Tablo:
+
+| UI bölümü | Şablon/JS | Fetch fonksiyonu | Endpoint | Alanlar | Backend üreticisi | Store |
+| --------- | --------- | ---------------- | -------- | ------- | ----------------- | ----- |
+| Üst çubuk |           |                  |          |         |                   |       |
+| Ana kart  |           |                  |          |         |                   |       |
+
+Testler:
+
+1. Worker-local `STARTUP_FAILED`, paylaşımlı kanonik snapshot `RUNNING` ise iki UI kaynağı da `RUNNING/GREEN` dönmeli.
+2. İki worker’ın local değerleri farklı olsa da endpoint sonucu değişmemeli.
+3. Kanonik scheduler gerçekten stale/failed ise iki bölüm de `YELLOW` göstermeli.
+4. Kanonik `last_completed_analysis` varsa hiçbir bölüm `Veri yok` göstermemeli.
+5. Geç gelen eski frontend cevabı yeni cevabı ezmemeli.
+6. Tarihsel startup/idempotency hatası güncel durum olarak gösterilmemeli.
+7. Saat dilimi farkı arıza sayılmamalı.
+
+Hedef:
+
+```text
+Shared canonical scheduler snapshot
+→ single backend status producer
+→ top bar + summary card
+```
+
+Process-local scheduler bilgisi gerekiyorsa yalnız diagnostic alanı olarak kalmalıdır.
+
+---
+
+# FAZ K — Private-auth ayrımı
+
+Test:
+
+```text
+Public market pipeline: HEALTHY
+Scheduler: RUNNING
+Binance Global private auth: HTTP 401 / -2015
+```
+
+Beklenen:
+
+```text
+PUBLIC_PIPELINE: GREEN
+PRIVATE_AUTH: AUTH_ERROR
+PAPER_ANALYSIS: NOT_BLOCKED
+```
+
+Private-auth hatası:
+
+* Public fiyat/mum analizini sarıya çevirmemeli.
+* Scheduler’ı durmuş göstermemeli.
+* Paper motorunu gereksiz yere bloke etmemeli.
+* Ayrı rozet ve ayrı hata alanında tutulmalı.
+* Gerçek işlemlere geçiş için engel olarak kalmalı.
+
+Binance anahtarlarına veya izinlerine müdahale etme.
+
+---
+
+# FAZ L — Tarihsel performans incelemesi
+
+Mevcut paper ledger üzerinde salt-okunur analiz yap. Veriyi değiştirme.
+
+Aşağıdaki sınıfları say:
+
+```text
+LOW_QUALITY_ENTRY
+FALSE_BREAKOUT
+EXCESSIVE_GIVEBACK
+TP_NOT_REACHED_BUT_OPTIMAL_EXIT_PASSED
+PROFIT_CAPTURE_GOOD
+STOP_LOSS
+TRAILING
+TIME_EXIT
+ADAPTIVE_EXIT
+EVIDENCE_MISSING
+```
+
+Ölç:
+
+```text
+trade_count
+win_rate
+gross_pnl
+net_pnl
+total_cost
+profit_factor_net
+average_net_trade
+median_net_trade
+max_drawdown
+captured_ratio
+maximum_favorable_excursion
+maximum_adverse_excursion
+exit_giveback
+holding_time
+results_by_symbol
+results_by_market_regime
+```
+
+Veri veya alan eksikse metrik uydurma:
+
+```text
+METRIC: UNVERIFIED
+REASON: EVIDENCE_MISSING
+```
+
+Geçmiş veri azsa genel kârlılık sonucu verme.
+
+---
+
+# FAZ M — Patch ve dosya sınırı
+
+Yalnız başarısız testle kanıtlanan sorunlara minimal patch uygula.
+
+İzin verilen düzeltmeler:
+
+* Yanlış bağlanmış fonksiyon veya eksik çağrı
+* Yanlış alan eşlemesi
+* Process-local yerine mevcut paylaşımlı store kullanımı
+* `sub_reason` kaybı
+* Tarihsel hatanın aktif hata gibi gösterilmesi
+* Long/short yön hatası
+* Fee/spread/slippage hesap hatası
+* Çift kayıt/idempotency sorunu
+* Paper/live kapısının yanlış bağlanması
+* Mevcut onaylı adaptive-exit tasarımının eksik bağlantısı
+* UI’nın farklı durum kaynaklarını kullanması
+* Geç gelen response’un yeni durumu ezmesi
+* Mevcut kanonik state’ten yanlış `last_analysis` okunması
+
+Executive Review olmadan yapılmayacaklar:
+
+* Strateji eşik değişiklikleri
+* Risk limitleri
+* Position sizing değişiklikleri
+* TP/SL yüzdeleri
+* Minimum net R/R
+* Minimum edge/cost katsayısı
+* Universe büyüklüğü
+* Model ağırlıkları
+* Yeni sinyal üretme mantığı
+* Onaysız TCI/TDP formülü
+* Champion/model değişimi
+
+Bir sorun yalnız konfigürasyon kaynaklıysa kodu değiştirme; ölçüm ve öneriyi ayrı raporla.
+
+---
+
+# FAZ N — Test sırası
+
+Zorunlu sıra:
+
+1. Yeni regresyon testleri tek tek
+2. Ürün seçimi testleri
+3. Giriş ve NO_SIGNAL testleri
+4. Maliyet/net P&L testleri
+5. Pozisyon yönetimi testleri
+6. Adaptive-exit testleri
+7. Paper uçtan uca testleri
+8. Scheduler/API/UI testleri
+9. Private-auth ayrım testleri
+10. İlgili tüm test grubu
+11. Makul süredeyse tam test paketi
+
+Mümkünse:
+
+* Scheduler endpoint’lerine iki worker benzetimiyle en az 20 tekrar
+* Paper karar motoruna aynı snapshot ile tekrar çağrı
+* Frontend polling sıralama testi
+* Network spy ile exchange write sayımı
+* Long ve short simetrisi
+* Sabit saat kullanılarak stale/fresh sınır testleri
+
+Test sürecinde uygulamayı restart etme.
+
+---
+
+# FAZ O — Kârlılık doğrulama sınırı
+
+Birkaç deterministik test veya tek kârlı işlem, gerçek strateji kârlılığını kanıtlamaz.
+
+Şu ayrımı koru:
+
+```text
+FUNCTIONAL_CORRECTNESS
+PAPER_EXECUTION_CORRECTNESS
+HISTORICAL_BACKTEST_RESULT
+WALK_FORWARD_RESULT
+LIVE_PROFITABILITY
+```
+
+`PROFITABILITY_VALIDATED: TRUE` yalnız mevcut kabul edilmiş minimum örneklem, rejim kapsamı, maliyet/stres testi ve walk-forward koşulları gerçekten sağlanıyorsa verilebilir.
+
+Aksi halde:
+
+```text
+PROFITABILITY_VALIDATED: FALSE
+PAPER_VALIDATION_REQUIRED: TRUE
+```
+
+yaz.
+
+Testler geçse bile veri yetersizse `PASS` yalnız fonksiyonel onarım anlamına gelmeli; gerçek kârlılık iddiası yapılmamalıdır.
+
+---
+
+# Kabul kriterleri
+
+Aşağıdakilerin tümü testle doğrulanmalıdır:
+
+```text
+RUNNING_VERSION_IDENTIFIED: TRUE veya UNVERIFIED açıklamalı
+PRODUCT_SELECTION_PATH: TESTED
+ENTRY_QUALITY_GATES: TESTED
+NO_SIGNAL_SUB_REASONS: VISIBLE
+COST_GATES: ACTIVE
+NET_PNL_CALCULATION: PASS
+PAPER_EXECUTION_PATH: PASS
+POSITION_MANAGEMENT: PASS
+DOUBLE_CLOSE_PROTECTION: PASS
+REAL_FAILURE_VISIBILITY: PRESERVED
+PRIVATE_AUTH_SEPARATION: PASS
+TOP_BAR_AND_SUMMARY_SOURCE: CONSISTENT
+PROCESS_LOCAL_STATE_USED_AS_GLOBAL_HEALTH: FALSE
+EXCHANGE_WRITE_REQUESTS: 0
+LIVE_ORDER_CREATED: FALSE
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+CHAMPION_CHANGED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+RESTARTED: FALSE
+FINAL_COMMIT: NONE
+PUSHED: FALSE
+```
+
+TCI/TDP için:
+
+```text
+TCI_TDP_APPROVED_SPEC: FOUND
+ADAPTIVE_EXIT_TESTS: PASS
+```
+
+veya:
+
+```text
+TCI_TDP_APPROVED_SPEC: MISSING
+ADAPTIVE_EXIT_IMPLEMENTATION: BLOCKED_PENDING_APPROVED_SPEC
+```
+
+Keyfî formül kullanarak `PASS` verme.
+
+---
+
+# Zorunlu teslim formatı
+
+```text
+RESULT: PASS | PARTIAL_PASS | FAIL | BLOCKED
+TASK: 118_ALPHA_PROFIT_ARCHITECTURE_REPAIR
+
+HEAD_BEFORE:
+HEAD_AFTER:
+ORIGIN_MAIN:
+RUNNING_VERSION_SHA:
+RUNNING_VERSION_MATCH:
+WORKTREE_BEFORE:
+WORKTREE_AFTER:
+
+GUNICORN_MASTER_PID:
+GUNICORN_WORKER_COUNT:
+SCHEDULER_OWNER_PID:
+SHARED_OPERATION_STORE:
+SHARED_SCHEDULER_STORE:
+PAPER_LEDGER_STORE:
+
+ROOT_CAUSE_SUMMARY:
+PROVEN_ROOT_CAUSES:
+UNVERIFIED_SUSPECTS:
+ROOT_CAUSE_FILES_AND_LINES:
+
+PRODUCT_SELECTION_PATH:
+PRODUCT_SELECTION_DEFECT:
+LOOKAHEAD_TEST:
+STALE_DATA_TEST:
+DETERMINISTIC_RANKING_TEST:
+
+ENTRY_QUALITY_GATES:
+LATE_ENTRY_PROTECTION:
+FALSE_BREAKOUT_PROTECTION:
+LOW_QUALITY_ENTRY_RESULT:
+
+NO_SIGNAL_ROOT_CLASS:
+SIGNAL_FUNNEL:
+TOP_REJECTION_REASONS:
+SUB_REASON_VISIBILITY:
+SUB_REASON_DATA_PATH:
+
+COST_POLICY:
+NET_TP_GATE:
+NET_RR_GATE:
+EDGE_COST_MULTIPLE_GATE:
+COST_CALCULATION:
+NET_PNL_CALCULATION:
+
+POSITION_MANAGER_PATH:
+TP_TEST:
+SL_TEST:
+TRAILING_TEST:
+TIME_EXIT_TEST:
+IDEMPOTENCY_TEST:
+
+TCI_TDP_APPROVED_SPEC:
+ADAPTIVE_EXIT_IMPLEMENTATION:
+ADAPTIVE_EXIT_TESTS:
+EXCESSIVE_GIVEBACK_TEST:
+PROFIT_CAPTURE_TEST:
+
+PAPER_EXECUTION_PATH:
+PAPER_ENTRY_CREATED:
+PAPER_EXIT_CREATED:
+PAPER_LEDGER_UPDATED:
+PAPER_TRADING:
+FIRST_NATURAL_PAPER_TRADE:
+NATURAL_SIGNAL_COUNT:
+
+CANONICAL_SCHEDULER_SOURCE:
+TOP_BAR_SOURCE:
+SUMMARY_CARD_SOURCE:
+FALSE_STARTUP_FAILED:
+MULTI_WORKER_SIMULATION:
+REPEATED_REQUEST_COUNT:
+STATUS_MISMATCH_COUNT_AFTER_PATCH:
+
+PUBLIC_PIPELINE:
+PRIVATE_AUTH:
+PRIVATE_AUTH_SEPARATION:
+
+FAILING_TESTS_BEFORE_PATCH:
+PATCH_SUMMARY:
+CHANGED_FILES:
+TARGETED_TEST_COMMANDS:
+TARGETED_TEST_RESULTS:
+FULL_TEST_COMMAND:
+FULL_TEST_RESULT:
+
+HISTORICAL_TRADE_COUNT:
+NET_PERFORMANCE_RESULT:
+EXCESSIVE_GIVEBACK_COUNT:
+LOW_QUALITY_ENTRY_COUNT:
+EVIDENCE_MISSING_COUNT:
+PROFITABILITY_VALIDATED:
+PAPER_VALIDATION_REQUIRED:
+
+GLOBAL_PAUSE_BEFORE:
+GLOBAL_PAUSE_AFTER:
+LIVE_ORDERS_BEFORE:
+LIVE_ORDERS_AFTER:
+EXCHANGE_WRITE_REQUESTS:
+LIVE_ORDER_CREATED:
+OPEN_LIVE_POSITIONS:
+CHAMPION_CHANGED:
+REAL_TRADING_BEHAVIOR_CHANGED:
+
+SOURCE_CODE_CHANGED:
+OPERATIONAL_STATE_CHANGED:
+RUNTIME_DATA_RESET:
+RESTARTED:
+FINAL_COMMIT:
+PUSHED:
+```
+
+Rapor sonunda şu cümleleri açıkça tamamla:
+
+```text
+Yanlış ürün seçimi konusunda kanıtlanan sorun ...
+Zararlı veya geç giriş konusunda kanıtlanan sorun ...
+Sürekli NO_SIGNAL oluşmasının kanıtlanan ana nedeni ...
+Maliyet sonrası kâr politikası karar zincirinde ...
+Pozisyonların geç kapatılması veya kâr geri vermesi konusunda ...
+TCI/TDP uyarlanabilir çıkış katmanı ...
+Paper al-sat zinciri ...
+Doğal sinyal geldiğinde sistem ...
+Üst çubuk ile ana kart artık ... kanonik kaynağını kullanıyor.
+Binance Global -2015 sorunu public analizden ... tutuldu.
+Gerçek Binance emri gönderilmedi; exchange write request sayısı ...
+Gerçek kârlılık ... nedeniyle doğrulandı/doğrulanmadı.
+Executive Review kararı bekleniyor.
+```
+
+Son güvenlik özeti aynen bulunmalıdır:
+
+```text
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+EXCHANGE_WRITE_REQUESTS: 0
+LIVE_ORDER_CREATED: FALSE
+CHAMPION_CHANGED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+RESTARTED: FALSE
+FINAL_COMMIT: NONE
+PUSHED: FALSE
+```

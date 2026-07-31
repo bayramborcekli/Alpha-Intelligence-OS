@@ -561,6 +561,29 @@ def _open_paper_trade(
     atr_mult = float(config.get("atr_stop_multiplier", 1.5))
     rr       = float(config.get("reward_risk_ratio", 2.0))
 
+    # GÖREV 118 — Mission-11 ekonomi kapısı bu yolda da zorunlu:
+    # alpha20.run_cycle aynı kuralı uyguluyordu; orkestre edilen AUTO
+    # yolunda çağrı eksikti (fee-dominant işlem açılabiliyordu).
+    # Kural/eşik AYNEN alpha20.evaluate_trade_economics'ten gelir.
+    econ = alpha20.evaluate_trade_economics(
+        entry, atr, side, float(trading_state["balance"]), config)
+    if econ["skip"]:
+        log.info(
+            "SKIPPED: Expected fee exceeds acceptable threshold. | %s %s"
+            " | brüt=%.4f fee=%.4f sf=%.1f",
+            symbol, side, econ["expected_gross_profit"],
+            econ["expected_total_fee"], econ["safety_factor"])
+        ms.append_decision(
+            symbol=symbol, price=entry, regime=coin_regime,
+            regime_confidence=0, strategy_score=0,
+            final_score=final_score, risk_pct=risk_pct,
+            stop=None, target=None,
+            decision="REJECT",
+            reason="FEE_DRAG — beklenen brüt kâr, komisyon×güvenlik "
+                   "katsayısını karşılamıyor (Mission-11 ekonomi kapısı)",
+        )
+        return
+
     qty, stop_dist, err = ar.calculate_position_size(
         balance=float(trading_state["balance"]),
         risk_pct=risk_pct, entry=entry, stop=0,
