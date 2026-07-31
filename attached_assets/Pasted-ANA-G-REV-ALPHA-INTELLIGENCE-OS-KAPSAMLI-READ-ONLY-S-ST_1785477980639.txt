@@ -1,0 +1,518 @@
+ANA GÖREV — ALPHA INTELLIGENCE OS
+KAPSAMLI READ-ONLY SİSTEM, SİNYAL, VERİ AKIŞI VE TASARIM DENETİMİ
+
+GLOBAL_PAUSE: ACTIVE kalacak.
+
+Bu aşamada yalnız inceleme yap.
+
+KESİNLİKLE YASAK:
+
+- dosya değiştirme
+- kod yazma
+- test dosyası ekleme
+- commit
+- push
+- merge
+- rebase
+- branch/worktree kalıcı değişikliği
+- runtime dosyası temizleme
+- ayar değiştirme
+- görev tamamlama
+- markTaskComplete çağırma
+- follow-up görev oluşturma
+- başka göreve geçme
+
+LIVE ORDERS kesinlikle DISABLED kalacak.
+Champion, Paper davranışı, TP/SL, giriş eşikleri ve runtime state değiştirilmeyecek.
+
+==================================================
+ANA AMAÇ
+==================================================
+
+Alpha Intelligence OS’u uçtan uca incele.
+
+Aşağıdaki dört ana soruya kanıtla cevap ver:
+
+1. Sistem gerçekten bütün beklenen piyasaları analiz ediyor mu?
+2. Sinyal oluşmamasının nedeni piyasa koşulları mı, aşırı sıkı filtreler mi,
+   veri eksikliği mi, scheduler/queue hatası mı?
+3. Backend, API ve panel aynı gerçeği mi gösteriyor?
+4. Mevcut arayüz neden önceki profesyonel tasarımdan uzaklaştı ve hangi
+   bileşenler yeniden düzenlenmeli?
+
+Hiçbir iddiayı yalnız ekran görüntüsüne veya tahmine dayandırma.
+
+Her bulguyu şu kanıtlardan biriyle destekle:
+
+- kod yolu
+- endpoint cevabı
+- runtime state
+- audit/log
+- test
+- Git geçmişi
+- HTML/JS/CSS render zinciri
+
+==================================================
+BÖLÜM 1 — MİMARİ HARİTA
+==================================================
+
+Mevcut sistemin gerçek akışını çıkar:
+
+Market Data
+→ Universe
+→ Watchlist
+→ Feature Pipeline
+→ Signal Engine
+→ Cost-Aware Gates
+→ PFDE
+→ Risk Engine
+→ Paper Intent
+→ Position
+→ PHI/Hold Intelligence
+→ Exit
+→ Trade History
+→ Strategy Lab
+→ UI
+
+Her katman için raporla:
+
+- sorumlu dosya/modül
+- giriş verisi
+- çıkış verisi
+- state/runtime dosyası
+- endpoint
+- frontend tüketicisi
+- hata/fail-closed davranışı
+- Windows uyumluluğu
+
+Aynı gerçeğin birden fazla yerde tutulduğu alanları belirt.
+
+==================================================
+BÖLÜM 2 — SİNYAL ÜRETİMİ VE ANALİZ KAPSAMI
+==================================================
+
+Son en az 20 analiz çevrimini incele.
+
+Model bazında:
+
+CORE
+OPPORTUNITY
+
+şunları çıkar:
+
+- beklenen semboller
+- queue’ya alınan semboller
+- feature üretilen semboller
+- decision engine’e ulaşan semboller
+- NO_SIGNAL
+- REJECTED
+- ACCEPTED
+- DATA_UNAVAILABLE
+- ERROR
+- TIMEOUT
+- NOT_ANALYZED
+
+Ayrı ayrı incele:
+
+- sabit watchlist
+- CORE evreni
+- OPPORTUNITY evreni
+- pinned semboller
+- watch-only semboller
+
+Özellikle araştır:
+
+- HYPEUSDT neden NOT_ANALYZED?
+- ONDOUSDT neden NOT_ANALYZED?
+- Sabit watchlist sembolleri modele nasıl atanıyor?
+- analyzed_symbol_count gerçekten neyi sayıyor?
+- Aynı sembol iki modelde birbirini eziyor mu?
+- Bir sembol hatası kalan çevrimi durduruyor mu?
+- Queue erken kesiliyor mu?
+- Son semboller zaman bütçesi nedeniyle düşüyor mu?
+- Symbol normalize problemi var mı?
+
+Raporla:
+
+WATCHLIST_EXPECTED:
+WATCHLIST_ANALYZED:
+CORE_EXPECTED:
+CORE_ANALYZED:
+OPPORTUNITY_EXPECTED:
+OPPORTUNITY_ANALYZED:
+MISSING_SYMBOLS:
+EXACT_COVERAGE_GAP:
+
+==================================================
+BÖLÜM 3 — SİNYAL YOKLUĞUNUN KÖK NEDENİ
+==================================================
+
+Son 500 karar veya erişilebilen en yüksek dürüst örneklem üzerinden:
+
+- NO_SIGNAL
+- LOW_CONFIDENCE
+- MOMENTUM_EXHAUSTED
+- FALSE_BREAKOUT_RISK
+- NET_REWARD_RISK_TOO_LOW
+- FEE_DRAG
+- DATA_QUALITY
+- diğer redler
+
+sayısal dağılımını çıkar.
+
+Her reason code için:
+
+- model
+- sembol
+- sıklık
+- son görülme zamanı
+- toplam etki
+- gerçek giriş kapısı mı
+- yalnız shadow mı
+
+Şu soruya kesin cevap ver:
+
+“Yeni pozisyon açılmamasının ana nedeni hangisi?”
+
+Aday kategoriler:
+
+- gerçek setup oluşmuyor
+- confidence düşük
+- maliyet sonrası R/R kapıları bütün adayları engelliyor
+- momentum tükenmiş
+- veri eksikliği
+- scheduler coverage problemi
+- risk engine
+- operator/global pause
+- Paper controller
+- kod hatası
+
+Birden fazla neden varsa yüzde ve öncelik ver.
+
+==================================================
+BÖLÜM 4 — COST-AWARE, PFDE VE PHI DOĞRULAMASI
+==================================================
+
+Doğrula:
+
+- Cost-Aware Gates gerçek girişe bağlı mı?
+- PFDE yalnız shadow mı?
+- PHI yalnız shadow mı?
+- TCP/EPP/PFS gerçek kararı etkiliyor mu?
+- Hold Intelligence gerçek çıkışı etkiliyor mu?
+- Gerçek işlem davranışı raporlarla tutarlı mı?
+
+Endpoint ve runtime:
+
+- /api/profit-first/report
+- /api/hold-intelligence/report
+- /api/dual-model/state
+- /api/paper/state
+
+Her biri için:
+
+- HTTP status
+- veri güncelliği
+- coverage
+- sample
+- stale durumu
+- Windows import/lock problemi
+- gerçek davranış sözleşmesi
+
+Şu riskleri incele:
+
+- shadow kodun yanlışlıkla gerçek girişe bağlanması
+- exception’ın yutulması
+- stale shadow verinin panelde güncel görünmesi
+- eksik feature’ın 0 gibi yorumlanması
+- look-ahead leakage
+
+==================================================
+BÖLÜM 5 — STRATEGY LAB
+==================================================
+
+İncele:
+
+- cycle gerçekten çalışıyor mu?
+- last_cycle neden güncel değil?
+- tetikleyici nedir?
+- bir sonraki cycle ne zaman?
+- generated/tested neden 0?
+- veri eşiği mi, stale worker mı, circuit breaker mı?
+- CORE ve OPPORTUNITY ayrı mı değerlendirilmekte?
+
+Kısıtlar:
+
+- ALLOCATION_UNKNOWN
+- CONCENTRATION_UNKNOWN
+- DIVERSIFICATION_UNKNOWN
+- EXPOSURE_UNKNOWN
+- MARKET_REGIME_UNKNOWN
+- NO_FORECAST
+- RISK_UTILIZATION_UNKNOWN
+
+Her biri için:
+
+- beklenen kaynak
+- gerçek kaynak
+- kaynak mevcut mu?
+- veri üretiliyor mu?
+- schema uyumlu mu?
+- freshness
+- kesin reason
+- minimum düzeltme
+
+Rapor:
+
+STRATEGY_LAB_STATUS:
+LAST_CYCLE_AGE:
+CYCLE_TRIGGER:
+EVIDENCE_PIPELINE_STATUS:
+UNKNOWN_CONSTRAINT_ROOT_CAUSES:
+
+==================================================
+BÖLÜM 6 — TRADE INTELLIGENCE VE KAYIT BÜTÜNLÜĞÜ
+==================================================
+
+İncele:
+
+- trade_history.json
+- recent_trades
+- decisions.jsonl
+- decisions.jsonl.1
+- pfs_shadow.jsonl
+- hold_shadow.jsonl
+- diğer runtime/audit dosyaları
+
+Sorular:
+
+- LAUSDT hangi yol tarafından üretildi?
+- Legacy ve dual-model kayıtları karışıyor mu?
+- Aynı işlem için trade_id var mı?
+- Entry anındaki TCP/EPP/PFS/PHI kayıtlı mı?
+- Exit anındaki MFE/MAE/giveback kayıtlı mı?
+- “Güçlü strateji sinyali” dışında gerçek kanıt zinciri var mı?
+- Runtime dosyaları neden GitHub Desktop’ta değişiklik görünüyor?
+- Rotation dosyaları Git tarafından takip ediliyor mu?
+- .gitignore yeterli mi?
+
+Bu bölümde dosya temizleme veya Git takibi değiştirme.
+
+Yalnız raporla.
+
+==================================================
+BÖLÜM 7 — BACKEND / API / UI TUTARLILIĞI
+==================================================
+
+Şu ekran ve endpoint’leri karşılaştır:
+
+Trading Home
+Portfolio
+Markets
+Watchlists
+Strategies
+AI Scanner
+Risk Management
+Reports
+Automation
+Operation Center
+Strategy Lab
+
+Her panel için:
+
+- backend kaynağı
+- endpoint
+- frontend render fonksiyonu
+- gösterilen alan
+- eksik alan
+- yanlış fallback
+- stale/cache riski
+- çelişen bilgi
+
+Özellikle araştır:
+
+- RUNNING ile “Automation kapalı” çelişkisi
+- Pipeline GREEN ama NOT_ANALYZED semboller
+- risk_approved > 0 fakat candidate = 0
+- open position count ile incomplete position farkı
+- UNKNOWN yerine NO_SIGNAL gösterilmesi
+- aynı verinin farklı ekranlarda farklı değer göstermesi
+
+==================================================
+BÖLÜM 8 — TASARIM VE UX DENETİMİ
+==================================================
+
+Referans hedef:
+
+- profesyonel trading terminali
+- önceki modern dashboard tasarımına yakın görünüm
+- tek bakışta sistem durumu
+- gerçek zamanlı ve açıklanabilir kararlar
+
+Mevcut ekranları incele:
+
+- layout
+- grid
+- spacing
+- font
+- kart yüksekliği
+- kolon hizası
+- yatay taşma
+- responsive davranış
+- renk hiyerarşisi
+- status badge kullanımı
+- yoğunluk
+- boş alan
+- okunabilirlik
+
+Özellikle raporla:
+
+1. Trading Home neden parçalı ve sıkışık görünüyor?
+2. Strategy Lab kartı neden okunaksız hale geldi?
+3. Watchlist, model evreni ve son analiz kartı neden karışıyor?
+4. Büyük ekran alanı neden verimsiz kullanılıyor?
+5. Hangi kartlar birleştirilmeli?
+6. Hangi bilgiler ana ekranda kalmalı?
+7. Hangi bilgiler detay/tooltip’e taşınmalı?
+8. Mobil/orta ekran davranışı nasıl?
+9. Önceki tasarım hangi commit/merge sonrasında bozuldu?
+10. CSS mi, template mi, JS render mı kök neden?
+
+Her ekranı şu puanlarla değerlendir:
+
+- Bilgi doğruluğu /10
+- Okunabilirlik /10
+- Operatör faydası /10
+- Görsel kalite /10
+- Tutarlılık /10
+
+==================================================
+BÖLÜM 9 — REFERANS DASHBOARD İLE GAP ANALİZİ
+==================================================
+
+Paylaşılan referans dashboard’u yalnız tasarım hedefi olarak kullan.
+
+Karşılaştır:
+
+- üst sağlık barı
+- KPI kartları
+- aktif pozisyon tablosu
+- CORE ve OPPORTUNITY ayrımı
+- izlenen piyasalar
+- sistem sağlığı
+- piyasa özeti
+- risk kullanımı
+- responsive düzen
+
+Aynısını kör biçimde kopyalama.
+
+Mevcut gerçek veriye uygun bir tasarım hedefi çıkar:
+
+- hangi bloklar korunmalı
+- hangi bloklar kaldırılmalı
+- hangi yeni bloklar eklenmeli
+- hangi alanlar canlı veri olmadan gösterilmemeli
+- sahte/demo değer kesinlikle üretilmemeli
+
+==================================================
+BÖLÜM 10 — GÜVENLİK VE OPERASYON
+==================================================
+
+Doğrula:
+
+- LIVE_ORDERS gerçekten DISABLED
+- Binance Global read-only
+- controller/scheduler tutarlı
+- global pause etkisi
+- incomplete positions
+- orphan/legacy kayıtlar
+- fail-closed davranışı
+- API hata cevaplarının JSON olması
+- Windows flock fallback’leri
+- runtime state atomik yazımı
+- secrets sızıntısı riski
+
+==================================================
+BÖLÜM 11 — GIT VE MERGE HASARI
+==================================================
+
+Git geçmişinde incele:
+
+- hangi commit’ler Trading Home tasarımını değiştirdi?
+- hangi merge’lerde CSS/template/JS kaybı oldu?
+- eski tasarımın son sağlam commit’i hangisi?
+- Strategy Lab ve PFDE eklenirken hangi UI blokları ezildi?
+- runtime dosyaları ne zaman track edilmeye başladı?
+- geri alma yerine forward-fix daha güvenli mi?
+
+Hiçbir checkout/reset/revert yapma.
+
+Yalnız commit hash ve dosya düzeyinde raporla.
+
+==================================================
+BÖLÜM 12 — ÖNCELİKLENDİRME
+==================================================
+
+Bütün bulguları şu sınıflara ayır:
+
+P0 — veri bütünlüğü / yanlış gerçeklik / güvenlik
+P1 — sinyal coverage / Strategy Lab / runtime entegrasyonu
+P2 — UI yanlış veya çelişkili bilgi
+P3 — görsel tasarım ve kullanılabilirlik
+P4 — iyileştirme/optimizasyon
+
+Her madde için:
+
+- sorun
+- kanıt
+- kullanıcı etkisi
+- ticari etki
+- risk
+- minimum çözüm
+- tahmini dosyalar
+- bağımlılıklar
+
+==================================================
+ZORUNLU SONUÇ RAPORU
+==================================================
+
+Rapor şu sırada teslim edilecek:
+
+1. Executive Summary
+2. Sistem gerçekten çalışıyor mu?
+3. Sinyal neden çıkmıyor?
+4. Hangi semboller analiz edilmiyor?
+5. Watchlist/model evreni farkı
+6. PFDE/PHI gerçek çalışma durumu
+7. Strategy Lab kök nedeni
+8. UNKNOWN kısıtlarının kök nedeni
+9. Trade intelligence eksikleri
+10. Backend/API/UI tutarsızlıkları
+11. Tasarım bozulmasının kök nedeni
+12. Referans dashboard gap analizi
+13. Git/merge kaynaklı bozulmalar
+14. İlk düzeltilmesi gereken 20 madde
+15. Önerilen aşamalı uygulama planı
+16. Değişiklik yapılmadığı kanıtı
+
+Her bulgu için:
+
+- CONFIRMED
+- PROBABLE
+- UNPROVEN
+
+etiketi kullan.
+
+Tahmin ile kanıtı karıştırma.
+
+RAPOR SONU:
+
+GLOBAL_PAUSE: ACTIVE
+MODE: READ_ONLY_FULL_SYSTEM_AUDIT
+FILES_CHANGED: NONE
+COMMITS: NONE
+PUSH: NONE
+LIVE_ORDERS: DISABLED
+CHAMPION_CHANGED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+BACKGROUND_WORK: STOPPED
