@@ -1,0 +1,534 @@
+GLOBAL_PAUSE: ACTIVE kalacak.
+
+LIVE_ORDERS kesinlikle DISABLED kalacak.
+
+Bu görev yalnız Paper / Shadow ortamında çalışacaktır.
+
+Champion değişmeyecek.
+
+Gerçek trade davranışı değişmeyecek.
+
+Yeni karar motoru yazılmayacak.
+
+Mevcut algoritmalar kullanılacaktır.
+
+Görev tamamlanınca markTaskComplete çağrılmayacak.
+
+Başka göreve geçilmeyecek.
+
+Follow-up oluşturulmayacak.
+
+=========================================================
+AMAÇ
+=========================================================
+
+Bu görevin amacı yeni AI katmanı geliştirmek değildir.
+
+Amaç:
+
+Alpha Intelligence OS'u profesyonel bir trading platformu seviyesine ulaştırmaktır.
+
+Öncelik:
+
+1) sistem neden sinyal üretmiyor
+
+2) neden iyi coin kaçıyor
+
+3) neden erken zarar ediyor
+
+4) dashboard neden operatöre yanlış izlenim veriyor
+
+5) tek kanonik veri kaynağı oluşturmak
+
+6) Trading Home'u referans tasarıma dönüştürmek
+
+=========================================================
+FAZ 0
+READ ONLY SYSTEM AUDIT
+=========================================================
+
+Önce hiçbir dosya değiştirilmeyecek.
+
+Tüm sistem incelenecek.
+
+Rapor hazırlanacak.
+
+Aşağıdakiler tek tek ölçülecek.
+
+• Scheduler
+
+• Scanner
+
+• Decision Engine
+
+• Risk Engine
+
+• PFDE
+
+• PHI
+
+• Strategy Lab
+
+• Dashboard
+
+• API
+
+• Runtime
+
+• State
+
+• JSON
+
+• UI
+
+Hiçbir varsayım yapılmayacak.
+
+Her bulgu kod kanıtı ile yazılacak.
+
+=========================================================
+FAZ 1
+NO SIGNAL ROOT CAUSE ANALYZER
+=========================================================
+
+Tüm rejected işlemler analiz edilecek.
+
+NO_SIGNAL tek başlık olmayacak.
+
+Alt nedenler çıkarılacak.
+
+Örneğin:
+
+EMA_BLOCK
+
+VWAP_BLOCK
+
+VOLUME_BLOCK
+
+RSI_BLOCK
+
+ADX_BLOCK
+
+TREND_TOO_WEAK
+
+BREAKOUT_TOO_LATE
+
+BREAKOUT_TOO_EARLY
+
+LOCAL_TOP
+
+SPREAD
+
+LOW_EDGE
+
+LOW_CONFIDENCE
+
+PFDE
+
+PHI
+
+RR
+
+TCI
+
+AEI
+
+hangi filtre ne kadar etkiliyor
+
+istatistik üretilecek.
+
+Örnek:
+
+EMA
+34%
+
+VWAP
+11%
+
+Momentum
+18%
+
+Volume
+22%
+
+vb.
+
+Sistem artık
+
+NO_SIGNAL
+
+değil
+
+NEDEN_NO_SIGNAL
+
+üretecek.
+
+=========================================================
+FAZ 2
+ENTRY QUALITY ANALYZER
+=========================================================
+
+Son 500-1000 analiz incelenecek.
+
+Aşağıdakiler ölçülecek.
+
+Gerçek yükselen coin
+
+kaçırıldı mı
+
+neden kaçırıldı
+
+hangi filtre reddetti
+
+kaç dakika sonra yükseldi
+
+kaçırılan maksimum kar
+
+hangi model
+
+hangi market
+
+hangi volatilite
+
+hangi confidence
+
+hangi regime
+
+hangi PFDE
+
+hangi PHI
+
+çıkarılacak.
+
+Sonunda
+
+Missed Opportunity Report
+
+oluşturulacak.
+
+=========================================================
+FAZ 3
+TRADE TIMELINE ANALYZER
+=========================================================
+
+Her pozisyon için
+
+0sn
+
+30sn
+
+60sn
+
+90sn
+
+120sn
+
+180sn
+
+300sn
+
+600sn
+
+ölçülecek.
+
+Çıkarılacak.
+
+MFE
+
+MAE
+
+Peak
+
+Giveback
+
+Net PnL
+
+PHI
+
+TCP
+
+EPP
+
+PFS
+
+Trend
+
+Momentum
+
+RSI
+
+VWAP
+
+EMA
+
+Volatility
+
+Sonuç:
+
+İlk zarar
+
+ilk kar
+
+ilk geri dönüş
+
+ilk bozulma
+
+ilk trend kırılması
+
+kanıtlanacak.
+
+=========================================================
+FAZ 4
+TRADING HOME REBUILD
+=========================================================
+
+Referans alınacak tasarım:
+
+(eklenen görsel)
+
+Bu tasarım temel alınacaktır.
+
+Ama birebir kopyalanmayacaktır.
+
+Alpha Intelligence OS kimliği korunacaktır.
+
+Tek kanonik veri kaynağı kullanılacaktır.
+
+Aynı veri iki farklı yerden okunmayacaktır.
+
+Hiçbir kart placeholder göstermeyecek.
+
+UNKNOWN
+
+—
+
+N/A
+
+gibi alanlar kalmayacak.
+
+Kartlar yalnız gerçek runtime verisi gösterecek.
+
+=========================================================
+Dashboard hedefi
+=========================================================
+
+Üst bölüm
+
+• Portfolio
+
+• Daily PnL
+
+• Unrealized
+
+• Active Position
+
+• Watchlist
+
+• System Health
+
+• AI Status
+
+Orta bölüm
+
+Aktif işlemler
+
+Core
+
+Opportunity
+
+Watchlist
+
+Alt bölüm
+
+Market Summary
+
+Top Winners
+
+Top Losers
+
+Risk
+
+Automation
+
+AI Diagnostics
+
+=========================================================
+FAZ 5
+KANONİK DATA SOURCE
+=========================================================
+
+Trading Home
+
+Automation
+
+Strategy Lab
+
+Risk
+
+Portfolio
+
+Watchlist
+
+tamamı
+
+tek runtime state
+
+tek API
+
+tek serializer
+
+tek model
+
+üzerinden beslenecek.
+
+Duplicate state kaldırılacak.
+
+=========================================================
+FAZ 6
+UI TUTARLILIK DENETİMİ
+=========================================================
+
+Tüm ekranlar incelenecek.
+
+Eksikler bulunacak.
+
+Bozuk hizalama
+
+yanlış renk
+
+yanlış ikon
+
+taşan yazılar
+
+responsive sorunları
+
+boş kartlar
+
+çift scrollbar
+
+placeholder
+
+UNKNOWN
+
+bozuk tooltip
+
+yanlış sayaç
+
+tespit edilecek.
+
+=========================================================
+FAZ 7
+WINDOWS VALIDATION
+=========================================================
+
+Windows
+
+Linux
+
+aynı dashboard üretmeli.
+
+Aynı API
+
+aynı sonuç
+
+aynı kart
+
+aynı sayaç
+
+aynı watchlist
+
+aynı state
+
+kanıtlanacak.
+
+=========================================================
+FAZ 8
+TESTLER
+=========================================================
+
+Yeni testler yazılacak.
+
+Dashboard
+
+API
+
+Serializer
+
+Decision
+
+Runtime
+
+Scheduler
+
+Watchlist
+
+Signal Visibility
+
+UI Contract
+
+Canonical State
+
+Regression
+
+Windows
+
+Linux
+
+hepsi test edilecek.
+
+=========================================================
+TESLİM RAPORU
+=========================================================
+
+Teslim raporu şunları içerecek.
+
+1.
+
+Dashboard sorunları
+
+2.
+
+NO_SIGNAL neden dağılımı
+
+3.
+
+Kaçırılan fırsatlar
+
+4.
+
+İlk 5 dakika davranışı
+
+5.
+
+UI eksikleri
+
+6.
+
+Canonical state doğrulaması
+
+7.
+
+Windows doğrulaması
+
+8.
+
+Performans kazanımı
+
+9.
+
+Test sonuçları
+
+10.
+
+Kalan teknik borç
+
+Hiçbir varsayım yazılmayacak.
+
+Her sonuç kod veya veri ile kanıtlanacaktır.
+
+GLOBAL_PAUSE değişmeyecek.
+
+LIVE_ORDERS DISABLED kalacaktır.
+
+Gerçek trading davranışı değiştirilmeyecektir.
+
+Bu görev yalnız sistemi olgunlaştırmak ve mevcut mimariyi profesyonel seviyeye çıkarmak içindir.
