@@ -4559,11 +4559,10 @@ def api_paper_state():
     from services import emergency_stop as es
     from services import binance_connection as bcn
     est = es.status()
-    try:
-        controller = ("RUNNING" if ac.get_status().get("running")
-                      else "STOPPED")
-    except Exception:
-        controller = "UNKNOWN"
+    # GÖREV 116: 'controller' rozeti aşağıda kanonik readiness
+    # detayından türetilir (worker-yerel ac.get_status() flapping'i
+    # imkânsız olsun); burada yalnız varsayılan atanır.
+    controller = "UNKNOWN"
     strategies = _strategy_states()
     try:
         bg = (bcn.status().get("BINANCE_GLOBAL") or {}).get(
@@ -4581,7 +4580,11 @@ def api_paper_state():
     except Exception:
         auto_state = "UNKNOWN"
     try:
-        ready = sro.readiness(ac.get_status(), auto_state,
+        # GÖREV 116: worker-yerel ac.get_status() DEĞİL, None geçilir —
+        # scheduler_status() kanonik çözümü yapar (yerel çalışmıyorsa
+        # sahibi canlı+taze paylaşımlı snapshot'a düşer). Böylece hangi
+        # worker cevap verirse versin aynı kanonik durum döner.
+        ready = sro.readiness(None, auto_state,
                               bool(est["active"]))
     except Exception as exc:
         app.logger.warning("readiness hesaplanamadı: %s", exc)
@@ -4594,6 +4597,11 @@ def api_paper_state():
                  "selected_risk_profile": "UNKNOWN",
                  "last_complete_analysis": None,
                  "last_decision": None}
+    else:
+        # GÖREV 116: rozet kanonik scheduler detayından türetilir.
+        controller = ("RUNNING" if (ready.get(
+            "analysis_scheduler_detail") or {}).get("running")
+            else "STOPPED")
     # Dürüst sayaçlar: enabled sembol "fırsat" DEĞİLDİR. Sinyal adayı
     # = son karar kayıtlarında WATCH/OPEN; riskten geçen = risk
     # allowed; paper intent = OPEN kararı.

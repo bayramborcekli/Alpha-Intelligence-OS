@@ -1,0 +1,495 @@
+# GÖREV 116 — REPLİT SARI/YEŞİL DURUM TUTARSIZLIĞI VE KANONİK SCHEDULER SNAPSHOT AGENTI
+
+## Rolün
+
+Sen Alpha Intelligence OS için kıdemli backend, frontend ve çoklu-worker tutarlılık agentısın.
+
+Görevin, Replit ekranında peş peşe yenilemelerde veya aynı ekranın farklı bölümlerinde görülen:
+
+```text
+GREEN ↔ YELLOW
+RUNNING ↔ STARTUP_FAILED
+Son Analiz zamanı ↔ Veri yok
+```
+
+çelişkisini kesin kaynak zinciriyle kanıtlamak, regresyon testini önce yazmak ve minimal düzeltmeyi uygulamaktır.
+
+Bu görev yalnızca **durum gözlemlenebilirliği ve UI tutarlılığı** kapsamındadır. Scheduler çalışma mantığını, analiz stratejisini veya trading davranışını değiştirme.
+
+---
+
+## 1. Kabul edilmiş ekran kanıtları
+
+Peş peşe alınan Replit görüntülerinde iki farklı görünüm oluşmuştur.
+
+### Sağlıklı görünen ekranlar
+
+```text
+Pipeline: GREEN
+Analiz Zamanlayıcısı: RUNNING
+Son Analiz: güncel saat
+CORE ve OPPORTUNITY listeleri: dolu
+İzlenen piyasalar: 4 sembol
+Coin analizleri: güncel
+```
+
+### Çelişkili ekranlar
+
+Aynı anda:
+
+| Kanonik üst çubuk           | Ana özet kartı        |
+| --------------------------- | --------------------- |
+| Pipeline `GREEN`            | Pipeline `YELLOW`     |
+| Scheduler `RUNNING – 12:02` | `STARTUP_FAILED`      |
+| Son analiz `12:02`          | Son analiz `Veri yok` |
+
+Ayrıca bu çelişkili görünüm sırasında:
+
+```text
+CORE: 9
+OPPORTUNITY: 20
+İzlenen piyasa: 4
+BTC/ETH/SOL/UNI analizleri: mevcut
+dual-model runtime: taze
+last_error: null
+```
+
+olduğu görülmüştür.
+
+Bu veriler, gerçek analiz döngüsünün tamamlandığını ve ana özet kartındaki `STARTUP_FAILED / Veri yok` bilgisinin gerçek scheduler durumunu temsil etmediğini güçlü biçimde kanıtlamaktadır.
+
+Saat farkını hata sayma:
+
+```text
+12:03 UTC = 15:03 Europe/Istanbul
+```
+
+---
+
+## 2. Mevcut teknik teşhis
+
+Kabul edilen üst düzey teşhis:
+
+```text
+SCHEDULER_BACKEND: RUNNING
+PUBLIC_MARKET_ANALYSIS: PASS
+FALSE_STARTUP_FAILED_UI: CONFIRMED
+STATUS_SOURCE_INCONSISTENCY: CONFIRMED
+```
+
+En güçlü kök neden adayı:
+
+```text
+Gunicorn çoklu worker
++
+scheduler durumunun bazı alanlarda process-local tutulması
++
+üst çubuk ve ana kartın farklı endpoint/state kaynakları kullanması
++
+isteklerin farklı worker’lara düşmesi
+→ yenilemeler arasında GREEN/YELLOW değişimi
+```
+
+Ancak yalnız tahmine dayanma. Aşağıdaki zinciri dosya, fonksiyon ve alan düzeyinde kanıtla:
+
+```text
+UI bileşeni
+→ JavaScript fetch/poll fonksiyonu
+→ API endpoint
+→ response alanı
+→ backend durum üreticisi
+→ process-local veya paylaşımlı store
+```
+
+Kesin mekanizma kanıtlanmadan yalnız “multi-worker olabilir” yazıp görevi kapatma.
+
+---
+
+## 3. Değişmez güvenlik sınırları
+
+Görev boyunca:
+
+```text
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+EXCHANGE_WRITE_REQUESTS: 0
+LIVE_ORDER_CREATED: FALSE
+OPEN_LIVE_POSITIONS: 0
+CHAMPION_CHANGED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+EXECUTION_MODE: PAPER/SHADOW ONLY
+```
+
+Kesinlikle yapma:
+
+* Scheduler’ı başlatma, durdurma veya yeniden başlatma.
+* Operation state’i değiştirme.
+* Adaptive engine’i enable/disable etme.
+* Replit’i yeniden başlatma.
+* Gerçek emir oluşturma, değiştirme veya iptal etme.
+* Global pause kilidini kaldırma.
+* Live-orders kilidini açma.
+* Binance anahtarlarına veya izinlerine müdahale etme.
+* Secret, token, API key veya DPAPI içeriğini yazdırma.
+* TP/SL, R/R, maliyet kapıları veya sinyal eşiklerini değiştirme.
+* NO_SIGNAL filtre mantığına dokunma.
+* Universe seçim mantığını değiştirme.
+* Paper ledger veya işlem geçmişini silme.
+* Runtime verilerini sıfırlama.
+* Commit veya push yapma.
+* Unrelated dosyalara dokunma.
+
+Binance Global `HTTP 401 / -2015` private-auth sorunu bu görevden ayrıdır. Bu hata, çalışan public piyasa analizi pipeline’ını `YELLOW` yapmamalıdır.
+
+---
+
+## 4. FAZ A — Çalışma alanını ve mevcut durumu doğrula
+
+Önce salt-okunur inceleme yap:
+
+```text
+git status --short
+git rev-parse HEAD
+git rev-parse origin/main
+```
+
+Raporla:
+
+* Çalışan HEAD
+* Worktree durumu
+* Gunicorn master ve worker sayısı
+* Uygulamanın gerçek import yolları
+* Scheduler sahibi süreç
+* Paylaşımlı operation store yolu
+* Scheduler snapshot/runtime yolu
+* Son analiz zamanı
+* Universe refresh zamanı
+* Runtime dosyalarının tazeliği
+* CORE ve OPPORTUNITY sayıları
+* `last_error`
+* Global pause
+* Live-orders durumu
+
+Kullanıcıya ait mevcut değişiklikleri geri alma veya yeniden biçimlendirme.
+
+Runtime dosyaları Git tarafından izleniyorsa bu görevde silme veya geçmişi yeniden yazma. Yalnız raporla.
+
+---
+
+## 5. FAZ B — İki UI kaynağını haritala
+
+Üst çubuk ve ana özet kartındaki şu metinleri kaynak kodda bul:
+
+```text
+Pipeline
+Analiz Zamanlayıcısı
+STARTUP_FAILED
+RUNNING
+Son Analiz
+Veri yok
+```
+
+Her görünüm için aşağıdaki tabloyu doldur:
+
+| UI bölümü         | Şablon/JS dosyası | Fetch fonksiyonu | Endpoint | Response alanı | Backend üreticisi | Nihai store |
+| ----------------- | ----------------- | ---------------- | -------- | -------------- | ----------------- | ----------- |
+| Üst kanonik çubuk |                   |                  |          |                |                   |             |
+| Ana özet kartı    |                   |                  |          |                |                   |             |
+
+Özellikle kontrol et:
+
+* İki bölüm farklı endpoint kullanıyor mu?
+* Endpoint’lerden biri modül globali/process-local nesne okuyor mu?
+* `STARTUP_FAILED` import/startup sırasında worker’a özel yazılıyor mu?
+* Tarihsel startup hatası aktif hata gibi mi gösteriliyor?
+* Bir worker scheduler sahibi, diğer worker yalnız web isteği mi karşılıyor?
+* `last_analysis` alanı paylaşımlı store yerine worker belleğinden mi okunuyor?
+* Frontend eski response’u yeni response’un üzerine yazabiliyor mu?
+* Farklı polling süreleri yarış durumu oluşturuyor mu?
+* UI tarafında renk ve pipeline durumu ikinci kez bağımsız mı hesaplanıyor?
+* Cache veya varsayılan fallback yanlışlıkla `STARTUP_FAILED` üretiyor mu?
+
+`STARTUP_FAILED` değerinin nerede oluşturulduğunu, nerede saklandığını ve hangi şartla temizlendiğini satır düzeyinde göster.
+
+---
+
+## 6. FAZ C — Önce başarısız regresyon testi yaz
+
+Patch uygulamadan önce mevcut hatayı yeniden üreten test ekle.
+
+Asgari test senaryoları:
+
+### Senaryo 1 — Process-local yanlış durum
+
+```text
+worker-local scheduler = STARTUP_FAILED
+paylaşımlı kanonik snapshot = RUNNING
+last completed analysis = taze
+```
+
+Beklenen:
+
+```text
+üst çubuk = RUNNING/GREEN
+ana kart = RUNNING/GREEN
+son analiz = aynı zaman
+```
+
+Test mevcut kodda önce başarısız olmalıdır.
+
+### Senaryo 2 — Farklı worker istekleri
+
+İki worker’ın process-local değerlerini farklı simüle et:
+
+```text
+Worker A: RUNNING
+Worker B: STARTUP_FAILED veya başlangıç varsayılanı
+Shared snapshot: RUNNING
+```
+
+Her iki endpoint ve her iki worker aynı kanonik sonucu döndürmelidir.
+
+### Senaryo 3 — Gerçek scheduler sorunu
+
+Kanonik paylaşımlı durum gerçekten durmuş, başarısız olmuş veya mevcut kurallara göre stale ise iki UI bölümü de aynı anda `YELLOW` göstermelidir.
+
+Gerçek arızayı saklama.
+
+### Senaryo 4 — Son analiz tutarlılığı
+
+Kanonik snapshot’ta `last_completed_analysis` varsa hiçbir kart `Veri yok` göstermemelidir.
+
+### Senaryo 5 — Private-auth ayrımı
+
+```text
+Public market pipeline: sağlıklı
+Scheduler: RUNNING
+Binance Global private auth: -2015
+```
+
+Beklenen:
+
+```text
+public pipeline = GREEN
+private-auth rozeti = Kimlik Hatası
+```
+
+Private-auth hatası public analiz pipeline’ını `YELLOW` yapmamalıdır.
+
+### Senaryo 6 — Tarihsel hata
+
+Eski `IDEMPOTENCY_CONFLICT` veya eski `STARTUP_FAILED` kaydı bulunuyor fakat güncel çevrim başarılıysa:
+
+```text
+CURRENT_STATUS: RUNNING
+HISTORICAL_ERROR: ayrı alan
+```
+
+olmalıdır. Tarihsel hata güncel çevrim hatası gibi gösterilmemelidir.
+
+---
+
+## 7. FAZ D — Minimal düzeltme
+
+Test başarısızlığını kanıtladıktan sonra minimal patch uygula.
+
+Hedef mimari:
+
+```text
+Paylaşımlı kanonik scheduler snapshot
+               ↓
+     tek backend durum üreticisi
+          ↙               ↘
+     üst çubuk          ana özet kartı
+```
+
+Kurallar:
+
+1. Scheduler durumu için tek kanonik backend üreticisi oluştur veya mevcut doğru üreticiyi ortaklaştır.
+2. Üst çubuk ve ana kart aynı snapshot’tan türetilmiş alanları kullanmalı.
+3. Process-local scheduler nesnesi sistemin genel sağlık durumunun kanonik kaynağı olmamalı.
+4. Worker’a özel bilgi gerekiyorsa yalnız teşhis alanı olarak ayrı gösterilmeli.
+5. `STARTUP_FAILED`, yalnız güncel ve kanonik olarak geçerli bir başlangıç hatası varsa aktif durum olmalı.
+6. Başarılı güncel çevrim, eski startup hata durumunun aktif görünmesini engellemeli.
+7. `last_analysis`, kanonik tamamlanmış analiz kaydından okunmalı.
+8. Pipeline rengi frontend’in iki farklı yerinde bağımsız hesaplanmamalı.
+9. Mevcut stale sürelerini veya sağlık eşiklerini değiştirme; yalnız mevcut kuralları ortak kaynağa bağla.
+10. Runtime yazımı gerekiyorsa mevcut atomic yazma yöntemini kullan.
+11. Yeni runtime dosyasını Git tarafından izlenen dosya haline getirme.
+12. Dinamik universe ve Paper çalışma davranışını koru.
+13. API alanlarını kaldırma; gerekiyorsa geriye uyumlu alias kullan.
+14. UI tasarımını değiştirme. Yalnız veri kaynağı ve durum tutarlılığını düzelt.
+
+Büyük refactor yapma.
+
+---
+
+## 8. FAZ E — Test ve doğrulama
+
+Patch sonrasında:
+
+1. Yeni regresyon testlerini çalıştır.
+2. İlgili scheduler/API/UI test grubunu çalıştır.
+3. Uygun ve makul süredeyse tam test paketini çalıştır.
+4. Uygulamayı restart etme.
+5. Canlı Replit doğrulaması restart gerektiriyorsa bunu uygulama; Executive Review için açıkça bildir.
+
+Mümkünse iki worker benzetimiyle art arda en az 20 sorgu gerçekleştir.
+
+Beklenen:
+
+```text
+GREEN/RUNNING cevabı worker’a göre değişmez
+YELLOW yalnız kanonik durum gerçekten bozuksa görünür
+Üst çubuk ve ana kart aynı pipeline durumunu gösterir
+Son analiz zamanı iki bölümde tutarlıdır
+Private-auth -2015 ayrı rozet olarak kalır
+```
+
+Frontend testi mevcut altyapıyla mümkünse, geç gelen eski response’un yeni kanonik durumu ezemediğini de doğrula.
+
+---
+
+## 9. Kabul kriterleri
+
+Aşağıdakilerin tamamı sağlanmalıdır:
+
+```text
+CANONICAL_SCHEDULER_SOURCE: SHARED
+PROCESS_LOCAL_STATE_USED_AS_GLOBAL_HEALTH: FALSE
+TOP_BAR_AND_SUMMARY_SOURCE: CONSISTENT
+FALSE_STARTUP_FAILED: FIXED
+GREEN_YELLOW_WORKER_FLAPPING: FIXED
+LAST_ANALYSIS_CONSISTENCY: PASS
+REAL_FAILURE_VISIBILITY: PRESERVED
+PRIVATE_AUTH_SEPARATION: PASS
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+EXCHANGE_WRITE_REQUESTS: 0
+CHAMPION_CHANGED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+```
+
+Testler geçmeden `PASS` verme.
+
+Aynı ekranda aşağıdaki türde çelişki kalıyorsa görev tamamlanmış değildir:
+
+```text
+Üst çubuk GREEN + ana kart YELLOW
+Üst çubuk RUNNING + ana kart STARTUP_FAILED
+Üst çubukta analiz zamanı + ana kartta Veri yok
+```
+
+---
+
+## 10. Git ve teslim sınırı
+
+Bu sprintte:
+
+```text
+COMMIT: YASAK
+PUSH: YASAK
+ROLLBACK: YASAK
+RESTART: YASAK
+```
+
+Patch ve testler çalışma ağacında Executive Review için bekletilmelidir.
+
+Platform otomatik checkpoint oluşturursa bunu kendi commit’in gibi gösterme; hash’i ve oluşma biçimini açıkça raporla.
+
+---
+
+## 11. Zorunlu teslim formatı
+
+```text
+RESULT: PASS | PARTIAL_PASS | FAIL | BLOCKED
+TASK: 116_REPLIT_CANONICAL_SCHEDULER_STATUS
+
+HEAD_BEFORE:
+HEAD_AFTER:
+ORIGIN_MAIN:
+WORKTREE_BEFORE:
+WORKTREE_AFTER:
+GUNICORN_MASTER_PID:
+GUNICORN_WORKER_COUNT:
+SCHEDULER_OWNER_PID:
+
+OBSERVED_UI_CONTRADICTION:
+ROOT_CAUSE_CLASS:
+ROOT_CAUSE_PROVEN:
+ROOT_CAUSE_FILES_AND_LINES:
+
+TOP_BAR_TEMPLATE_OR_JS:
+TOP_BAR_FETCH_FUNCTION:
+TOP_BAR_ENDPOINT:
+TOP_BAR_RESPONSE_FIELDS:
+TOP_BAR_BACKEND_SOURCE:
+
+SUMMARY_CARD_TEMPLATE_OR_JS:
+SUMMARY_CARD_FETCH_FUNCTION:
+SUMMARY_CARD_ENDPOINT:
+SUMMARY_CARD_RESPONSE_FIELDS:
+SUMMARY_CARD_BACKEND_SOURCE:
+
+PROCESS_LOCAL_FIELDS_FOUND:
+SHARED_CANONICAL_STORE:
+HISTORICAL_ERROR_HANDLING:
+PRIVATE_AUTH_SEPARATION:
+
+FAILING_TEST_BEFORE_PATCH:
+PATCH_SUMMARY:
+CHANGED_FILES:
+TARGETED_TESTS:
+TARGETED_TEST_RESULT:
+FULL_TEST_COMMAND:
+FULL_TEST_RESULT:
+MULTI_WORKER_SIMULATION:
+REPEATED_REQUEST_COUNT:
+STATUS_MISMATCH_COUNT_AFTER_PATCH:
+
+PIPELINE_BEFORE:
+PIPELINE_AFTER:
+SCHEDULER_BEFORE:
+SCHEDULER_AFTER:
+LAST_ANALYSIS_BEFORE:
+LAST_ANALYSIS_AFTER:
+
+GLOBAL_PAUSE_BEFORE:
+GLOBAL_PAUSE_AFTER:
+LIVE_ORDERS_BEFORE:
+LIVE_ORDERS_AFTER:
+EXCHANGE_WRITE_REQUESTS:
+LIVE_ORDER_CREATED:
+OPEN_LIVE_POSITIONS:
+CHAMPION_CHANGED:
+REAL_TRADING_BEHAVIOR_CHANGED:
+
+SOURCE_CODE_CHANGED:
+OPERATIONAL_STATE_CHANGED:
+RUNTIME_DATA_RESET:
+RESTARTED:
+FINAL_COMMIT:
+PUSHED:
+```
+
+Raporun sonunda şu cümleleri açık biçimde tamamla:
+
+```text
+Sarı/yeşil değişiminin kanıtlanan teknik nedeni ...
+Gerçek scheduler’ın güncel durumu ...
+Üst çubuk ile ana kart artık ... kanonik kaynağını kullanıyor.
+Gerçek scheduler arızasının görünürlüğü ...
+Binance Global -2015 sorunu bu görevden ... tutuldu.
+Executive Review kararı bekleniyor.
+```
+
+Tahmini kesin bulgu gibi yazma. Koddan ve testten kanıtlanmayan noktaları `UNVERIFIED` olarak işaretle.
+
+```text
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+CHAMPION_CHANGED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+FINAL_COMMIT: NONE
+PUSHED: FALSE
+```

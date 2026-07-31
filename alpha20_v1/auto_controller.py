@@ -61,6 +61,61 @@ def get_status() -> dict[str, Any]:
 def _update_status(**kwargs: Any) -> None:
     with _status_lock:
         _last_status.update(kwargs)
+    # GÖREV 116: Scheduler sahibi worker durumunu PAYLAŞIMLI kanonik
+    # snapshot dosyasına da yazar — diğer gunicorn worker'ları process-
+    # local bellek yerine bu dosyadan okur (sahte STARTUP_FAILED biter).
+    # Yalnız döngü sahibi yazar: _LOOP_RUNNING seti veya 'running'
+    # anahtarı (start/stop geçişi) varsa. Diğer worker'ların yerel
+    # safe_mode vb. güncellemeleri paylaşımlı durumu KİRLETEMEZ.
+    if _LOOP_RUNNING.is_set() or "running" in kwargs:
+        _persist_shared_status()
+
+
+# ── GÖREV 116: paylaşımlı kanonik scheduler snapshot (git dışı) ──────────
+SHARED_STATUS_PATH = ROOT / "controller_status_runtime.json"
+
+
+def _persist_shared_status() -> None:
+    """Yerel durumu atomik olarak paylaşımlı dosyaya yaz (tmp+replace)."""
+    try:
+        with _status_lock:
+            snap = dict(_last_status)
+        snap["pid"] = os.getpid()
+        snap["updated_at"] = datetime.now(timezone.utc).isoformat()
+        tmp = SHARED_STATUS_PATH.with_suffix(
+            f".{os.getpid()}.tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump(snap, f, ensure_ascii=False)
+        os.replace(tmp, SHARED_STATUS_PATH)
+    except Exception as exc:  # snapshot yazımı asla döngüyü kırmaz
+        log.warning("Paylaşımlı durum snapshot yazılamadı: %s", exc)
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def get_shared_status() -> dict[str, Any]:
+    """Paylaşımlı kanonik snapshot'ı oku (salt-okunur).
+
+    Dönen sözlükte 'owner_alive' alanı vardır: snapshot'ı yazan sürecin
+    hâlâ yaşadığı os.kill(pid, 0) ile doğrulanır. Sahip ölmüşse
+    fail-closed: owner_alive=False → çağıran taraf RUNNING kabul EDEMEZ
+    (gerçek arıza maskelenmez).
+    """
+    try:
+        with SHARED_STATUS_PATH.open("r", encoding="utf-8") as f:
+            snap = json.load(f)
+        if not isinstance(snap, dict):
+            return {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+    snap["owner_alive"] = _pid_alive(snap.get("pid", -1))
+    return snap
 
 
 # ══════════════════════════════════════════════════════════════════════════════

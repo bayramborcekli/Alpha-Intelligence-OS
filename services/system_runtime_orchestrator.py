@@ -105,6 +105,24 @@ def recent_decisions(n: int = 50) -> list[dict]:
     return _tail_jsonl(ALPHA_DIR / "decisions.jsonl", n)
 
 
+def _shared_snapshot_fresh(shared: dict[str, Any],
+                           interval_min: int) -> bool:
+    """GÖREV 116: paylaşımlı snapshot tazelik kapısı.
+
+    Mevcut readiness stale kuralı aynen kullanılır (yeni eşik icat
+    edilmez): max(3 × tarama aralığı, 900 sn). Sahip PID'i canlı olsa
+    bile (PID geri dönüşümü/takılı döngü) bayat snapshot RUNNING kabul
+    EDİLMEZ — fail-closed."""
+    ts = shared.get("updated_at") or shared.get("last_cycle_time")
+    if not ts:
+        return False
+    try:
+        age = time.time() - datetime.fromisoformat(ts).timestamp()
+    except (ValueError, TypeError):
+        return False
+    return age < max(3 * interval_min * 60, 900)
+
+
 def scheduler_status(controller_status: dict[str, Any] | None = None,
                      preference: str | None = None) -> dict[str, Any]:
     """TEK KANONİK Analysis Scheduler durumu.
@@ -127,6 +145,17 @@ def scheduler_status(controller_status: dict[str, Any] | None = None,
             _alpha_path()
             import auto_controller as ac
             controller_status = ac.get_status()
+            # GÖREV 116: bu worker döngü sahibi değilse yerel bellek
+            # running=False döner (sahte STARTUP_FAILED). Kanonik
+            # kaynak paylaşımlı snapshot'tır: sahibi CANLI ve running
+            # ise onu kullan. Sahip ölmüşse owner_alive=False →
+            # fallback YOK, gerçek arıza görünür kalır (fail-closed).
+            if not controller_status.get("running"):
+                shared = ac.get_shared_status()
+                if (shared.get("running") and shared.get("owner_alive")
+                        and _shared_snapshot_fresh(
+                            shared, p["scan_interval_minutes"])):
+                    controller_status = shared
         except Exception:
             controller_status = {}
     st = controller_status or {}

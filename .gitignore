@@ -174,3 +174,5 @@ alpha20_v1/hold_shadow.jsonl.*.tmp
 alpha20_v1/hold_memory.json
 alpha20_v1/hold_memory.json.lock
 alpha20_v1/hold_memory.json.*.tmp
+alpha20_v1/controller_status_runtime.json
+alpha20_v1/controller_status_runtime.*.tmp
