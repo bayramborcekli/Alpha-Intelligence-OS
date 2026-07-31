@@ -398,11 +398,14 @@ class TestConsolidatedState:
             # Sinyal görünürlüğü görevi: kanonik karar alanları
             # (last_decision/last_rejection_reason/last_analyzed_at/
             # model) bilinçli eklendi — eski alanlar aynen korunur.
+            # NEDEN_NO_SIGNAL misyonu: last_rejection_sub_reason
+            # (NO_SIGNAL alt nedeni) bilinçli eklendi.
             assert set(s) == {"symbol", "enabled", "run_state",
                               "entry_allowed", "last_signal",
                               "last_error", "updated_at",
                               "last_decision",
                               "last_rejection_reason",
+                              "last_rejection_sub_reason",
                               "last_analyzed_at", "model"}
         assert "ENABLED" in data["strategies_summary"]
 

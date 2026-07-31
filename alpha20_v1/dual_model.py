@@ -431,9 +431,29 @@ def evaluate_signal(symbol: str, klines: list[list],
         if last <= vwap * 1.004:            # VWAP'a yakın giriş
             conf += 10
     if side is None:
+        # NEDEN_NO_SIGNAL: birincil blok EMA/VWAP ön koşulundan gelir;
+        # zayıf faktörler teşhis içindir (giriş kararını DEĞİŞTİRMEZ).
+        ema_block = not (ema9 > ema21)
+        vwap_block = not (last > vwap)
+        if ema_block and vwap_block:
+            sub = "EMA_VWAP_BLOCK"
+        elif ema_block:
+            sub = "EMA_BLOCK"
+        else:
+            sub = "VWAP_BLOCK"
+        weak = []
+        if mom_pct <= 0.05:
+            weak.append("MOMENTUM_WEAK")
+        if vol_ratio < 1.5:
+            weak.append("VOLUME_WEAK")
+        if not (35 <= rsi <= 65):
+            weak.append("RSI_OUT_OF_BAND")
+        if last <= hi20:
+            weak.append("BREAKOUT_ABSENT")
         return {"symbol": symbol, "side": None, "confidence": 0,
                 "reason_code": "NO_SIGNAL", "rsi": rsi,
-                "vol_ratio": vol_ratio}
+                "vol_ratio": vol_ratio,
+                "sub_reason": sub, "weak_factors": weak}
     if model == MODEL_OPP and vol_ratio < 1.2:
         return {"symbol": symbol, "side": None, "confidence": conf,
                 "reason_code": "MOMENTUM_EXHAUSTED"}
@@ -970,6 +990,8 @@ def symbol_status() -> dict:
             "decision_state": state,
             "last_decision": state,
             "last_rejection_reason": reason,
+            "last_rejection_sub_reason": rej.get("sub_reason"),
+            "weak_factors": rej.get("weak_factors") or [],
             "data_quality": "MISSING" if reason == "DATA_QUALITY"
             else "OK"})
         for opt in ("confidence", "net_reward_risk", "expected_edge"):
@@ -1003,18 +1025,83 @@ def symbol_status() -> dict:
             "last_refresh": last_refresh, "symbols": out}
 
 
-def record_rejection(symbol: str, model: str, reason_code: str) -> None:
+NO_SIGNAL_SUB_REASONS = (
+    "EMA_BLOCK", "VWAP_BLOCK", "EMA_VWAP_BLOCK")
+
+
+def record_rejection(symbol: str, model: str, reason_code: str,
+                     detail: dict | None = None) -> None:
     if reason_code not in REASON_CODES:
         reason_code = "DATA_QUALITY"
 
     def _mut(rt: dict) -> None:
         rej = rt.get("rejections", [])
-        rej.insert(0, {"symbol": symbol, "model": model,
-                       "reason_code": reason_code,
-                       "at": _now_iso()})
+        entry = {"symbol": symbol, "model": model,
+                 "reason_code": reason_code,
+                 "at": _now_iso()}
+        if isinstance(detail, dict):
+            sub = detail.get("sub_reason")
+            if sub in NO_SIGNAL_SUB_REASONS:
+                entry["sub_reason"] = sub
+            weak = detail.get("weak_factors")
+            if isinstance(weak, list) and weak:
+                entry["weak_factors"] = [str(w) for w in weak][:6]
+            # FAZ 2 temel verisi: ret ANINDAKİ fiyat — kaçırılan
+            # fırsat (sonradan yükseliş) ancak bununla ölçülebilir.
+            try:
+                price = detail.get("price")
+                if price is not None and float(price) > 0:
+                    entry["price"] = float(price)
+            except (TypeError, ValueError):
+                pass
+        rej.insert(0, entry)
         rt["rejections"] = rej[:300]
 
     _update_runtime(_mut)
+
+
+def rejection_breakdown(rt: dict | None = None) -> dict[str, Any]:
+    """NEDEN_NO_SIGNAL istatistiği — runtime ret penceresinden.
+
+    Salt okunur; reason_code dağılımı + NO_SIGNAL alt neden dağılımı
+    + zayıf faktör sayımları, yüzdelerle. Örneklem runtime cap'i
+    kadardır (en fazla 300 kayıt) — dürüst kapsam alanıyla döner."""
+    rt = rt if rt is not None else _load_runtime()
+    rejections = rt.get("rejections") or []
+    total = len(rejections)
+    reasons: dict[str, int] = {}
+    subs: dict[str, int] = {}
+    weak: dict[str, int] = {}
+    no_sig_total = 0
+    for r in rejections:
+        code = r.get("reason_code") or "DATA_QUALITY"
+        reasons[code] = reasons.get(code, 0) + 1
+        if code == "NO_SIGNAL":
+            no_sig_total += 1
+            s = r.get("sub_reason")
+            if s:
+                subs[s] = subs.get(s, 0) + 1
+            for w in (r.get("weak_factors") or []):
+                weak[w] = weak.get(w, 0) + 1
+
+    def _pct(cnt: dict[str, int], denom: int) -> dict[str, dict]:
+        return {k: {"count": v,
+                    "pct": round(v * 100.0 / denom, 1) if denom else 0.0}
+                for k, v in sorted(cnt.items(), key=lambda kv: -kv[1])}
+
+    tagged = sum(subs.values())
+    return {
+        "sample_size": total,
+        "scope": "runtime_rejections_last_300_max",
+        "reasons": _pct(reasons, total),
+        "no_signal": {
+            "total": no_sig_total,
+            "sub_reason_tagged": tagged,
+            "sub_reason_untagged": no_sig_total - tagged,
+            "sub_reasons": _pct(subs, tagged),
+            "weak_factors": _pct(weak, tagged),
+        },
+    }
 
 
 # ── Ayrı performans ölçümü ─────────────────────────────────────────
@@ -1160,6 +1247,7 @@ def snapshot(with_prices: bool = False,
             t["net_pnl"] for t in rt.get("trades", [])), 4),
         "recent_trades": rt.get("trades", [])[:20],
         "recent_rejections": rt.get("rejections", [])[:30],
+        "rejection_breakdown": rejection_breakdown(rt),
         "last_refresh": rt.get("last_refresh"),
         "last_error": rt.get("last_error"),
     }
@@ -1371,7 +1459,15 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                     if not sig.get("side"):
                         record_rejection(sym, model,
                                          sig.get("reason_code",
-                                                 "NO_SIGNAL"))
+                                                 "NO_SIGNAL"),
+                                         detail={
+                                             "sub_reason":
+                                                 sig.get("sub_reason"),
+                                             "weak_factors":
+                                                 sig.get("weak_factors"),
+                                             "price":
+                                                 price_cache.get(sym),
+                                         })
                         continue
                     # PFDE GÖLGE skoru: gerçek kapıdan BAĞIMSIZ,
                     # kararı DEĞİŞTİRMEZ; yalnız kayıt (raporlama).

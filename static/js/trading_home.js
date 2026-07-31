@@ -416,6 +416,11 @@
       // Gerçek son karar varsa onu göster — "İzleniyor (giriş
       // kapalı)" yalnız karar verisi gerçekten yokken kalır.
       var reason = pr.last_rejection_reason;
+      // NO_SIGNAL alt nedeni varsa asıl açıklama odur (NEDEN_NO_SIGNAL)
+      if (reason === "NO_SIGNAL" && pr.last_rejection_sub_reason &&
+          REASON_TR.hasOwnProperty(pr.last_rejection_sub_reason)) {
+        reason = pr.last_rejection_sub_reason;
+      }
       var decided = reason && reason !== "-" &&
         REASON_TR.hasOwnProperty(reason) ? REASON_TR[reason]
         : (reason && reason !== "-" ? reason : null);
@@ -896,12 +901,22 @@
     MOMENTUM_EXHAUSTED: "Momentum tükenmiş",
     NET_REWARD_RISK_TOO_LOW: "Maliyet sonrası ödül/risk yetersiz",
     DATA_QUALITY: "Karar verisi yetersiz",
-    FEE_DRAG: "İşlem maliyeti kazancı yutuyor"
+    FEE_DRAG: "İşlem maliyeti kazancı yutuyor",
+    // NEDEN_NO_SIGNAL alt nedenleri
+    EMA_BLOCK: "EMA trendi ters (EMA9 ≤ EMA21)",
+    VWAP_BLOCK: "Fiyat VWAP altında",
+    EMA_VWAP_BLOCK: "EMA trendi ters + fiyat VWAP altında"
   };
 
-  function reasonCell(code) {
+  function reasonCell(code, sub) {
     if (!code || code === "-") return "—";
     var tr = REASON_TR[code] || code;
+    // NO_SIGNAL ise alt neden asıl açıklamadır (NEDEN_NO_SIGNAL)
+    if (code === "NO_SIGNAL" && sub && REASON_TR[sub]) {
+      return "<span title=\"" + esc(code) + " / " + esc(sub) + "\">" +
+        esc(REASON_TR[sub]) + " <small style=\"opacity:.6\">(" +
+        esc(sub) + ")</small></span>";
+    }
     return "<span title=\"" + esc(code) + "\">" + esc(tr) +
       " <small style=\"opacity:.6\">(" + esc(code) + ")</small></span>";
   }
@@ -948,7 +963,9 @@
                     .replace("ALPHA_OPPORTUNITY", "OPPORTUNITY")
                  : "—") + "</td><td>" +
         "<span class=\"th-badge " + cls + "\">" + resultTxt +
-        "</span></td><td>" + reasonCell(r.last_rejection_reason) +
+        "</span></td><td>" +
+        reasonCell(r.last_rejection_reason,
+                   r.last_rejection_sub_reason) +
         "</td><td>" + agoCell(r.analyzed_at) + "</td><td>" +
         esc(entryTxt) + "</td></tr>";
     }).join("");

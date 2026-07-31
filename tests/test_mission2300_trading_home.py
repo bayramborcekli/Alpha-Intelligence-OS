@@ -194,13 +194,17 @@ class TestNoTechnicalNoise:
     def test_no_indicator_terms(self, banned):
         assert banned not in TEMPLATE, banned
 
-    @pytest.mark.parametrize("banned", ["RSI", "EMA", "MACD"])
+    # NEDEN_NO_SIGNAL misyonu: EMA/VWAP alt neden açıklamaları
+    # (EMA_BLOCK/VWAP_BLOCK) spec gereği JS'te BİLİNÇLİ var —
+    # operatöre sinyalin NEDEN oluşmadığını söyler. Yasak liste
+    # gösterge gürültüsünü hedefler; RSI/MACD yasak kalır.
+    @pytest.mark.parametrize("banned", ["RSI", "MACD"])
     def test_no_indicator_terms_in_js(self, banned):
         assert banned not in JS, banned
 
     def test_page_response_clean(self, client):
         html = client.get("/home").get_data(as_text=True)
-        for banned in ("RSI", "EMA", "MACD"):
+        for banned in ("RSI", "MACD"):
             assert banned not in html
 
     def test_owner_language(self):

@@ -3448,6 +3448,9 @@ def _operation_raw() -> dict[str, Any]:
                     "last_decision": st["last_decision"],
                     "last_rejection_reason":
                         st["last_rejection_reason"] or "-",
+                    "last_rejection_sub_reason":
+                        st.get("last_rejection_sub_reason"),
+                    "weak_factors": st.get("weak_factors") or [],
                     "last_signal_at": st["last_signal_at"] or "-",
                     "analyzed_at": st["analyzed_at"],
                     "model": st["model"],
@@ -4515,6 +4518,9 @@ def _strategy_states() -> list[dict[str, Any]]:
             if status_ok else "UNKNOWN",
             "last_rejection_reason":
                 (st or {}).get("last_rejection_reason")
+                if status_ok else None,
+            "last_rejection_sub_reason":
+                (st or {}).get("last_rejection_sub_reason")
                 if status_ok else None,
             "last_analyzed_at": (st or {}).get("analyzed_at")
             if status_ok else None,
