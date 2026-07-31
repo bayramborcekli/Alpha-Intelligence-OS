@@ -38,5 +38,11 @@
     "trailing_stop_enabled": false,
     "partial_take_profit_enabled": false,
     "kill_switch": false
+  },
+  "dual_model": {
+    "paper_learning": {
+      "enabled": true,
+      "relaxed_gate": "EMA_VWAP_COMBINED"
+    }
   }
 }

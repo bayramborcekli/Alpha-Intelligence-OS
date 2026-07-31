@@ -103,6 +103,17 @@ DEFAULTS: dict[str, Any] = {
     },
     "total_max_open_positions": 4,
     "monitor_seconds": 4,           # 3-5 sn pozisyon monitörü
+    # GÖREV 118 EK — kontrollü PAPER_LEARNING profili.
+    # STRICT: mevcut kurallar aynen. PAPER_LEARNING: YALNIZ tek
+    # yumuşak kapı (EMA/VWAP birleşik ön koşulu; ret hunisinde
+    # kanıtlanan baskın kapı) esnetilir — iki koşuldan EN AZ BİRİ
+    # sağlanmalı. Sert kapılar (veri/likidite/spread/slippage/
+    # NET_TP/NET_RR/EDGE_COST/risk/limit/duplicate/cooldown)
+    # DEĞİŞMEZ. LIVE tamamen kapalı (bu motorda live yol yok).
+    "paper_learning": {
+        "enabled": False,
+        "relaxed_gate": "EMA_VWAP_COMBINED",
+    },
 }
 
 
@@ -391,7 +402,8 @@ def _rsi(closes: list[float], n: int = 14) -> float:
 
 
 def evaluate_signal(symbol: str, klines: list[list],
-                    model: str) -> dict[str, Any]:
+                    model: str,
+                    relax_ema_vwap: bool = False) -> dict[str, Any]:
     """1m klines → sinyal (side/confidence/expected_gross_edge_pct).
 
     Kural tabanlı, deterministik; her iki model aynı çekirdek
@@ -417,9 +429,19 @@ def evaluate_signal(symbol: str, klines: list[list],
 
     conf = 0
     side = None
-    if ema9 > ema21 and last > vwap:
+    relaxed = False
+    ema_ok, vwap_ok = ema9 > ema21, last > vwap
+    if ema_ok and vwap_ok:
         side = "LONG"
         conf += 30
+    elif relax_ema_vwap and (ema_ok or vwap_ok):
+        # PAPER_LEARNING: birleşik zorunluluk yerine EN AZ BİRİ.
+        # Puanlama AYNI (taban +30 dahil) — skor şişirme yok; aday
+        # yine min_confidence ve TÜM maliyet/risk kapılarından geçer.
+        side = "LONG"
+        conf += 30
+        relaxed = True
+    if side is not None:
         if mom_pct > 0.05:
             conf += 15
         if last > hi20:                     # kısa vadeli breakout
@@ -461,10 +483,14 @@ def evaluate_signal(symbol: str, klines: list[list],
         return {"symbol": symbol, "side": None, "confidence": conf,
                 "reason_code": "FALSE_BREAKOUT_RISK"}
     edge = min(abs(mom_pct) * 0.6 + (vol_ratio - 1) * 0.15, 2.0)
-    return {"symbol": symbol, "side": side, "confidence": min(conf, 100),
-            "expected_gross_edge_pct": round(edge, 4),
-            "rsi": round(rsi, 1), "vol_ratio": round(vol_ratio, 2),
-            "vwap": vwap, "last": last}
+    out = {"symbol": symbol, "side": side, "confidence": min(conf, 100),
+           "expected_gross_edge_pct": round(edge, 4),
+           "rsi": round(rsi, 1), "vol_ratio": round(vol_ratio, 2),
+           "vwap": vwap, "last": last}
+    if relaxed:
+        out["profile"] = "PAPER_LEARNING"
+        out["relaxed_gate"] = "EMA_VWAP_COMBINED"
+    return out
 
 
 def cost_profile(m: dict, slippage_pct: float | None = None) -> dict:
@@ -630,6 +656,10 @@ def try_open_position(symbol: str, model: str, sig: dict,
             "confidence": sig["confidence"],
             "net_edge_pct": net_edge_pct,
             "execution_mode": "PAPER",
+            # Karar profili izi (STRICT varsayılan; PAPER_LEARNING
+            # yalnız esnetilen kapıyla açılan paper işlemi işaretler)
+            "profile": sig.get("profile", "STRICT"),
+            "relaxed_gate": sig.get("relaxed_gate"),
             # Öğrenme köprüsü: bu girişte hangi config sürümü etkindi?
             "config_version": m.get("config_version", "BASE"),
             # PFDE gölge skorları (raporlama; karar etkisi YOK)
@@ -670,6 +700,8 @@ def _build_trade(p: dict, price: float, result: str,
         "mfe_pct": mfe_pct, "mae_pct": mae_pct,
         "trade_id": uuid.uuid4().hex[:16],
         "config_version": p.get("config_version", "BASE"),
+        "profile": p.get("profile", "STRICT"),
+        "relaxed_gate": p.get("relaxed_gate"),
         "notional_usdt": p.get("notional_usdt"),
         "net_edge_pct": p.get("net_edge_pct"),
         **{k: p[k] for k in ("symbol", "model", "side", "entry",
@@ -1027,6 +1059,44 @@ def symbol_status() -> dict:
 
 NO_SIGNAL_SUB_REASONS = (
     "EMA_BLOCK", "VWAP_BLOCK", "EMA_VWAP_BLOCK")
+
+
+def record_learning_decision(symbol: str, model: str, strict_sig: dict,
+                             learn_sig: dict, gate_ok: bool,
+                             gate_reason: str | None, net_edge: float,
+                             cfg: dict, opened: bool,
+                             open_reject: str | None,
+                             btc_change_pct=None) -> None:
+    """PAPER_LEARNING karar günlüğü — STRICT vs LEARNING kıyası.
+
+    Yalnız gölge/paper kayıt; hiçbir kapı eşiği burada DEĞİŞMEZ."""
+    m = cfg["core"] if model == MODEL_CORE else cfg["opportunity"]
+    cp = cost_profile(m)
+    entry = {
+        "at": _now_iso(), "symbol": symbol, "model": model,
+        "profile": "PAPER_LEARNING",
+        "relaxed_gate": learn_sig.get("relaxed_gate",
+                                      "EMA_VWAP_COMBINED"),
+        "strict_decision": strict_sig.get("reason_code", "NO_SIGNAL"),
+        "strict_sub_reason": strict_sig.get("sub_reason"),
+        "learning_decision": ("OPENED" if opened else
+                              (open_reject or gate_reason
+                               or "CANDIDATE")),
+        "entry_quality_score": learn_sig.get("confidence", 0),
+        "expected_edge": learn_sig.get("expected_gross_edge_pct"),
+        "net_edge_pct": round(net_edge, 4),
+        "net_reward_risk": cp["net_reward_risk"],
+        "round_trip_cost": cp["round_trip_cost_pct"],
+        "market_regime": ({"btc_change_pct": btc_change_pct}
+                          if btc_change_pct is not None else None),
+    }
+
+    def _mut(rt: dict) -> None:
+        j = rt.get("learning_journal", [])
+        j.insert(0, entry)
+        rt["learning_journal"] = j[:500]
+
+    _update_runtime(_mut)
 
 
 def record_rejection(symbol: str, model: str, reason_code: str,
@@ -1468,6 +1538,34 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                                              "price":
                                                  price_cache.get(sym),
                                          })
+                        # PAPER_LEARNING: STRICT ret sonrası tek
+                        # yumuşak kapı esnetilmiş ikinci değerlendirme.
+                        # Sert kapılar (aşağıdaki quality gate dahil)
+                        # AYNEN uygulanır; LIVE yolu yok.
+                        pl = cfg.get("paper_learning") or {}
+                        if pl.get("enabled"):
+                            lsig = evaluate_signal(
+                                sym, kl, model, relax_ema_vwap=True)
+                            if lsig.get("side"):
+                                lok, lreason, lnet = \
+                                    execution_quality_gate(
+                                        row, lsig, model, cfg)
+                                if lok:
+                                    # Açılış ERTELENİR: öğrenme adayı
+                                    # da sahiplik arbitrajından geçer
+                                    # (en yüksek net edge kazanır).
+                                    cands.append({
+                                        "symbol": sym, "sig": lsig,
+                                        "net_edge_pct": lnet,
+                                        "shadow": None,
+                                        "learning_strict": sig})
+                                else:
+                                    record_learning_decision(
+                                        sym, model, sig, lsig, lok,
+                                        lreason, lnet, cfg, False,
+                                        None,
+                                        btc_change_pct=rt.get(
+                                            "btc_change_pct"))
                         continue
                     # PFDE GÖLGE skoru: gerçek kapıdan BAĞIMSIZ,
                     # kararı DEĞİŞTİRMEZ; yalnız kayıt (raporlama).
@@ -1508,6 +1606,13 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                 for rej in own["rejected"]:
                     record_rejection(rej["symbol"], rej["model"],
                                      "DUPLICATE_MODEL_OWNERSHIP")
+                    if "learning_strict" in rej:
+                        record_learning_decision(
+                            rej["symbol"], rej["model"],
+                            rej["learning_strict"], rej["sig"],
+                            True, "DUPLICATE_MODEL_OWNERSHIP",
+                            rej["net_edge_pct"], cfg, False,
+                            "DUPLICATE_MODEL_OWNERSHIP")
                 for w in own["winners"]:
                     opened, reason = try_open_position(
                         w["symbol"], w["model"], w["sig"],
@@ -1516,6 +1621,12 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                     if not opened:
                         record_rejection(w["symbol"], w["model"],
                                          reason)
+                    if "learning_strict" in w:
+                        record_learning_decision(
+                            w["symbol"], w["model"],
+                            w["learning_strict"], w["sig"], True,
+                            None, w["net_edge_pct"], cfg, opened,
+                            None if opened else reason)
             # 4) Pozisyon monitörü — açık semboller için TAZE fiyat
             # (bayat cache ile TP/SL kararı verilmez)
             open_syms = list(_open_positions(_load_runtime()))

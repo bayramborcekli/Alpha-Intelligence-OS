@@ -1,0 +1,84 @@
+# GÖREV 118 EK TALİMAT — KONTROLLÜ PAPER_LEARNING
+
+Uzun süredir doğal alış işlemi ve dolayısıyla pozisyon kapanışı
+oluşmadığı için yalnız PAPER/SHADOW ortamında kontrollü öğrenme
+profili uygula.
+
+1. Önce deterministik sağlıklı fixture ile:
+   SIGNAL → paper aday → paper pozisyon
+   zincirinin çalıştığını kanıtla.
+
+2. Sağlıklı fixture bile SIGNAL üretemiyorsa:
+   CONFIGURATION_RELAXATION: YAPMA
+   ROOT_CLASS: CODE_OR_WIRING_BUG
+   Önce başarısız testle bağlantı/mantık hatasını kanıtla ve düzelt.
+
+3. Sağlıklı fixture geçiyorsa son güncel kararlar için ret hunisi çıkar:
+   - reason_code
+   - sub_reason
+   - rejection_stage
+   - symbol
+   - model
+   - timestamp
+
+4. İki karar profili oluştur:
+   STRICT: Mevcut kurallar, shadow karşılaştırma
+   PAPER_LEARNING: Kontrollü esneklik, yalnız Paper işlem
+   LIVE: Tamamen kapalı
+
+5. PAPER_LEARNING içinde şu sert kapılar değiştirilemez:
+   - stale/eksik veri
+   - likidite
+   - spread/slippage
+   - NET_TP_NON_POSITIVE
+   - NET_REWARD_RISK_TOO_LOW
+   - EDGE_BELOW_COST_MULTIPLE
+   - risk ve pozisyon limitleri
+   - duplicate/cooldown koruması
+
+6. Yalnız baskın bir yumuşak kapıyı ilk deneyde esnet:
+   BREAKOUT_ABSENT, MOMENTUM_WEAK, VOLUME_WEAK,
+   RSI_OUT_OF_BAND veya EMA/VWAP birleşik zorunluluğu.
+
+7. Hangi kapının esnetileceğini tahminle seçme.
+   Güncel ret hunisinde en fazla sağlıklı adayı eleyen kapıyı kanıtla.
+
+8. Her Paper kararında şunları kaydet:
+   profile
+   strict_decision
+   learning_decision
+   relaxed_gate
+   entry_quality_score
+   expected_edge
+   net_reward_risk
+   round_trip_cost
+   exit_reason
+   net_pnl
+   market_regime
+
+9. PAPER_LEARNING hiçbir koşulda:
+   - gerçek emir göndermemeli,
+   - global pause’u kaldırmamalı,
+   - live-orders kilidini açmamalı,
+   - maliyet/risk kapılarını gevşetmemeli.
+
+10. Doğal işlem oluşana kadar eşikleri art arda düşürme.
+    Her yeni esneklik ayrı test ve ayrı ölçüm dönemi olmalıdır.
+
+Zorunlu sonuç alanları:
+
+HEALTHY_FIXTURE_SIGNAL:
+HEALTHY_FIXTURE_PAPER_ENTRY:
+OVER_STRICT_CONFIGURATION:
+TOP_BLOCKING_SOFT_GATE:
+RELAXED_GATE:
+STRICT_SIGNAL_COUNT:
+PAPER_LEARNING_SIGNAL_COUNT:
+NATURAL_PAPER_ENTRY_COUNT:
+COMPLETED_PAPER_TRADE_COUNT:
+NET_PNL:
+PROFIT_FACTOR_NET:
+STOP_LOSS_RATE:
+EXCESSIVE_GIVEBACK_COUNT:
+LIVE_ORDER_CREATED: FALSE
+EXCHANGE_WRITE_REQUESTS: 0
