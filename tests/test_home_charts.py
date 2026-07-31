@@ -89,9 +89,47 @@ class TestHomeCharts:
             return {"ok": True, "margin_usage_pct": "1.5"}
 
         monkeypatch.setattr(risk_api, "summary", spy)
+        app_module._HOME_RISK_CACHE.update(ts=0.0, payload=None)
         d = client.get("/api/home/charts").get_json()
         assert seen.get("persist") is False
         assert d["risk_usage"]["usage_pct"] == 1.5
+
+    def test_risk_usage_ttl_cache_blocks_repolls(self, client,
+                                                 monkeypatch):
+        """12 sn'lik panel yoklaması her turda senkron borsa çağrısı
+        tetikleyemez: TTL içinde ikinci istek risk_api'ye GİTMEZ."""
+        import risk_api
+        calls = {"n": 0}
+
+        def spy(persist=True):
+            calls["n"] += 1
+            return {"ok": True, "margin_usage_pct": "2.0"}
+
+        monkeypatch.setattr(risk_api, "summary", spy)
+        app_module._HOME_RISK_CACHE.update(ts=0.0, payload=None)
+        client.get("/api/home/charts")
+        client.get("/api/home/charts")
+        assert calls["n"] == 1
+
+    def test_risk_usage_stale_on_error(self, client, monkeypatch):
+        """Taze okuma patlarsa son geçerli değer STALE etiketiyle
+        döner — sahte HEALTHY/OK üretilmez."""
+        import risk_api
+
+        def boom(persist=True):
+            raise RuntimeError("network down")
+
+        monkeypatch.setattr(risk_api, "summary", boom)
+        app_module._HOME_RISK_CACHE.update(
+            ts=0.0, payload={"status": "OK", "usage_pct": 3.0})
+        d = client.get("/api/home/charts").get_json()
+        assert d["risk_usage"]["status"] == "STALE"
+        assert d["risk_usage"]["usage_pct"] == 3.0
+        # Önbellek de tamamen boşsa dürüst API_ERROR:
+        app_module._HOME_RISK_CACHE.update(ts=0.0, payload=None)
+        d = client.get("/api/home/charts").get_json()
+        assert d["risk_usage"]["status"] == "API_ERROR"
+        assert d["risk_usage"]["usage_pct"] is None
 
 
 class TestAccountsReadOnlyBridge:

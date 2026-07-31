@@ -5222,23 +5222,48 @@ def api_home_charts():
                             "total": None}
 
     # C) Risk kullanımı — GERÇEK risk_api özeti (persist=False:
-    #    salt-okunur çağrı günlük snapshot YAZMAZ).
+    #    salt-okunur çağrı günlük snapshot YAZMAZ). 12 sn'lik panel
+    #    yoklaması her turda senkron borsa çağrısı TETİKLEMESİN diye
+    #    süreç içi TTL önbelleği kullanılır; taze okuma başarısızsa
+    #    son geçerli değer dürüstçe STALE etiketiyle servis edilir
+    #    (sahte HEALTHY üretilmez).
+    out["risk_usage"] = _home_risk_usage_cached()
+    return jsonify(out)
+
+
+_HOME_RISK_CACHE: dict = {"ts": 0.0, "payload": None}
+_HOME_RISK_TTL_S = 60
+
+
+def _home_risk_usage_cached() -> dict:
+    now = time.time()
+    cached = _HOME_RISK_CACHE["payload"]
+    if cached is not None and \
+            now - _HOME_RISK_CACHE["ts"] < _HOME_RISK_TTL_S:
+        return cached
     try:
         import risk_api as _ra
         s = _ra.summary(persist=False)
         usage = s.get("margin_usage_pct") or s.get("usage_pct")
-        out["risk_usage"] = {
+        payload = {
             "status": "OK" if usage is not None
             else "DATA_SOURCE_UNAVAILABLE",
             "usage_pct": float(usage) if usage is not None else None,
             "score": s.get("health", {}).get("score")
             if isinstance(s.get("health"), dict)
             else s.get("risk_score"),
-            "source": "risk_api.summary(read_only)"}
+            "source": "risk_api.summary(read_only,ttl=60s)"}
+        _HOME_RISK_CACHE.update(ts=now, payload=payload)
+        return payload
     except Exception:
         app.logger.exception("home charts: risk kullanımı alınamadı")
-        out["risk_usage"] = {"status": "API_ERROR", "usage_pct": None}
-    return jsonify(out)
+        if cached is not None and cached.get("status") == "OK":
+            stale = dict(cached)
+            stale["status"] = "STALE"
+            # Bayat değer kısa süre daha gösterilir; TTL yenilenmez —
+            # bir sonraki istek taze okumayı yeniden dener.
+            return stale
+        return {"status": "API_ERROR", "usage_pct": None}
 
 
 @app.get("/api/profit-first/report")
