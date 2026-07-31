@@ -3,6 +3,20 @@
 Bu depo mission-tabanlı geliştirilir. Her mission; uygulama + test +
 mimari inceleme + commit/push + Türkçe teslim raporu ile kapanır.
 
+## Zorunlu proje bağlamı (her Agent için ilk adım)
+Her işe başlamadan önce, bu sırayla ve tamamen oku:
+1. `governance/project_state.json` — tek makine-okunur güncel gerçek.
+2. `SYSTEM_CONSTITUTION.md` — değişmez güvenlik ve yetki sınırları.
+3. `DECISIONS.md` — yürürlükteki ve yerine geçen kararlar.
+4. `CURRENT_TASK.md` — yalnız güncel öncelik ve kabul şartları.
+
+Ardından `python scripts/project_preflight.py --check` çalıştır. Kontrol
+başarısızsa veya görev bu dosyalarla çelişiyorsa hiçbir kaynak dosyayı
+değiştirme; `GOVERNANCE_BLOCKED` raporu ver ve Executive Review iste.
+Sohbet özeti, eski görev metni veya eski rapor bu dört dosyanın önüne
+geçemez. Yeni kullanıcı kararı önce karar defterine ve proje durumuna
+işlenmeden uygulamaya alınamaz.
+
 ## Değişmez kurallar
 1. **Salt-okunur mimari:** borsa yazma isteği SONSUZA DEK 0. Emir,
    transfer, çekim kodu eklenemez; `exchange_gateway` yalnızca GET +

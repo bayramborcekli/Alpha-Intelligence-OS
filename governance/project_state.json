@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "project": "Alpha Intelligence OS",
+  "updated_at": "2026-07-31T17:00:00+03:00",
+  "updated_by": "Executive Review",
+  "source_of_truth": true,
+  "operating_mode": "PAPER_LEARNING",
+  "safety": {
+    "global_pause": "ACTIVE",
+    "live_orders": "DISABLED",
+    "exchange_write_requests_allowed": 0,
+    "paper_only": true,
+    "restart_requires_user_approval": true,
+    "push_requires_tests_and_fidelity_report": true
+  },
+  "strategy": {
+    "strict_role": "comparison_baseline",
+    "paper_learning_role": "controlled_learning",
+    "paper_soft_rules": [
+      "EMA_VWAP",
+      "MOMENTUM",
+      "CONFIDENCE_SCORE",
+      "NET_REWARD_RISK_1_20"
+    ],
+    "paper_hard_safety": [
+      "STALE_OR_INVALID_MARKET_DATA",
+      "EXCESSIVE_SPREAD",
+      "INSUFFICIENT_LIQUIDITY",
+      "NON_POSITIVE_NET_TARGET",
+      "POSITION_AND_DAILY_LOSS_LIMITS",
+      "DUPLICATE_OR_COOLDOWN",
+      "LIVE_ORDER_PROHIBITION"
+    ],
+    "net_reward_risk_1_20": "quality_target_not_paper_blocker",
+    "one_hypothesis_change_at_a_time": true,
+    "minimum_completed_trades_before_performance_judgment": 20,
+    "preferred_completed_trades_for_performance_judgment": 30
+  },
+  "priorities": [
+    {
+      "rank": 1,
+      "id": "PAPER_FLOW_WINDOWS",
+      "status": "IN_PROGRESS",
+      "goal": "Windows ortamında doğal PAPER_LEARNING alış ve kapanış akışını başlatıp kanıtla"
+    },
+    {
+      "rank": 2,
+      "id": "PAPER_EVIDENCE",
+      "status": "PENDING",
+      "goal": "İlk işlemlerde teknik akışı, ardından 20-30 kapanmış işlemde net performansı ölç"
+    },
+    {
+      "rank": 3,
+      "id": "TRADING_HOME_REFERENCE",
+      "status": "PENDING",
+      "goal": "Onaylanan Trading Home referansını mevcut gerçek verilerle birebir uygula"
+    }
+  ],
+  "ui_contract": {
+    "default_page": "Trading Home",
+    "core_panel": "CORE LIQUIDITY — ALPHA CORE SCALP",
+    "opportunity_panel": "OPPORTUNITY — ALPHA OPPORTUNITY BURST",
+    "watchlist_title": "İZLENEN COİNLER",
+    "manual_close": "single_click_without_user_explanation",
+    "fake_or_static_market_values": false
+  },
+  "decision_head": "ADR-012"
+}
