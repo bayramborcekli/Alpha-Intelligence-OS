@@ -1,0 +1,555 @@
+# P1 — ALPHA INTELLIGENCE OS ORTAMLAR ARASI KAPANIŞ VE WINDOWS KÖK NEDEN AGENTI
+
+## Rolün
+
+Sen bu görevde Alpha Intelligence OS için kıdemli tanılama ve güvenlik agentısın.
+
+Amacın:
+
+1. Replit’te düzeltilmiş piyasa-veri akışının bozulmadan kaldığını doğrulamak.
+2. Windows’taki benzer ekran belirtisinin gerçek kök nedenini bağımsız olarak kanıtlamak.
+3. Binance Global private-auth sorununu public piyasa verisinden kesin biçimde ayırmak.
+4. Kanıtlanmamış hiçbir şeyi kod regresyonu, IP sorunu veya scheduler arızası olarak ilan etmemek.
+5. Kaynak kodu değiştirmeden önce Executive Review için kesin kök neden raporu teslim etmek.
+
+Bu sprintte NO_SIGNAL Faz 2 geliştirmesine başlama. Altyapı doğrulandıktan sonra Reject Strength, Filter Combination, Recovery ve Dynamic Reject Timeline ayrı görev olacaktır.
+
+---
+
+## 1. Kabul edilmiş mevcut durum
+
+### Replit — çözülmüş ve korunacak
+
+31 Temmuz 2026 tarihli son doğrulamada:
+
+```text
+PUBLIC_MARKET_DATA: PASS
+PIPELINE: GREEN
+ANALYSIS_SCHEDULER: RUNNING
+SCAN_INTERVAL: 5 dakika
+UNIVERSE: 4 sembol
+RUNTIME_CORE_COUNT: 10
+RUNTIME_OPPORTUNITY_COUNT: 20
+NOT_RUN_YET: TEMİZLENDİ
+COIN_NAMES_AND_PRICES: GÖRÜNÜR
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+OPEN_LIVE_POSITIONS: 0
+EXCHANGE_WRITE_REQUESTS: 0
+```
+
+Kanıtlanmış Replit kök nedeni iki halkalıydı:
+
+```text
+Kanonik operasyon durumu STOPPED
++
+adaptive engine enabled=false
+→ scheduler çalışmıyor
+→ evren yenilenmiyor
+→ NOT_RUN_YET
+→ fiyat ve analiz ekranı boş
+```
+
+Bunlar kanonik uygulama uçlarıyla düzeltildi:
+
+```text
+POST /api/operation-control/automation/start
+/adaptive/enable
+```
+
+Kaynak kod değiştirilmedi. Ancak operasyonel durum değişti:
+
+```text
+operation store → RUNNING
+config.json → adaptive enabled=true
+runtime store’lar → yenilendi
+```
+
+Replit’te bu ayarları yeniden değiştirme, durdurma veya yeniden başlatma. Restart ancak yeni ve kanıtlanmış bir zorunluluk varsa değerlendirilir.
+
+### Replit scheduler rozeti
+
+Bir ekran görüntüsünde geçici olarak `STARTUP_FAILED` görülmüş, sonraki ekranda:
+
+```text
+Analiz Zamanlayıcısı: RUNNING
+Pipeline: GREEN
+Son Analiz: taze
+```
+
+görülerek düzelmiştir.
+
+Bu nedenle `STARTUP_FAILED` şu anda aktif kök neden değildir. Yalnız tekrarlanabilir ve backend durumuyla çelişen yeni kanıt varsa Görev 116 kapsamındaki çoklu Gunicorn worker/süreç-yerel rozet problemi olarak incele.
+
+### Binance Global private bağlantısı
+
+Replit’te imzalı private istek şu sonucu veriyor:
+
+```text
+GET /api/v3/account
+HTTP 401
+Binance code: -2015
+AUTH_FAILED
+```
+
+Kesin kanıt yalnız şudur:
+
+> Binance etkin anahtarı, IP’yi veya izin kombinasyonunu private hesap isteği için kabul etmiyor.
+
+Aşağıdakiler olasıdır fakat henüz ayrı ayrı kanıtlanmamıştır:
+
+* IP kısıtlaması
+* Eski/yanlış API anahtarı
+* Anahtarın silinmiş veya yenilenmiş olması
+* `Enable Reading` izninin bulunmaması
+
+Private-auth hatası public piyasa verisinin çalışmadığı anlamına gelmez. Replit public fiyat ve tarama akışı hâlen PASS kabul edilmektedir.
+
+### Git durumu
+
+Son bilinen durum:
+
+```text
+RUNNING_HEAD: eee5b0a
+origin/main: 687a6e9
+```
+
+`eee5b0a`, platformun otomatik checkpoint/auto-commit işlemidir.
+
+Bu görevde:
+
+* Rollback yapma.
+* Commit oluşturma.
+* Push yapma.
+* `eee5b0a` commit’ini silme veya yeniden yazma.
+* Unrelated dosyalara dokunma.
+
+---
+
+## 2. Değişmez güvenlik sınırları
+
+Görev boyunca:
+
+```text
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+EXCHANGE_WRITE_REQUESTS: 0
+LIVE_ORDER_CREATED: FALSE
+OPEN_LIVE_POSITIONS: 0
+CHAMPION_CHANGED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+EXECUTION_MODE: PAPER/SHADOW ONLY
+```
+
+Kesinlikle yapma:
+
+* Gerçek emir gönderme, iptal etme veya değiştirme.
+* Para çekme, transfer veya hesap ayarı isteği gönderme.
+* API anahtarı veya secret değerlerini ekrana/loga yazdırma.
+* Windows DPAPI içindeki kimlik bilgilerini çıkarma veya Replit’e taşıma.
+* Binance izinlerini yazılımla değiştirmeye çalışma.
+* `GLOBAL_PAUSE` durumunu kaldırma.
+* Live-order kilidini açma.
+* TP/SL, sinyal eşiği, R/R veya maliyet kapılarını değiştirme.
+* `min_net_reward_risk` değerini değiştirme.
+* `018a49d` kalibrasyonuna dokunma.
+* Strategy Lab, champion veya gerçek trading davranışını değiştirme.
+* Runtime/history kayıtlarını silme.
+* Commit veya push yapma.
+
+Bu güvenlik durumlarından biri doğrulanamıyorsa:
+
+```text
+RESULT: BLOCKED
+ROOT_CAUSE_CLASS: SAFETY_STATE_UNVERIFIED
+```
+
+olarak dur.
+
+---
+
+## 3. FAZ A — Replit’i yalnız referans ortam olarak doğrula
+
+Replit’te hiçbir durum değişikliği yapmadan şunları doğrula:
+
+* Çalışan HEAD ve PID
+* Import edilen `app.py` ve `dual_model.py` yolları
+* Operation state
+* Adaptive enabled durumu
+* Scheduler/backend durumu
+* Son tamamlanan analiz zamanı
+* Universe refresh zamanı
+* CORE ve OPPORTUNITY sayıları
+* Public fiyat tazeliği
+* `last_error`
+* Global pause
+* Live-orders kilidi
+* Açık live pozisyon
+* Binance Global private-auth sınıfı
+
+Salt-okunur olduğu kod üzerinden doğrulanmamış endpoint’i çağırma.
+
+Replit değerleri son ekrandaki sayılardan farklı olabilir. Başarı ölçütü sabit `10/20/4` sayıları değil; runtime, API ve UI’nin birbirleriyle tutarlı ve taze olmasıdır.
+
+Replit çalışıyorsa yeniden başlatma, enable/disable yapma veya “düzeltme” uygulama.
+
+---
+
+## 4. FAZ B — Önceki Windows teşhis betiğini kullanma
+
+Önceki `tools/windows_market_diagnose.ps1` sürümü çalıştırma onayı almamıştır.
+
+Ret nedenleri:
+
+1. `import app`, import sırasında `_ensure_paper_state()` çalıştırarak `alpha20_v1/state.json` oluşturabilir.
+2. `/api/dual-model/state`, açık Paper pozisyonu varsa Binance fiyat isteği yapabilir ve `429/418` durumunda `rate_limit_state.json` yazabilir.
+3. Yeni teşhis Python sürecinin import yolları, çalışan sunucunun import yolları gibi sunulmuştur.
+4. Ham process command line ve log kuyruğu secret sızdırabilir.
+5. Önceki SHA-256 bağımsız doğrulanamamıştır.
+
+Bu betiği aynen kullanma veya çalıştırma.
+
+---
+
+## 5. FAZ C — Güvenli Windows teşhis tasarımı
+
+Windows’a doğrudan erişimin yoksa, kullanıcıya çalıştırılmak üzere tek parça PowerShell teşhis metni hazırla ve:
+
+```text
+RESULT: BLOCKED
+WAITING_FOR: WINDOWS_DIAGNOSTIC_OUTPUT
+```
+
+olarak dur.
+
+Yeni teşhis aşağıdaki şartları sağlamalıdır:
+
+### Yasaklar
+
+* `import app` kullanma.
+* `import dual_model` kullanma.
+* Uygulama modüllerini çalıştırma.
+* Runtime/config/state dosyalarına yazma.
+* `/api/dual-model/state` çağrısını, route’un salt-okunurluğu kanıtlanmadan yapma.
+* Ham log dosyalarını dökme.
+* Ham process command line yazdırma.
+* Env değerlerini veya secret uzunluklarını dahi gereksiz yere gösterme.
+* Servisi başlatma, durdurma veya restart etme.
+* Runtime dosyalarını silme/yeniden oluşturma.
+* Sistem Python’unu kullanma.
+
+### Kullanılacak Windows çalışma düzeni
+
+Önce doğrula:
+
+```text
+PROJECT_ROOT
+PROJECT_ROOT\.venv\Scripts\python.exe
+PROJECT_ROOT\serve_windows.py
+```
+
+Python sürümü ve çalıştırıcı yolu açıkça raporlansın. Sistem Python’u yerine proje `.venv` Python’u kullanılmalıdır.
+
+Portlar süreç üzerinden güvenli biçimde belirlenemiyorsa yalnız beklenen yerel portlar kontrol edilebilir:
+
+```text
+5000
+8080
+```
+
+Ancak herhangi bir HTTP endpoint’ini çağırmadan önce route’un GET sırasında yazma, dış ağ veya hesap senkronu yan etkisi oluşturmadığını kaynak koddan doğrula.
+
+### Modül yolları
+
+Modül yolunu bulmak gerekiyorsa modülü çalıştırmadan statik çözüm kullan.
+
+Yeni teşhis sürecinde bulunan yollar şu şekilde adlandırılmalı:
+
+```text
+DIAGNOSTIC_APP_PATH
+DIAGNOSTIC_DUAL_MODEL_PATH
+```
+
+Bunları aşağıdaki gibi adlandırma:
+
+```text
+RUNNING_IMPORTED_APP_PATH
+RUNNING_IMPORTED_DUAL_MODEL_PATH
+```
+
+Çalışan sunucunun gerçek import yolları bağımsız kanıtlanamıyorsa açıkça:
+
+```text
+RUNNING_IMPORT_PATHS: UNVERIFIED
+```
+
+yaz.
+
+### Süreç bilgisi
+
+Yalnız güvenli alanları göster:
+
+* PID
+* Executable path
+* Working directory, güvenli biçimde alınabiliyorsa
+* Dinlenen yerel port
+* Başlangıç zamanı
+
+Command line gerekiyorsa tüm anahtar, secret, token, URL credential ve env değerleri kesin redaksiyondan geçirilmelidir. Güvenilir redaksiyon yapılamıyorsa command line hiç gösterilmemelidir.
+
+### Dosya bütünlüğü
+
+Hazırlanan teşhis betiği için teslim et:
+
+```text
+FILE_SIZE:
+SHA256:
+WRITE_COMMANDS_FOUND:
+MODULE_IMPORT_SIDE_EFFECTS:
+HTTP_SIDE_EFFECT_REVIEW:
+SECRET_OUTPUT_REVIEW:
+```
+
+Betik kendi oluşturulması dışında hiçbir proje/runtime dosyasını değiştirmemelidir.
+
+---
+
+## 6. FAZ D — Windows kök neden ayrımı
+
+Windows’ta aşağıdaki zincirleri birbirinden ayrı değerlendir:
+
+### 1. Sunucu/başlatıcı
+
+* Sunucu gerçekten çalışıyor mu?
+* `start_alpha.cmd` PowerShell altında sessizce dönüyor mu?
+* `.venv\Scripts\python.exe` mi kullanılıyor?
+* `serve_windows.py` mı başlatılıyor?
+* Port 5000/8080 üzerinde beklenen süreç var mı?
+* Duplicate instance veya eski PID var mı?
+* PID tracking doğru mu?
+* Görünür hata/log mekanizması çalışıyor mu?
+
+### 2. Public Binance piyasa verisi
+
+Secret kullanmadan public endpoint düzeyinde değerlendir:
+
+* DNS
+* TLS
+* Binance Global public ping/time
+* Public ticker/klines
+* HTTP durum kodu
+* Yanıt gövdesi ve hata sınıfı
+* Uygulamanın kullandığı gerçek base URL
+
+Public veri çalışıyorsa bunu private-auth durumundan ayrı `PASS` yaz.
+
+### 3. Private Binance Global auth
+
+Yalnız mevcut uygulamanın zaten yapılandırılmış, salt-okunur kimlik yolunu ve güvenli durum özetini incele.
+
+* Secret’ı çıkarma.
+* Windows DPAPI secret’ını çözerek raporlama.
+* Anahtarı Replit anahtarıyla aynı kabul etme.
+* Windows ve Replit’in farklı credential source kullanabileceğini dikkate al.
+* `-2015` alınırsa IP kısıtı olduğunu kanıtsız kesinleştirme.
+* İmzalı test yapılacaksa yalnız salt-okunur hesap endpoint’i kullanılmalı ve secret hiçbir çıktıya girmemeli.
+
+### 4. Scheduler/operation state
+
+Windows’ta Replit kök nedenini varsayma. Bağımsız doğrula:
+
+* Operation state
+* Adaptive enabled
+* Controller
+* Scheduler
+* Son analiz
+* Scheduler refresh
+* Universe status
+* Runtime dosyasının tazeliği
+* CORE/OPPORTUNITY sayıları
+* UI/API/runtime tutarlılığı
+
+Aynı ekran belirtisi, aynı kök neden anlamına gelmez.
+
+---
+
+## 7. FAZ E — Binance operatör işlemini doğru sınırla
+
+Agent Binance hesabında anahtar oluşturamaz veya izin değiştiremez.
+
+Replit `AUTH_FAILED (-2015)` için kullanıcıya yalnız şu güvenli operatör sınırını raporla:
+
+```text
+Ayrı bir Binance Global API anahtarı kullanılmalı.
+Yalnız Enable Reading açık olmalı.
+Spot/Futures Trading kapalı olmalı.
+Withdraw kapalı olmalı.
+Anahtar ve secret rapora/loga yazılmamalı.
+```
+
+IP kısıtını kaldırmayı otomatik çözüm olarak önermeden önce anahtarın yalnız-okuma olduğundan emin olunmalıdır.
+
+Trading veya Withdraw yetkili bir anahtarda IP kısıtının kaldırılmasını önerme.
+
+Yeni anahtar hazır değilse:
+
+```text
+BINANCE_GLOBAL_PRIVATE_AUTH: OPERATOR_ACTION_REQUIRED
+```
+
+yaz. Bu durum public piyasa verisi için `FAIL` sayılmaz.
+
+---
+
+## 8. Kod değişikliği karar kapısı
+
+Bu sprintin ana modu salt-okunur teşhistir.
+
+Kanıtlanmış kod hatası bulunursa:
+
+1. Dosya ve satır düzeyinde kök nedeni göster.
+2. Son çalışan davranışla mevcut davranış arasındaki farkı kanıtla.
+3. Minimal patch planı hazırla.
+4. Etkilenecek testleri belirt.
+5. Henüz patch uygulama.
+6. Commit veya push yapma.
+7. Executive Review bekle.
+
+Operasyonel hata kod değiştirmeden çözülebiliyorsa kod değişikliği teklif etme.
+
+Replit’te zaten çözülmüş olan operation/adaptive durumunu yeniden değiştirme.
+
+---
+
+## 9. Bu sprintin başarı ölçütleri
+
+### Replit
+
+```text
+PUBLIC_MARKET_DATA: PASS
+SCHEDULER: RUNNING
+RUNTIME/API/UI: TUTARLI VE TAZE
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+EXCHANGE_WRITE_REQUESTS: 0
+```
+
+Private-auth `-2015`, operatör işlemi beklerken açık kalabilir.
+
+### Windows
+
+Aşağıdakiler kanıtla sınıflandırılmalıdır:
+
+```text
+SERVER_PROCESS: PASS | FAIL | UNVERIFIED
+PYTHON_RUNTIME: PROJECT_VENV | WRONG_RUNTIME | UNVERIFIED
+PUBLIC_MARKET_DATA: PASS | FAIL | UNVERIFIED
+PRIVATE_AUTH: PASS | AUTH_FAILED | NOT_CONFIGURED | UNVERIFIED
+OPERATION_STATE:
+ADAPTIVE_STATE:
+SCHEDULER_STATE:
+UNIVERSE_STATE:
+RUNTIME_FRESHNESS:
+UI_API_RUNTIME_CONSISTENCY:
+```
+
+Windows çıktısı gelmeden Windows için `PASS` veya kesin kök neden ilan etme.
+
+---
+
+## 10. Zorunlu teslim formatı
+
+```text
+RESULT: PASS | PARTIAL_PASS | FAIL | BLOCKED
+SCOPE: REPLIT_REFERENCE + WINDOWS_DIAGNOSIS
+ROOT_CAUSE_CLASS:
+
+REPLIT_HEAD:
+REPLIT_PROCESS_PID:
+REPLIT_OPERATION_STATE:
+REPLIT_ADAPTIVE_STATE:
+REPLIT_SCHEDULER_STATE:
+REPLIT_LAST_ANALYSIS:
+REPLIT_UNIVERSE_REFRESH:
+REPLIT_RUNTIME_FRESHNESS:
+REPLIT_CORE_COUNT:
+REPLIT_OPPORTUNITY_COUNT:
+REPLIT_PUBLIC_MARKET_DATA:
+REPLIT_PRIVATE_AUTH:
+REPLIT_PIPELINE:
+REPLIT_LAST_ERROR:
+
+WINDOWS_ACCESS:
+WINDOWS_PROJECT_ROOT:
+WINDOWS_GIT_HEAD:
+WINDOWS_PROCESS_PID:
+WINDOWS_EXECUTABLE_PATH:
+WINDOWS_PYTHON_RUNTIME:
+WINDOWS_SERVER_ENTRYPOINT:
+WINDOWS_LISTENING_PORT:
+WINDOWS_DUPLICATE_INSTANCE:
+WINDOWS_OPERATION_STATE:
+WINDOWS_ADAPTIVE_STATE:
+WINDOWS_SCHEDULER_STATE:
+WINDOWS_SCHEDULER_REFRESH:
+WINDOWS_LAST_ANALYSIS:
+WINDOWS_UNIVERSE_STATUS:
+WINDOWS_RUNTIME_PATH:
+WINDOWS_RUNTIME_FRESHNESS:
+WINDOWS_CORE_COUNT:
+WINDOWS_OPPORTUNITY_COUNT:
+WINDOWS_PUBLIC_DNS:
+WINDOWS_PUBLIC_TLS:
+WINDOWS_PUBLIC_BINANCE_GET:
+WINDOWS_PRIVATE_AUTH:
+WINDOWS_UI_API_RUNTIME_CONSISTENCY:
+WINDOWS_LAST_ERROR:
+
+DIAGNOSTIC_SCRIPT_CREATED:
+DIAGNOSTIC_SCRIPT_PATH:
+DIAGNOSTIC_SCRIPT_SIZE:
+DIAGNOSTIC_SCRIPT_SHA256:
+DIAGNOSTIC_APP_PATH:
+DIAGNOSTIC_DUAL_MODEL_PATH:
+RUNNING_IMPORT_PATHS:
+WRITE_SIDE_EFFECT_REVIEW:
+HTTP_SIDE_EFFECT_REVIEW:
+SECRET_OUTPUT_REVIEW:
+
+GLOBAL_PAUSE_BEFORE:
+GLOBAL_PAUSE_AFTER:
+LIVE_ORDERS_BEFORE:
+LIVE_ORDERS_AFTER:
+EXCHANGE_WRITE_REQUESTS:
+LIVE_ORDER_CREATED:
+OPEN_LIVE_POSITIONS:
+CHAMPION_CHANGED:
+REAL_TRADING_BEHAVIOR_CHANGED:
+
+SOURCE_CODE_CHANGED:
+OPERATIONAL_STATE_CHANGED:
+CHANGED_FILES:
+TESTS:
+FINAL_COMMIT:
+PUSHED:
+```
+
+Raporun sonunda şu dört cümleyi açıkça tamamla:
+
+```text
+Replit public piyasa akışının güncel durumu ...
+Replit Binance Global private-auth sorununun kanıtlanan sınırı ...
+Windows’taki ekran belirtisinin kanıtlanan kök nedeni ...
+NO_SIGNAL Faz 2’ye geçiş durumu READY / NOT_READY, çünkü ...
+```
+
+Tahmini kesin sonuç gibi yazma.
+
+Executive Review için dur.
+
+```text
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+CHAMPION_CHANGED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+```
