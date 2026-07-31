@@ -1,0 +1,281 @@
+DÜZELTME GÖREVİ — TRADING HOME HEDEF TASARIMDAN CİDDİ SAPTI
+
+MEVCUT TESLİM KABUL EDİLMEDİ.
+
+Referans görsel ile Windows’taki gerçek ekran karşılaştırıldı.
+
+SORUNLAR
+
+1. Hedefteki profesyonel terminal görünümü oluşmadı.
+2. Grafikler ve sparkline’lar hiç uygulanmadı.
+3. KPI kartları ve görsel hiyerarşi hedefe uymuyor.
+4. Eski sıkışık DOM/panel yapısı büyük ölçüde korunmuş.
+5. Gerçek ekran çok sayıda UNKNOWN / Veri yok gösteriyor.
+6. Setup runtime GREEN olmasına rağmen Trading Home runtime/account/model verilerini alamıyor.
+7. Binance Global CONNECTED_READ_ONLY olmasına rağmen ekran “Bağlı hesap yok” gösteriyor.
+8. CORE ve OPPORTUNITY verileri hedef kart düzeninde doğru render edilmiyor.
+9. Hedef ekran ile teslim arasında kabul edilemez görsel ve işlevsel sapma var.
+
+Bu görev yalnız CSS rötuşu değildir.
+
+--------------------------------------------------
+1. ÖNCE GERÇEK HATA TEŞHİSİ
+--------------------------------------------------
+
+Windows gerçek ekranında aşağıdaki API’leri tek tek incele:
+
+- /api/operation-control/status
+- /api/operation-control/overview
+- /api/operation-control/workspace/portfolio
+- /api/operation-control/workspace/journal
+- /api/dual-model/state
+- /api/paper/state
+- /api/accounts
+- /api/accounts/wallets
+- /health/runtime
+
+Her biri için:
+
+- HTTP status
+- response schema
+- frontend’in beklediği alan
+- gerçek dönen alan
+- hata nedeni
+- auth/local bypass etkisi
+- partial failure davranışı
+
+raporla.
+
+Setup ekranı GREEN iken Trading Home UNKNOWN gösteremez.
+
+Backend gerçekten veri sağlıyorsa frontend alan eşlemesini düzelt.
+Backend veri sağlamıyorsa mevcut kanonik store’dan güvenli read-only adapter ekle.
+
+Sahte değer üretme.
+
+--------------------------------------------------
+2. REFERANS TASARIMI GERÇEK HEDEF OLARAK UYGULA
+--------------------------------------------------
+
+Referans görsel yalnız ilham değildir; kabul hedefidir.
+
+Masaüstü 1600x900 civarında şu yapı gerçek anlamda oluşmalı:
+
+- belirgin sol navigasyon
+- yüksekliği dengeli sticky üst durum şeridi
+- büyük KPI kartları
+- sağda AI Durumu / Danışman kartı
+- tam genişlik Aktif İşlemler tablosu
+- üç kolon:
+  CORE LIQUIDITY
+  OPPORTUNITY
+  İZLENEN PİYASALAR
+- alt bölüm:
+  Piyasa Özeti
+  Kazananlar / Kaybedenler
+  Sistem & Otomasyon
+- altta fiyat ticker şeridi
+
+Eski küçük yazılı, yoğun çizgili legacy ekran görünümü kalmamalı.
+
+--------------------------------------------------
+3. GRAFİKLERİ GERÇEK VERİYE BAĞLA
+--------------------------------------------------
+
+En az şu grafikler uygulanmalı:
+
+A. Portföy/PnL sparkline
+- Son N portföy değeri veya gerçekleşmiş PnL zaman serisi
+- Gerçek ledger/journal verisi
+- Veri yoksa açıkça NO_HISTORY
+
+B. Günlük PnL sparkline
+- Gün içindeki kapanan işlemler veya equity snapshot’ları
+- Uydurma eğri yok
+
+C. Risk kullanım progress/chart
+- Gerçek risk used / risk limit
+
+D. Güven/confidence bar
+- CORE ve OPPORTUNITY sinyallerindeki gerçek confidence
+
+E. Piyasa duygu göstergesi
+- Gerçek kaynak yoksa kart tamamen kaldırılabilir veya DATA_SOURCE_NOT_CONFIGURED gösterilmeli
+- Referanstaki 72 gibi sahte değer kullanma
+
+Grafik kütüphanesi:
+- mevcut bağımlılık varsa onu kullan
+- yoksa hafif SVG/canvas çözümü veya Chart.js eklenebilir
+- CDN bağımlılığına kör güvenme
+- lokal/static çalışma Windows’ta doğrulansın
+
+Grafikler 12 saniyelik refresh sırasında yeniden oluşturulup memory leak üretmemeli.
+
+--------------------------------------------------
+4. VERİ EKSİKSE DÜRÜST AMA PROFESYONEL GÖSTER
+--------------------------------------------------
+
+UNKNOWN her yere dağılmamalı.
+
+Duruma göre ayrıştır:
+
+- LOADING
+- NOT_CONFIGURED
+- PARTIAL_DATA
+- DATA_SOURCE_UNAVAILABLE
+- NO_OPEN_POSITION
+- NO_HISTORY
+- API_ERROR
+
+Setup GREEN iken frontend hata veriyorsa üstte tek bir veri sağlığı uyarısı göster ve ilgili kartlarda son geçerli veriyi timestamp ile kullan.
+
+Sahte sıfır veya sahte pozitif değer kullanma.
+
+--------------------------------------------------
+5. HESAP BAĞLANTISI TUTARSIZLIĞINI DÜZELT
+--------------------------------------------------
+
+Windows setup:
+
+BINANCE_GLOBAL: CONNECTED_READ_ONLY
+
+diyor.
+
+Trading Home:
+
+Bağlı hesap yok
+
+diyor.
+
+Bu tutarsızlık kapatılmalı.
+
+Read-only Global bağlantı:
+
+- Hesap bağlı
+- READ ONLY
+- Spot/Futures izin durumu
+- son doğrulama zamanı
+
+olarak gösterilmeli.
+
+Credential frontend’e açılmayacak.
+
+--------------------------------------------------
+6. TASARIM ÖLÇÜLERİ
+--------------------------------------------------
+
+Hedef:
+
+- normal tarayıcı zoom: %100
+- 1440–1920 px masaüstünde okunabilirlik
+- minimum ana gövde fontu 12–13 px
+- KPI değerleri 20–28 px
+- tablo satırları rahat okunur
+- kart paddingleri dengeli
+- geniş ekran boşluğu etkin kullanılır
+- ekranın ortasında aşırı boş alan kalmaz
+
+%50 zoom üzerinden tasarım doğrulaması yapma.
+
+Windows ekran görüntüsü %100 zoom ile alınmalı.
+
+--------------------------------------------------
+7. AKTİF İŞLEMLER
+--------------------------------------------------
+
+Birleşik tablo gerçek veriyle dolmalı:
+
+- symbol
+- side
+- quantity
+- notional
+- entry
+- current
+- net pnl
+- pnl %
+- duration
+- TP
+- SL
+- model
+- list type
+- status
+- Paper close action
+
+Model pozisyonları dual-model state’ten doğru eşlenmeli.
+
+Bir API düşerse tüm tablo UNKNOWN olmamalı; çalışan kaynak gösterilmeli ve “kısmi” etiketi kullanılmalı.
+
+--------------------------------------------------
+8. TESTLER
+--------------------------------------------------
+
+Mevcut DOM ID bekçi testleri tek başına kabul kanıtı değildir.
+
+Ekle:
+
+1. GREEN runtime response UI’da GREEN görünür.
+2. CONNECTED_READ_ONLY hesap “bağlı hesap yok” göstermez.
+3. Dual-model listeleri gerçek satırlara dönüşür.
+4. Açık pozisyonlar birleşik tabloda görünür.
+5. PnL history varsa sparkline dataset oluşur.
+6. History yoksa sahte grafik çizilmez.
+7. API partial failure diğer kartları bozmaz.
+8. UNKNOWN nedeni reason code ile gösterilir.
+9. Chart refresh memory leak üretmez.
+10. XSS koruması sürer.
+11. LIVE ORDERS DISABLED korunur.
+12. %100 zoom masaüstü Playwright screenshot regression testi eklenir.
+
+--------------------------------------------------
+9. GÖRSEL KABUL KANITI
+--------------------------------------------------
+
+Teslimden önce şu ekran görüntülerini paylaş:
+
+- Referans
+- Windows gerçek ekran %100 zoom
+- 1600x900 veya 1920x1080
+- veriler doluyken
+- kısmi API kesintisinde
+- veri geçmişi yokken
+
+Görsel farkları kendin değerlendir.
+
+Yalnız test sayısı paylaşmak yeterli değil.
+
+--------------------------------------------------
+10. SINIRLAR
+--------------------------------------------------
+
+- LIVE ORDERS DISABLED
+- gerçek emir yolu açılmayacak
+- verify=False yok
+- sahte KPI yok
+- sahte grafik yok
+- credential değişikliği yok
+- dual-model motor davranışı bozulmayacak
+- runtime store Git’i kirletmeyecek
+- görev dışı öğrenme motoru geliştirmesi yapılmayacak
+
+--------------------------------------------------
+11. TESLİM RAPORU
+--------------------------------------------------
+
+Finalde paylaş:
+
+1. Asıl sapmanın nedeni
+2. UNKNOWN veri sorunlarının kök nedeni
+3. Düzeltilen API schema eşlemeleri
+4. Eklenen gerçek grafik veri kaynakları
+5. Veri kaynağı olmayan kartlara ne yapıldığı
+6. Referans ile görsel eşleşme özeti
+7. Playwright screenshot kanıtı
+8. Windows %100 zoom ekran görüntüsü
+9. Hedefli test sonucu
+10. Tam test sonucu
+11. git status
+12. commit hash
+
+Bu görev mevcut teslimin devamıdır.
+Yeni görev numarasıyla kapsamı dağıtma.
+Önce hedef tasarım ve gerçek veri bağlantısını tamamla.
