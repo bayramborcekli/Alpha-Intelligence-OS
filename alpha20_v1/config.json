@@ -18,7 +18,7 @@
   "fee_safety_factor": 2.0,
   "max_open_positions": 1,
   "adaptive_system": {
-    "enabled": false,
+    "enabled": true,
     "mode": "MONITOR",
     "auto_paper_enabled": false,
     "regime_min_confidence": 65.0,

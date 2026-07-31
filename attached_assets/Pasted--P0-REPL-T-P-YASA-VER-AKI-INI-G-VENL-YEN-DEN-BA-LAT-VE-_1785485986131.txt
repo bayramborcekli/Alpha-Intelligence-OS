@@ -1,0 +1,260 @@
+# P0 — REPLİT PİYASA VERİ AKIŞINI GÜVENLİ YENİDEN BAŞLAT VE DOĞRULA
+
+## Amaç
+
+Replit’te kanıtlanan şu zinciri güvenli biçimde düzelt:
+
+```text
+Kanonik operasyon durumu STOPPED
+→ analiz zamanlayıcısı çalışmıyor
+→ scheduler_refresh yok
+→ evren NOT_RUN_YET
+→ coin fiyatları yenilenmiyor
+```
+
+Bu görev yalnız Replit içindir. Windows teşhisi ayrı ve hâlen `BLOCKED` durumundadır.
+
+## Değişmez güvenlik sınırları
+
+Görev boyunca:
+
+```text
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+EXCHANGE_WRITE_REQUESTS: 0
+LIVE_ORDER_CREATED: FALSE
+CHAMPION_CHANGED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+```
+
+* Gerçek işlem açma.
+* Binance emir, iptal, transfer veya hesap değişikliği isteği gönderme.
+* API anahtarı/secret değerlerini yazdırma.
+* Trading izinlerini değiştirme.
+* Sinyal eşiklerini, TP/SL’yi, R/R kapılarını veya Strategy Lab’i değiştirme.
+* `018a49d` kalibrasyonuna dokunma.
+* Windows teşhis betiğini değiştirme.
+* Commit veya push yapma.
+* Platform auto-commit’i `eee5b0a` için rollback yapma; yalnız raporla.
+
+## FAZ 0 — Başlangıç güvenlik kanıtı
+
+Herhangi bir durum değişikliğinden önce kaydet:
+
+```text
+git status --short
+git branch --show-current
+git rev-parse HEAD
+git log -3 --oneline
+```
+
+Canlı Replit sürecinden doğrula:
+
+* PID ve güvenli biçimde redakte edilmiş komut
+* Çalışan Git HEAD
+* Import edilen `app.py` ve `dual_model.py` yolları
+* `GLOBAL_PAUSE`
+* Live-orders kilidi
+* Açık gerçek pozisyon sayısı
+* Açık Paper pozisyon sayısı
+* Scheduler/controller durumu
+* `scheduler_refresh`
+* CORE ve OPPORTUNITY sayıları
+* `/api/dual-model/state` liste sayıları
+* Son hata
+
+Başlangıçta `GLOBAL_PAUSE: ACTIVE` veya `LIVE_ORDERS: DISABLED` doğrulanamazsa:
+
+```text
+RESULT: BLOCKED
+ROOT_CAUSE_CLASS: SAFETY_STATE_UNVERIFIED
+```
+
+olarak dur.
+
+## FAZ 1 — Başlatma işleminin kapsamını kanıtla
+
+Kanonik operasyon durumunu başlatmadan önce kod üzerinden belirle:
+
+* Kullanılacak servis/fonksiyon/endpoint hangisi?
+* Yalnız scheduler ve Paper/Shadow analizini mi başlatıyor?
+* Live trading’i etkinleştiren herhangi bir yan etkisi var mı?
+* Global pause’u kaldırıyor mu?
+* Live-order kilidini değiştiriyor mu?
+* Exchange write isteği oluşturabilecek yol var mı?
+
+Başlatma işleminin analiz ile gerçek işlem modunu güvenli biçimde ayıramadığı görülürse hiçbir şey başlatma ve `BLOCKED` olarak dur.
+
+## FAZ 2 — Scheduler’ı kontrollü başlat
+
+Güvenlik kanıtı olumluysa kanonik operasyon kontrolü üzerinden yalnız analiz/scheduler zincirini başlat.
+
+Başlatmadan hemen önce ve hemen sonra şunları karşılaştır:
+
+```text
+GLOBAL_PAUSE
+LIVE_ORDERS
+controller state
+scheduler state
+scheduler thread
+scheduler lock owner
+duplicate instance
+open live positions
+exchange write request count
+```
+
+Doğrudan runtime/config dosyası düzenleyerek `RUNNING` yazma. Uygulamanın kanonik operasyon kontrol yolunu kullan.
+
+Global pause veya live-order kilidi değişirse işlemi güvenli biçimde durdur ve `FAIL` raporla.
+
+## FAZ 3 — İlk analiz çevrimini doğrula
+
+İlk scheduler çevriminin tamamlanmasını bekle ve kanıtla:
+
+* Scheduler thread canlı
+* `scheduler_refresh` artık null değil
+* Son yenileme zamanı görev sırasında ilerliyor
+* Runtime dosyası taze
+* CORE listesi dolu
+* OPPORTUNITY listesi oluşmuş veya piyasa koşuluna bağlı olarak dürüstçe sıfır
+* Coin adları mevcut
+* Canlı/public fiyatlar mevcut
+* `last_error` boş veya açıkça sınıflandırılmış
+* `/api/dual-model/state` ile runtime sayıları tutarlı
+* Trading Home aynı listeyi ve fiyatları gösteriyor
+* Evren artık `NOT_RUN_YET` değil
+
+OPPORTUNITY listesinin sıfır olması tek başına başarısızlık değildir. Ancak public fiyat, CORE listesi veya scheduler yenilemesi yoksa hata zincirini kanıtla.
+
+## FAZ 4 — Binance Global kimlik hatasını ayrı tut
+
+Mevcut kanıt:
+
+```text
+GET /api/v3/account
+HTTP 401
+Binance code: -2015
+```
+
+Bu private hesap bağlantısı sorunudur; public piyasa verisi sorunuyla karıştırma.
+
+* Mevcut secret veya anahtarı değiştirme.
+* IP kısıtı, yanlış/eski anahtar ve kaldırılmış okuma izni seçeneklerinden birini kanıtsız kesin neden ilan etme.
+* Kullanıcı Binance tarafında düzeltme yapmadıysa Global bağlantı rozeti `AUTH_FAILED` kalabilir.
+* Public coin/fiyat akışı çalışıyorsa bunu ayrı `PASS` olarak raporla.
+* Pipeline yalnız private auth nedeniyle RED kalıyorsa bunu açıkça göster; görünümü sahte biçimde yeşile çevirme.
+* Kimlik hatasını gizlemek veya readiness kontrolünü gevşetmek için kod değiştirme.
+
+Kullanıcı için gerekli operatör işlemini şu güvenlik sınırıyla raporla:
+
+```text
+Ayrı, yalnız Enable Reading yetkili API anahtarı kullanılmalı.
+Trading ve Withdraw izinleri kapalı olmalı.
+Anahtar/secret rapora veya loga yazılmamalı.
+```
+
+## FAZ 5 — Regresyon ve tekrar başlatma kontrolü
+
+Scheduler çalıştıktan sonra yalnız güvenli ve gerekli ise uygulama sürecini kontrollü yeniden başlat.
+
+Restart sonrası doğrula:
+
+* Kanonik operasyon tercihi beklenen durumda kalıyor
+* Scheduler yeniden başlıyor
+* Duplicate scheduler oluşmuyor
+* Lock doğru süreçte
+* Yeni analiz çevrimi oluşuyor
+* CORE/runtime/API/UI tutarlılığı korunuyor
+* Global pause aktif
+* Live orders kapalı
+* Exchange write request sayısı sıfır
+
+Restart riskliyse uygulama ve bunu raporla; kabul kriteri olarak zorla uygulama.
+
+## Kod değişikliği kuralı
+
+Önce mevcut tasarımın kanonik başlatma yolunu kullan. Operasyonel başlatma yeterliyse kaynak kod değiştirme.
+
+Yalnız kanıtlanmış ayrı bir kod hatası varsa:
+
+1. Önce kök neden ve satır/diff kanıtını raporla.
+2. Minimal patch uygula.
+3. İlgili regresyon testlerini çalıştır.
+4. Commit ve push yapma.
+5. Unrelated dosyalara dokunma.
+
+## Kabul kriterleri
+
+```text
+Replit public Binance GET: PASS
+Scheduler: RUNNING
+Scheduler refresh: FRESH
+Runtime CORE: DOLU
+Runtime/API sayıları: TUTARLI
+Trading Home coin adları: GÖRÜNÜR
+Trading Home fiyatları: GÖRÜNÜR
+Evren: NOT_RUN_YET DEĞİL
+Exchange write requests: 0
+Live order created: FALSE
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+```
+
+Binance Global private bağlantı rozeti, `-2015` operatör tarafından giderilmeden PASS şartı değildir. Bunu ayrı sonuç olarak raporla.
+
+## Zorunlu teslim formatı
+
+```text
+RESULT: PASS | FAIL | BLOCKED
+SCOPE: REPLIT
+ROOT_CAUSE_CLASS:
+START_HEAD:
+RUNNING_HEAD:
+PROCESS_PID:
+IMPORTED_APP_PATH:
+IMPORTED_DUAL_MODEL_PATH:
+OPERATION_STATE_BEFORE:
+OPERATION_STATE_AFTER:
+GLOBAL_PAUSE_BEFORE:
+GLOBAL_PAUSE_AFTER:
+LIVE_ORDERS_BEFORE:
+LIVE_ORDERS_AFTER:
+SCHEDULER_BEFORE:
+SCHEDULER_AFTER:
+SCHEDULER_THREAD_ALIVE:
+SCHEDULER_LOCK_OWNER:
+DUPLICATE_INSTANCE:
+SCHEDULER_REFRESH_BEFORE:
+SCHEDULER_REFRESH_AFTER:
+RUNTIME_PATH:
+RUNTIME_LAST_REFRESH:
+RUNTIME_CORE_COUNT:
+RUNTIME_OPPORTUNITY_COUNT:
+API_CORE_COUNT:
+API_OPPORTUNITY_COUNT:
+PUBLIC_MARKET_DATA:
+UI_COIN_NAMES_VISIBLE:
+UI_PRICES_VISIBLE:
+UNIVERSE_STATUS:
+PIPELINE_STATUS:
+BINANCE_GLOBAL_PRIVATE_AUTH:
+LAST_ERROR:
+EXCHANGE_WRITE_REQUESTS:
+LIVE_ORDER_CREATED:
+OPEN_LIVE_POSITIONS:
+CHAMPION_CHANGED:
+REAL_TRADING_BEHAVIOR_CHANGED:
+CHANGED_FILES:
+TESTS:
+FINAL_COMMIT:
+PUSHED:
+```
+
+Raporun sonunda kesin olarak iki ayrı cümle kur:
+
+```text
+Replit’te coin listesi ve fiyatların yenilenmemesinin nedeni ...
+Binance Global bağlantı rozetinin AUTH_FAILED kalmasının nedeni ...
+```
+
+Tahminleri kesin kök neden olarak yazma. Yönetici incelemesi için dur.
