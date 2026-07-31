@@ -4227,6 +4227,24 @@ def api_accounts_list():
                 a["exchange"])["connection_state"]
         else:
             card["connection_state"] = "DISABLED"
+        # Kurulum doğrulaması köprüsü: canlı hesap sorgusu başarısız
+        # olsa bile bağlantı servisi READ-ONLY doğrulaması yaptıysa
+        # kart "Bağlı hesap yok" YERİNE dürüst VERIFIED_READ_ONLY
+        # gösterir (credential asla frontend'e açılmaz).
+        if a.get("exchange") == "BINANCE_GLOBAL" and \
+                card["connection_state"] in (
+                    "DISABLED", "AUTH_FAILED", "CONNECTION_FAILED",
+                    "NOT_CONFIGURED"):
+            try:
+                from services import binance_connection as _bc
+                st = (_bc.status() or {}).get("BINANCE_GLOBAL") or {}
+                if st.get("status") == "CONNECTED_READ_ONLY":
+                    card["connection_state"] = "VERIFIED_READ_ONLY"
+                    card["permission_status"] = "READ_ONLY"
+                    card["last_verified_at"] = st.get("tested_at")
+            except Exception:
+                app.logger.exception(
+                    "binance_connection durumu okunamadı")
         cards.append(card)
     return _accounts_json(True, {
         "accounts": cards,
@@ -5158,6 +5176,69 @@ def api_dual_model_state():
     return jsonify({"ok": True,
                     "data": _dm.snapshot(with_prices=True,
                                          main_cfg=_get_main_config())})
+
+
+@app.get("/api/home/charts")
+def api_home_charts():
+    """Trading Home grafik verileri — SALT OKUNUR kanonik adapter.
+
+    Sahte eğri YOK: her seri gerçek kayıttan gelir; kaynak boşsa
+    status=NO_HISTORY döner ve UI grafik ÇİZMEZ. Hata durumunda
+    API_ERROR + boş seri (diğer kartlar etkilenmez)."""
+    out: dict = {"ok": True, "live_orders": "DISABLED"}
+
+    # A) Model PnL eğrisi — dual runtime kapanan işlemlerden kümülatif
+    #    net PnL (kronolojik). Kaynak: dual_model_runtime.json trades.
+    try:
+        import dual_model as _dm
+        rt = _dm._load_runtime()
+        trades = [t for t in (rt.get("trades") or [])
+                  if t.get("closed_at") and t.get("net_pnl") is not None]
+        trades.sort(key=lambda t: t.get("closed_at") or "")
+        cum, pts = 0.0, []
+        for t in trades[-300:]:
+            cum += float(t["net_pnl"])
+            pts.append({"t": t["closed_at"], "v": round(cum, 4)})
+        out["pnl_curve"] = {
+            "status": "OK" if pts else "NO_HISTORY",
+            "points": pts,
+            "source": "dual_model_runtime.trades"}
+        # B) Bugünkü (UTC) kapanan işlemler — gün içi PnL serisi.
+        today = datetime.now(timezone.utc).date().isoformat()
+        dcum, dpts = 0.0, []
+        for t in trades:
+            if str(t.get("closed_at") or "").startswith(today):
+                dcum += float(t["net_pnl"])
+                dpts.append({"t": t["closed_at"], "v": round(dcum, 4)})
+        out["daily_pnl"] = {
+            "status": "OK" if dpts else "NO_TRADES_TODAY",
+            "points": dpts,
+            "total": round(dcum, 4) if dpts else None,
+            "source": "dual_model_runtime.trades(utc_today)"}
+    except Exception:
+        app.logger.exception("home charts: pnl serileri üretilemedi")
+        out["pnl_curve"] = {"status": "API_ERROR", "points": []}
+        out["daily_pnl"] = {"status": "API_ERROR", "points": [],
+                            "total": None}
+
+    # C) Risk kullanımı — GERÇEK risk_api özeti (persist=False:
+    #    salt-okunur çağrı günlük snapshot YAZMAZ).
+    try:
+        import risk_api as _ra
+        s = _ra.summary(persist=False)
+        usage = s.get("margin_usage_pct") or s.get("usage_pct")
+        out["risk_usage"] = {
+            "status": "OK" if usage is not None
+            else "DATA_SOURCE_UNAVAILABLE",
+            "usage_pct": float(usage) if usage is not None else None,
+            "score": s.get("health", {}).get("score")
+            if isinstance(s.get("health"), dict)
+            else s.get("risk_score"),
+            "source": "risk_api.summary(read_only)"}
+    except Exception:
+        app.logger.exception("home charts: risk kullanımı alınamadı")
+        out["risk_usage"] = {"status": "API_ERROR", "usage_pct": None}
+    return jsonify(out)
 
 
 @app.get("/api/profit-first/report")

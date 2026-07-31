@@ -66,11 +66,30 @@
       grid-template-columns:repeat(5, minmax(0,1fr)); }
   @media (max-width:1100px) {
     .th-cards { grid-template-columns:repeat(2, minmax(0,1fr)); } }
-  .th-cards .th-card { padding:10px 12px; }
-  .th-cards b { display:block; font-size:.6rem; letter-spacing:.06em;
+  .th-cards .th-card { padding:14px 16px; }
+  .th-cards b { display:block; font-size:.62rem; letter-spacing:.06em;
       text-transform:uppercase; color:var(--muted,#8b949e);
-      font-weight:600; margin-bottom:4px; }
-  .th-cards span { font-size:1.02rem; font-weight:800; }
+      font-weight:600; margin-bottom:6px; }
+  /* Referans tasarım: KPI değerleri büyük (20-28px) okunur. */
+  .th-cards span { font-size:1.4rem; font-weight:800; }
+  .th-cards .th-spark { display:block; margin-top:6px; }
+  .th-cards .th-spark span { font-size:.72rem; }
+  .th-sparksvg { width:100%; max-width:150px; height:30px;
+      display:block; }
+  /* Güven / risk kullanım mini barları (gerçek veriyle çizilir) */
+  .th-confwrap { display:inline-flex; align-items:center; gap:6px; }
+  .th-confbar { display:inline-block; width:52px; height:6px;
+      border-radius:4px; background:#20232c; overflow:hidden;
+      vertical-align:middle; }
+  .th-confbar > span { display:block; height:100%;
+      background:var(--amber); border-radius:4px; }
+  .th-riskbar { width:100%; height:8px; margin-top:6px; }
+  .th-riskbar > span { background:#3fbf7f; }
+  .th-ro-badge { display:inline-block; padding:1px 7px;
+      border-radius:999px; font-size:.6rem; font-weight:800;
+      letter-spacing:.05em; background:rgba(90,176,224,.14);
+      color:#5ab0e0; border:1px solid rgba(90,176,224,.4);
+      vertical-align:middle; }
 
   /* ── Ana ızgara: sol %75 işlemler, sağ %25 AI + izleme ── */
   .th-main { display:grid; gap:10px; margin-top:10px;
@@ -195,11 +214,17 @@
   <div class="th-card"><b>Toplam Pozisyon Değeri</b>
     <span id="th-sc-notional" class="th-unknown">UNKNOWN</span></div>
   <div class="th-card"><b>Gün İçi PnL</b>
-    <span id="th-sc-intraday" class="th-unknown">UNKNOWN</span></div>
+    <span id="th-sc-intraday" class="th-unknown">UNKNOWN</span>
+    <span id="th-spark-daily" class="th-spark"
+          aria-label="gün içi PnL eğrisi"></span></div>
   <div class="th-card"><b>Gerçekleşmiş PnL (Model, net)</b>
-    <span id="th-sc-realized" class="th-unknown">UNKNOWN</span></div>
+    <span id="th-sc-realized" class="th-unknown">UNKNOWN</span>
+    <span id="th-spark-curve" class="th-spark"
+          aria-label="model PnL eğrisi"></span></div>
   <div class="th-card"><b>Risk Kullanımı</b>
-    <span id="th-sc-risk" class="th-unknown">UNKNOWN</span></div>
+    <span id="th-sc-risk" class="th-unknown">UNKNOWN</span>
+    <span id="th-risk-bar" class="th-spark"
+          aria-label="risk kullanım çubuğu"></span></div>
 </div>
 
 <!-- ── Yetim (ORPHAN) legacy kayıt bildirimi — Task 145 ──────────

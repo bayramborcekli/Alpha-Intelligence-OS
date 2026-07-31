@@ -124,8 +124,12 @@ class TestTriColumnAndBottom:
         assert "renderDualMetrics(null)" in seg
 
     def test_confidence_is_escaped(self):
-        # XSS: innerHTML'e giren confidence alanı esc'ten geçer.
-        assert "esc(p.confidence)" in JS
+        # XSS: confidence artık ham metin olarak basılmaz —
+        # parseFloat ile YALNIZ sayısal değere dönüştürülür ve mini
+        # güven barı + yüzde olarak çizilir (Trading Home düzeltme
+        # görevi). Sayısal olmayan girdi bar üretmez ("—").
+        assert "parseFloat(p.confidence)" in JS
+        assert "th-confbar" in JS
 
     def test_system_card(self):
         for el in ("th-sys-api", "th-sys-data", "th-sys-auto",

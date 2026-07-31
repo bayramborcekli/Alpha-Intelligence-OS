@@ -158,7 +158,11 @@
       NOT_CONFIGURED: "Anahtar Yapılandırılmamış",
       AUTH_FAILED: "Kimlik Hatası",
       CONNECTION_FAILED: "Bağlantı Hatası",
-      DISABLED: "Bağlı Değil"
+      DISABLED: "Bağlı Değil",
+      // Kurulum doğrulaması köprüsü: canlı bakiye sorgusu başarısız
+      // olsa bile bağlantı servisi READ-ONLY doğrulaması yaptıysa
+      // hesap "Bağlı Değil" DEĞİL, dürüstçe bağlı + READ ONLY'dir.
+      VERIFIED_READ_ONLY: "Hesap bağlı"
     };
     function stateLabel(a) {
       var s = STATE_TR[a.connection_state];
@@ -169,17 +173,22 @@
       return STATE_TR[a.status] || "Durum Bilinmiyor";
     }
     el.innerHTML = ordered.map(function (a) {
-      var ok = a.status === "OK";
+      var ro = a.connection_state === "VERIFIED_READ_ONLY";
+      var ok = a.status === "OK" || ro;
+      var verified = ro && a.last_verified_at ?
+        " · doğrulama: " + fmtTime(a.last_verified_at) : "";
       return "<span class=\"th-acct\">" +
         "<span>" + esc(a.logo) + "</span>" +
         "<span><span class=\"nm\">" + esc(a.nickname) +
-        (a.primary ? " ★" : "") + "</span><br>" +
+        (a.primary ? " ★" : "") +
+        (ro ? " <span class=\"th-ro-badge\">READ ONLY</span>" : "") +
+        "</span><br>" +
         "<span class=\"bal " +
         (stripBalance(a) === "UNKNOWN" ? "th-unknown" : "") + "\">" +
         esc(stripBalance(a)) + "</span></span>" +
         "<span class=\"st\"><span class=\"th-dot" +
         (ok ? " ok" : "") + "\"></span>" +
-        esc(stateLabel(a)) + "</span></span>";
+        esc(stateLabel(a) + verified) + "</span></span>";
     }).join("") + offline.map(function (a) {
       return "<span class=\"th-acct th-offline\">" +
         "<span>" + esc(a.logo) + "</span>" +
@@ -189,7 +198,8 @@
         "bağlı değil</span></span>";
     }).join("");
     var anyOk = (accounts || []).some(function (a) {
-      return a.status === "OK";
+      return a.status === "OK" ||
+        a.connection_state === "VERIFIED_READ_ONLY";
     });
     var dot = document.getElementById("th-wallet-conn");
     if (dot) {
@@ -842,11 +852,19 @@
     function listRow(r) {
       var p = openBy[r.symbol];
       var spread = parseFloat(r.spread_pct);
+      // Güven: sayısal değer varsa mini bar + yüzde (referans
+      // tasarım); veri yoksa bar ÇİZİLMEZ, sade tire.
+      var conf = p ? parseFloat(p.confidence) : NaN;
+      var confCell = !isNaN(conf)
+        ? "<span class=\"th-confwrap\"><span class=\"th-confbar\">" +
+          "<span style=\"width:" +
+          Math.max(0, Math.min(100, conf)) + "%\"></span></span>" +
+          conf.toFixed(0) + "%</span>"
+        : "—";
       return "<tr><td><b>" + esc(r.symbol) + "</b></td><td>" +
         (p ? esc(p.side) : "—") + "</td><td>" +
         (!isNaN(spread) ? spread.toFixed(3) + "%" : "—") +
-        "</td><td>" + (p && p.confidence != null ?
-          esc(p.confidence) : "—") +
+        "</td><td>" + confCell +
         "</td><td>" + stateOf(r.symbol) + "</td><td>" +
         (p ? esc(p.side) + " @" + fmtPrice(p.entry) : "—") +
         "</td></tr>";
@@ -1129,7 +1147,10 @@
       // AI Öğrenme Merkezi — gerçek öğrenme state'i (sahte veri yok)
       get("/api/dual-model/learning"),
       // Strateji Laboratuvarı — gerçek lab state'i (sahte veri yok)
-      get("/api/strategy-lab/status")
+      get("/api/strategy-lab/status"),
+      // Grafik verileri — gerçek seriler; yoksa NO_HISTORY (sahte
+      // eğri asla çizilmez).
+      get("/api/home/charts")
     ]).then(function (r) {
       function data(i, key) {
         var b = r[i].body;
@@ -1178,8 +1199,96 @@
       renderLearning(r[8].body && r[8].body.ok ? r[8].body.data : null);
       renderStrategyLab(r[9].body && r[9].body.ok ?
                         r[9].body.data : null);
+      renderCharts(r[10].http === 200 ? r[10].body : null,
+                   data(2, "portfolio"));
       inflight = false;
     }, function () { inflight = false; });
+  }
+
+  // ── Grafikler: /api/home/charts (gerçek seriler; sahte eğri YOK) ──
+  // Hafif inline SVG — harici grafik kütüphanesi/CDN bağımlılığı yok.
+  // Her yenilemede innerHTML ile yeniden çizilir (birikme/leak yok).
+
+  function sparkSvg(points, cls) {
+    if (!points || points.length < 2) return "";
+    var vals = points.map(function (p) { return p.v; });
+    var min = Math.min.apply(null, vals),
+        max = Math.max.apply(null, vals);
+    var W = 120, H = 30, pad = 2, span = (max - min) || 1;
+    var coords = vals.map(function (v, i) {
+      var x = pad + (W - 2 * pad) * i / (vals.length - 1);
+      var y = H - pad - (H - 2 * pad) * (v - min) / span;
+      return x.toFixed(1) + "," + y.toFixed(1);
+    });
+    return "<svg viewBox=\"0 0 " + W + " " + H + "\" class=\"" +
+      (cls || "") + "\" preserveAspectRatio=\"none\" role=\"img\" " +
+      "aria-label=\"eğri grafiği\"><polyline fill=\"none\" " +
+      "stroke=\"currentColor\" stroke-width=\"1.5\" points=\"" +
+      coords.join(" ") + "\"/></svg>";
+  }
+
+  function renderCharts(c, portfolio) {
+    var elCurve = document.getElementById("th-spark-curve");
+    var elDaily = document.getElementById("th-spark-daily");
+    var elRisk = document.getElementById("th-risk-bar");
+    if (!c) {
+      // Uç düşerse grafik alanları dürüstçe boşalır.
+      if (elCurve) elCurve.innerHTML =
+        "<span class=\"th-unknown\">API_ERROR</span>";
+      if (elDaily) elDaily.innerHTML = "";
+      if (elRisk) elRisk.innerHTML = "";
+      return;
+    }
+    var pc = c.pnl_curve || {};
+    if (elCurve) {
+      var last = (pc.points || []).length ?
+        pc.points[pc.points.length - 1].v : null;
+      elCurve.innerHTML = pc.status === "OK"
+        ? "<span class=\"" + pnlClass(last) + "\">" +
+          sparkSvg(pc.points, "th-sparksvg") + "</span>"
+        : "<span class=\"th-unknown\">" +
+          (pc.status === "NO_HISTORY" ? "Geçmiş yok" :
+           esc(pc.status)) + "</span>";
+    }
+    var dp = c.daily_pnl || {};
+    if (elDaily) {
+      elDaily.innerHTML = dp.status === "OK"
+        ? "<span class=\"" + pnlClass(dp.total) + "\">" +
+          sparkSvg(dp.points, "th-sparksvg") + "</span>" : "";
+    }
+    // Gün içi PnL: portföy ucu null bıraktıysa UNKNOWN yerine
+    // AYRIŞMIŞ durum — bugün kapanan model işlemi toplamı ya da
+    // dürüst "Bugün kapanan işlem yok".
+    var noPf = !portfolio || portfolio.daily_pnl === null ||
+      portfolio.daily_pnl === undefined;
+    if (noPf) {
+      if (dp.status === "OK" && dp.total !== null) {
+        setText("th-daily-pnl", fmtSigned(dp.total, "USDT"),
+                pnlClass(dp.total));
+        setText("th-sc-intraday", fmtSigned(dp.total, "USDT"),
+                pnlClass(dp.total));
+      } else if (dp.status === "NO_TRADES_TODAY") {
+        setText("th-daily-pnl", "Bugün kapanan işlem yok",
+                "th-unknown");
+        setText("th-sc-intraday", "Bugün kapanan işlem yok",
+                "th-unknown");
+      }
+    }
+    var ru = c.risk_usage || {};
+    if (elRisk) {
+      if (ru.status === "OK" && ru.usage_pct !== null &&
+          ru.usage_pct !== undefined) {
+        var pct = Math.max(0, Math.min(100, ru.usage_pct));
+        elRisk.innerHTML = "<span class=\"th-confbar th-riskbar\">" +
+          "<span style=\"width:" + pct + "%\"></span></span>";
+        setText("th-sc-risk", "%" + ru.usage_pct.toLocaleString(
+          "tr-TR", { maximumFractionDigits: 2 }));
+      } else {
+        elRisk.innerHTML = "";
+        setDatum("th-sc-risk", ru.status === "API_ERROR" ?
+          "API_ERROR" : null);
+      }
+    }
   }
 
   // ── AI Öğrenme Merkezi: /api/dual-model/learning ─────────────────
