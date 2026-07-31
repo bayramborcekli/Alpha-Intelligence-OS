@@ -2,9 +2,10 @@
 
 Sözleşme:
 - STRICT davranış (relax kapalı) birebir DEĞİŞMEZ.
-- Esnetilen TEK yumuşak kapı: EMA/VWAP birleşik ön koşulu
-  (ret hunisinde kanıtlanan baskın kapı; 300 retin 212'si).
-  İki koşuldan EN AZ BİRİ hâlâ zorunlu; ikisi de yoksa NO_SIGNAL.
+- ADR-013 Paper giriş rotaları: STRICT_TREND,
+  EMA_OR_VWAP_CONFIRMATION ve PRICE_MOMENTUM_PROBE.
+- Kısa pencere mum hacmi Paper giriş engeli değildir; temel piyasa
+  likiditesi ve maliyet kapıları sert kalır.
 - Sert kapılar (veri, likidite, spread/slippage, NET_TP, EDGE_COST,
   risk/limit/duplicate/cooldown) AYNEN uygulanır. NET_RR 1.20 yalnız
   PAPER_LEARNING'de kalite hedefidir; STRICT'te sert kapı kalır.
@@ -65,6 +66,39 @@ def _klines_both_block(n=60):
     return out
 
 
+def _klines_price_probe(n=60):
+    """EMA+VWAP gerideyken fiyat toparlanması: hacim teyidi yoktur."""
+    out, price = [], 100.0
+    for i in range(n):
+        price *= 1.004 if i >= n - 5 else 0.998
+        out.append([0, str(price), str(price * 1.001),
+                    str(price * 0.999), str(price), str(1000.0)])
+    return out
+
+
+def _klines_rising_low_candle_volume(n=60):
+    """Fiyat güçlü yükselir; son beş mum hacmi tabanın yalnız %30'u."""
+    out, price = [], 100.0
+    for i in range(n):
+        price *= 1.003
+        if i == n - 1:
+            price *= 0.998
+        volume = 300.0 if i >= n - 5 else 1000.0
+        out.append([0, str(price), str(price * 1.001),
+                    str(price * 0.999), str(price), str(volume)])
+    return out
+
+
+def _klines_old_uptrend_but_recent_fall(n=60):
+    """EMA/VWAP hâlâ yukarı görünürken son beş mum fiyatı düşer."""
+    out, price = [], 100.0
+    for i in range(n):
+        price *= 0.998 if i >= n - 5 else 1.002
+        out.append([0, str(price), str(price * 1.001),
+                    str(price * 0.999), str(price), "1000.0"])
+    return out
+
+
 def _row(**kw):
     r = {"spread_pct": 0.005, "volume_usdt": 200e6,
          "trade_count": 300000}
@@ -110,8 +144,83 @@ class TestRelaxedGate:
         assert lsig["confidence"] <= 100
         assert lsig["confidence"] >= 30  # taban aynı
 
+    def test_price_momentum_probe_opens_route_with_both_trend_blocks(self):
+        kl = _klines_price_probe()
+        strict = dm.evaluate_signal("XUSDT", kl, dm.MODEL_CORE)
+        paper = dm.evaluate_signal(
+            "XUSDT", kl, dm.MODEL_CORE, relax_ema_vwap=True,
+            profile="PAPER_LEARNING")
+
+        assert strict["side"] is None
+        assert strict["sub_reason"] == "EMA_VWAP_BLOCK"
+        assert paper["side"] == "LONG"
+        assert paper["entry_route"] == "PRICE_MOMENTUM_PROBE"
+        assert paper["profile"] == "PAPER_LEARNING"
+
+    def test_low_candle_volume_is_warning_not_paper_signal_blocker(self):
+        kl = _klines_rising_low_candle_volume()
+        strict = dm.evaluate_signal("XUSDT", kl, dm.MODEL_OPP)
+        paper = dm.evaluate_signal(
+            "XUSDT", kl, dm.MODEL_OPP, relax_ema_vwap=True,
+            profile="PAPER_LEARNING")
+
+        assert strict["side"] is None
+        assert strict["reason_code"] == "MOMENTUM_EXHAUSTED"
+        assert paper["side"] == "LONG"
+        assert paper["vol_ratio"] == pytest.approx(0.3)
+        assert "MOMENTUM_EXHAUSTED" in paper["quality_warnings"]
+
+    def test_low_candle_volume_does_not_subtract_paper_edge(self):
+        low = _klines_rising_low_candle_volume()
+        flat = [list(k) for k in low]
+        for k in flat:
+            k[5] = "1000.0"
+
+        low_sig = dm.evaluate_signal(
+            "XUSDT", low, dm.MODEL_CORE, relax_ema_vwap=True,
+            profile="PAPER_LEARNING")
+        flat_sig = dm.evaluate_signal(
+            "XUSDT", flat, dm.MODEL_CORE, relax_ema_vwap=True,
+            profile="PAPER_LEARNING")
+
+        assert low_sig["expected_gross_edge_pct"] == \
+            flat_sig["expected_gross_edge_pct"]
+
+    def test_recent_price_fall_never_becomes_positive_paper_edge(self):
+        sig = dm.evaluate_signal(
+            "XUSDT", _klines_old_uptrend_but_recent_fall(),
+            dm.MODEL_CORE, relax_ema_vwap=True,
+            profile="PAPER_LEARNING")
+
+        assert sig["side"] == "LONG"  # eski trend izi hâlâ mevcut
+        assert sig["expected_gross_edge_pct"] == 0
+
+        _sig, ok, reason, _net = dm.evaluate_paper_learning_candidate(
+            _row(), "XUSDT", _klines_old_uptrend_but_recent_fall(),
+            dm.MODEL_CORE, CFG)
+        assert not ok and reason == "FEE_DRAG"
+
 
 class TestHardGatesImmutable:
+    def test_low_confidence_is_warning_only_for_paper(self):
+        paper_sig = {
+            "side": "LONG", "last": 100.0, "confidence": 30,
+            "expected_gross_edge_pct": 1.9,
+            "profile": "PAPER_LEARNING",
+            "entry_route": "PRICE_MOMENTUM_PROBE",
+        }
+        ok, reason, _ = dm.execution_quality_gate(
+            _row(), paper_sig, dm.MODEL_CORE, CFG,
+            profile="PAPER_LEARNING")
+        assert ok and reason is None
+        assert "LOW_CONFIDENCE" in paper_sig["quality_warnings"]
+
+        strict_sig = dict(paper_sig)
+        strict_sig.pop("quality_warnings")
+        ok, reason, _ = dm.execution_quality_gate(
+            _row(), strict_sig, dm.MODEL_CORE, CFG)
+        assert not ok and reason == "LOW_CONFIDENCE"
+
     def test_net_rr_is_quality_warning_only_in_paper_learning(self):
         """Paper öğrenmede 1.20 R/R hedef, STRICT'te sert kapıdır."""
         kl = _klines_one_block()
@@ -136,6 +245,17 @@ class TestHardGatesImmutable:
         ok, reason, _ = dm.execution_quality_gate(
             _row(volume_usdt=1e4), lsig, dm.MODEL_CORE, CFG)
         assert not ok and reason == "LOW_LIQUIDITY"
+
+    def test_natural_rising_low_volume_candidate_passes_paper_gate(self):
+        sig, ok, reason, net = dm.evaluate_paper_learning_candidate(
+            _row(), "XUSDT", _klines_rising_low_candle_volume(),
+            dm.MODEL_OPP, CFG)
+
+        assert ok and reason is None
+        assert net > 0
+        assert sig["side"] == "LONG"
+        assert sig["entry_route"] == "STRICT_TREND"
+        assert "MOMENTUM_EXHAUSTED" in sig["quality_warnings"]
 
 
 class TestPaperOnlyOpenAndJournal:

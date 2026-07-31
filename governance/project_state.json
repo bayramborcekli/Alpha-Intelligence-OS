@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "Alpha Intelligence OS",
-  "updated_at": "2026-07-31T17:00:00+03:00",
+  "updated_at": "2026-07-31T20:15:00+03:00",
   "updated_by": "Executive Review",
   "source_of_truth": true,
   "operating_mode": "PAPER_LEARNING",
@@ -20,7 +20,13 @@
       "EMA_VWAP",
       "MOMENTUM",
       "CONFIDENCE_SCORE",
+      "FALSE_BREAKOUT_RISK",
       "NET_REWARD_RISK_1_20"
+    ],
+    "paper_entry_routes": [
+      "STRICT_TREND",
+      "EMA_OR_VWAP_CONFIRMATION",
+      "PRICE_MOMENTUM_PROBE"
     ],
     "paper_hard_safety": [
       "STALE_OR_INVALID_MARKET_DATA",
@@ -64,5 +70,5 @@
     "manual_close": "single_click_without_user_explanation",
     "fake_or_static_market_values": false
   },
-  "decision_head": "ADR-012"
+  "decision_head": "ADR-013"
 }

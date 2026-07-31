@@ -13,6 +13,8 @@ bu teslim tamamlanana kadar bekler.
 ## Bu görevde izin verilenler
 
 - Paper strateji kapılarının kanıta dayalı, tek-hipotezli düzenlenmesi
+- ADR-013 kapsamında `alpha20_v1/dual_model.py` içinde yalnız Paper aday
+  üretimini genişleten sınırlı değişiklik
 - Paper günlük/ledger etiketleri ve ölçümleri
 - Testler, salt-okunur teşhis ve sadakat raporu
 

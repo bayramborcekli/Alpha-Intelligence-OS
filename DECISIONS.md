@@ -4,6 +4,28 @@ Kararlar silinmez. `ACTIVE` yürürlüktedir; `SUPERSEDED` kaydı, yerini alan k
 kimliğini belirtir. Son makine-okunur karar kimliği `project_state.json` içindeki
 `decision_head` ile aynı olmalıdır.
 
+## ACTIVE — ADR-013 — Paper giriş seçenekleri kontrollü genişletilecek
+
+- Tarih: 2026-07-31
+- Kullanıcı kararı: Paper başlangıç alım seçenekleri, ürünün hiç işlem
+  yapamamasını önleyecek biçimde esnetilecek ve geliştirilecek.
+- Tek hipotez: `PAPER_LEARNING` aday üretim erişilebilirliği.
+- Uygulama: STRICT trend girişi yanında EMA veya VWAP tek-teyit girişi ve
+  fiyat hareketine dayalı momentum-probe girişi bulunur. Kısa pencere mum
+  hacmi Paper adayını tek başına engellemez ve beklenen edge hesabına girmez.
+  Paper edge yalnız pozitif fiyat momentumundan türetilir; düşüşün mutlak
+  değeri yükseliş/kâr ihtimali gibi sayılamaz.
+  Düşük güven, momentum tükenmesi, false-breakout riski ve net R/R 1.20
+  Paper'da kalite etiketi olabilir.
+- Ayrım: mum hacmi strateji teyididir; piyasanın temel işlem hacmi ve işlem
+  sayısı ise gerçekleştirilebilirlik/likidite güvenliğidir.
+- Sert kalanlar: bozuk/bayat veri, aşırı spread/slippage, yetersiz likidite,
+  maliyet sonrası pozitif olmayan hedef, edge/maliyet alt sınırı,
+  pozisyon/günlük zarar, tekrar/cooldown ve canlı emir yasağı.
+- Yetki: Yalnız `alpha20_v1/dual_model.py` içinde bu Paper kapsamıyla sınırlı
+  değişiklik, kullanıcı tarafından açıkça onaylanmıştır. STRICT davranışın ve
+  borsa salt-okunur sınırının değişmesi onaylanmamıştır.
+
 ## ACTIVE — ADR-012 — Kalıcı proje yönetim omurgası
 
 - Tarih: 2026-07-31

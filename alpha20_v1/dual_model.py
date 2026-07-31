@@ -103,13 +103,12 @@ DEFAULTS: dict[str, Any] = {
     },
     "total_max_open_positions": 4,
     "monitor_seconds": 4,           # 3-5 sn pozisyon monitörü
-    # GÖREV 118 EK — kontrollü PAPER_LEARNING profili.
-    # STRICT: mevcut kurallar aynen. PAPER_LEARNING: YALNIZ tek
-    # yumuşak kapı (EMA/VWAP birleşik ön koşulu; ret hunisinde
-    # kanıtlanan baskın kapı) esnetilir — iki koşuldan EN AZ BİRİ
-    # sağlanmalı. Sert kapılar (veri/likidite/spread/slippage/NET_TP/
-    # EDGE_COST/risk/limit/duplicate/cooldown) DEĞİŞMEZ. NET_RR 1.20
-    # yalnız PAPER_LEARNING'de kalite hedefidir. LIVE yolu kapalıdır.
+    # GÖREV 118 / ADR-013 — kontrollü PAPER_LEARNING profili.
+    # STRICT: mevcut kurallar aynen. PAPER_LEARNING: trend, tek
+    # EMA/VWAP teyidi veya fiyat temelli momentum-probe rotasından
+    # aday üretebilir. Strateji kalite kusurları etiketlenir; sert
+    # veri/likidite/spread/slippage/NET_TP/EDGE_COST/risk/limit/
+    # duplicate/cooldown kapıları DEĞİŞMEZ. LIVE yolu kapalıdır.
     "paper_learning": {
         "enabled": False,
         "relaxed_gate": "EMA_VWAP_COMBINED",
@@ -403,7 +402,8 @@ def _rsi(closes: list[float], n: int = 14) -> float:
 
 def evaluate_signal(symbol: str, klines: list[list],
                     model: str,
-                    relax_ema_vwap: bool = False) -> dict[str, Any]:
+                    relax_ema_vwap: bool = False,
+                    profile: str = "STRICT") -> dict[str, Any]:
     """1m klines → sinyal (side/confidence/expected_gross_edge_pct).
 
     Kural tabanlı, deterministik; her iki model aynı çekirdek
@@ -427,20 +427,33 @@ def evaluate_signal(symbol: str, klines: list[list],
     vol_ratio = vol_recent / vol_base
     hi20 = max(closes[-21:-1])
 
+    paper_learning = profile == "PAPER_LEARNING" or relax_ema_vwap
     conf = 0
     side = None
     relaxed = False
+    entry_route = None
     ema_ok, vwap_ok = ema9 > ema21, last > vwap
     if ema_ok and vwap_ok:
         side = "LONG"
         conf += 30
+        entry_route = "STRICT_TREND"
     elif relax_ema_vwap and (ema_ok or vwap_ok):
         # PAPER_LEARNING: birleşik zorunluluk yerine EN AZ BİRİ.
-        # Puanlama AYNI (taban +30 dahil) — skor şişirme yok; aday
-        # yine min_confidence ve TÜM maliyet/risk kapılarından geçer.
+        # Puanlama AYNI (taban +30 dahil) — skor şişirme yok.
         side = "LONG"
         conf += 30
         relaxed = True
+        entry_route = "EMA_OR_VWAP_CONFIRMATION"
+    elif paper_learning and mom_pct > 0.05 \
+            and (last > hi20 or 35 <= rsi <= 65):
+        # ADR-013 PRICE_MOMENTUM_PROBE: EMA ve VWAP aynı anda teyit
+        # etmese bile pozitif fiyat momentumu breakout veya sağlıklı
+        # RSI ile destekleniyorsa Paper adayı üret. Mum hacmi Paper
+        # giriş engeli değildir; gerçek likidite kapısı aşağıda kalır.
+        side = "LONG"
+        conf += 10
+        relaxed = True
+        entry_route = "PRICE_MOMENTUM_PROBE"
     if side is not None:
         if mom_pct > 0.05:
             conf += 15
@@ -476,20 +489,43 @@ def evaluate_signal(symbol: str, klines: list[list],
                 "reason_code": "NO_SIGNAL", "rsi": rsi,
                 "vol_ratio": vol_ratio,
                 "sub_reason": sub, "weak_factors": weak}
+    quality_warnings = []
     if model == MODEL_OPP and vol_ratio < 1.2:
-        return {"symbol": symbol, "side": None, "confidence": conf,
-                "reason_code": "MOMENTUM_EXHAUSTED"}
+        if not paper_learning:
+            return {"symbol": symbol, "side": None,
+                    "confidence": conf,
+                    "reason_code": "MOMENTUM_EXHAUSTED"}
+        quality_warnings.append("MOMENTUM_EXHAUSTED")
     if last > hi20 and vol_ratio < 1.2:
-        return {"symbol": symbol, "side": None, "confidence": conf,
-                "reason_code": "FALSE_BREAKOUT_RISK"}
-    edge = min(abs(mom_pct) * 0.6 + (vol_ratio - 1) * 0.15, 2.0)
+        if not paper_learning:
+            return {"symbol": symbol, "side": None,
+                    "confidence": conf,
+                    "reason_code": "FALSE_BREAKOUT_RISK"}
+        quality_warnings.append("FALSE_BREAKOUT_RISK")
+    # Paper edge yalnız pozitif fiyat momentumundan gelir: düşüşün
+    # mutlak değeri kâr ihtimali sayılamaz, mum hacmi edge'i ne düşürür
+    # ne de yapay biçimde yükseltir. STRICT'in tarihî hesabı değişmez.
+    if paper_learning:
+        edge = min(max(mom_pct, 0) * 0.6, 2.0)
+    else:
+        edge = min(abs(mom_pct) * 0.6 + (vol_ratio - 1) * 0.15,
+                   2.0)
     out = {"symbol": symbol, "side": side, "confidence": min(conf, 100),
            "expected_gross_edge_pct": round(edge, 4),
            "rsi": round(rsi, 1), "vol_ratio": round(vol_ratio, 2),
            "vwap": vwap, "last": last}
-    if relaxed:
+    if paper_learning:
         out["profile"] = "PAPER_LEARNING"
-        out["relaxed_gate"] = "EMA_VWAP_COMBINED"
+        out["entry_route"] = entry_route
+        if relaxed:
+            out["relaxed_gate"] = (
+                "EMA_VWAP_MOMENTUM_PROBE"
+                if entry_route == "PRICE_MOMENTUM_PROBE"
+                else "EMA_VWAP_COMBINED")
+        elif quality_warnings:
+            out["relaxed_gate"] = quality_warnings[0]
+        if quality_warnings:
+            out["quality_warnings"] = quality_warnings
     return out
 
 
@@ -528,13 +564,19 @@ def execution_quality_gate(row: dict, sig: dict, model: str,
         -> tuple[bool, str | None, float]:
     """Zorunlu kalite kapıları → (geçti, reason_code, net_edge_pct).
 
-    PAPER_LEARNING profilinde net R/R 1.20 bir kalite hedefidir; aday
-    bu nedenle tek başına reddedilmez. Diğer tüm maliyet ve güvenlik
-    kapıları STRICT ile aynıdır.
+    PAPER_LEARNING profilinde güven skoru ve net R/R 1.20 kalite
+    hedefidir; aday yalnız bunlar nedeniyle reddedilmez. Diğer tüm
+    maliyet ve güvenlik kapıları STRICT ile aynıdır.
     """
     m = cfg["core"] if model == MODEL_CORE else cfg["opportunity"]
+    is_paper_learning = profile == "PAPER_LEARNING" and \
+        sig.get("profile") == "PAPER_LEARNING"
     if sig.get("confidence", 0) < m["min_confidence"]:
-        return False, "LOW_CONFIDENCE", 0.0
+        if not is_paper_learning:
+            return False, "LOW_CONFIDENCE", 0.0
+        warnings = sig.setdefault("quality_warnings", [])
+        if "LOW_CONFIDENCE" not in warnings:
+            warnings.append("LOW_CONFIDENCE")
     if row.get("spread_pct", 999) > m["max_spread_pct"]:
         return False, "SPREAD_TOO_HIGH", 0.0
     if row.get("volume_usdt", 0) < m["min_volume_usdt"]:
@@ -558,8 +600,6 @@ def execution_quality_gate(row: dict, sig: dict, model: str,
         return False, "NET_TP_NON_POSITIVE", round(net, 4)
     min_rr = float(m.get("min_net_reward_risk", 1.20))
     if cp["net_reward_risk"] is None or cp["net_reward_risk"] < min_rr:
-        is_paper_learning = profile == "PAPER_LEARNING" and \
-            sig.get("profile") == "PAPER_LEARNING"
         if not is_paper_learning:
             return False, "NET_REWARD_RISK_TOO_LOW", round(net, 4)
         warnings = sig.setdefault("quality_warnings", [])
@@ -569,6 +609,27 @@ def execution_quality_gate(row: dict, sig: dict, model: str,
     if net < cp["round_trip_cost_pct"] * mult:
         return False, "EDGE_BELOW_COST_MULTIPLE", round(net, 4)
     return True, None, round(net, 4)
+
+
+def evaluate_paper_learning_candidate(
+        row: dict, symbol: str, klines: list[list], model: str,
+        cfg: dict) -> tuple[dict, bool, str | None, float]:
+    """ADR-013 Paper adayını çoklu giriş rotalarıyla değerlendir.
+
+    Bu yardımcı yalnız PAPER sinyali üretir. Gerçek borsa yazma yolu
+    içermez; bütün sert execution/risk kapılarını ortak kalite kapısına
+    bırakır.
+    """
+    sig = evaluate_signal(symbol, klines, model,
+                          relax_ema_vwap=True,
+                          profile="PAPER_LEARNING")
+    if not sig.get("side"):
+        return sig, False, sig.get("reason_code", "NO_SIGNAL"), 0.0
+    ok, reason, net = execution_quality_gate(
+        row, sig, model, cfg, profile="PAPER_LEARNING")
+    if not sig.get("relaxed_gate") and sig.get("quality_warnings"):
+        sig["relaxed_gate"] = sig["quality_warnings"][0]
+    return sig, ok, reason, net
 
 
 # ── Sahiplik, limitler, pozisyon yaşam döngüsü ─────────────────────
@@ -672,6 +733,7 @@ def try_open_position(symbol: str, model: str, sig: dict,
             # yalnız esnetilen kapıyla açılan paper işlemi işaretler)
             "profile": sig.get("profile", "STRICT"),
             "relaxed_gate": sig.get("relaxed_gate"),
+            "entry_route": sig.get("entry_route"),
             "quality_warnings": [
                 code for code in (sig.get("quality_warnings") or [])
                 if code in REASON_CODES],
@@ -717,6 +779,7 @@ def _build_trade(p: dict, price: float, result: str,
         "config_version": p.get("config_version", "BASE"),
         "profile": p.get("profile", "STRICT"),
         "relaxed_gate": p.get("relaxed_gate"),
+        "entry_route": p.get("entry_route"),
         "quality_warnings": p.get("quality_warnings") or [],
         "notional_usdt": p.get("notional_usdt"),
         "net_edge_pct": p.get("net_edge_pct"),
@@ -1091,8 +1154,8 @@ def record_learning_decision(symbol: str, model: str, strict_sig: dict,
     entry = {
         "at": _now_iso(), "symbol": symbol, "model": model,
         "profile": "PAPER_LEARNING",
-        "relaxed_gate": learn_sig.get("relaxed_gate",
-                                      "EMA_VWAP_COMBINED"),
+        "relaxed_gate": learn_sig.get("relaxed_gate"),
+        "entry_route": learn_sig.get("entry_route"),
         "strict_decision": strict_sig.get("reason_code", "NO_SIGNAL"),
         "strict_sub_reason": strict_sig.get("sub_reason"),
         "learning_decision": ("OPENED" if opened else
@@ -1555,19 +1618,16 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                                              "price":
                                                  price_cache.get(sym),
                                          })
-                        # PAPER_LEARNING: STRICT ret sonrası tek
-                        # yumuşak kapı esnetilmiş ikinci değerlendirme.
+                        # PAPER_LEARNING: STRICT ret sonrası çoklu
+                        # giriş rotalarıyla ikinci değerlendirme.
                         # Sert güvenlik/maliyet kapıları AYNEN uygulanır;
                         # net R/R yalnız learning kalite etiketi; LIVE yok.
                         pl = cfg.get("paper_learning") or {}
                         if pl.get("enabled"):
-                            lsig = evaluate_signal(
-                                sym, kl, model, relax_ema_vwap=True)
+                            lsig, lok, lreason, lnet = \
+                                evaluate_paper_learning_candidate(
+                                    row, sym, kl, model, cfg)
                             if lsig.get("side"):
-                                lok, lreason, lnet = \
-                                    execution_quality_gate(
-                                        row, lsig, model, cfg,
-                                        profile="PAPER_LEARNING")
                                 if lok:
                                     # Açılış ERTELENİR: öğrenme adayı
                                     # da sahiplik arbitrajından geçer
@@ -1603,6 +1663,32 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                         row, sig, model, cfg)
                     if not ok:
                         record_rejection(sym, model, reason)
+                        # STRICT sinyali yalnız Paper-yumuşak kalite
+                        # kapısında kaldıysa aynı doğal veriyle Paper
+                        # adayı olarak tekrar değerlendir. Sert maliyet,
+                        # veri ve risk retleri asla bu yolu kullanmaz.
+                        pl = cfg.get("paper_learning") or {}
+                        if pl.get("enabled") and reason in {
+                                "LOW_CONFIDENCE",
+                                "NET_REWARD_RISK_TOO_LOW"}:
+                            lsig, lok, lreason, lnet = \
+                                evaluate_paper_learning_candidate(
+                                    row, sym, kl, model, cfg)
+                            strict_outcome = dict(sig)
+                            strict_outcome["reason_code"] = reason
+                            if lok:
+                                cands.append({
+                                    "symbol": sym, "sig": lsig,
+                                    "net_edge_pct": lnet,
+                                    "shadow": shadow,
+                                    "learning_strict": strict_outcome})
+                            else:
+                                record_learning_decision(
+                                    sym, model, strict_outcome, lsig,
+                                    lok, lreason, lnet, cfg, False,
+                                    None,
+                                    btc_change_pct=rt.get(
+                                        "btc_change_pct"))
                         continue
                     cands.append({"symbol": sym, "sig": sig,
                                   "net_edge_pct": net,
