@@ -1,0 +1,20 @@
+name: Project governance
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  direction-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test runner
+        run: python -m pip install pytest
+      - name: Validate active project contract
+        run: python scripts/project_preflight.py --check
+      - name: Run governance tests
+        run: python -m pytest -q tests/test_project_governance.py
