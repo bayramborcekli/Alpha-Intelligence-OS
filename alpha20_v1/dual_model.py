@@ -107,9 +107,9 @@ DEFAULTS: dict[str, Any] = {
     # STRICT: mevcut kurallar aynen. PAPER_LEARNING: YALNIZ tek
     # yumuşak kapı (EMA/VWAP birleşik ön koşulu; ret hunisinde
     # kanıtlanan baskın kapı) esnetilir — iki koşuldan EN AZ BİRİ
-    # sağlanmalı. Sert kapılar (veri/likidite/spread/slippage/
-    # NET_TP/NET_RR/EDGE_COST/risk/limit/duplicate/cooldown)
-    # DEĞİŞMEZ. LIVE tamamen kapalı (bu motorda live yol yok).
+    # sağlanmalı. Sert kapılar (veri/likidite/spread/slippage/NET_TP/
+    # EDGE_COST/risk/limit/duplicate/cooldown) DEĞİŞMEZ. NET_RR 1.20
+    # yalnız PAPER_LEARNING'de kalite hedefidir. LIVE yolu kapalıdır.
     "paper_learning": {
         "enabled": False,
         "relaxed_gate": "EMA_VWAP_COMBINED",
@@ -524,8 +524,14 @@ def cost_profile(m: dict, slippage_pct: float | None = None) -> dict:
 
 
 def execution_quality_gate(row: dict, sig: dict, model: str,
-                           cfg: dict) -> tuple[bool, str | None, float]:
-    """Zorunlu kalite kapıları → (geçti, reason_code, net_edge_pct)."""
+                           cfg: dict, profile: str = "STRICT") \
+        -> tuple[bool, str | None, float]:
+    """Zorunlu kalite kapıları → (geçti, reason_code, net_edge_pct).
+
+    PAPER_LEARNING profilinde net R/R 1.20 bir kalite hedefidir; aday
+    bu nedenle tek başına reddedilmez. Diğer tüm maliyet ve güvenlik
+    kapıları STRICT ile aynıdır.
+    """
     m = cfg["core"] if model == MODEL_CORE else cfg["opportunity"]
     if sig.get("confidence", 0) < m["min_confidence"]:
         return False, "LOW_CONFIDENCE", 0.0
@@ -552,7 +558,13 @@ def execution_quality_gate(row: dict, sig: dict, model: str,
         return False, "NET_TP_NON_POSITIVE", round(net, 4)
     min_rr = float(m.get("min_net_reward_risk", 1.20))
     if cp["net_reward_risk"] is None or cp["net_reward_risk"] < min_rr:
-        return False, "NET_REWARD_RISK_TOO_LOW", round(net, 4)
+        is_paper_learning = profile == "PAPER_LEARNING" and \
+            sig.get("profile") == "PAPER_LEARNING"
+        if not is_paper_learning:
+            return False, "NET_REWARD_RISK_TOO_LOW", round(net, 4)
+        warnings = sig.setdefault("quality_warnings", [])
+        if "NET_REWARD_RISK_TOO_LOW" not in warnings:
+            warnings.append("NET_REWARD_RISK_TOO_LOW")
     mult = float(m.get("min_edge_cost_multiple", 1.5))
     if net < cp["round_trip_cost_pct"] * mult:
         return False, "EDGE_BELOW_COST_MULTIPLE", round(net, 4)
@@ -660,6 +672,9 @@ def try_open_position(symbol: str, model: str, sig: dict,
             # yalnız esnetilen kapıyla açılan paper işlemi işaretler)
             "profile": sig.get("profile", "STRICT"),
             "relaxed_gate": sig.get("relaxed_gate"),
+            "quality_warnings": [
+                code for code in (sig.get("quality_warnings") or [])
+                if code in REASON_CODES],
             # Öğrenme köprüsü: bu girişte hangi config sürümü etkindi?
             "config_version": m.get("config_version", "BASE"),
             # PFDE gölge skorları (raporlama; karar etkisi YOK)
@@ -702,6 +717,7 @@ def _build_trade(p: dict, price: float, result: str,
         "config_version": p.get("config_version", "BASE"),
         "profile": p.get("profile", "STRICT"),
         "relaxed_gate": p.get("relaxed_gate"),
+        "quality_warnings": p.get("quality_warnings") or [],
         "notional_usdt": p.get("notional_usdt"),
         "net_edge_pct": p.get("net_edge_pct"),
         **{k: p[k] for k in ("symbol", "model", "side", "entry",
@@ -1086,6 +1102,7 @@ def record_learning_decision(symbol: str, model: str, strict_sig: dict,
         "expected_edge": learn_sig.get("expected_gross_edge_pct"),
         "net_edge_pct": round(net_edge, 4),
         "net_reward_risk": cp["net_reward_risk"],
+        "quality_warnings": learn_sig.get("quality_warnings", []),
         "round_trip_cost": cp["round_trip_cost_pct"],
         "market_regime": ({"btc_change_pct": btc_change_pct}
                           if btc_change_pct is not None else None),
@@ -1540,8 +1557,8 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                                          })
                         # PAPER_LEARNING: STRICT ret sonrası tek
                         # yumuşak kapı esnetilmiş ikinci değerlendirme.
-                        # Sert kapılar (aşağıdaki quality gate dahil)
-                        # AYNEN uygulanır; LIVE yolu yok.
+                        # Sert güvenlik/maliyet kapıları AYNEN uygulanır;
+                        # net R/R yalnız learning kalite etiketi; LIVE yok.
                         pl = cfg.get("paper_learning") or {}
                         if pl.get("enabled"):
                             lsig = evaluate_signal(
@@ -1549,7 +1566,8 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                             if lsig.get("side"):
                                 lok, lreason, lnet = \
                                     execution_quality_gate(
-                                        row, lsig, model, cfg)
+                                        row, lsig, model, cfg,
+                                        profile="PAPER_LEARNING")
                                 if lok:
                                     # Açılış ERTELENİR: öğrenme adayı
                                     # da sahiplik arbitrajından geçer
