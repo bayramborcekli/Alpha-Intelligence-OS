@@ -5,8 +5,9 @@ Sözleşme:
 - Esnetilen TEK yumuşak kapı: EMA/VWAP birleşik ön koşulu
   (ret hunisinde kanıtlanan baskın kapı; 300 retin 212'si).
   İki koşuldan EN AZ BİRİ hâlâ zorunlu; ikisi de yoksa NO_SIGNAL.
-- Sert kapılar (veri, likidite, spread/slippage, NET_TP, NET_RR,
-  EDGE_COST, risk/limit/duplicate/cooldown) AYNEN uygulanır.
+- Sert kapılar (veri, likidite, spread/slippage, NET_TP, EDGE_COST,
+  risk/limit/duplicate/cooldown) AYNEN uygulanır. NET_RR 1.20 yalnız
+  PAPER_LEARNING'de kalite hedefidir; STRICT'te sert kapı kalır.
 - LIVE yolu yok; işlem yalnız PAPER, profile etiketiyle izlenir.
 """
 import json
@@ -111,19 +112,22 @@ class TestRelaxedGate:
 
 
 class TestHardGatesImmutable:
-    def test_learning_candidate_still_dies_at_net_rr(self):
-        """SERT KAPI KANITI: varsayılan CORE profiliyle esnetilmiş
-        aday bile NET_REWARD_RISK kapısında ölür (kapı gevşetilmedi).
-        Bu, mevcut yapısal çelişkinin PAPER_LEARNING'de de dürüstçe
-        korunduğunun regresyon mühürüdür."""
+    def test_net_rr_is_quality_warning_only_in_paper_learning(self):
+        """Paper öğrenmede 1.20 R/R hedef, STRICT'te sert kapıdır."""
         kl = _klines_one_block()
         lsig = dm.evaluate_signal("XUSDT", kl, dm.MODEL_CORE,
                                   relax_ema_vwap=True)
         lsig["expected_gross_edge_pct"] = 1.9  # edge sorunu dışarıda
         ok, reason, _ = dm.execution_quality_gate(
-            _row(), lsig, dm.MODEL_CORE, CFG)
-        assert not ok
-        assert reason == "NET_REWARD_RISK_TOO_LOW"
+            _row(), lsig, dm.MODEL_CORE, CFG, profile="PAPER_LEARNING")
+        assert ok and reason is None
+        assert lsig["quality_warnings"] == ["NET_REWARD_RISK_TOO_LOW"]
+
+        strict_sig = dict(lsig)
+        strict_sig.pop("quality_warnings")
+        ok, reason, _ = dm.execution_quality_gate(
+            _row(), strict_sig, dm.MODEL_CORE, CFG)
+        assert not ok and reason == "NET_REWARD_RISK_TOO_LOW"
 
     def test_liquidity_gate_still_applies(self):
         kl = _klines_one_block()
@@ -164,6 +168,57 @@ class TestPaperOnlyOpenAndJournal:
         assert closed[0]["profile"] == "PAPER_LEARNING"
         assert closed[0]["relaxed_gate"] == "EMA_VWAP_COMBINED"
         assert closed[0]["net_pnl"] is not None
+
+    def test_default_low_rr_candidate_completes_paper_flow(self):
+        """ADR-010 uçtan uca kanıtı: varsayılan CORE net R/R değeri
+        1.20 altında olsa da yalnız PAPER_LEARNING profilinde aday
+        açılır, kapanır ve kalite uyarısı öğrenme günlüğüne taşınır.
+        Aynı aday STRICT profilde reddedilmeye devam eder.
+        """
+        cfg = json.loads(json.dumps(CFG))
+        kl = _klines_one_block()
+        strict = dm.evaluate_signal("XUSDT", kl, dm.MODEL_CORE)
+        lsig = dm.evaluate_signal("XUSDT", kl, dm.MODEL_CORE,
+                                  relax_ema_vwap=True)
+        lsig["expected_gross_edge_pct"] = 1.9
+
+        strict_ok, strict_reason, _ = dm.execution_quality_gate(
+            _row(), dict(lsig), dm.MODEL_CORE, cfg)
+        assert not strict_ok
+        assert strict_reason == "NET_REWARD_RISK_TOO_LOW"
+
+        ok, reason, net = dm.execution_quality_gate(
+            _row(), lsig, dm.MODEL_CORE, cfg,
+            profile="PAPER_LEARNING")
+        assert ok and reason is None
+        assert lsig["quality_warnings"] == [
+            "NET_REWARD_RISK_TOO_LOW"]
+
+        opened, why = dm.try_open_position(
+            "XUSDT", dm.MODEL_CORE, lsig, net, cfg, now=1000.0)
+        assert opened, why
+        dm.record_learning_decision(
+            "XUSDT", dm.MODEL_CORE, strict, lsig, True, None,
+            net, cfg, opened, None)
+
+        rt = json.load(open(dm.RUNTIME_PATH))
+        position = rt["positions"]["XUSDT"]
+        assert position["execution_mode"] == "PAPER"
+        assert position["profile"] == "PAPER_LEARNING"
+        assert rt["learning_journal"][0]["learning_decision"] == \
+            "OPENED"
+        assert rt["learning_journal"][0]["quality_warnings"] == [
+            "NET_REWARD_RISK_TOO_LOW"]
+
+        close_price = position["entry"] * (
+            1 + cfg["core"]["tp_pct"] / 100)
+        closed = dm.monitor_positions(lambda _symbol: close_price,
+                                      cfg, now=1100.0)
+        assert len(closed) == 1
+        assert closed[0]["profile"] == "PAPER_LEARNING"
+        assert closed[0]["execution_mode"] == "PAPER"
+        assert closed[0]["quality_warnings"] == [
+            "NET_REWARD_RISK_TOO_LOW"]
 
     def test_strict_position_tagged_strict(self):
         sig = {"side": "LONG", "last": 100.0, "confidence": 80}
