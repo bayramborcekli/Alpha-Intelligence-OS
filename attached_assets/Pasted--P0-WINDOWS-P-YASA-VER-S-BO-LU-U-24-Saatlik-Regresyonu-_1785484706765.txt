@@ -1,0 +1,450 @@
+# P0 — WINDOWS PİYASA VERİSİ BOŞLUĞU
+
+## 24 Saatlik Regresyonu Kanıtla, Kök Nedeni Bul ve Koşullu Onar
+
+### Amaç
+
+Alpha Intelligence OS, Windows’ta yaklaşık 24 saat önce coin listelerini ve fiyatları gösterirken artık göstermiyor.
+
+Kesin olarak cevapla:
+
+```text
+Windows’ta Binance public piyasa verisi neden ekrana ulaşmıyor?
+Son çalışan sürümden bugüne hangi değişiklik bunu bozdu?
+```
+
+Yalnız kanıtlanmış teknik arızayı minimal biçimde düzelt. Tahmine dayalı patch üretme.
+
+---
+
+## Bilinen gerçekler
+
+1. `018a49d` ile gelen `net_reward_risk >= 1.20` kapısı kabul edilmiş işlem sinyallerini durduruyor; fakat coin listesini veya fiyatları boşaltamaz.
+
+2. Panelin kanonik veri yolu:
+
+```text
+Binance public Spot
+→ dual-model tarayıcı döngüsü
+→ dual_model_runtime.json
+→ GET /api/dual-model/state
+→ Trading Home
+```
+
+3. Binance Global Spot public verileri API anahtarı gerektirmez.
+
+4. Binance TR şu anda coin listesinin kaynağı değildir. Piyasa taraması `api.binance.com` Spot public uçlarını kullanır.
+
+5. Replit’te görülen “30 sembol taranıyor” bilgisi Windows bağlantısının kanıtı değildir.
+
+6. Önceki Windows gözlemleri:
+
+```text
+curl.exe https://api.binance.com/api/v3/ping → {}
+curl.exe https://www.binance.tr/open/v1/common/time → HTTP 200
+```
+
+Buna karşılık uygulamada daha önce:
+
+```text
+EXCHANGE_TLS_ERROR
+EXCHANGE_CURL_ERROR
+INVALID_EXCHANGE_RESPONSE
+```
+
+gözlemlendi.
+
+7. Daha önce `TRUSTSTORE: PASS` ve `BINANCE_GLOBAL: CONNECTED_READ_ONLY` sonucu da görüldü. Bu nedenle truststore, proxy veya antivirüsü kanıtsız kök neden ilan etme.
+
+8. Windows kurulumunda `.venv` varsa yalnız:
+
+```text
+<project>\.venv\Scripts\python.exe
+```
+
+kullanılmalı. Sistem Python’una sessiz fallback yapılmamalı.
+
+---
+
+# Değiştirilemez güvenlik sınırları
+
+```text
+GLOBAL_PAUSE: ACTIVE
+LIVE_ORDERS: DISABLED
+PAPER/SHADOW ONLY
+CHAMPION_CHANGED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+```
+
+Kesinlikle yapma:
+
+* Gerçek emir oluşturma.
+* Futures, transfer veya para çekme özelliği ekleme.
+* API anahtarı isteme ya da loglama.
+* `verify=False` kullanma veya TLS doğrulamasını kapatma.
+* `min_net_reward_risk` eşiğini değiştirme.
+* TP/SL, fee, slippage, champion veya trading config değiştirme.
+* Runtime dosyalarını topluca silme/sıfırlama.
+* Binance Global yerine Binance TR’yi kanıtsız biçimde piyasa kaynağı yapma.
+* Antivirüs/firewall istisnasını otomatik değiştirme.
+* `git reset`, checkout veya çalışan sürüme kör rollback yapma.
+* Kullanıcıya sormadan push yapma.
+
+---
+
+# FAZ 0 — Değişiklik öncesi kayıt
+
+Önce kaydet:
+
+```text
+git status --short
+git branch --show-current
+git rev-parse HEAD
+git log --oneline --decorate -20
+```
+
+Ayrıca:
+
+* Çalışan Windows sunucu PID’si
+* Process command line
+* Kullanılan Python executable
+* Working directory
+* Dinlenen port
+* Import edilen `app.py` yolu
+* Import edilen `dual_model.py` yolu
+* İlgili runtime dosyasının mutlak yolu ve SHA-256 değeri
+
+Kullanıcı dosyalarını ve mevcut worktree değişikliklerini koru.
+
+---
+
+# ZORUNLU DURDURMA KAPISI
+
+Bu görev Windows’a doğrudan erişemeyen Replit/Linux ortamında çalışıyorsa:
+
+1. Windows kök nedenini bulmuş gibi davranma.
+2. Replit sonuçlarını Windows kanıtı sayma.
+3. Kaynak kodu değiştirme.
+4. Tek bir salt-okunur PowerShell teşhis paketi hazırla.
+5. Kullanıcının Windows’ta çalıştırıp çıktıyı geri göndermesini iste.
+6. Çıktı gelmeden:
+
+```text
+RESULT: BLOCKED
+ROOT_CAUSE_CLASS: INSUFFICIENT_WINDOWS_EVIDENCE
+CHANGED_FILES: NONE
+COMMIT: NONE
+PUSHED: FALSE
+```
+
+olarak dur.
+
+`windows_diagnose.py` `.env` yazmayı teklif ederse otomatik çalıştırma; kullanıcıya sorulursa `H` cevabı verilmelidir.
+
+---
+
+# FAZ 1 — Çalışan Windows sürecinin kimliğini kanıtla
+
+Çalışan sunucudan veya aynı `.venv` Python’ından şu değerleri al:
+
+```python
+sys.executable
+os.getcwd()
+app.__file__
+dual_model.__file__
+```
+
+Şunları doğrula:
+
+* Kullanıcı gerçekten beklenen Git klasöründeki sürümü mü çalıştırıyor?
+* Sunucu eski/ikinci bir proje kopyasından mı açılmış?
+* Portta eski bir Python süreci mi bulunuyor?
+* `start_alpha.cmd`, `launcher_windows.py` veya `serve_windows.py` doğru `.venv` ve doğru kaynak klasörünü mü kullanıyor?
+* Aynı portta ikinci instance veya scheduler-lock sahibi başka süreç var mı?
+* Çalışan HEAD ile incelenen Git HEAD aynı mı?
+
+Yanlış kaynak kopyası/import yolu kanıtlanırsa bunun nasıl oluştuğunu da göster.
+
+---
+
+# FAZ 2 — Aynı Windows ortamında üçlü bağlantı karşılaştırması
+
+API anahtarı olmadan, aynı anda karşılaştır:
+
+### A. Windows `curl.exe`
+
+```text
+https://api.binance.com/api/v3/ping
+https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT
+https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=2
+```
+
+### B. Sunucunun kullandığı aynı `.venv` Python süreci
+
+Aynı üç URL’ye uygulamanın kullandığı HTTP yolu/session ayarlarıyla istek yap.
+
+Şunları kaydet:
+
+* HTTP status
+* süre
+* exception sınıfı
+* doğrulanmış sertifika yolu
+* truststore aktif/pasif durumu
+* proxy kullanılıp kullanılmadığı
+* response content-type
+* gövdenin yalnız güvenli ilk bölümü
+
+Proxy parolası, token, anahtar veya hassas header yazdırma.
+
+### C. Yerel uygulama
+
+Gerçek porta göre:
+
+```text
+GET /health
+GET /api/dual-model/state
+```
+
+State içinden gerçek alan adlarını kullanarak kaydet:
+
+* `last_refresh`
+* `last_error`
+* CORE liste sayısı
+* OPPORTUNITY liste sayısı
+* candidate sayıları
+* scheduler/thread durumu
+* açık pozisyon sayısı
+
+Olmayan alan adlarını uydurma.
+
+---
+
+# FAZ 3 — Runtime ve scheduler zinciri
+
+Import edilen gerçek `dual_model.py` üzerinden kanonik runtime dosyasının mutlak yolunu bul.
+
+Karşılaştır:
+
+* Dosya mevcut mu?
+* Son değişiklik zamanı
+* CORE/OPPORTUNITY liste sayıları
+* Son hata
+* Son tarama zamanı
+* Dosya taze mi, bayat mı?
+* API cevabındaki liste sayılarıyla disk aynı mı?
+* Scheduler başlatılmış mı?
+* Scheduler thread hayatta mı?
+* Kilit nedeniyle döngü başlamıyor mu?
+* Exception sessizce yutuluyor mu?
+* Rate-limit veya geçersiz JSON cevabı var mı?
+
+Tracked runtime dosyalarının bulunması tek başına kök neden sayılmaz. Bu dosyaların gerçekten yanlış restore edilip scheduler’ın güncel veri yazmasını engellediği kanıtlanmalıdır.
+
+---
+
+# FAZ 4 — Katmanları kesin biçimde ayır
+
+Kanıtı şu karar ağacına göre sınıflandır:
+
+### Dal A
+
+```text
+curl FAIL + aynı Python FAIL
+```
+
+Windows ağ/DNS/TLS/proxy katmanı sorunu.
+
+### Dal B
+
+```text
+curl PASS + aynı Python FAIL
+```
+
+Python requests, truststore, certifi, proxy inheritance veya uygulama session yapılandırması sorunu.
+
+### Dal C
+
+```text
+curl PASS + Python PASS + runtime bayat/boş
+```
+
+Scheduler başlamama, exception, lock, duplicate instance veya yanlış import edilen kaynak sorunu.
+
+### Dal D
+
+```text
+runtime taze/dolu + API boş
+```
+
+Yanlış store okuma, farklı çalışan süreç, snapshot/serialization veya state endpoint sorunu.
+
+### Dal E
+
+```text
+runtime dolu + API dolu + panel boş
+```
+
+Frontend endpoint, JavaScript rendering, cache veya yanlış port/origin sorunu.
+
+Birden fazla sorun varsa her birini ayrı kanıtla. “Muhtemelen TLS” gibi ifadeleri kesin kök neden olarak kullanma.
+
+---
+
+# FAZ 5 — 24 saatlik regresyon analizi
+
+Son çalışan zaman/commit ile mevcut HEAD arasını incele:
+
+```text
+git log
+git diff
+git blame
+```
+
+Özellikle:
+
+* `dual_model.py`
+* `app.py`
+* `serve_windows.py`
+* `launcher_windows.py`
+* `start_alpha.cmd`
+* scheduler başlangıç kodu
+* HTTP session/TLS/proxy kodu
+* `/api/dual-model/state`
+* Trading Home JavaScript’i
+* runtime path ve locking kodu
+* requirements/dependency değişiklikleri
+
+`018a49d` yalnız R/R kapısını değiştirdiyse market-data arızasının nedeni olarak yazma. Ancak aynı commit market scanner, scheduler veya state zincirini de değiştirdiyse satır/diff kanıtıyla göster.
+
+Amaç:
+
+```text
+LAST_KNOWN_GOOD_COMMIT
+FIRST_BAD_COMMIT
+BREAKING_CHANGE
+```
+
+alanlarını kanıtlamaktır.
+
+---
+
+# FAZ 6 — Yalnız kanıtlanmış arızayı onar
+
+Kök neden kanıtlandıktan sonra minimal patch uygula.
+
+İzin verilen örnek onarımlar:
+
+* Yanlış Python veya kaynak kopyasının kullanılmasını engellemek.
+* Launcher’ın doğru proje kökü ve `.venv` ile açılmasını sağlamak.
+* Duplicate instance/scheduler lock sorununu düzeltmek.
+* Doğru ve güvenli TLS/proxy/session davranışını sağlamak.
+* Scheduler exception’ını görünür ve kurtarılabilir hâle getirmek.
+* State endpoint ile kanonik runtime kaynağını eşitlemek.
+* Frontend’in doğru endpoint’i okumasını sağlamak.
+
+Piyasa koşulları, sinyal eşikleri ve trading davranışı bu görev kapsamında değildir.
+
+---
+
+# FAZ 7 — Testler
+
+Onarım yapıldıysa ilgili regresyon testlerini ekle:
+
+* Doğru proje kökü ve `.venv` seçimi
+* Yanlış/eski kopyadan import edilmemesi
+* Scheduler’ın başlatılması
+* Mock Binance Spot cevabından CORE/OPPORTUNITY listelerinin oluşması
+* Runtime → `/api/dual-model/state` sayı tutarlılığı
+* API doluyken panelin listeyi işlemesi
+* Ağ hatasında `last_error` görünürlüğü
+* Hiçbir exchange write request oluşmaması
+
+İnternete bağlı testi ana regresyon paketinin zorunlu parçası yapma; HTTP katmanını mock’la. Windows’ta yalnız public GET smoke testi yapılabilir.
+
+---
+
+# Kabul kriterleri
+
+Görev ancak Windows üzerinde şu zincir doğrulanırsa `PASS` olabilir:
+
+```text
+Aynı .venv Python → Binance Spot public GET başarılı
+Scheduler → canlı ve yenileniyor
+Runtime → taze ve listeler dolu
+/api/dual-model/state → aynı listeler dolu
+Trading Home → coin adları ve fiyatlar görünür
+Exchange write request → 0
+Live order → 0
+```
+
+Sadece Replit’te çalışması, curl’in tek başına 200 vermesi veya testlerin mock ile geçmesi Windows onarımı için yeterli değildir.
+
+---
+
+# Git kuralları
+
+* Kod değişmediyse commit oluşturma.
+* Onarım yapıldıysa yalnız ilgili dosyaları kapsayan tek odaklı commit oluştur.
+* Kullanıcıya ait unrelated değişiklikleri commit’e alma.
+* Push yapma.
+* Runtime/config verilerini commit’e alma.
+* Başlangıç ve bitiş `git status --short` çıktısını raporla.
+
+---
+
+# Zorunlu teslim formatı
+
+```text
+RESULT: PASS | FAIL | BLOCKED
+ROOT_CAUSE_CLASS:
+LAST_KNOWN_GOOD_COMMIT:
+FIRST_BAD_COMMIT:
+BREAKING_CHANGE:
+WINDOWS_PROCESS_PID:
+WINDOWS_PROCESS_COMMAND:
+WINDOWS_PYTHON:
+RUNNING_HEAD:
+IMPORTED_APP_PATH:
+IMPORTED_DUAL_MODEL_PATH:
+RUNTIME_PATH:
+CURL_SPOT_PUBLIC:
+PYTHON_SPOT_PUBLIC:
+SCHEDULER_RUNNING:
+RUNTIME_LAST_REFRESH:
+RUNTIME_CORE_COUNT:
+RUNTIME_OPPORTUNITY_COUNT:
+API_CORE_COUNT:
+API_OPPORTUNITY_COUNT:
+UI_LIST_VISIBLE:
+LAST_ERROR:
+TRUSTSTORE_STATUS:
+PROXY_EFFECT:
+DUPLICATE_INSTANCE:
+EXCHANGE_WRITE_REQUESTS:
+LIVE_ORDER_CREATED:
+GLOBAL_PAUSE:
+LIVE_ORDERS:
+CHAMPION_CHANGED:
+REAL_TRADING_BEHAVIOR_CHANGED:
+CHANGED_FILES:
+TESTS:
+START_HEAD:
+FINAL_COMMIT:
+PUSHED:
+```
+
+Raporun sonunda tek cümlelik kesin karar ver:
+
+```text
+Windows’ta coin listesi ve fiyatlar görünmüyordu çünkü ...
+```
+
+Kanıt henüz yeterli değilse:
+
+```text
+Windows kök nedeni henüz kanıtlanamadı; eksik zorunlu kanıt ...
+```
+
+Tahmini nedeni kesin neden gibi yazma.
+
+Strategy Lab `DATA_QUALITY_FAILURE` ve `018a49d` TP/SL kalibrasyonu bu görevde değiştirilmemeli. Windows market-data zinciri düzeldikten sonra bunlar ayrı P0 görev olarak ele alınacak.
