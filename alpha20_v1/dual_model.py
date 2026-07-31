@@ -74,7 +74,9 @@ DEFAULTS: dict[str, Any] = {
         # < roundtrip×1.5 ise giriş REDDEDİLİR.
         "min_net_reward_risk": 1.20,
         "min_edge_cost_multiple": 1.5,
-        "max_open_positions": 2,
+        # ADR-015: model boş birleşik kapasitenin tamamını kullanabilir;
+        # asıl sert tavan aşağıdaki total_max_open_positions değeridir.
+        "max_open_positions": 10,
         "position_usdt": 100.0,
         "refresh_seconds": 300,     # liste yenileme 5 dk
         "signal_seconds": 12,       # 10-15 sn
@@ -92,23 +94,28 @@ DEFAULTS: dict[str, Any] = {
         "min_confidence": 55,
         "max_slippage_pct": 0.08,
         # Maliyet-sonrası giriş kapıları — CORE ile aynı sözleşme.
+        # PAPER_LEARNING'de 1.5x çarpan ADR-014 kalite etiketidir;
+        # STRICT'te sert kapı kalır.
         "min_net_reward_risk": 1.20,
         "min_edge_cost_multiple": 1.5,
-        "max_open_positions": 2,
+        # ADR-015: model boş birleşik kapasitenin tamamını kullanabilir;
+        # asıl sert tavan aşağıdaki total_max_open_positions değeridir.
+        "max_open_positions": 10,
         "position_usdt": 50.0,      # CORE'dan küçük
         "refresh_seconds": 180,     # 2-5 dk havuz yenileme
         "signal_seconds": 25,       # 20-30 sn
         "cooldown_after_losses": 2,
         "cooldown_minutes": 15,
     },
-    "total_max_open_positions": 4,
+    "total_max_open_positions": 10,
     "monitor_seconds": 4,           # 3-5 sn pozisyon monitörü
     # GÖREV 118 / ADR-013 — kontrollü PAPER_LEARNING profili.
     # STRICT: mevcut kurallar aynen. PAPER_LEARNING: trend, tek
     # EMA/VWAP teyidi veya fiyat temelli momentum-probe rotasından
     # aday üretebilir. Strateji kalite kusurları etiketlenir; sert
-    # veri/likidite/spread/slippage/NET_TP/EDGE_COST/risk/limit/
-    # duplicate/cooldown kapıları DEĞİŞMEZ. LIVE yolu kapalıdır.
+    # veri/likidite/spread/slippage/pozitif-net/risk/limit/duplicate/
+    # cooldown kapıları DEĞİŞMEZ. ADR-014'te edge/maliyet çarpanı
+    # Paper kalite etiketidir. LIVE yolu kapalıdır.
     "paper_learning": {
         "enabled": False,
         "relaxed_gate": "EMA_VWAP_COMBINED",
@@ -594,7 +601,8 @@ def execution_quality_gate(row: dict, sig: dict, model: str,
     if net <= 0:
         return False, "EXPECTED_EDGE_TOO_LOW", round(net, 4)
     # Maliyet-sonrası TP/SL kapıları: komisyon+slippage düşüldükten
-    # sonra ödül/risk yapısı sürdürülebilir değilse giriş YOK.
+    # sonra pozitif net hedef her profilde zorunludur. PAPER_LEARNING
+    # kalite hedefleri ise işlemi durdurmaz; ölçüm etiketi olur.
     cp = cost_profile(m, slippage_pct)
     if cp["net_tp_pct"] <= 0:
         return False, "NET_TP_NON_POSITIVE", round(net, 4)
@@ -607,7 +615,11 @@ def execution_quality_gate(row: dict, sig: dict, model: str,
             warnings.append("NET_REWARD_RISK_TOO_LOW")
     mult = float(m.get("min_edge_cost_multiple", 1.5))
     if net < cp["round_trip_cost_pct"] * mult:
-        return False, "EDGE_BELOW_COST_MULTIPLE", round(net, 4)
+        if not is_paper_learning:
+            return False, "EDGE_BELOW_COST_MULTIPLE", round(net, 4)
+        warnings = sig.setdefault("quality_warnings", [])
+        if "EDGE_BELOW_COST_MULTIPLE" not in warnings:
+            warnings.append("EDGE_BELOW_COST_MULTIPLE")
     return True, None, round(net, 4)
 
 
@@ -1607,21 +1619,11 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                         price_cache[sym] = float(kl[-1][4])
                     sig = evaluate_signal(sym, kl, model)
                     if not sig.get("side"):
-                        record_rejection(sym, model,
-                                         sig.get("reason_code",
-                                                 "NO_SIGNAL"),
-                                         detail={
-                                             "sub_reason":
-                                                 sig.get("sub_reason"),
-                                             "weak_factors":
-                                                 sig.get("weak_factors"),
-                                             "price":
-                                                 price_cache.get(sym),
-                                         })
                         # PAPER_LEARNING: STRICT ret sonrası çoklu
                         # giriş rotalarıyla ikinci değerlendirme.
-                        # Sert güvenlik/maliyet kapıları AYNEN uygulanır;
-                        # net R/R yalnız learning kalite etiketi; LIVE yok.
+                        # Pozitif-net, veri, likidite ve risk güvenlikleri
+                        # uygulanır; net R/R ve edge/maliyet çarpanı yalnız
+                        # learning kalite etiketidir; LIVE yok.
                         pl = cfg.get("paper_learning") or {}
                         if pl.get("enabled"):
                             lsig, lok, lreason, lnet = \
@@ -1638,12 +1640,44 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                                         "shadow": None,
                                         "learning_strict": sig})
                                 else:
+                                    # Panelde STRICT karşılaştırma reddi
+                                    # değil, Paper'ın gerçek nihai kapısı
+                                    # görünür. Aksi halde yumuşatılmış
+                                    # LOW_CONFIDENCE/MOMENTUM yanlışlıkla
+                                    # hâlâ sert ret gibi görünüyordu.
+                                    record_rejection(
+                                        sym, model,
+                                        lreason or "DATA_QUALITY",
+                                        detail={"price":
+                                                price_cache.get(sym)})
                                     record_learning_decision(
                                         sym, model, sig, lsig, lok,
                                         lreason, lnet, cfg, False,
                                         None,
                                         btc_change_pct=rt.get(
                                             "btc_change_pct"))
+                            else:
+                                record_rejection(
+                                    sym, model,
+                                    lreason or lsig.get(
+                                        "reason_code", "NO_SIGNAL"),
+                                    detail={
+                                        "sub_reason":
+                                            lsig.get("sub_reason"),
+                                        "weak_factors":
+                                            lsig.get("weak_factors"),
+                                        "price": price_cache.get(sym),
+                                    })
+                        else:
+                            record_rejection(
+                                sym, model,
+                                sig.get("reason_code", "NO_SIGNAL"),
+                                detail={
+                                    "sub_reason": sig.get("sub_reason"),
+                                    "weak_factors":
+                                        sig.get("weak_factors"),
+                                    "price": price_cache.get(sym),
+                                })
                         continue
                     # PFDE GÖLGE skoru: gerçek kapıdan BAĞIMSIZ,
                     # kararı DEĞİŞTİRMEZ; yalnız kayıt (raporlama).
@@ -1662,7 +1696,6 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                     ok, reason, net = execution_quality_gate(
                         row, sig, model, cfg)
                     if not ok:
-                        record_rejection(sym, model, reason)
                         # STRICT sinyali yalnız Paper-yumuşak kalite
                         # kapısında kaldıysa aynı doğal veriyle Paper
                         # adayı olarak tekrar değerlendir. Sert maliyet,
@@ -1683,12 +1716,21 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                                     "shadow": shadow,
                                     "learning_strict": strict_outcome})
                             else:
+                                record_rejection(
+                                    sym, model,
+                                    lreason or "DATA_QUALITY",
+                                    detail={"price":
+                                            price_cache.get(sym)})
                                 record_learning_decision(
                                     sym, model, strict_outcome, lsig,
                                     lok, lreason, lnet, cfg, False,
                                     None,
                                     btc_change_pct=rt.get(
                                         "btc_change_pct"))
+                        else:
+                            record_rejection(sym, model, reason,
+                                             detail={"price":
+                                                     price_cache.get(sym)})
                         continue
                     cands.append({"symbol": sym, "sig": sig,
                                   "net_edge_pct": net,

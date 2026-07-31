@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "Alpha Intelligence OS",
-  "updated_at": "2026-07-31T20:15:00+03:00",
+  "updated_at": "2026-07-31T21:07:03+03:00",
   "updated_by": "Executive Review",
   "source_of_truth": true,
   "operating_mode": "PAPER_LEARNING",
@@ -21,7 +21,8 @@
       "MOMENTUM",
       "CONFIDENCE_SCORE",
       "FALSE_BREAKOUT_RISK",
-      "NET_REWARD_RISK_1_20"
+      "NET_REWARD_RISK_1_20",
+      "EDGE_BELOW_COST_MULTIPLE"
     ],
     "paper_entry_routes": [
       "STRICT_TREND",
@@ -38,6 +39,13 @@
       "LIVE_ORDER_PROHIBITION"
     ],
     "net_reward_risk_1_20": "quality_target_not_paper_blocker",
+    "paper_minimum_expected_net_edge": "STRICTLY_POSITIVE_AFTER_COSTS",
+    "paper_position_limits": {
+      "core_max_open_positions": 10,
+      "opportunity_max_open_positions": 10,
+      "combined_total_max_open_positions": 10,
+      "legacy_position_counts_toward_total": true
+    },
     "one_hypothesis_change_at_a_time": true,
     "minimum_completed_trades_before_performance_judgment": 20,
     "preferred_completed_trades_for_performance_judgment": 30
@@ -70,5 +78,5 @@
     "manual_close": "single_click_without_user_explanation",
     "fake_or_static_market_values": false
   },
-  "decision_head": "ADR-013"
+  "decision_head": "ADR-015"
 }

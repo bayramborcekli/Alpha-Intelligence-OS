@@ -13,8 +13,12 @@ bu teslim tamamlanana kadar bekler.
 ## Bu görevde izin verilenler
 
 - Paper strateji kapılarının kanıta dayalı, tek-hipotezli düzenlenmesi
-- ADR-013 kapsamında `alpha20_v1/dual_model.py` içinde yalnız Paper aday
-  üretimini genişleten sınırlı değişiklik
+- ADR-014 kapsamında `alpha20_v1/dual_model.py` içinde yalnız Paper
+  edge/maliyet çarpanı kapısını kalite uyarısına çeviren ve gerçek nihai
+  Paper ret nedenini görünür yapan sınırlı değişiklik
+- ADR-015 kapsamında toplam Paper açık pozisyon tavanını 10'a çıkaran,
+  iki modelin bu birleşik kapasiteyi kullanmasına izin veren ve paneli aynı
+  kanonik limitle uyumlu gösteren sınırlı değişiklik
 - Paper günlük/ledger etiketleri ve ölçümleri
 - Testler, salt-okunur teşhis ve sadakat raporu
 
@@ -32,6 +36,7 @@ bu teslim tamamlanana kadar bekler.
 GOVERNANCE_PREFLIGHT: PASS
 CURRENT_TASK_ALIGNED: TRUE
 PAPER_LEARNING_FLOW_POSSIBLE: TRUE
+PAPER_TOTAL_OPEN_POSITION_LIMIT: 10
 STRICT_COMPARISON_PRESERVED: TRUE
 LIVE_ORDER_CREATED: FALSE
 EXCHANGE_WRITE_REQUESTS: 0

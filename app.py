@@ -1390,7 +1390,7 @@ def render_dashboard(message: str | None = None, message_type: str = "success"):
         execution_mode_labels=EXECUTION_MODE_LABELS,
         exec_panel={
             "trade_amount": safe_config.get("trade_amount_usdt", 10),
-            "max_positions": safe_config.get("max_open_positions", 1),
+            "max_positions": _paper_total_open_position_limit(safe_config),
             "leverage": "1x",
         },
         setting_fields=setting_fields(config),
@@ -3292,6 +3292,28 @@ def _operation_kill_switch_active(cfg: dict[str, Any] | None) -> bool:
     return bool(adaptive.get("kill_switch", False))
 
 
+def _paper_total_open_position_limit(
+        cfg: dict[str, Any] | None) -> int | None:
+    """Panel için kanonik birleşik Paper pozisyon tavanını döndür.
+
+    Legacy `max_open_positions` tek-kayıtlı eski motorun sınırıdır ve
+    çift-model toplam kapasitesini temsil etmez. Önce etkin dual_model
+    ayarı, yoksa motorun kanonik varsayılanı okunur; değer uydurulmaz.
+    """
+    dual_cfg = (cfg or {}).get("dual_model")
+    value = dual_cfg.get("total_max_open_positions") \
+        if isinstance(dual_cfg, dict) else None
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    try:
+        import dual_model as _dm
+        default = _dm.DEFAULTS.get("total_max_open_positions")
+    except (ImportError, AttributeError):
+        return None
+    return default if isinstance(default, int) \
+        and not isinstance(default, bool) and default > 0 else None
+
+
 def _operation_raw() -> dict[str, Any]:
     """Operasyon anlık görüntüsü için ham veri topla.
 
@@ -3324,9 +3346,7 @@ def _operation_raw() -> dict[str, Any]:
         "signals": [], "reconciliation": [],
         "risk_limits": {
             "max_open_positions":
-                (cfg or {}).get("max_open_positions")
-                if isinstance((cfg or {}).get(
-                    "max_open_positions"), int) else None,
+                _paper_total_open_position_limit(cfg),
             "max_daily_loss": str((cfg or {}).get(
                 "daily_loss_limit_pct"))
             if (cfg or {}).get("daily_loss_limit_pct")

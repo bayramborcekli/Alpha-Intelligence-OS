@@ -4,7 +4,45 @@ Kararlar silinmez. `ACTIVE` yürürlüktedir; `SUPERSEDED` kaydı, yerini alan k
 kimliğini belirtir. Son makine-okunur karar kimliği `project_state.json` içindeki
 `decision_head` ile aynı olmalıdır.
 
-## ACTIVE — ADR-013 — Paper giriş seçenekleri kontrollü genişletilecek
+## ACTIVE — ADR-015 — Paper toplam açık pozisyon tavanı 10 olacak
+
+- Tarih: 2026-07-31
+- Kullanıcı kararı: Paper sisteminin aynı anda yönetebileceği toplam açık
+  işlem/pozisyon sayısı 10 yapılacak.
+- Uygulama: CORE ve OPPORTUNITY modellerinin her biri, boş kapasite varsa
+  toplam tavana kadar pozisyon açabilir; iki model ve varsa legacy Paper
+  pozisyonunun birleşik toplamı hiçbir zaman 10'u aşamaz.
+- Gerekçe: Eski `CORE 2 / OPPORTUNITY 2 / TOPLAM 4` ve panelde görünen legacy
+  `1` sınırı, doğal Paper örneği toplama hedefini gereksiz yere yavaşlatıyor.
+- Sert kalanlar: aynı sembolde mükerrer pozisyon, cooldown, bozuk/bayat veri,
+  aşırı spread/slippage, yetersiz likidite, maliyet sonrası pozitif olmayan
+  hedef, günlük zarar limiti, kill-switch ve canlı emir yasağı.
+- Risk kapsamı: Bu genişleme yalnız Paper içindir; pozisyon büyüklükleri,
+  günlük zarar sınırı ve borsa yazma isteği değiştirilmez.
+- `SUPERSEDES`: Önceki model başına 2 ve birleşik toplam 4 açık pozisyon
+  sınırı. ADR-014 ve diğer güvenlik hükümleri yürürlüktedir.
+
+## ACTIVE — ADR-014 — Paper girişleri pozitif-net sınıra kadar gevşetilecek
+
+- Tarih: 2026-07-31
+- Kullanıcı kararı: Paper başlangıç alımları son derece gevşetilecek;
+  sistemin neredeyse hiç işlem üretememesi kabul edilmeyecek.
+- Tek hipotez: `EDGE_BELOW_COST_MULTIPLE`, `PAPER_LEARNING` için sert
+  işlem engeli olmaktan çıkarılıp kalite uyarısına dönüştürülecek.
+- En geniş güvenli sınır: beklenen brüt hareketten komisyon ve tahmini
+  kayma çıkarıldıktan sonra sonuç kesinlikle pozitifse Paper adayı
+  açılabilir. Beklenen net sonuç `<= 0` ise giriş yine kapalıdır.
+- Görünürlük düzeltmesi: panel STRICT karşılaştırma reddini son karar gibi
+  göstermeyecek; Paper ikinci değerlendirmesinin gerçek nihai ret nedenini
+  gösterecektir.
+- Sert kalanlar: bozuk/bayat veri, aşırı spread/slippage, yetersiz
+  likidite, maliyet sonrası pozitif olmayan hedef, pozisyon/günlük zarar,
+  tekrar/cooldown ve canlı emir yasağı.
+- `SUPERSEDES`: ADR-013 içindeki `edge/maliyet alt sınırı`nın Paper'da sert
+  kalacağı hükmü. ADR-013'ün diğer hükümleri yürürlüktedir; STRICT davranış
+  değişmez.
+
+## ACTIVE (ADR-014 İLE KISMEN SUPERSEDED) — ADR-013 — Paper giriş seçenekleri kontrollü genişletilecek
 
 - Tarih: 2026-07-31
 - Kullanıcı kararı: Paper başlangıç alım seçenekleri, ürünün hiç işlem

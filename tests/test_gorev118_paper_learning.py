@@ -6,9 +6,10 @@ Sözleşme:
   EMA_OR_VWAP_CONFIRMATION ve PRICE_MOMENTUM_PROBE.
 - Kısa pencere mum hacmi Paper giriş engeli değildir; temel piyasa
   likiditesi ve maliyet kapıları sert kalır.
-- Sert kapılar (veri, likidite, spread/slippage, NET_TP, EDGE_COST,
-  risk/limit/duplicate/cooldown) AYNEN uygulanır. NET_RR 1.20 yalnız
-  PAPER_LEARNING'de kalite hedefidir; STRICT'te sert kapı kalır.
+- Sert kapılar (veri, likidite, spread/slippage, pozitif-net hedef,
+  risk/limit/duplicate/cooldown) AYNEN uygulanır. NET_RR 1.20 ve
+  EDGE_COST çarpanı yalnız PAPER_LEARNING'de kalite hedefidir;
+  STRICT'te sert kapı kalır.
 - LIVE yolu yok; işlem yalnız PAPER, profile etiketiyle izlenir.
 """
 import json
@@ -86,6 +87,17 @@ def _klines_rising_low_candle_volume(n=60):
         volume = 300.0 if i >= n - 5 else 1000.0
         out.append([0, str(price), str(price * 1.001),
                     str(price * 0.999), str(price), str(volume)])
+    return out
+
+
+def _klines_moderate_rise(n=60):
+    """Beş dakikada yaklaşık %0.50 yükseliş: maliyet sonrası pozitif,
+    fakat eski 1.5x ek maliyet tamponunun altında doğal Paper örneği."""
+    out, price = [], 100.0
+    for _ in range(n):
+        price *= 1.001
+        out.append([0, str(price), str(price * 1.001),
+                    str(price * 0.999), str(price), "1000.0"])
     return out
 
 
@@ -238,6 +250,48 @@ class TestHardGatesImmutable:
             _row(), strict_sig, dm.MODEL_CORE, CFG)
         assert not ok and reason == "NET_REWARD_RISK_TOO_LOW"
 
+    def test_positive_net_below_cost_multiple_is_paper_warning(self):
+        """ADR-014: Paper en geniş güvenli sınıra iner; komisyon ve
+        kayma sonrası net hâlâ pozitifse 1.5x tampon yalnız etikettir.
+        Aynı aday STRICT profilde sert ret kalır.
+        """
+        cfg = json.loads(json.dumps(CFG))
+        cfg["core"]["tp_pct"] = 1.0  # R/R kapısını testten ayır
+        paper_sig = {
+            "side": "LONG", "last": 100.0, "confidence": 80,
+            "expected_gross_edge_pct": 0.25,
+            "profile": "PAPER_LEARNING",
+            "entry_route": "EMA_OR_VWAP_CONFIRMATION",
+        }
+
+        ok, reason, net = dm.execution_quality_gate(
+            _row(), paper_sig, dm.MODEL_CORE, cfg,
+            profile="PAPER_LEARNING")
+        assert ok and reason is None
+        assert net > 0
+        assert "EDGE_BELOW_COST_MULTIPLE" in \
+            paper_sig["quality_warnings"]
+
+        strict_sig = dict(paper_sig)
+        strict_sig.pop("quality_warnings")
+        ok, reason, strict_net = dm.execution_quality_gate(
+            _row(), strict_sig, dm.MODEL_CORE, cfg)
+        assert not ok and reason == "EDGE_BELOW_COST_MULTIPLE"
+        assert strict_net == net
+
+    def test_non_positive_net_remains_hard_in_paper_learning(self):
+        paper_sig = {
+            "side": "LONG", "last": 100.0, "confidence": 80,
+            "expected_gross_edge_pct": 0.20,
+            "profile": "PAPER_LEARNING",
+            "entry_route": "EMA_OR_VWAP_CONFIRMATION",
+        }
+        ok, reason, net = dm.execution_quality_gate(
+            _row(), paper_sig, dm.MODEL_CORE, CFG,
+            profile="PAPER_LEARNING")
+        assert not ok and reason == "FEE_DRAG"
+        assert net < 0
+
     def test_liquidity_gate_still_applies(self):
         kl = _klines_one_block()
         lsig = dm.evaluate_signal("XUSDT", kl, dm.MODEL_CORE,
@@ -256,6 +310,16 @@ class TestHardGatesImmutable:
         assert sig["side"] == "LONG"
         assert sig["entry_route"] == "STRICT_TREND"
         assert "MOMENTUM_EXHAUSTED" in sig["quality_warnings"]
+
+    def test_natural_moderate_rise_passes_at_positive_net_boundary(self):
+        sig, ok, reason, net = dm.evaluate_paper_learning_candidate(
+            _row(), "XUSDT", _klines_moderate_rise(),
+            dm.MODEL_CORE, CFG)
+
+        assert ok and reason is None
+        assert net > 0
+        assert sig["expected_gross_edge_pct"] < 0.4
+        assert "EDGE_BELOW_COST_MULTIPLE" in sig["quality_warnings"]
 
 
 class TestPaperOnlyOpenAndJournal:

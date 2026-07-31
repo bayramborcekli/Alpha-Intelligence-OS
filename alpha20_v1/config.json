@@ -40,6 +40,13 @@
     "kill_switch": false
   },
   "dual_model": {
+    "core": {
+      "max_open_positions": 10
+    },
+    "opportunity": {
+      "max_open_positions": 10
+    },
+    "total_max_open_positions": 10,
     "paper_learning": {
       "enabled": true,
       "relaxed_gate": "EMA_VWAP_COMBINED"

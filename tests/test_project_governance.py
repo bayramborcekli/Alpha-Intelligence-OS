@@ -6,7 +6,7 @@ from scripts.project_preflight import ROOT, validate
 def test_governance_preflight_passes():
     state, errors = validate()
     assert errors == []
-    assert state["decision_head"] == "ADR-013"
+    assert state["decision_head"] == "ADR-015"
 
 
 def test_live_and_exchange_writes_remain_disabled():
@@ -28,6 +28,15 @@ def test_paper_learning_contract_is_current():
         "PRICE_MOMENTUM_PROBE",
     ]
     assert "FALSE_BREAKOUT_RISK" in strategy["paper_soft_rules"]
+    assert "EDGE_BELOW_COST_MULTIPLE" in strategy["paper_soft_rules"]
+    assert strategy["paper_minimum_expected_net_edge"] == \
+        "STRICTLY_POSITIVE_AFTER_COSTS"
+    assert strategy["paper_position_limits"] == {
+        "core_max_open_positions": 10,
+        "opportunity_max_open_positions": 10,
+        "combined_total_max_open_positions": 10,
+        "legacy_position_counts_toward_total": True,
+    }
 
 
 def test_only_windows_paper_flow_is_active_priority():
