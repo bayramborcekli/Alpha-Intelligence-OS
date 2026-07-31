@@ -1,0 +1,355 @@
+# ALPHA INTELLIGENCE OS — P0 SİNYAL/İŞLEM BLOKAJI KÖK NEDEN VE GÜVENLİ ONARIM
+
+## Ana hedef
+
+Sistem tarama yaptığı hâlde neden sinyal üretemediğini veya Paper işlem açamadığını kesin kanıtlarla belirle ve yalnız kanıtlanmış teknik arızayı en küçük değişiklikle düzelt.
+
+Ekrandaki mevcut belirtiler:
+
+* Pipeline: `GREEN`
+* Canlı emir: `KAPALI`
+* Uygun fırsatlar: `0`
+* CORE aday sinyali: `0`
+* OPPORTUNITY aday sinyali: `0`
+* Piyasaların çoğu: `NO_SIGNAL`
+* Aktif Paper pozisyon: `UNIUSDT`
+* `UNIUSDT` alanları: giriş/fiyat/TP/SL/model `UNKNOWN`
+* CORE net R/R: yaklaşık `0,42`
+* OPPORTUNITY net R/R: yaklaşık `0,67`
+* Bilinen minimum net R/R kabul tabanı: yaklaşık `1,20`
+* Önceki incelemede `max_open_positions=1` ihtimali bulundu.
+
+Bu belirtileri doğru kabul edip sonuca atlama; her birini kod, runtime state ve aynı tarama çevrimine ait API verileriyle doğrula.
+
+## Güvenlik sınırları
+
+* `GLOBAL_PAUSE: ACTIVE`
+* `LIVE_ORDERS: DISABLED`
+* Yalnız Paper/Shadow testleri yapılabilir.
+* Binance üzerinde gerçek emir oluşturma, değiştirme veya iptal etme.
+* Champion/Challenger terfisi yapma.
+* Push yapma.
+* Kullanıcı onayı olmadan gerçek pozisyon veya hesap durumuna dokunma.
+* `UNIUSDT` kaydını doğrudan silme veya “Kapat” düğmesine basma.
+* Runtime dosyalarını topluca sıfırlama.
+* Eşikleri sinyal çıksın diye gevşetme.
+* Maliyetleri küçültme veya devre dışı bırakma.
+* `max_open_positions` değerini artırma.
+* `kill_switch`, adaptive mode, sembol evreni, TP/SL veya risk yüzdesini değiştirme.
+* Bu göreve Git/runtime hijyeni temizliğini karıştırma.
+* Kanıtlanmış hata olmadan commit oluşturma.
+
+## Değişiklik öncesi zorunlu kayıt
+
+Aşağıdakileri kaydet:
+
+```text
+git status --short
+git branch --show-current
+git rev-parse HEAD
+git log -1 --oneline
+```
+
+Çalışma ağacında kullanıcıya ait mevcut değişiklik varsa koru. İlgili dosyayla çakışıyorsa dur ve `BLOCKED` raporu ver.
+
+Aşağıdaki dosyalar mevcutsa işlem öncesi SHA-256 değerlerini kaydet:
+
+* `config.json`
+* `smart_config.json`
+* `state.json`
+* `dual_model_runtime.json`
+* `decisions.jsonl`
+* `safety_state.json`
+* `operation_control_state.json`
+* `runtime_preferences.json`
+
+## Faz 1 — Tek çevrimlik kanonik durum fotoğrafı
+
+Aynı zaman aralığına ve mümkünse aynı `scan_id/cycle_id` değerine ait şu verileri birlikte al:
+
+1. Dashboard’un çağırdığı gerçek API uçları.
+2. `/api/dual-model/state` veya mevcut kanonik dual-model state endpoint’i.
+3. Aktif Paper pozisyon endpoint’i.
+4. Operation-control ve safety state.
+5. Son tarama çevriminin adayları.
+6. Son karar/rejection kayıtları.
+7. CORE ve OPPORTUNITY maliyet profilleri.
+8. Açık pozisyon sayısı ve `max_open_positions`.
+9. Scheduler/tarayıcı son çalışma zamanı.
+10. Veri tazelik zamanları.
+
+Eski ve yeni verileri karıştırma. Her çıktıda timestamp, kaynak dosya/endpoint ve çevrim kimliğini belirt.
+
+Dashboard kartlarının farklı zamanlara veya farklı state kaynaklarına ait olduğu görülürse bunu ayrıca işaretle.
+
+## Faz 2 — “Sinyal yok” ile “işlem açılamıyor” ayrımı
+
+Her model için son 300 kararın yanında en az 10 tam tarama çevrimini incele. Yalnız “son 300 kayıt” penceresine dayanma.
+
+Aşağıdaki sayaçları çıkar:
+
+```text
+SCANNED_SYMBOLS
+MARKET_DATA_VALID
+SETUP_FOUND
+RAW_SIGNAL_CREATED
+CANDIDATE_CREATED
+CANDIDATE_REJECTED
+SIGNAL_ACCEPTED
+PAPER_ORDER_ATTEMPTED
+PAPER_POSITION_OPENED
+```
+
+Her aşama arasındaki kaybı sayı ve yüzdeyle raporla.
+
+Her sembol/model kararı için mümkünse şu zinciri oluştur:
+
+```text
+scan
+→ market data
+→ setup
+→ raw signal
+→ confidence/momentum/volume gates
+→ cost gates
+→ risk/safety gates
+→ position-limit gate
+→ Paper execution
+```
+
+Şu üç durumdan hangisinin gerçekleştiğini kesin ayır:
+
+* Teknik setup oluşmuyor.
+* Setup/sinyal oluşuyor fakat karar kapılarında reddediliyor.
+* Sinyal kabul ediliyor fakat pozisyon/yürütme katmanında işlem açılamıyor.
+
+## Faz 3 — `UNIUSDT` pozisyon incelemesi
+
+Aşağıdakileri salt okunur kanıtla:
+
+1. `UNIUSDT` hangi dosya, veri tabanı veya runtime store’dan geliyor?
+2. Hangi fonksiyon başlangıçta bu kaydı geri yüklüyor?
+3. Kaydın oluşturulma zamanı ve varsa karar/emir kimliği nedir?
+4. Giriş fiyatı, miktar, yön, TP, SL ve model alanları gerçekten eksik mi?
+5. Eksikler disk üzerinde mi, yalnız API serialization veya dashboard katmanında mı?
+6. Bu gerçek bir Paper pozisyonu mu, restore edilmiş bozuk/stale kayıt mı, yoksa yalnız panel hayaleti mi?
+7. Pozisyon açık sayacına dâhil ediliyor mu?
+8. `max_open_positions=1` ise yeni pozisyonların reddedilmesine doğrudan sebep oluyor mu?
+9. Son kararlarda `MAX_OPEN_POSITIONS`, `POSITION_LIMIT`, `ALREADY_OPEN` veya eşdeğer ret kodu kaç kez oluşmuş?
+10. Aynı sembole ait kapanış, ledger veya trade-history kaydı bulunuyor mu?
+11. Herhangi bir gerçek Binance emriyle bağlantısı var mı?
+
+`UNIUSDT` pozisyon limiti kontrolünden önce ve sonra işlenen değerleri testle göster.
+
+## Faz 4 — Maliyet ve net R/R incelemesi
+
+CORE ve OPPORTUNITY için şu değerlerin gerçek hesaplarını çıkar:
+
+```text
+gross_tp
+gross_sl
+entry_fee
+exit_fee
+spread
+slippage
+round_trip_cost
+net_tp
+net_sl
+net_reward_risk
+minimum_required_net_rr
+```
+
+Aşağıdakileri belirle:
+
+* Paneldeki `0,42` ve `0,67` değerleri doğru hesaplanmış mı?
+* Bu değerler sabit profil kartı mı, yoksa gerçek aday başına hesap mı?
+* Minimum `1,20` eşiği hangi config veya kod kaynağından geliyor?
+* Adaylar gerçekten `NET_REWARD_RISK_TOO_LOW`, `NET_TP_NON_POSITIVE`, `FEE_DRAG`, `EXPECTED_EDGE_TOO_LOW` veya `EDGE_BELOW_COST_MULTIPLE` nedeniyle reddediliyor mu?
+* Aynı ücret/slippage iki kere ekleniyor mu?
+* Yüzde/baz-puan veya oran/yüzde dönüşüm hatası var mı?
+* Spot/Futures ya da Binance TR/Global maliyet profilleri karışıyor mu?
+* Panel ve karar motoru aynı maliyet fonksiyonunu ve aynı config snapshot’ını mı kullanıyor?
+
+Maliyet hesabı matematiksel olarak doğru ve stratejinin gerçek TP/SL yapısı net R/R eşiğini karşılamıyorsa bu bir yazılım arızası değildir. Böyle bir durumda eşikleri değiştirme; `STRATEGY_CALIBRATION_REQUIRED` olarak raporla.
+
+## Faz 5 — Diğer ret nedenleri
+
+Her model için aşağıdaki nedenleri sayı ve yüzdeyle raporla:
+
+* `EMA_BLOCK`
+* `VWAP_BLOCK`
+* `EMA_VWAP_BLOCK`
+* `MOMENTUM_WEAK`
+* `VOLUME_WEAK`
+* `RSI_OUT_OF_BAND`
+* `BREAKOUT_ABSENT`
+* güven skoru yetersizliği
+* veri eskiliği/eksik mum
+* maliyet retleri
+* risk/safety retleri
+* günlük kayıp limiti
+* açık pozisyon limiti
+* cooldown
+* duplicate signal
+* diğer gerçek ret kodları
+
+Tek bir kararın birden fazla nedeni varsa:
+
+* birincil ret nedeni,
+* bütün nedenler,
+* ilk başarısız kapı
+
+ayrı ayrı sayılmalı. Yüzdeler çift sayım yaratmayacak şekilde açıklanmalı.
+
+## Faz 6 — Kanıtlanmış hataya göre izin verilen onarım
+
+Yalnız aşağıdaki dallardan kanıtlananı uygula.
+
+### A. Bozuk/stale Paper pozisyon kaydı kanıtlanırsa
+
+* Önce ilgili runtime dosyasının yedeğini ve SHA-256 değerini al.
+* Gerçek Binance emri olmadığını kanıtla.
+* Kaydın neden geçerli pozisyon gibi restore edildiğini düzelt.
+* Eksik zorunlu alanlara sahip pozisyonların sessizce aktif slota girmesini önle.
+* Bozuk kayıtları silmek yerine karantinaya alan/audit kaydı oluşturan güvenli davranış tercih et.
+* Sadece kanıtlanan `UNIUSDT` kaydını ele al; tüm Paper state’i temizleme.
+* Yeniden başlatmada kayıt tekrar aktif pozisyon olarak dönmemeli.
+* Geçerli Paper pozisyonlarının restore davranışı bozulmamalı.
+
+### B. Pozisyon yalnız dashboard hayaletiyse
+
+* Dashboard’u kanonik pozisyon kaynağına bağla.
+* API ve panel aynı pozisyon sayısını göstermeli.
+* Trading motorunun gerçek state’ini değiştirme.
+
+### C. Maliyet hesabında kod/config bağlantı hatası kanıtlanırsa
+
+* Formül, birim veya yanlış profil seçimi hatasını en küçük değişiklikle düzelt.
+* Gerçek fee, spread ve slippage değerlerini azaltma.
+* Kabul eşiğini değiştirme.
+* Panel ve karar motorunu tek kanonik hesap kaynağında tut.
+
+### D. Rejection telemetry yetersizse
+
+* Trading kararını değiştirmeden tanılama ekle.
+* Her tarama çevriminde ilk başarısız kapı, tüm alt nedenler ve aşama sayaçları görülebilmeli.
+* Telemetry eklemek sinyal kabul sonucunu değiştirmemeli.
+
+### E. Hiçbir teknik hata kanıtlanmazsa
+
+Kod/config/runtime değiştirme ve commit oluşturma.
+
+Sonucu şu sınıflardan biriyle bildir:
+
+* `LEGITIMATE_NO_SETUP`
+* `STRATEGY_CALIBRATION_REQUIRED`
+* `INSUFFICIENT_EVIDENCE`
+
+## Zorunlu testler
+
+En az şu regresyon senaryolarını ekle/çalıştır:
+
+1. Eksik giriş fiyatlı pozisyon aktif slot sayılmaz veya güvenli karantinaya alınır.
+2. Geçerli Paper pozisyon yeniden başlatmada doğru restore edilir.
+3. Geçersiz pozisyon diğer geçerli pozisyonları silmez.
+4. `max_open_positions=1` yalnız gerçek aktif pozisyonda yeni girişi engeller.
+5. Dashboard ve motor aynı aktif pozisyon sayısını gösterir.
+6. Net R/R hesabı bilinen örneklerle doğrulanır.
+7. Fee/slippage yalnız tasarlanan sayıda uygulanır.
+8. CORE ve OPPORTUNITY doğru maliyet profilini kullanır.
+9. Rejection sayaçları gerçek karar sayılarıyla tutarlıdır.
+10. Paper testinde kabul edilen sinyal uygun koşulda pozisyon açabilir.
+11. Test boyunca gerçek ağ emri oluşturulmaz.
+12. `config.json` ve `smart_config.json` değişmez.
+13. Mevcut güvenlik ve dual-model testleri geçer.
+14. `git diff --check` geçer.
+
+## Çalışma sonrası doğrulama
+
+* Uygulama başlamalı.
+* Pipeline sağlıklı kalmalı.
+* Tarama çevrimleri ilerlemeli.
+* Bozuk/hayalet pozisyon varsa artık aktif slotu doldurmamalı.
+* En az bir sentetik kabul edilebilir Paper sinyalin uçtan uca yürüyebildiği testle gösterilmeli.
+* Canlı piyasada sinyal çıkması zorunlu başarı ölçütü değildir; piyasa zorla işlem açtırılmayacak.
+* Mevcut piyasa setup vermiyorsa sistem `NO_SIGNAL` üretmeye devam edebilir.
+* Canlı emir kapalı kalmalı.
+* Hiçbir gerçek emir oluşmamalı.
+
+## Commit politikası
+
+Kanıtlanmış bir teknik hata düzeltilmiş ve bütün testler geçmişse tek yerel commit oluştur:
+
+```text
+fix(trading): repair verified signal execution blocker
+```
+
+Yalnız telemetry düzeltmesi yapılmışsa:
+
+```text
+fix(diagnostics): expose canonical signal rejection stages
+```
+
+* Commit’i amend etme.
+* Push yapma.
+* Birden fazla bağımsız kök neden varsa tek commit’e yığma; önce kullanıcıya raporla.
+* Teknik hata kanıtlanmadıysa commit oluşturma.
+
+## Teslim raporu
+
+Şu biçimde teslim et:
+
+```text
+RESULT: PASS / BLOCKED / FAIL
+ROOT_CAUSE_CLASS:
+START_HEAD:
+FINAL_COMMIT:
+PUSHED: FALSE
+
+SCANNED_SYMBOLS:
+RAW_SIGNALS:
+ACCEPTED_SIGNALS:
+PAPER_POSITIONS_OPENED:
+
+UNIUSDT_SOURCE:
+UNIUSDT_RECORD_VALID:
+UNIUSDT_BLOCKED_POSITION_SLOT:
+MAX_OPEN_POSITIONS:
+
+CORE_NET_RR:
+OPPORTUNITY_NET_RR:
+MIN_REQUIRED_NET_RR:
+COST_MATH_CORRECT:
+
+PRIMARY_REJECTION_REASONS:
+CHANGED_FILES:
+TESTS:
+```
+
+Son güvenlik beyanları:
+
+```text
+CONFIG_CHANGED: FALSE
+SMART_CONFIG_CHANGED: FALSE
+THRESHOLDS_CHANGED: FALSE
+COST_ASSUMPTIONS_REDUCED: FALSE
+MAX_OPEN_POSITIONS_CHANGED: FALSE
+CHAMPION_CHANGED: FALSE
+LIVE_ORDER_CREATED: FALSE
+REAL_TRADING_BEHAVIOR_CHANGED: FALSE
+RUNTIME_STATE_BULK_RESET: FALSE
+PUSHED: FALSE
+```
+
+Raporun sonunda tek cümlelik kesin karar ver:
+
+```text
+Sistem sinyal üretmiyor çünkü ...
+```
+
+veya:
+
+```text
+Sistem sinyal üretiyor ancak işlem açamıyor çünkü ...
+```
+
+Birden fazla neden varsa, her nedenin toplam engellemedeki kanıtlanmış payını ayrı belirt. Tahmini nedeni kesin neden gibi yazma.
