@@ -884,6 +884,44 @@ def manage_position(state: dict[str, Any]) -> None:
     )
 
 
+
+# ── Dynamic market symbol refresh ──
+_SYMBOL_CACHE: list[str] | None = None
+_SYMBOL_CACHE_TS: float = 0.0
+_SYMBOL_CACHE_TTL: float = 300.0  # 5 minutes
+
+
+def refresh_symbols_from_binance(config_symbols: list[str]) -> list[str]:
+    """Binance Spot 24h tickers'dan en yacimli USDT paritelerini cek.
+    Cache'li; her 5 dakikada bir guncellenir."""
+    global _SYMBOL_CACHE, _SYMBOL_CACHE_TS
+    now = time.time()
+    if _SYMBOL_CACHE is not None and (now - _SYMBOL_CACHE_TS) < _SYMBOL_CACHE_TTL:
+        return _SYMBOL_CACHE
+    try:
+        r = requests.get("https://api.binance.com/api/v3/ticker/24hr", timeout=15)
+        r.raise_for_status()
+        tickers = r.json()
+        usdt = []
+        for t in tickers:
+            sym = t.get("symbol", "")
+            if not sym.endswith("USDT") or sym.startswith("USD"):
+                continue
+            vol = float(t.get("quoteVolume", 0) or 0)
+            if vol < 5_000_000:  # min 5M USDT 24h hacim
+                continue
+            usdt.append((vol, sym))
+        usdt.sort(reverse=True)
+        top = [s for _v, s in usdt[:30]]
+        # Fallback: eger API basarisiz olursa eski listeyi koru
+        _SYMBOL_CACHE = top if top else config_symbols
+        _SYMBOL_CACHE_TS = now
+        log.info("Dinamik evren yenilendi: %s coin", len(_SYMBOL_CACHE))
+        return _SYMBOL_CACHE
+    except Exception as exc:
+        log.warning("Binance dinamik liste alinamadi: %s — fallback config", exc)
+        return _SYMBOL_CACHE if _SYMBOL_CACHE is not None else config_symbols
+
 def run_cycle(config: dict[str, Any], state: dict[str, Any]) -> None:
     reset_day_if_needed(state)
     manage_position(state)
@@ -894,9 +932,13 @@ def run_cycle(config: dict[str, Any], state: dict[str, Any]) -> None:
         save_json(STATE_PATH, state)
         return
 
+    # Dinamik evren: her 5 dk'da Binance'ten yenile
+    symbols = refresh_symbols_from_binance(config.get("symbols", []))
+    config["symbols"] = symbols
+
     candidates = []
     data_error = False
-    for symbol in config["symbols"]:
+    for symbol in symbols:
         sym_ok, sym_reason = can_open(config, state, symbol=symbol)
         if not sym_ok:
             log.info("%s atlandı: %s", symbol, sym_reason)

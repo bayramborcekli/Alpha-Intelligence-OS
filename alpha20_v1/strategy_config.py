@@ -75,7 +75,12 @@ PAPER_LEARNING = {
 
 # ── alpha20.py Legacy Parametreleri ──
 LEGACY = {
-    "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+    "symbols": [
+        "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
+        "DOGEUSDT","ADAUSDT","LINKUSDT","AVAXUSDT","SUIUSDT",
+        "LTCUSDT","BCHUSDT","DOTUSDT","TRXUSDT","UNIUSDT",
+        "ETCUSDT","ATOMUSDT","NEARUSDT","ICPUSDT","AAVEUSDT",
+    ],
     "interval": "15m",
     "trend_interval": "1h",
     "scan_seconds": 60,
@@ -83,16 +88,16 @@ LEGACY = {
     "risk_per_trade_pct": 0.5,
     "daily_loss_limit_pct": 1.5,
     "max_consecutive_losses": 3,
-    "minimum_score": 72,  # Güncellendi: daha yüksek kalite eşiği
+    "minimum_score": 72,
     "reward_risk_ratio": 2.0,
     "atr_stop_multiplier": 3.0,
-    "fee_safety_factor": 3.0,  # Güncellendi: daha agresif fee filtresi
+    "fee_safety_factor": 3.0,
     "max_open_positions": 1,
 }
 
 # ── Decision Engine ──
 DECISION = {
-    "final_decision_threshold": 82.0,  # Güncellendi: daha yüksek eşik
+    "final_decision_threshold": 82.0,
     "regime_min_confidence": 65.0,
     "weights": {
         "strategy": 35.0,
