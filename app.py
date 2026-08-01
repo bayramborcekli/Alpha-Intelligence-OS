@@ -50,6 +50,7 @@ import auto_controller  as ac    # noqa: E402
 import learning_engine  as le    # noqa: E402
 import auth                      # noqa: E402
 import security_log     as slog  # noqa: E402
+import strategy_config           # noqa: E402
 
 app = Flask(__name__)
 
@@ -148,52 +149,14 @@ INTEGER_PATTERN       = re.compile(r"^[0-9]+$")
 SYMBOL_PATTERN        = re.compile(r"^[A-Z0-9]+USDT$")
 LOG_TIMESTAMP_PATTERN = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d{3}")
 
-DEFAULT_CONFIG: dict[str, Any] = {
-    "mode": "PAPER",
-    "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-    "minimum_score": 72, "scan_seconds": 60,
-    "risk_per_trade_pct": 0.5, "daily_loss_limit_pct": 1.5,
-    "max_consecutive_losses": 3, "reward_risk_ratio": 2.0,
-    "atr_stop_multiplier": 3.0, "max_open_positions": 1,
-    "fee_safety_factor": 3.0,
-}
+DEFAULT_CONFIG: dict[str, Any] = dict(strategy_config.LEGACY)
+DEFAULT_CONFIG["mode"] = strategy_config.MODE
 
-SETTING_RULES: dict[str, tuple[str, float, float]] = {
-    "minimum_score":           ("int",   0,   100),
-    "scan_seconds":            ("int",   15,  3600),
-    "risk_per_trade_pct":      ("float", 0.1, 2.0),
-    "daily_loss_limit_pct":    ("float", 0.5, 10.0),
-    "max_consecutive_losses":  ("int",   1,   10),
-    "reward_risk_ratio":       ("float", 1.0, 5.0),
-    "atr_stop_multiplier":     ("float", 0.5, 5.0),
-    "max_open_positions":      ("int",   1,   5),
-    "fee_safety_factor":       ("float", 1.0, 5.0),
-}
+SETTING_RULES = strategy_config.SETTING_RULES
 
-ADAPTIVE_SETTING_RULES: dict[str, tuple[str, float, float]] = {
-    "regime_min_confidence":      ("float", 0,   100),
-    "final_decision_threshold":   ("float", 50,  100),
-    "base_risk_pct":              ("float", 0.05, 0.50),
-    "max_risk_pct":               ("float", 0.05, 0.50),
-    "daily_loss_limit_pct":       ("float", 0.1,  5.0),
-    "max_drawdown_pct":           ("float", 1.0,  20.0),
-    "max_consecutive_losses":     ("int",   1,    10),
-    "risk_reduction_after_losses":("int",   1,    10),
-    "learning_interval_hours":    ("float", 1,    168),
-    "minimum_learning_trades":    ("int",   5,    200),
-    "max_daily_weight_change_pct":("float", 0.5,  20.0),
-    "cooldown_minutes":           ("int",   0,    1440),
-}
+ADAPTIVE_SETTING_RULES = strategy_config.ADAPTIVE_SETTING_RULES
 
-DEFAULT_PRESETS = {
-    "default": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-    "top10": ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
-              "DOGEUSDT","ADAUSDT","LINKUSDT","AVAXUSDT","SUIUSDT"],
-    "top20": ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
-              "DOGEUSDT","ADAUSDT","LINKUSDT","AVAXUSDT","SUIUSDT",
-              "LTCUSDT","BCHUSDT","DOTUSDT","TRXUSDT","UNIUSDT",
-              "ETCUSDT","ATOMUSDT","NEARUSDT","ICPUSDT","AAVEUSDT"],
-}
+DEFAULT_PRESETS = strategy_config.DEFAULT_PRESETS
 
 
 @app.template_filter("fmt_volume")

@@ -73,8 +73,9 @@ def initial_state(config: dict[str, Any]) -> dict[str, Any]:
 
 
 MAX_SYMBOLS = 3
-MIN_RISK_PCT = 0.25
-MAX_RISK_PCT = 0.50
+import strategy_config
+MIN_RISK_PCT = strategy_config.MIN_RISK_PCT
+MAX_RISK_PCT = strategy_config.MAX_RISK_PCT
 FEE_RATE = 0.001  # taraf başına %0.1 tahmini ücret
 
 

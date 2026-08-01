@@ -181,3 +181,45 @@ def merge_into_alpha20_config() -> dict[str, Any]:
     }
     cfg["execution_mode"] = EXECUTION_MODE
     return cfg
+
+# ── UI Validation Kuralları (app.py için) ──
+SETTING_RULES: dict[str, tuple[str, float, float]] = {
+    "minimum_score":           ("int",   0,   100),
+    "scan_seconds":            ("int",   15,  3600),
+    "risk_per_trade_pct":      ("float", 0.1, 2.0),
+    "daily_loss_limit_pct":    ("float", 0.5, 10.0),
+    "max_consecutive_losses":  ("int",   1,   10),
+    "reward_risk_ratio":       ("float", 1.0, 5.0),
+    "atr_stop_multiplier":     ("float", 0.5, 5.0),
+    "max_open_positions":      ("int",   1,   5),
+    "fee_safety_factor":       ("float", 1.0, 5.0),
+}
+
+ADAPTIVE_SETTING_RULES: dict[str, tuple[str, float, float]] = {
+    "regime_min_confidence":      ("float", 0,   100),
+    "final_decision_threshold":   ("float", 50,  100),
+    "base_risk_pct":              ("float", 0.05, 0.50),
+    "max_risk_pct":               ("float", 0.05, 0.50),
+    "daily_loss_limit_pct":       ("float", 0.1,  5.0),
+    "max_drawdown_pct":           ("float", 1.0,  20.0),
+    "max_consecutive_losses":     ("int",   1,    10),
+    "risk_reduction_after_losses":("int",   1,    10),
+    "learning_interval_hours":    ("float", 1,    168),
+    "minimum_learning_trades":    ("int",   5,    200),
+    "max_daily_weight_change_pct":("float", 0.5,  20.0),
+    "cooldown_minutes":           ("int",   0,    1440),
+}
+
+DEFAULT_PRESETS = {
+    "default": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+    "top10": ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
+              "DOGEUSDT","ADAUSDT","LINKUSDT","AVAXUSDT","SUIUSDT"],
+    "top20": ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
+              "DOGEUSDT","ADAUSDT","LINKUSDT","AVAXUSDT","SUIUSDT",
+              "LTCUSDT","BCHUSDT","DOTUSDT","TRXUSDT","UNIUSDT",
+              "ETCUSDT","ATOMUSDT","NEARUSDT","ICPUSDT","AAVEUSDT"],
+}
+
+# ── alpha20.py Risk Sınırları ──
+MIN_RISK_PCT = 0.25
+MAX_RISK_PCT = 0.50
