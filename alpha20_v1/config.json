@@ -1,5 +1,4 @@
 {
-  "mode": "PAPER",
   "symbols": [
     "BTCUSDT",
     "ETHUSDT",
@@ -12,17 +11,18 @@
   "risk_per_trade_pct": 0.5,
   "daily_loss_limit_pct": 1.5,
   "max_consecutive_losses": 3,
-  "minimum_score": 65,
+  "minimum_score": 72,
   "reward_risk_ratio": 2.0,
   "atr_stop_multiplier": 3.0,
-  "fee_safety_factor": 2.0,
+  "fee_safety_factor": 3.0,
   "max_open_positions": 1,
+  "mode": "PAPER",
   "adaptive_system": {
     "enabled": true,
     "mode": "MONITOR",
     "auto_paper_enabled": false,
     "regime_min_confidence": 65.0,
-    "final_decision_threshold": 78.0,
+    "final_decision_threshold": 82.0,
     "base_risk_pct": 0.25,
     "max_risk_pct": 0.5,
     "daily_loss_limit_pct": 1.0,
@@ -41,15 +41,16 @@
   },
   "dual_model": {
     "core": {
-      "max_open_positions": 10
+      "max_open_positions": 2
     },
     "opportunity": {
-      "max_open_positions": 10
+      "max_open_positions": 2
     },
-    "total_max_open_positions": 10,
+    "total_max_open_positions": 4,
     "paper_learning": {
       "enabled": true,
       "relaxed_gate": "EMA_VWAP_COMBINED"
     }
-  }
+  },
+  "execution_mode": "PAPER"
 }

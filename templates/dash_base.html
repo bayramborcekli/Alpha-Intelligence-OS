@@ -116,21 +116,21 @@
     <!-- Mission 2300 A04: sade kullanıcı menüsü; sistem/gelişmiş
          bağlantılar altta ayrı grupta (rota silinmedi). -->
     <div class="nav">
-      <a href="/home" {% if active_page=='trading_home' %}class="active" aria-current="page"{% endif %}>🏡 Trading Home</a>
-      <a href="/portfolio" {% if active_page=='portfolio' %}class="active" aria-current="page"{% endif %}>💼 Portföy</a>
-      <a href="/home#th-markets-card">📈 Piyasalar</a>
-      <a href="/home#th-lists">👁️ İzleme Listeleri</a>
-      <a href="/strategy-intelligence">♟️ Stratejiler</a>
-      <a href="/home#th-ai">🛰️ AI Tarayıcı</a>
-      <a href="/risk">⚖️ Risk Yönetimi</a>
-      <a href="/reports">📄 Raporlar</a>
-      <a href="/automation" {% if active_page=='automation' %}class="active" aria-current="page"{% endif %}>🤖 Otomasyon</a>
-      <a href="/settings/accounts" {% if active_page=='my_accounts' %}class="active" aria-current="page"{% endif %}>⚙️ Ayarlar · Hesaplarım</a>
-      <a href="/settings/password" {% if active_page=='change_password' %}class="active" aria-current="page"{% endif %}>🔑 Parolayı Değiştir</a>
+      <a href="/home" {% if active_page=='trading_home' %}class="active" aria-current="page"{% endif %}>Trading Home</a>
+      <a href="/portfolio" {% if active_page=='portfolio' %}class="active" aria-current="page"{% endif %}>Portföy</a>
+      <a href="/home#th-markets-card">Piyasalar</a>
+      <a href="/home#th-lists">İzleme Listeleri</a>
+      <a href="/strategy-intelligence">Stratejiler</a>
+      <a href="/home#th-ai">AI Tarayıcı</a>
+      <a href="/risk">Risk Yönetimi</a>
+      <a href="/reports">Raporlar</a>
+      <a href="/automation" {% if active_page=='automation' %}class="active" aria-current="page"{% endif %}>Otomasyon</a>
+      <a href="/settings/accounts" {% if active_page=='my_accounts' %}class="active" aria-current="page"{% endif %}>Ayarlar · Hesaplarım</a>
+      <a href="/settings/password" {% if active_page=='change_password' %}class="active" aria-current="page"{% endif %}>Parolayı Değiştir</a>
     </div>
     <div class="nav nav-system">
       <div class="nav-label">Sistem</div>
-      <a href="/operation-center" {% if active_page=='operation_center' %}class="active" aria-current="page"{% endif %}>🎛️ Operation Center</a>
+      <a href="/operation-center" {% if active_page=='operation_center' %}class="active" aria-current="page"{% endif %}>Operation Center</a>
       <details class="nav-adv"{% if active_page in ('overview','ledger','audit','reports','risk','intelligence','workspace','portfolio_intelligence','strategy_intelligence') %} open{% endif %}>
         <summary>Gelişmiş</summary>
         <a href="/start">🏠 Başlangıç</a>

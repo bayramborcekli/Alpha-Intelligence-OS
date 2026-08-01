@@ -234,10 +234,12 @@ class TestGitClean:
 # ── check_backoff_evidence ────────────────────────────────────────
 
 class TestBackoffEvidence:
-    def test_no_rate_state_is_not_applicable(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(vdm, "RATE_STATE",
-                            tmp_path / "rate_limit_state.json")
-        assert vdm.check_backoff_evidence() == []
+    def test_no_rate_state_is_not_applicable(self, tmp_path):
+        # Autouse rate-limit fixture aynı tmp_path içinde kanonik dosyayı
+        # güvenli biçimde sıfırlar/yazar. Bu senaryo gerçekten eksik olan
+        # farklı bir yolu sınamalıdır.
+        rate_state = tmp_path / "missing_rate_limit_state.json"
+        assert vdm.check_backoff_evidence(rate_state=rate_state) == []
 
     def test_rate_state_with_log_trace_passes(self, tmp_path, monkeypatch):
         rs = tmp_path / "rate_limit_state.json"
@@ -245,9 +247,8 @@ class TestBackoffEvidence:
         log = tmp_path / "alpha20.log"
         log.write_text("2026-07-30 WARN 429 geri çekilme aktif\n",
                        encoding="utf-8")
-        monkeypatch.setattr(vdm, "RATE_STATE", rs)
-        monkeypatch.setattr(vdm, "LOG_CANDIDATES", (log,))
-        assert vdm.check_backoff_evidence() == []
+        assert vdm.check_backoff_evidence(
+            rate_state=rs, log_candidates=(log,)) == []
 
     def test_rate_state_without_log_trace_fails(self, tmp_path,
                                                 monkeypatch):
@@ -256,16 +257,14 @@ class TestBackoffEvidence:
         log = tmp_path / "alpha20.log"
         log.write_text("2026-07-30 INFO her şey yolunda\n",
                        encoding="utf-8")
-        monkeypatch.setattr(vdm, "RATE_STATE", rs)
-        monkeypatch.setattr(vdm, "LOG_CANDIDATES", (log,))
-        fails = vdm.check_backoff_evidence()
+        fails = vdm.check_backoff_evidence(
+            rate_state=rs, log_candidates=(log,))
         assert any("geri çekilme izi bulunamadı" in f for f in fails)
 
-    def test_unreadable_rate_state_fails(self, tmp_path, monkeypatch):
+    def test_unreadable_rate_state_fails(self, tmp_path):
         rs = tmp_path / "rate_limit_state.json"
         rs.write_text("BOZUK{{", encoding="utf-8")
-        monkeypatch.setattr(vdm, "RATE_STATE", rs)
-        fails = vdm.check_backoff_evidence()
+        fails = vdm.check_backoff_evidence(rate_state=rs)
         assert any("okunamadı" in f for f in fails)
 
 

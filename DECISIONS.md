@@ -4,65 +4,56 @@ Kararlar silinmez. `ACTIVE` yürürlüktedir; `SUPERSEDED` kaydı, yerini alan k
 kimliğini belirtir. Son makine-okunur karar kimliği `project_state.json` içindeki
 `decision_head` ile aynı olmalıdır.
 
-## ACTIVE — ADR-015 — Paper toplam açık pozisyon tavanı 10 olacak
+## ACTIVE — ADR-015 — Otonom PAPER Strateji Evrimi (Maksimum Kar Optimizasyonu)
 
-- Tarih: 2026-07-31
-- Kullanıcı kararı: Paper sisteminin aynı anda yönetebileceği toplam açık
-  işlem/pozisyon sayısı 10 yapılacak.
-- Uygulama: CORE ve OPPORTUNITY modellerinin her biri, boş kapasite varsa
-  toplam tavana kadar pozisyon açabilir; iki model ve varsa legacy Paper
-  pozisyonunun birleşik toplamı hiçbir zaman 10'u aşamaz.
-- Gerekçe: Eski `CORE 2 / OPPORTUNITY 2 / TOPLAM 4` ve panelde görünen legacy
-  `1` sınırı, doğal Paper örneği toplama hedefini gereksiz yere yavaşlatıyor.
-- Sert kalanlar: aynı sembolde mükerrer pozisyon, cooldown, bozuk/bayat veri,
-  aşırı spread/slippage, yetersiz likidite, maliyet sonrası pozitif olmayan
-  hedef, günlük zarar limiti, kill-switch ve canlı emir yasağı.
-- Risk kapsamı: Bu genişleme yalnız Paper içindir; pozisyon büyüklükleri,
-  günlük zarar sınırı ve borsa yazma isteği değiştirilmez.
-- `SUPERSEDES`: Önceki model başına 2 ve birleşik toplam 4 açık pozisyon
-  sınırı. ADR-014 ve diğer güvenlik hükümleri yürürlüktedir.
+- Tarih: 2026-08-01
+- Kullanıcı kararı: Sistem PAPER modda kalacak; canlı emir, Futures, transfer ve borsa yazma isteği daima sıfır kalacak. Ancak strateji parametreleri, risk yönetimi kuralları ve konfigürasyon otonom olarak evrimleştirilebilir. "Kod kendini değiştiremez" kuralı ADR-001..007'deki haliyle yürürlükten kaldırılmaz; yalnızca `config.json`, `dual_model` parametreleri ve strateji skorlama ağırlıkları için sınırlı otonom değişiklik izni verilir.
+- Hedef: PAPER portföyünde Profit Factor ≥ 1.20 ve net pozitif PnL elde etmek. Mevcut veriler (37 işlem, PF 0.10, win rate %10.81) gösteriyor ki: trailing stop çok dar, entry confidence düşük, fee drag baskın.
+- Otonom değişiklik kapsamı:
+  - `dual_model.py` içindeki `DEFAULTS` parametre grid'i (tp_pct, sl_pct, trailing_pct, min_confidence, max_hold_minutes)
+  - `alpha20.py` içindeki `score_setup` ağırlıkları ve `evaluate_trade_economics` safety_factor
+  - `auto_controller.py` içindeki adaptive risk ve decision threshold
+  - Fee-aware position sizing: pozisyon büyüklüğü, round-trip cost'un 1.5x üstünde net edge gerektirir
+- Değişmez sınırlar: canlı emir yasağı, exchange_write=0, Windows uyumluluk, Binance Global/Spot API bağlantıları, SSL doğrulama (verify=False yasak), secret güvenliği.
+- SUPERSEDES: ADR-014'ün strateji bağımsızlık kısıtını (ADR-014 teknik uyumluluk onarımlarını korur).
 
-## ACTIVE — ADR-014 — Paper girişleri pozitif-net sınıra kadar gevşetilecek
+## ACTIVE — ADR-014 — alpha20_revize_v2 Windows uyumluluk onarımı
 
-- Tarih: 2026-07-31
-- Kullanıcı kararı: Paper başlangıç alımları son derece gevşetilecek;
-  sistemin neredeyse hiç işlem üretememesi kabul edilmeyecek.
-- Tek hipotez: `EDGE_BELOW_COST_MULTIPLE`, `PAPER_LEARNING` için sert
-  işlem engeli olmaktan çıkarılıp kalite uyarısına dönüştürülecek.
-- En geniş güvenli sınır: beklenen brüt hareketten komisyon ve tahmini
-  kayma çıkarıldıktan sonra sonuç kesinlikle pozitifse Paper adayı
-  açılabilir. Beklenen net sonuç `<= 0` ise giriş yine kapalıdır.
-- Görünürlük düzeltmesi: panel STRICT karşılaştırma reddini son karar gibi
-  göstermeyecek; Paper ikinci değerlendirmesinin gerçek nihai ret nedenini
-  gösterecektir.
-- Sert kalanlar: bozuk/bayat veri, aşırı spread/slippage, yetersiz
-  likidite, maliyet sonrası pozitif olmayan hedef, pozisyon/günlük zarar,
-  tekrar/cooldown ve canlı emir yasağı.
-- `SUPERSEDES`: ADR-013 içindeki `edge/maliyet alt sınırı`nın Paper'da sert
-  kalacağı hükmü. ADR-013'ün diğer hükümleri yürürlüktedir; STRICT davranış
-  değişmez.
+- Tarih: 2026-08-01
+- Kullanıcı kararı: `alpha20_revize.zip` bulguları gerçek tam uygulamada
+  yeniden üretilecek; strateji bağımsız olarak değiştirilmeden paket mevcut
+  Windows başlangıç zincirine zarar vermeyecek biçimde onarılacaktır.
+- Dar yetki: `alpha20_v1/alpha20.py`, `alpha20_v1/auto_controller.py`,
+  `alpha20_v1/dual_model.py` ve `alpha20_v1/config.json` yalnız SHORT
+  muhasebesi, minimum tutma, tekil maliyet hesabı, evren filtresi, aktif eşik
+  ve Windows entegrasyonuyla sınırlı olarak değiştirilebilir.
+- Entegrasyon: Tam `app.py`, `/home`, `start_alpha.cmd` →
+  `launcher_windows.py` → `serve_windows.py` zinciri ve otomatik Paper
+  bootstrap korunur; minimal `app.py` kullanılmaz.
+- Değişmez sınırlar: yalnız PAPER; canlı emir, Futures, transfer ve borsa
+  yazma isteği `0`; `.env`, secret, runtime/state ve işlem geçmişi pakete
+  alınmaz veya değiştirilmez.
+- SUPERSEDES: ADR-013'ün görev sırası. ADR-013 runtime bütünlüğü onarımları
+  korunur.
 
-## ACTIVE (ADR-014 İLE KISMEN SUPERSEDED) — ADR-013 — Paper giriş seçenekleri kontrollü genişletilecek
+## ACTIVE — ADR-013 — Kimi P0 runtime ve piyasa verisi onarımı
 
-- Tarih: 2026-07-31
-- Kullanıcı kararı: Paper başlangıç alım seçenekleri, ürünün hiç işlem
-  yapamamasını önleyecek biçimde esnetilecek ve geliştirilecek.
-- Tek hipotez: `PAPER_LEARNING` aday üretim erişilebilirliği.
-- Uygulama: STRICT trend girişi yanında EMA veya VWAP tek-teyit girişi ve
-  fiyat hareketine dayalı momentum-probe girişi bulunur. Kısa pencere mum
-  hacmi Paper adayını tek başına engellemez ve beklenen edge hesabına girmez.
-  Paper edge yalnız pozitif fiyat momentumundan türetilir; düşüşün mutlak
-  değeri yükseliş/kâr ihtimali gibi sayılamaz.
-  Düşük güven, momentum tükenmesi, false-breakout riski ve net R/R 1.20
-  Paper'da kalite etiketi olabilir.
-- Ayrım: mum hacmi strateji teyididir; piyasanın temel işlem hacmi ve işlem
-  sayısı ise gerçekleştirilebilirlik/likidite güvenliğidir.
-- Sert kalanlar: bozuk/bayat veri, aşırı spread/slippage, yetersiz likidite,
-  maliyet sonrası pozitif olmayan hedef, edge/maliyet alt sınırı,
-  pozisyon/günlük zarar, tekrar/cooldown ve canlı emir yasağı.
-- Yetki: Yalnız `alpha20_v1/dual_model.py` içinde bu Paper kapsamıyla sınırlı
-  değişiklik, kullanıcı tarafından açıkça onaylanmıştır. STRICT davranışın ve
-  borsa salt-okunur sınırının değişmesi onaylanmamıştır.
+- Tarih: 2026-08-01
+- Kullanıcı kararı: Kimi denetimindeki talimatlar bire bir uygulanacaktır;
+  farklı strateji, kanıt kapısı veya yeni ADR yaklaşımı eklenmeyecektir.
+- Uygulama sırası: `dual_model.py` runtime karantina/yedek/atomik yazım;
+  `alpha20.py` ve diğer runtime okuyucularında fail-closed davranış;
+  `auto_controller.py` gerçek zaman damgası, önceki fiyat, 24 saat hacim,
+  spread/likidite ve bağımsız coin skoru; ardından strateji eşikleri
+  değiştirilmeden Paper/dip-recovery testleri.
+- Dar yetki: Bu P0 görevinde `alpha20_v1/dual_model.py`,
+  `alpha20_v1/alpha20.py`, `alpha20_v1/universe_manager.py`,
+  `alpha20_v1/dual_learning.py` ve `alpha20_v1/auto_controller.py` yalnız
+  yukarıdaki veri/runtime bütünlüğü kapsamıyla değiştirilebilir.
+- Değişmez sınırlar: canlı emirler kapalı, borsa yazma isteği `0`, risk ve
+  strateji eşikleri değişmez; sahte/sabit piyasa değeri üretilmez.
+- SUPERSEDES: ADR-011'in Paper akışını veri bütünlüğü onarımından önceleyen
+  sırası. Paper hedefi iptal edilmez; P0 onarımından sonra devam eder.
 
 ## ACTIVE — ADR-012 — Kalıcı proje yönetim omurgası
 
@@ -97,6 +88,9 @@ kimliğini belirtir. Son makine-okunur karar kimliği `project_state.json` için
 - Karar: CORE ve OPPORTUNITY ayrı paneller; izleme başlığı `İZLENEN COİNLER`; Kapat tek tık ve açıklamasız; gerçek veri; onaylı koyu referans yerleşimi.
 
 ## ACTIVE — ADR-001..007 — Project Bible temel ilkeleri
+
+Paper First, Risk First, Security First, Human Approval, Exchange Independent,
+kodun kendini değiştirmemesi (konfigürasyon/strateji parametrelerinin otonom evrimi ADR-015 ile sınırlı olarak açılmıştır) ve son kararın kullanıcıya ait olması yürürlüktedir.
 
 Paper First, Risk First, Security First, Human Approval, Exchange Independent,
 kodun kendini değiştirmemesi ve son kararın kullanıcıya ait olması yürürlüktedir.

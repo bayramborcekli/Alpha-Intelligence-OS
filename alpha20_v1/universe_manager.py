@@ -93,7 +93,13 @@ def _atomic_write(path: Path, data: Any) -> None:
             f.write("\n")
             f.flush()
             os.fsync(f.fileno())
-        tmp.replace(path)
+        os.replace(tmp, path)
+        if os.name != "nt":
+            dir_fd = os.open(str(path.parent), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
     finally:
         if tmp.exists():
             tmp.unlink(missing_ok=True)
@@ -202,14 +208,38 @@ def save_main_config(data: dict[str, Any]) -> None:
 # çalışmada yazılmaz.
 
 def _load_runtime() -> dict[str, Any]:
+    corrupt_path = RUNTIME_STORE_PATH.with_suffix(".corrupt")
+    if not RUNTIME_STORE_PATH.exists() and corrupt_path.exists():
+        raise RuntimeError(
+            "RUNTIME_CORRUPT — universe store operatör müdahalesi bekliyor")
     if not RUNTIME_STORE_PATH.exists():
         return {}
     try:
         with RUNTIME_STORE_PATH.open("r", encoding="utf-8") as f:
             data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
+        if not isinstance(data, dict):
+            raise ValueError("Runtime root is not a dict")
+        typed_fields = {
+            "smart": dict, "dynamic_symbols": list,
+            "removed_symbols": list, "log": list,
+        }
+        for field, expected in typed_fields.items():
+            if field in data and not isinstance(data[field], expected):
+                raise ValueError(f"Corrupt {field} field")
+        return data
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        target = corrupt_path
+        if target.exists():
+            target = RUNTIME_STORE_PATH.with_name(
+                f"{RUNTIME_STORE_PATH.stem}."
+                f"{int(time.time() * 1000)}.corrupt")
+        try:
+            RUNTIME_STORE_PATH.replace(target)
+        except OSError as move_exc:
+            log.error("RUNTIME_CORRUPT_QUARANTINE_FAILED | %s", move_exc)
+        log.error("RUNTIME_CORRUPT | Universe runtime karantinada: %s", exc)
+        raise RuntimeError("RUNTIME_CORRUPT — universe mutasyonu durdu") \
+            from exc
 
 
 def _save_runtime(data: dict[str, Any]) -> None:
@@ -228,6 +258,22 @@ def _update_runtime(mutator: Any) -> dict[str, Any]:
         try:
             data = _load_runtime()
             mutator(data)
+            if not isinstance(data, dict):
+                raise ValueError("Runtime mutator root dict üretmelidir")
+            if RUNTIME_STORE_PATH.exists():
+                bak = RUNTIME_STORE_PATH.with_suffix(".bak")
+                payload = RUNTIME_STORE_PATH.read_bytes()
+                bak_tmp = bak.with_name(
+                    f".{bak.name}.{os.getpid()}."
+                    f"{threading.get_ident()}.tmp")
+                try:
+                    with bak_tmp.open("wb") as f:
+                        f.write(payload)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(bak_tmp, bak)
+                finally:
+                    bak_tmp.unlink(missing_ok=True)
             _save_runtime(data)
             return data
         finally:

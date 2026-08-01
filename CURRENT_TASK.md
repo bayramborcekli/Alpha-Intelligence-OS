@@ -1,32 +1,29 @@
-# Güncel Görev — Windows PAPER_LEARNING Akışı
+# Güncel Görev — alpha20_revize_v2 Windows Uyumluluk Onarımı
 
 Durum: `IN_PROGRESS`  
 Kaynak: `governance/project_state.json`  
-Son güncelleme: 2026-07-31
+Son güncelleme: 2026-08-01
 
 ## Tek aktif öncelik
 
-Windows ortamında doğal `PAPER_LEARNING` alım ve kapanış akışını başlatabilecek
-kuralları kanıtla. `STRICT` yalnız karşılaştırma tabanı olarak kalır. Tasarım işi
-bu teslim tamamlanana kadar bekler.
+`alpha20_revize.zip` bulgularını tam uygulamada yeniden üret; mevcut tam
+`app.py`, `/home` ve gerçek Windows başlangıç zincirini koru. SHORT muhasebesi,
+minimum dört saat tutma, tekil komisyon hesabı, sembol filtreleri ve aktif karar
+eşiği bağlantısını düzelt. Strateji göstergelerine bağımsız müdahale etme.
 
 ## Bu görevde izin verilenler
 
-- Paper strateji kapılarının kanıta dayalı, tek-hipotezli düzenlenmesi
-- ADR-014 kapsamında `alpha20_v1/dual_model.py` içinde yalnız Paper
-  edge/maliyet çarpanı kapısını kalite uyarısına çeviren ve gerçek nihai
-  Paper ret nedenini görünür yapan sınırlı değişiklik
-- ADR-015 kapsamında toplam Paper açık pozisyon tavanını 10'a çıkaran,
-  iki modelin bu birleşik kapasiteyi kullanmasına izin veren ve paneli aynı
-  kanonik limitle uyumlu gösteren sınırlı değişiklik
-- Paper günlük/ledger etiketleri ve ölçümleri
-- Testler, salt-okunur teşhis ve sadakat raporu
+- Tam Windows `app.py` ve başlatma zincirinin korunması
+- SHORT yönlü TP/SL ve net PnL muhasebesinin düzeltilmesi
+- Stop-loss korunarak kârlı çıkışlarda minimum dört saat tutma
+- Stablecoin/leveraged-token filtreleri ve aktif karar eşiği bağlantısı
+- Testler, Paper doğrulaması ve güvenli Windows paketi
 
 ## Bu görevde yasak olanlar
 
 - Canlı Binance emri, transfer veya çekim
 - Kullanıcı onayı olmadan restart
-- Aynı anda birden fazla strateji hipotezini değiştirmek
+- Mevcut göstergeleri veya yön kurallarını bağımsız yeniden tasarlamak
 - Tasarım çalışmasını aktif önceliğin önüne almak
 - Sahte işlem veya sabit piyasa verisi üretmek
 
@@ -34,12 +31,17 @@ bu teslim tamamlanana kadar bekler.
 
 ```text
 GOVERNANCE_PREFLIGHT: PASS
-CURRENT_TASK_ALIGNED: TRUE
-PAPER_LEARNING_FLOW_POSSIBLE: TRUE
-PAPER_TOTAL_OPEN_POSITION_LIMIT: 10
-STRICT_COMPARISON_PRESERVED: TRUE
+HOME_ROUTE: PASS
+WINDOWS_START_CHAIN: PASS
+AUTO_PAPER_BOOTSTRAP: PASS
+SHORT_PNL_AND_EXIT: PASS
+MIN_HOLD_4H: PASS
+ROUND_TRIP_FEE_SINGLE: PASS
+UNIVERSE_FILTERS: PASS
+ACTIVE_DECISION_THRESHOLD: PASS
 LIVE_ORDER_CREATED: FALSE
 EXCHANGE_WRITE_REQUESTS: 0
 RESTARTED_WITHOUT_APPROVAL: FALSE
+WINDOWS_COMPATIBLE: TRUE
 TESTS: PASS
 ```

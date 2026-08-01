@@ -292,19 +292,30 @@ def check_git_clean() -> list[str]:
     return []
 
 
-def check_backoff_evidence() -> list[str]:
+def check_backoff_evidence(
+        rate_state: Path | None = None,
+        log_candidates: tuple[Path, ...] | None = None) -> list[str]:
+    """429/418 geri çekilme kanıtını izole girdilerle doğrular.
+
+    Parametre verilmediğinde Windows saha aracının kanonik yolları kullanılır.
+    Açık parametreler, tam test koşusunda modül-global yol durumunun başka bir
+    testten sızmasını önler ve saha davranışını değiştirmez.
+    """
+    state_path = rate_state if rate_state is not None else RATE_STATE
+    candidate_logs = (log_candidates if log_candidates is not None
+                      else LOG_CANDIDATES)
     print(f"\n{INFO} Paylaşımlı 429/418 geri çekilme kanıtı (koşullu):")
-    if not RATE_STATE.exists():
+    if not state_path.exists():
         print("  - rate_limit_state.json yok → bu koşuda hiç 429/418 "
               "yaşanmamış; kontrol UYGULANAMAZ (sorun değil).")
         return []
     try:
-        st = json.loads(RATE_STATE.read_text(encoding="utf-8"))
+        st = json.loads(state_path.read_text(encoding="utf-8"))
     except Exception as exc:
         return [f"rate_limit_state.json okunamadı: {exc}"]
     print(f"  - paylaşımlı durum dosyası: {st}")
     hits: list[str] = []
-    for logp in LOG_CANDIDATES:
+    for logp in candidate_logs:
         if not logp.exists():
             continue
         try:

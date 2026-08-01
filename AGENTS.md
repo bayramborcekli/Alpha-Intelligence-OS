@@ -22,7 +22,9 @@ işlenmeden uygulamaya alınamaz.
    transfer, çekim kodu eklenemez; `exchange_gateway` yalnızca GET +
    allowlist'tir.
 2. **Dokunulmaz bölgeler:** `alpha20_v1/`, `auth.py`, defter (ledger)
-   yazımı ve borsa imzalama katmanı değiştirilmez.
+   yazımı ve borsa imzalama katmanı değiştirilmez. Yalnız yürürlükteki karar
+   defterinde dosya ve kapsamı açıkça belirtilmiş kullanıcı yetkisi istisnadır;
+   ADR-014 Windows uyumluluk yetkisi bunun güncel örneğidir.
 3. **Para matematiği yalnızca `Decimal`** — `float()` yasak; API'de
    Decimal-string serileştirme.
 4. **Değer uydurma yok:** bilinmeyen → `null` / "Veri Yok" / "—";

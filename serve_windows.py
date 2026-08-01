@@ -312,6 +312,9 @@ def _bootstrap_background_services() -> None:
     #     LIVE ORDERS DISABLED. Hata sunucuyu çökertmez.
     try:
         import dual_model as _dm
+        log.info("ADR-024 ACTIVE — eski PAPER AUTOPILOT kurulmadı; "
+                 "PAPER_PROFIT_V1 gerçek validation+holdout kanıtı "
+                 "geçene kadar etkinleşmez. LIVE ORDERS DISABLED")
         if _dm.start_dual_model_loop(_app._get_main_config):
             log.info("DUAL-MODEL LOOP STARTED (LIVE ORDERS DISABLED)")
         else:

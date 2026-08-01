@@ -301,8 +301,11 @@ class TestRealBehaviorUnchanged:
     def test_monitor_exit_rules_unchanged(self):       # spec 9
         src = (ROOT / "alpha20_v1/dual_model.py").read_text(
             encoding="utf-8")
-        # Gerçek çıkış kuralları aynen durur
-        for rule in ('if price >= p["tp"]:', 'elif price <= p["sl"]:',
+        # Gerçek çıkış kuralları yön-duyarlı ve min-hold uyumlu kalır.
+        for rule in ('if price >= p["sl"]:',
+                     'elif hold_satisfied and price <= p["tp"]:',
+                     'if price <= p["sl"]:',
+                     'elif hold_satisfied and price >= p["tp"]:',
                      'result = "TRAILING"', 'result = "TIME_EXIT"'):
             assert rule in src
         # PHI/hold_state gerçek karara bağlanamaz
@@ -326,6 +329,7 @@ class TestRealBehaviorUnchanged:
             "entry": 100.0, "quantity": 1.0, "notional_usdt": 100.0,
             "tp": 101.0, "sl": 99.0, "trailing_pct": 0.5, "peak": 100.0,
             "trough": 100.0, "max_hold_minutes": 60,
+            "min_hold_hours": 0.0,
             "opened_at": "2026-07-30T00:00:00+00:00",
             "opened_ts": 0.0, "confidence": 70, "net_edge_pct": 0.5,
             "execution_mode": "PAPER", "early_marks": {}}},

@@ -26,6 +26,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+import strategy_config
+
 try:
     import fcntl
 except ImportError:  # Windows
@@ -42,6 +44,12 @@ MODEL_CORE = "ALPHA_CORE_SCALP"
 MODEL_OPP = "ALPHA_OPPORTUNITY_BURST"
 MODELS = (MODEL_CORE, MODEL_OPP)
 PINNED = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
+STABLECOIN_BASES = frozenset({
+    "BUSD", "DAI", "FDUSD", "TUSD", "USDC", "USDP", "USDS", "USDE",
+    "USD1", "PYUSD", "EUR", "EURC",
+})
+LEVERAGED_SUFFIXES = ("UP", "DOWN", "BULL", "BEAR", "2L", "2S",
+                      "3L", "3S", "5L", "5S")
 
 REASON_CODES = (
     "NO_SIGNAL", "LOW_CONFIDENCE", "SPREAD_TOO_HIGH",
@@ -56,71 +64,19 @@ REASON_CODES = (
 
 FEE_RATE = 0.001  # tek yön; gidiş-dönüş 2x
 
-DEFAULTS: dict[str, Any] = {
-    "enabled": True,
-    "core": {
-        "list_size": 10,            # 8-15 önerisi
-        "min_volume_usdt": 50_000_000,
-        "max_spread_pct": 0.05,
-        "min_trade_count": 200_000,
-        "tp_pct": 0.45, "sl_pct": 0.30,
-        "max_hold_minutes": 15,
-        "trailing_pct": 0.20,
-        "min_confidence": 60,
-        "max_slippage_pct": 0.03,
-        # Maliyet-sonrası giriş kapıları (net TP/SL sözleşmesi):
-        # net_tp = tp - roundtrip, net_sl = sl + roundtrip;
-        # net_tp<=0 veya net_rr<1.20 veya beklenen net edge
-        # < roundtrip×1.5 ise giriş REDDEDİLİR.
-        "min_net_reward_risk": 1.20,
-        "min_edge_cost_multiple": 1.5,
-        # ADR-015: model boş birleşik kapasitenin tamamını kullanabilir;
-        # asıl sert tavan aşağıdaki total_max_open_positions değeridir.
-        "max_open_positions": 10,
-        "position_usdt": 100.0,
-        "refresh_seconds": 300,     # liste yenileme 5 dk
-        "signal_seconds": 12,       # 10-15 sn
-    },
-    "opportunity": {
-        "list_size": 20,            # 15-30 önerisi
-        "min_volume_usdt": 5_000_000,
-        "max_spread_pct": 0.15,
-        "min_trade_count": 20_000,
-        "min_volume_burst": 2.0,    # son hacim / ortalama oranı
-        "min_volatility_pct": 1.5,
-        "tp_pct": 0.80, "sl_pct": 0.50,
-        "max_hold_minutes": 20,
-        "trailing_pct": 0.35,
-        "min_confidence": 55,
-        "max_slippage_pct": 0.08,
-        # Maliyet-sonrası giriş kapıları — CORE ile aynı sözleşme.
-        # PAPER_LEARNING'de 1.5x çarpan ADR-014 kalite etiketidir;
-        # STRICT'te sert kapı kalır.
-        "min_net_reward_risk": 1.20,
-        "min_edge_cost_multiple": 1.5,
-        # ADR-015: model boş birleşik kapasitenin tamamını kullanabilir;
-        # asıl sert tavan aşağıdaki total_max_open_positions değeridir.
-        "max_open_positions": 10,
-        "position_usdt": 50.0,      # CORE'dan küçük
-        "refresh_seconds": 180,     # 2-5 dk havuz yenileme
-        "signal_seconds": 25,       # 20-30 sn
-        "cooldown_after_losses": 2,
-        "cooldown_minutes": 15,
-    },
-    "total_max_open_positions": 10,
-    "monitor_seconds": 4,           # 3-5 sn pozisyon monitörü
-    # GÖREV 118 / ADR-013 — kontrollü PAPER_LEARNING profili.
-    # STRICT: mevcut kurallar aynen. PAPER_LEARNING: trend, tek
-    # EMA/VWAP teyidi veya fiyat temelli momentum-probe rotasından
-    # aday üretebilir. Strateji kalite kusurları etiketlenir; sert
-    # veri/likidite/spread/slippage/pozitif-net/risk/limit/duplicate/
-    # cooldown kapıları DEĞİŞMEZ. ADR-014'te edge/maliyet çarpanı
-    # Paper kalite etiketidir. LIVE yolu kapalıdır.
-    "paper_learning": {
-        "enabled": False,
-        "relaxed_gate": "EMA_VWAP_COMBINED",
-    },
+
+class RuntimeCorruptError(RuntimeError):
+    """Kanonik runtime güvenle okunamadı; mutasyonlar durmalıdır."""
+
+
+_RUNTIME_HEALTH: dict[str, Any] = {
+    "status": "UNKNOWN",
+    "error": None,
+    "quarantine_path": None,
+    "checked_at": None,
 }
+
+DEFAULTS: dict[str, Any] = strategy_config.merge_into_dual_model_defaults()
 
 
 def get_config(main_cfg: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -133,6 +89,10 @@ def get_config(main_cfg: dict[str, Any] | None = None) -> dict[str, Any]:
                 cfg[key].update(val)
             else:
                 cfg[key] = val
+    adaptive = (main_cfg or {}).get("adaptive_system")
+    if isinstance(adaptive, dict) and "min_hold_hours" in adaptive:
+        cfg["min_hold_hours"] = max(
+            0.0, float(adaptive.get("min_hold_hours") or 0.0))
     # Öğrenilmiş champion overlay'i (dual_learning): yalnız izin
     # listesindeki, sınır içinde clamplanmış alanlar + config_version.
     # Öğrenme durumu okunamazsa BASE ile devam edilir (fail-safe).
@@ -152,16 +112,99 @@ def get_config(main_cfg: dict[str, Any] | None = None) -> dict[str, Any]:
 
 # ── Git dışı kanonik runtime store (flock, transaksiyonel) ─────────
 
-def _load_runtime() -> dict[str, Any]:
+def _set_runtime_health(status: str, error: str | None = None,
+                        quarantine_path: Path | None = None) -> None:
+    _RUNTIME_HEALTH.update({
+        "status": status,
+        "error": error,
+        "quarantine_path": (str(quarantine_path.name)
+                            if quarantine_path else None),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+def runtime_health() -> dict[str, Any]:
+    """Panel/API için salt-okunur runtime sağlık görünümü."""
+    return dict(_RUNTIME_HEALTH)
+
+
+def _validate_runtime(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise ValueError("Runtime root is not a dict")
+    typed_fields = {
+        "positions": dict,
+        "trades": list,
+        "rejections": list,
+        "core_list": list,
+        "opportunity_list": list,
+        "last_candidates": dict,
+    }
+    for field, expected in typed_fields.items():
+        if field in data and not isinstance(data[field], expected):
+            raise ValueError(
+                f"Corrupt {field} field: expected {expected.__name__}")
+    return data
+
+
+def _quarantine_runtime(exc: Exception) -> Path | None:
+    corrupt_path = RUNTIME_PATH.with_suffix(".corrupt")
+    if corrupt_path.exists():
+        corrupt_path = RUNTIME_PATH.with_name(
+            f"{RUNTIME_PATH.stem}.{int(time.time() * 1000)}.corrupt")
     try:
-        if RUNTIME_PATH.exists():
-            with RUNTIME_PATH.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                return data
-    except (OSError, json.JSONDecodeError):
-        pass
-    return {}
+        RUNTIME_PATH.replace(corrupt_path)
+    except OSError as move_exc:
+        log.error("RUNTIME_CORRUPT_QUARANTINE_FAILED | %s", move_exc)
+        corrupt_path = None
+    _set_runtime_health("RUNTIME_CORRUPT", str(exc), corrupt_path)
+    log.error("RUNTIME_CORRUPT | Bozuk runtime karantinaya alındı: %s", exc)
+    return corrupt_path
+
+
+def _fsync_directory(path: Path) -> None:
+    """POSIX'te rename kaydını diske sabitle; Windows'ta replace yeterli."""
+    if os.name == "nt":
+        return
+    fd = os.open(str(path), os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _atomic_write_bytes(path: Path, payload: bytes) -> None:
+    tmp = path.with_name(
+        f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        with tmp.open("wb") as f:
+            f.write(payload)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+        _fsync_directory(path.parent)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+def _load_runtime() -> dict[str, Any]:
+    quarantine = RUNTIME_PATH.with_suffix(".corrupt")
+    if not RUNTIME_PATH.exists() and quarantine.exists():
+        exc = RuntimeCorruptError(
+            "Karantinadaki runtime için operatör müdahalesi gerekli")
+        _set_runtime_health("RUNTIME_CORRUPT", str(exc), quarantine)
+        raise exc
+    if not RUNTIME_PATH.exists():
+        _set_runtime_health("HEALTHY_EMPTY")
+        return {}
+    try:
+        with RUNTIME_PATH.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        validated = _validate_runtime(data)
+        _set_runtime_health("HEALTHY")
+        return validated
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        quarantined = _quarantine_runtime(exc)
+        raise RuntimeCorruptError(
+            f"RUNTIME_CORRUPT: {exc}; quarantine={quarantined}") from exc
 
 
 def _update_runtime(mutator: Callable[[dict], None]) -> dict[str, Any]:
@@ -171,13 +214,27 @@ def _update_runtime(mutator: Callable[[dict], None]) -> dict[str, Any]:
         try:
             data = _load_runtime()
             mutator(data)
+            _validate_runtime(data)
+
+            # Yalnız doğrulanmış mevcut runtime yedeklenir.
+            if RUNTIME_PATH.exists():
+                bak = RUNTIME_PATH.with_suffix(".bak")
+                _atomic_write_bytes(bak, RUNTIME_PATH.read_bytes())
+
             tmp = RUNTIME_PATH.with_name(
                 f".{RUNTIME_PATH.name}.{os.getpid()}."
                 f"{threading.get_ident()}.tmp")
-            with tmp.open("w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=1)
-            tmp.replace(RUNTIME_PATH)
-            return data
+            try:
+                with tmp.open("w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=1)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp, RUNTIME_PATH)
+                _fsync_directory(RUNTIME_PATH.parent)
+                _set_runtime_health("HEALTHY")
+                return data
+            finally:
+                tmp.unlink(missing_ok=True)
         finally:
             fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
 
@@ -311,9 +368,12 @@ def _ticker_fields(t: dict) -> dict[str, float] | None:
 
 def _eligible_usdt(t: dict) -> bool:
     s = t.get("symbol", "")
-    return (s.endswith("USDT") and not any(
-        x in s for x in ("UP", "DOWN", "BULL", "BEAR"))
-        and "_" not in s)
+    if not isinstance(s, str) or not s.endswith("USDT") or "_" in s:
+        return False
+    base = s[:-4]
+    if base in STABLECOIN_BASES:
+        return False
+    return not base.endswith(LEVERAGED_SUFFIXES)
 
 
 def build_core_list(tickers: list[dict], cfg: dict) -> list[dict]:
@@ -409,8 +469,7 @@ def _rsi(closes: list[float], n: int = 14) -> float:
 
 def evaluate_signal(symbol: str, klines: list[list],
                     model: str,
-                    relax_ema_vwap: bool = False,
-                    profile: str = "STRICT") -> dict[str, Any]:
+                    relax_ema_vwap: bool = False) -> dict[str, Any]:
     """1m klines → sinyal (side/confidence/expected_gross_edge_pct).
 
     Kural tabanlı, deterministik; her iki model aynı çekirdek
@@ -434,33 +493,20 @@ def evaluate_signal(symbol: str, klines: list[list],
     vol_ratio = vol_recent / vol_base
     hi20 = max(closes[-21:-1])
 
-    paper_learning = profile == "PAPER_LEARNING" or relax_ema_vwap
     conf = 0
     side = None
     relaxed = False
-    entry_route = None
     ema_ok, vwap_ok = ema9 > ema21, last > vwap
     if ema_ok and vwap_ok:
         side = "LONG"
         conf += 30
-        entry_route = "STRICT_TREND"
     elif relax_ema_vwap and (ema_ok or vwap_ok):
         # PAPER_LEARNING: birleşik zorunluluk yerine EN AZ BİRİ.
-        # Puanlama AYNI (taban +30 dahil) — skor şişirme yok.
+        # Puanlama AYNI (taban +30 dahil) — skor şişirme yok; aday
+        # yine min_confidence ve TÜM maliyet/risk kapılarından geçer.
         side = "LONG"
         conf += 30
         relaxed = True
-        entry_route = "EMA_OR_VWAP_CONFIRMATION"
-    elif paper_learning and mom_pct > 0.05 \
-            and (last > hi20 or 35 <= rsi <= 65):
-        # ADR-013 PRICE_MOMENTUM_PROBE: EMA ve VWAP aynı anda teyit
-        # etmese bile pozitif fiyat momentumu breakout veya sağlıklı
-        # RSI ile destekleniyorsa Paper adayı üret. Mum hacmi Paper
-        # giriş engeli değildir; gerçek likidite kapısı aşağıda kalır.
-        side = "LONG"
-        conf += 10
-        relaxed = True
-        entry_route = "PRICE_MOMENTUM_PROBE"
     if side is not None:
         if mom_pct > 0.05:
             conf += 15
@@ -496,43 +542,20 @@ def evaluate_signal(symbol: str, klines: list[list],
                 "reason_code": "NO_SIGNAL", "rsi": rsi,
                 "vol_ratio": vol_ratio,
                 "sub_reason": sub, "weak_factors": weak}
-    quality_warnings = []
     if model == MODEL_OPP and vol_ratio < 1.2:
-        if not paper_learning:
-            return {"symbol": symbol, "side": None,
-                    "confidence": conf,
-                    "reason_code": "MOMENTUM_EXHAUSTED"}
-        quality_warnings.append("MOMENTUM_EXHAUSTED")
+        return {"symbol": symbol, "side": None, "confidence": conf,
+                "reason_code": "MOMENTUM_EXHAUSTED"}
     if last > hi20 and vol_ratio < 1.2:
-        if not paper_learning:
-            return {"symbol": symbol, "side": None,
-                    "confidence": conf,
-                    "reason_code": "FALSE_BREAKOUT_RISK"}
-        quality_warnings.append("FALSE_BREAKOUT_RISK")
-    # Paper edge yalnız pozitif fiyat momentumundan gelir: düşüşün
-    # mutlak değeri kâr ihtimali sayılamaz, mum hacmi edge'i ne düşürür
-    # ne de yapay biçimde yükseltir. STRICT'in tarihî hesabı değişmez.
-    if paper_learning:
-        edge = min(max(mom_pct, 0) * 0.6, 2.0)
-    else:
-        edge = min(abs(mom_pct) * 0.6 + (vol_ratio - 1) * 0.15,
-                   2.0)
+        return {"symbol": symbol, "side": None, "confidence": conf,
+                "reason_code": "FALSE_BREAKOUT_RISK"}
+    edge = min(abs(mom_pct) * 0.6 + (vol_ratio - 1) * 0.15, 2.0)
     out = {"symbol": symbol, "side": side, "confidence": min(conf, 100),
            "expected_gross_edge_pct": round(edge, 4),
            "rsi": round(rsi, 1), "vol_ratio": round(vol_ratio, 2),
            "vwap": vwap, "last": last}
-    if paper_learning:
+    if relaxed:
         out["profile"] = "PAPER_LEARNING"
-        out["entry_route"] = entry_route
-        if relaxed:
-            out["relaxed_gate"] = (
-                "EMA_VWAP_MOMENTUM_PROBE"
-                if entry_route == "PRICE_MOMENTUM_PROBE"
-                else "EMA_VWAP_COMBINED")
-        elif quality_warnings:
-            out["relaxed_gate"] = quality_warnings[0]
-        if quality_warnings:
-            out["quality_warnings"] = quality_warnings
+        out["relaxed_gate"] = "EMA_VWAP_COMBINED"
     return out
 
 
@@ -571,19 +594,13 @@ def execution_quality_gate(row: dict, sig: dict, model: str,
         -> tuple[bool, str | None, float]:
     """Zorunlu kalite kapıları → (geçti, reason_code, net_edge_pct).
 
-    PAPER_LEARNING profilinde güven skoru ve net R/R 1.20 kalite
-    hedefidir; aday yalnız bunlar nedeniyle reddedilmez. Diğer tüm
-    maliyet ve güvenlik kapıları STRICT ile aynıdır.
+    PAPER_LEARNING profilinde net R/R 1.20 bir kalite hedefidir; aday
+    bu nedenle tek başına reddedilmez. Diğer tüm maliyet ve güvenlik
+    kapıları STRICT ile aynıdır.
     """
     m = cfg["core"] if model == MODEL_CORE else cfg["opportunity"]
-    is_paper_learning = profile == "PAPER_LEARNING" and \
-        sig.get("profile") == "PAPER_LEARNING"
     if sig.get("confidence", 0) < m["min_confidence"]:
-        if not is_paper_learning:
-            return False, "LOW_CONFIDENCE", 0.0
-        warnings = sig.setdefault("quality_warnings", [])
-        if "LOW_CONFIDENCE" not in warnings:
-            warnings.append("LOW_CONFIDENCE")
+        return False, "LOW_CONFIDENCE", 0.0
     if row.get("spread_pct", 999) > m["max_spread_pct"]:
         return False, "SPREAD_TOO_HIGH", 0.0
     if row.get("volume_usdt", 0) < m["min_volume_usdt"]:
@@ -601,13 +618,14 @@ def execution_quality_gate(row: dict, sig: dict, model: str,
     if net <= 0:
         return False, "EXPECTED_EDGE_TOO_LOW", round(net, 4)
     # Maliyet-sonrası TP/SL kapıları: komisyon+slippage düşüldükten
-    # sonra pozitif net hedef her profilde zorunludur. PAPER_LEARNING
-    # kalite hedefleri ise işlemi durdurmaz; ölçüm etiketi olur.
+    # sonra ödül/risk yapısı sürdürülebilir değilse giriş YOK.
     cp = cost_profile(m, slippage_pct)
     if cp["net_tp_pct"] <= 0:
         return False, "NET_TP_NON_POSITIVE", round(net, 4)
     min_rr = float(m.get("min_net_reward_risk", 1.20))
     if cp["net_reward_risk"] is None or cp["net_reward_risk"] < min_rr:
+        is_paper_learning = profile == "PAPER_LEARNING" and \
+            sig.get("profile") == "PAPER_LEARNING"
         if not is_paper_learning:
             return False, "NET_REWARD_RISK_TOO_LOW", round(net, 4)
         warnings = sig.setdefault("quality_warnings", [])
@@ -615,33 +633,8 @@ def execution_quality_gate(row: dict, sig: dict, model: str,
             warnings.append("NET_REWARD_RISK_TOO_LOW")
     mult = float(m.get("min_edge_cost_multiple", 1.5))
     if net < cp["round_trip_cost_pct"] * mult:
-        if not is_paper_learning:
-            return False, "EDGE_BELOW_COST_MULTIPLE", round(net, 4)
-        warnings = sig.setdefault("quality_warnings", [])
-        if "EDGE_BELOW_COST_MULTIPLE" not in warnings:
-            warnings.append("EDGE_BELOW_COST_MULTIPLE")
+        return False, "EDGE_BELOW_COST_MULTIPLE", round(net, 4)
     return True, None, round(net, 4)
-
-
-def evaluate_paper_learning_candidate(
-        row: dict, symbol: str, klines: list[list], model: str,
-        cfg: dict) -> tuple[dict, bool, str | None, float]:
-    """ADR-013 Paper adayını çoklu giriş rotalarıyla değerlendir.
-
-    Bu yardımcı yalnız PAPER sinyali üretir. Gerçek borsa yazma yolu
-    içermez; bütün sert execution/risk kapılarını ortak kalite kapısına
-    bırakır.
-    """
-    sig = evaluate_signal(symbol, klines, model,
-                          relax_ema_vwap=True,
-                          profile="PAPER_LEARNING")
-    if not sig.get("side"):
-        return sig, False, sig.get("reason_code", "NO_SIGNAL"), 0.0
-    ok, reason, net = execution_quality_gate(
-        row, sig, model, cfg, profile="PAPER_LEARNING")
-    if not sig.get("relaxed_gate") and sig.get("quality_warnings"):
-        sig["relaxed_gate"] = sig["quality_warnings"][0]
-    return sig, ok, reason, net
 
 
 # ── Sahiplik, limitler, pozisyon yaşam döngüsü ─────────────────────
@@ -727,16 +720,27 @@ def try_open_position(symbol: str, model: str, sig: dict,
             return
         entry = float(sig["last"])
         qty = m["position_usdt"] / entry if entry > 0 else 0.0
+        side = str(sig.get("side") or "").upper()
+        if side not in ("LONG", "SHORT"):
+            result["reason"] = "DATA_QUALITY"
+            return
+        if side == "LONG":
+            tp = entry * (1 + m["tp_pct"] / 100)
+            sl = entry * (1 - m["sl_pct"] / 100)
+        else:
+            tp = entry * (1 - m["tp_pct"] / 100)
+            sl = entry * (1 + m["sl_pct"] / 100)
         pos[symbol] = {
-            "symbol": symbol, "model": model, "side": sig["side"],
+            "symbol": symbol, "model": model, "side": side,
             "entry": entry, "quantity": qty,
             "notional_usdt": m["position_usdt"],
-            "tp": entry * (1 + m["tp_pct"] / 100),
-            "sl": entry * (1 - m["sl_pct"] / 100),
+            "tp": tp,
+            "sl": sl,
             "trailing_pct": m["trailing_pct"],
             "peak": entry,
-            "trough": entry,  # MAE kanıtı için en düşük görülen fiyat
+            "trough": entry,
             "max_hold_minutes": m["max_hold_minutes"],
+            "min_hold_hours": float(cfg.get("min_hold_hours") or 0.0),
             "opened_at": _now_iso(), "opened_ts": now,
             "confidence": sig["confidence"],
             "net_edge_pct": net_edge_pct,
@@ -745,7 +749,6 @@ def try_open_position(symbol: str, model: str, sig: dict,
             # yalnız esnetilen kapıyla açılan paper işlemi işaretler)
             "profile": sig.get("profile", "STRICT"),
             "relaxed_gate": sig.get("relaxed_gate"),
-            "entry_route": sig.get("entry_route"),
             "quality_warnings": [
                 code for code in (sig.get("quality_warnings") or [])
                 if code in REASON_CODES],
@@ -771,7 +774,8 @@ def _build_trade(p: dict, price: float, result: str,
                  now: float) -> dict:
     """Kapanış muhasebesi tek yerde: fee + slippage sonrası net PnL."""
     import uuid
-    gross = (price - p["entry"]) * p["quantity"]
+    direction = 1 if p.get("side") == "LONG" else -1
+    gross = (price - p["entry"]) * p["quantity"] * direction
     fee = (p["entry"] + price) * p["quantity"] * FEE_RATE
     slip = price * p["quantity"] * 0.0002
     # MFE/MAE kanıtı (Strategy Lab zarar/kâr-yakalama analizi için).
@@ -780,10 +784,16 @@ def _build_trade(p: dict, price: float, result: str,
     peak = p.get("peak")
     trough = p.get("trough")
     entry = p["entry"]
-    mfe_pct = round((float(peak) / entry - 1) * 100, 4) \
-        if isinstance(peak, (int, float)) and entry > 0 else None
-    mae_pct = round((1 - float(trough) / entry) * 100, 4) \
-        if isinstance(trough, (int, float)) and entry > 0 else None
+    if p.get("side") == "SHORT":
+        mfe_pct = round((1 - float(trough) / entry) * 100, 4) \
+            if isinstance(trough, (int, float)) and entry > 0 else None
+        mae_pct = round((float(peak) / entry - 1) * 100, 4) \
+            if isinstance(peak, (int, float)) and entry > 0 else None
+    else:
+        mfe_pct = round((float(peak) / entry - 1) * 100, 4) \
+            if isinstance(peak, (int, float)) and entry > 0 else None
+        mae_pct = round((1 - float(trough) / entry) * 100, 4) \
+            if isinstance(trough, (int, float)) and entry > 0 else None
     return {
         "peak_price": peak, "trough_price": trough,
         "mfe_pct": mfe_pct, "mae_pct": mae_pct,
@@ -791,7 +801,6 @@ def _build_trade(p: dict, price: float, result: str,
         "config_version": p.get("config_version", "BASE"),
         "profile": p.get("profile", "STRICT"),
         "relaxed_gate": p.get("relaxed_gate"),
-        "entry_route": p.get("entry_route"),
         "quality_warnings": p.get("quality_warnings") or [],
         "notional_usdt": p.get("notional_usdt"),
         "net_edge_pct": p.get("net_edge_pct"),
@@ -941,8 +950,10 @@ def monitor_positions(price_of: Callable[[str], float | None],
             except Exception as exc:
                 log.error("hold_track güncellenemedi (%s): %s",
                           sym, exc)
-            trail_stop = p["peak"] * (1 - p["trailing_pct"] / 100)
             held_min = (now - p["opened_ts"]) / 60
+            min_hold_min = max(
+                0.0, float(p.get("min_hold_hours",
+                                 cfg.get("min_hold_hours", 0.0))) * 60.0)
             # PFDE erken-pencere izi: 30/60/90/180 sn eşiği ilk kez
             # aşıldığında o ana kadarki MFE/MAE dondurulur (gölge).
             marks = p.get("early_marks")
@@ -962,13 +973,29 @@ def monitor_positions(price_of: Callable[[str], float | None],
                                          4),
                             "at_sec": round(held_sec, 1)}
             result = None
-            if price >= p["tp"]:
-                result = "TP"
-            elif price <= p["sl"]:
-                result = "SL"
-            elif price <= trail_stop and p["peak"] > p["entry"]:
-                result = "TRAILING"
-            elif held_min >= p["max_hold_minutes"]:
+            hold_satisfied = held_min >= min_hold_min
+            if p.get("side") == "SHORT":
+                trail_stop = p["trough"] * (
+                    1 + p["trailing_pct"] / 100)
+                if price >= p["sl"]:
+                    result = "SL"
+                elif hold_satisfied and price <= p["tp"]:
+                    result = "TP"
+                elif (hold_satisfied and price >= trail_stop
+                      and p["trough"] < p["entry"]):
+                    result = "TRAILING"
+            else:
+                trail_stop = p["peak"] * (
+                    1 - p["trailing_pct"] / 100)
+                if price <= p["sl"]:
+                    result = "SL"
+                elif hold_satisfied and price >= p["tp"]:
+                    result = "TP"
+                elif (hold_satisfied and price <= trail_stop
+                      and p["peak"] > p["entry"]):
+                    result = "TRAILING"
+            if (not result and hold_satisfied
+                    and held_min >= p["max_hold_minutes"]):
                 result = "TIME_EXIT"
             if not result:
                 continue
@@ -1055,7 +1082,8 @@ def symbol_status() -> dict:
         log.error("symbol_status runtime okunamadı: %s", exc)
         return {"ok": False, "source": "dual_model_runtime",
                 "error": "RUNTIME_UNREADABLE", "symbols": None,
-                "last_refresh": None}
+                "last_refresh": None,
+                "runtime_health": runtime_health()}
     out: dict[str, dict] = {}
     lists = {"CORE": rt.get("core_list") or [],
              "OPPORTUNITY": rt.get("opportunity_list") or []}
@@ -1134,7 +1162,7 @@ def symbol_status() -> dict:
             "source": "dual_model_runtime"})
         cur.update({
             "model": p.get("model"),
-            "direction": "LONG",
+            "direction": p.get("side", "LONG"),
             "signal_state": "POSITION_OPEN",
             "decision_state": "POSITION_OPEN",
             "last_decision": "SIGNAL_ACCEPTED",
@@ -1145,7 +1173,8 @@ def symbol_status() -> dict:
             "expected_edge": p.get("net_edge_pct")})
     last_refresh = rt.get("last_refresh")
     return {"ok": True, "source": "dual_model_runtime",
-            "last_refresh": last_refresh, "symbols": out}
+            "last_refresh": last_refresh, "symbols": out,
+            "runtime_health": runtime_health()}
 
 
 NO_SIGNAL_SUB_REASONS = (
@@ -1166,8 +1195,8 @@ def record_learning_decision(symbol: str, model: str, strict_sig: dict,
     entry = {
         "at": _now_iso(), "symbol": symbol, "model": model,
         "profile": "PAPER_LEARNING",
-        "relaxed_gate": learn_sig.get("relaxed_gate"),
-        "entry_route": learn_sig.get("entry_route"),
+        "relaxed_gate": learn_sig.get("relaxed_gate",
+                                      "EMA_VWAP_COMBINED"),
         "strict_decision": strict_sig.get("reason_code", "NO_SIGNAL"),
         "strict_sub_reason": strict_sig.get("sub_reason"),
         "learning_decision": ("OPENED" if opened else
@@ -1336,7 +1365,23 @@ def snapshot(with_prices: bool = False,
     Fiyat alınamazsa alanlar None kalır (UI 'UNKNOWN' gösterir) —
     bayat/uydurma fiyat asla yazılmaz.
     """
-    rt = _load_runtime()
+    try:
+        rt = _load_runtime()
+    except RuntimeCorruptError:
+        return {
+            "cost_profiles": None,
+            "snapshot_version": 0,
+            "live_orders": "DISABLED",
+            "runtime_health": runtime_health(),
+            "core_list": [], "opportunity_list": [], "positions": [],
+            "counters": {"core_universe": 0, "opportunity_universe": 0,
+                         "core_open": 0, "opportunity_open": 0,
+                         "total_open": 0},
+            "metrics": {}, "portfolio_net_pnl": None,
+            "recent_trades": [], "recent_rejections": [],
+            "rejection_breakdown": {}, "last_refresh": None,
+            "last_error": "RUNTIME_CORRUPT",
+        }
     positions = list(_open_positions(rt).values())
     prices: dict[str, float] = {}
     if with_prices and positions:
@@ -1390,6 +1435,7 @@ def snapshot(with_prices: bool = False,
         "cost_profiles": cost_profiles,
         "snapshot_version": int(rt.get("updated_ts") or 0),
         "live_orders": "DISABLED",
+        "runtime_health": runtime_health(),
         "core_list": rt.get("core_list", []),
         "opportunity_list": rt.get("opportunity_list", []),
         "positions": positions,
@@ -1619,17 +1665,30 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                         price_cache[sym] = float(kl[-1][4])
                     sig = evaluate_signal(sym, kl, model)
                     if not sig.get("side"):
-                        # PAPER_LEARNING: STRICT ret sonrası çoklu
-                        # giriş rotalarıyla ikinci değerlendirme.
-                        # Pozitif-net, veri, likidite ve risk güvenlikleri
-                        # uygulanır; net R/R ve edge/maliyet çarpanı yalnız
-                        # learning kalite etiketidir; LIVE yok.
+                        record_rejection(sym, model,
+                                         sig.get("reason_code",
+                                                 "NO_SIGNAL"),
+                                         detail={
+                                             "sub_reason":
+                                                 sig.get("sub_reason"),
+                                             "weak_factors":
+                                                 sig.get("weak_factors"),
+                                             "price":
+                                                 price_cache.get(sym),
+                                         })
+                        # PAPER_LEARNING: STRICT ret sonrası tek
+                        # yumuşak kapı esnetilmiş ikinci değerlendirme.
+                        # Sert güvenlik/maliyet kapıları AYNEN uygulanır;
+                        # net R/R yalnız learning kalite etiketi; LIVE yok.
                         pl = cfg.get("paper_learning") or {}
                         if pl.get("enabled"):
-                            lsig, lok, lreason, lnet = \
-                                evaluate_paper_learning_candidate(
-                                    row, sym, kl, model, cfg)
+                            lsig = evaluate_signal(
+                                sym, kl, model, relax_ema_vwap=True)
                             if lsig.get("side"):
+                                lok, lreason, lnet = \
+                                    execution_quality_gate(
+                                        row, lsig, model, cfg,
+                                        profile="PAPER_LEARNING")
                                 if lok:
                                     # Açılış ERTELENİR: öğrenme adayı
                                     # da sahiplik arbitrajından geçer
@@ -1640,44 +1699,12 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                                         "shadow": None,
                                         "learning_strict": sig})
                                 else:
-                                    # Panelde STRICT karşılaştırma reddi
-                                    # değil, Paper'ın gerçek nihai kapısı
-                                    # görünür. Aksi halde yumuşatılmış
-                                    # LOW_CONFIDENCE/MOMENTUM yanlışlıkla
-                                    # hâlâ sert ret gibi görünüyordu.
-                                    record_rejection(
-                                        sym, model,
-                                        lreason or "DATA_QUALITY",
-                                        detail={"price":
-                                                price_cache.get(sym)})
                                     record_learning_decision(
                                         sym, model, sig, lsig, lok,
                                         lreason, lnet, cfg, False,
                                         None,
                                         btc_change_pct=rt.get(
                                             "btc_change_pct"))
-                            else:
-                                record_rejection(
-                                    sym, model,
-                                    lreason or lsig.get(
-                                        "reason_code", "NO_SIGNAL"),
-                                    detail={
-                                        "sub_reason":
-                                            lsig.get("sub_reason"),
-                                        "weak_factors":
-                                            lsig.get("weak_factors"),
-                                        "price": price_cache.get(sym),
-                                    })
-                        else:
-                            record_rejection(
-                                sym, model,
-                                sig.get("reason_code", "NO_SIGNAL"),
-                                detail={
-                                    "sub_reason": sig.get("sub_reason"),
-                                    "weak_factors":
-                                        sig.get("weak_factors"),
-                                    "price": price_cache.get(sym),
-                                })
                         continue
                     # PFDE GÖLGE skoru: gerçek kapıdan BAĞIMSIZ,
                     # kararı DEĞİŞTİRMEZ; yalnız kayıt (raporlama).
@@ -1696,41 +1723,7 @@ def _loop(get_main_config: Callable[[], dict]) -> None:
                     ok, reason, net = execution_quality_gate(
                         row, sig, model, cfg)
                     if not ok:
-                        # STRICT sinyali yalnız Paper-yumuşak kalite
-                        # kapısında kaldıysa aynı doğal veriyle Paper
-                        # adayı olarak tekrar değerlendir. Sert maliyet,
-                        # veri ve risk retleri asla bu yolu kullanmaz.
-                        pl = cfg.get("paper_learning") or {}
-                        if pl.get("enabled") and reason in {
-                                "LOW_CONFIDENCE",
-                                "NET_REWARD_RISK_TOO_LOW"}:
-                            lsig, lok, lreason, lnet = \
-                                evaluate_paper_learning_candidate(
-                                    row, sym, kl, model, cfg)
-                            strict_outcome = dict(sig)
-                            strict_outcome["reason_code"] = reason
-                            if lok:
-                                cands.append({
-                                    "symbol": sym, "sig": lsig,
-                                    "net_edge_pct": lnet,
-                                    "shadow": shadow,
-                                    "learning_strict": strict_outcome})
-                            else:
-                                record_rejection(
-                                    sym, model,
-                                    lreason or "DATA_QUALITY",
-                                    detail={"price":
-                                            price_cache.get(sym)})
-                                record_learning_decision(
-                                    sym, model, strict_outcome, lsig,
-                                    lok, lreason, lnet, cfg, False,
-                                    None,
-                                    btc_change_pct=rt.get(
-                                        "btc_change_pct"))
-                        else:
-                            record_rejection(sym, model, reason,
-                                             detail={"price":
-                                                     price_cache.get(sym)})
+                        record_rejection(sym, model, reason)
                         continue
                     cands.append({"symbol": sym, "sig": sig,
                                   "net_edge_pct": net,

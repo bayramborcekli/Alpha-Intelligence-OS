@@ -35,7 +35,12 @@ def client():
 
 
 @pytest.fixture()
-def anon():
+def anon(monkeypatch):
+    # Bu test kurulum sihirbazını değil, /home oturum kapısını sınar.
+    # Yerel yönetici deposu tüm suite'te izole olduğundan kimlik
+    # yapılandırmasını açıkça var kabul et; böylece sıra bağımlılığı yoktur.
+    import auth
+    monkeypatch.setattr(auth, "password_hash_configured", lambda: True)
     previous = app_module.app.config.get("TESTING")
     app_module.app.config["TESTING"] = False
     try:

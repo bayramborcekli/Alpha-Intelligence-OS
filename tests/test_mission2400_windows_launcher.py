@@ -8,7 +8,7 @@ durdurma, secret sızıntısı yok) statik ve birim düzeyde kilitler.
 """
 from __future__ import annotations
 
-import fcntl as real_fcntl
+import json
 import subprocess
 import tempfile
 from pathlib import Path
@@ -16,6 +16,11 @@ from pathlib import Path
 import pytest
 
 import portable_flock
+
+try:
+    import fcntl as real_fcntl
+except ImportError:  # pragma: no cover - Windows'ta fcntl bulunmaz.
+    real_fcntl = None
 
 ROOT = Path(__file__).resolve().parent.parent
 START_CMD = (ROOT / "start_alpha.cmd").read_text(encoding="utf-8")
@@ -29,6 +34,7 @@ ALL_SCRIPTS = (START_CMD + STOP_CMD + INSTALL_CMD + LAUNCHER_PY +
                SHORTCUT_PS1 + SERVE_PY)
 
 
+@pytest.mark.skipif(real_fcntl is None, reason="POSIX-only fcntl tests")
 class TestPortableFlockPosix:
     """Linux'ta portable_flock gerçek fcntl'e birebir vekâlettir."""
 
@@ -72,6 +78,7 @@ class TestSharedStateModulesUnchangedOnPosix:
         assert "import portable_flock as fcntl" in src
         assert src.index("import fcntl") < src.index("portable_flock")
 
+    @pytest.mark.skipif(real_fcntl is None, reason="POSIX-only fcntl test")
     def test_modules_use_real_fcntl_here(self):
         import accounts_registry
         assert accounts_registry.fcntl is real_fcntl
@@ -165,8 +172,10 @@ class TestStopSafety:
         import launcher_windows as lw
         monkeypatch.setattr(lw, "RUNTIME", tmp_path)
         monkeypatch.setattr(lw, "PID_FILE", tmp_path / "alpha.pid")
-        (tmp_path / "alpha.pid").write_text(
-            '{"pid": 999999, "root": "%s"}' % lw.ROOT)
+        (tmp_path / "alpha.pid").write_text(json.dumps({
+            "pid": 999999,
+            "root": str(lw.ROOT),
+        }), encoding="utf-8")
         monkeypatch.setattr(lw, "alpha_healthy", lambda: False)
         assert lw.stop() == 0
         assert not (tmp_path / "alpha.pid").exists()

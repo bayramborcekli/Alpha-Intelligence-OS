@@ -319,8 +319,11 @@ class TestRealBehaviorUnchanged:
     def test_entry_logic_untouched(self):                # spec 19
         src = (ROOT / "alpha20_v1/dual_model.py").read_text(
             encoding="utf-8")
-        # Gerçek giriş/çıkış kuralları aynen durur
-        for rule in ('if price >= p["tp"]:', 'elif price <= p["sl"]:',
+        # Giriş kuralları korunur; çıkışlar yön-duyarlı/min-hold uyumludur.
+        for rule in ('if price >= p["sl"]:',
+                     'elif hold_satisfied and price <= p["tp"]:',
+                     'if price <= p["sl"]:',
+                     'elif hold_satisfied and price >= p["tp"]:',
                      "def evaluate_signal", "def try_open_position"):
             assert rule in src
         # symbol_status salt okunur: runtime'a yazan tek yol

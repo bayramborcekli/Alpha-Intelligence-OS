@@ -312,9 +312,15 @@ class TestReport:
 
 class TestRealGateUntouched:
     def test_reason_codes_unchanged(self):
-        # PFS nedenleri AYRI kayıttadır; gerçek kapı kod listesi
-        # bu görevle DEĞİŞMEDİ (19 kod).
-        assert len(dm.REASON_CODES) == 19
+        # PFS nedenleri AYRI kayıttadır. ADR-016, gerçek Paper karar
+        # zincirine altı açıklanabilir rejim/EV/güven/sıra kodu ekler.
+        assert len(dm.REASON_CODES) == 25
+        for reason in ("REGIME_UNSTABLE", "STRATEGY_NOT_CONFIRMED",
+                       "INSUFFICIENT_CALIBRATION",
+                       "NET_EV_NON_POSITIVE",
+                       "NET_EV_CONFIDENCE_LOW",
+                       "RANK_BELOW_CYCLE_CUTOFF"):
+            assert reason in dm.REASON_CODES
         assert "LOCAL_TOP_HIGH_RISK" not in dm.REASON_CODES
         assert "LOCAL_TOP_HIGH_RISK" in pf.PFS_REASON_CODES
 

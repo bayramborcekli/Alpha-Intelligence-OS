@@ -6,6 +6,10 @@ import os
 import tempfile
 
 import pytest
+from werkzeug.security import generate_password_hash
+
+
+DEFAULT_TEST_ADMIN_HASH = generate_password_hash("testpass1234")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -92,3 +96,27 @@ def _reset_rate_limit_state(tmp_path, monkeypatch):
         alpha20.reset_rate_limit_state()
     except Exception:
         pass
+
+
+@pytest.fixture(autouse=True)
+def _isolate_local_admin_store(tmp_path, monkeypatch):
+    """Windows yerel yönetici dosyası testler arasında sızmasın.
+
+    Bazı eski rota/güvenlik testleri gerçek ``data/local_admin.json``
+    durumuna bağlı kalıyor; kurulum testinin oluşturduğu dosya sonraki
+    testlerin /login ↔ /setup beklentisini sıraya bağlı hale getiriyordu.
+    Her test kendi geçici yerel yönetici deposunu ve sahte varsayılan
+    kimliği görür; kurulum-yok senaryoları env'i test içinde siler.
+    """
+    try:
+        import local_admin
+    except Exception:
+        yield
+        return
+    data_dir = tmp_path / "local-admin-data"
+    monkeypatch.setattr(local_admin, "ROOT", tmp_path)
+    monkeypatch.setattr(local_admin, "DATA_DIR", data_dir)
+    monkeypatch.setattr(local_admin, "FILE", data_dir / "local_admin.json")
+    monkeypatch.setenv("ADMIN_USERNAME", "testadmin")
+    monkeypatch.setenv("ADMIN_PASSWORD_HASH", DEFAULT_TEST_ADMIN_HASH)
+    yield

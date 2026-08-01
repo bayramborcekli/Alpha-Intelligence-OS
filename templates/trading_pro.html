@@ -1,0 +1,650 @@
+{% extends "dash_base.html" %}
+{% block title %}Trading Pro — Alpha Intelligence OS{% endblock %}
+
+{% block content %}
+<style>
+  /* ═══════════════════════════════════════════════════════════════
+     ALPHA TRADING PRO — Binance-inspired Dark Professional UI
+     ═══════════════════════════════════════════════════════════════ */
+  :root {
+    --bg-primary: #0b0e11;
+    --bg-secondary: #151a21;
+    --bg-tertiary: #1e2329;
+    --bg-hover: #2b3139;
+    --border-color: #2b3139;
+    --text-primary: #eaecef;
+    --text-secondary: #848e9c;
+    --text-muted: #5e6673;
+    --accent-yellow: #f0b90b;
+    --accent-green: #0ecb81;
+    --accent-red: #f6465d;
+    --accent-blue: #2e7d32;
+    --paper-green: #3fbf7f;
+    --paper-red: #e05656;
+    --font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  }
+
+  main.content { max-width: none; padding: 0; background: var(--bg-primary); }
+  main.content > h1, main.content > p.sub { display: none; }
+
+  /* ── Top Navigation Bar ── */
+  .pro-topbar {
+    display: flex; align-items: center; gap: 0;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 16px; height: 48px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .pro-topbar .brand {
+    font-weight: 900; font-size: 0.85rem;
+    color: var(--accent-yellow); letter-spacing: 0.1em;
+    text-transform: uppercase; margin-right: 24px;
+  }
+  .pro-topbar .nav-item {
+    padding: 0 16px; height: 100%; display: flex;
+    align-items: center; color: var(--text-secondary);
+    font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    border-bottom: 2px solid transparent; transition: all 0.2s;
+  }
+  .pro-topbar .nav-item:hover, .pro-topbar .nav-item.active {
+    color: var(--text-primary); border-bottom-color: var(--accent-yellow);
+  }
+  .pro-topbar .right-section {
+    margin-left: auto; display: flex; align-items: center; gap: 12px;
+  }
+  .pro-pill {
+    padding: 4px 12px; border-radius: 4px; font-size: 0.7rem;
+    font-weight: 700; letter-spacing: 0.03em;
+  }
+  .pro-pill.paper {
+    background: rgba(63, 191, 127, 0.15); color: var(--paper-green);
+    border: 1px solid rgba(63, 191, 127, 0.3);
+  }
+  .pro-pill.nolive {
+    background: rgba(240, 86, 86, 0.15); color: var(--paper-red);
+    border: 1px solid rgba(240, 86, 86, 0.3);
+  }
+
+  /* ── Main Layout Grid ── */
+  .pro-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 320px;
+    grid-template-rows: auto 1fr auto;
+    gap: 1px;
+    background: var(--border-color);
+    min-height: calc(100vh - 48px);
+  }
+  @media (max-width: 1400px) {
+    .pro-layout { grid-template-columns: 240px 1fr 280px; }
+  }
+  @media (max-width: 1100px) {
+    .pro-layout { grid-template-columns: 1fr; grid-template-rows: auto; }
+  }
+
+  .pro-panel {
+    background: var(--bg-primary);
+    display: flex; flex-direction: column;
+  }
+  .pro-panel-header {
+    padding: 10px 14px; background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.72rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+
+  /* ── Left Panel: Symbol List ── */
+  .pro-symbol-search {
+    padding: 8px 12px; border-bottom: 1px solid var(--border-color);
+  }
+  .pro-symbol-search input {
+    width: 100%; background: var(--bg-tertiary);
+    border: 1px solid var(--border-color); border-radius: 4px;
+    padding: 6px 10px; color: var(--text-primary);
+    font-size: 0.8rem; outline: none;
+  }
+  .pro-symbol-search input:focus {
+    border-color: var(--accent-yellow);
+  }
+  .pro-symbol-list {
+    flex: 1; overflow-y: auto;
+  }
+  .pro-symbol-row {
+    display: grid; grid-template-columns: 1fr auto auto;
+    padding: 8px 12px; font-size: 0.78rem;
+    border-bottom: 1px solid rgba(43, 49, 57, 0.5);
+    cursor: pointer; transition: background 0.15s;
+  }
+  .pro-symbol-row:hover { background: var(--bg-hover); }
+  .pro-symbol-row.active { background: var(--bg-tertiary); }
+  .pro-symbol-row .sym { font-weight: 700; color: var(--text-primary); }
+  .pro-symbol-row .sym span { font-size: 0.65rem; color: var(--text-muted); margin-left: 4px; }
+  .pro-symbol-row .price { text-align: right; font-family: var(--font-mono); }
+  .pro-symbol-row .change { text-align: right; font-family: var(--font-mono); font-weight: 700; }
+  .pro-symbol-row .change.up { color: var(--accent-green); }
+  .pro-symbol-row .change.down { color: var(--accent-red); }
+
+  /* ── Center Panel: Chart Area ── */
+  .pro-chart-header {
+    padding: 12px 16px; display: flex;
+    justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .pro-chart-title {
+    font-size: 1.1rem; font-weight: 800; color: var(--text-primary);
+  }
+  .pro-chart-title .sub {
+    font-size: 0.7rem; color: var(--text-muted); font-weight: 400; margin-left: 8px;
+  }
+  .pro-chart-price {
+    text-align: right;
+  }
+  .pro-chart-price .big {
+    font-size: 1.4rem; font-weight: 800; font-family: var(--font-mono);
+  }
+  .pro-chart-price .big.up { color: var(--accent-green); }
+  .pro-chart-price .big.down { color: var(--accent-red); }
+  .pro-chart-price .small {
+    font-size: 0.72rem; color: var(--text-secondary);
+  }
+
+  .pro-chart-area {
+    flex: 1; position: relative;
+    background: var(--bg-primary);
+    min-height: 400px;
+  }
+  #tradingview-chart {
+    width: 100%; height: 100%;
+    border: none;
+  }
+  .pro-chart-placeholder {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text-muted);
+  }
+  .pro-chart-placeholder .candle-animation {
+    width: 60px; height: 100px;
+    position: relative; margin-bottom: 16px;
+  }
+  .pro-chart-placeholder .candle-animation::before,
+  .pro-chart-placeholder .candle-animation::after {
+    content: ''; position: absolute; left: 50%; transform: translateX(-50%);
+    background: var(--accent-yellow);
+  }
+  .pro-chart-placeholder .candle-animation::before {
+    width: 20px; height: 40px; top: 30px; animation: candlePulse 1.5s infinite;
+  }
+  .pro-chart-placeholder .candle-animation::after {
+    width: 2px; height: 20px; top: 10px;
+  }
+  @keyframes candlePulse {
+    0%, 100% { opacity: 0.4; transform: translateX(-50%) scaleY(1); }
+    50% { opacity: 1; transform: translateX(-50%) scaleY(1.2); }
+  }
+
+  /* ── Right Panel: Order Form + Positions ── */
+  .pro-order-tabs {
+    display: flex; border-bottom: 1px solid var(--border-color);
+  }
+  .pro-order-tab {
+    flex: 1; padding: 10px; text-align: center;
+    font-size: 0.75rem; font-weight: 700;
+    color: var(--text-secondary); cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .pro-order-tab.active {
+    color: var(--accent-yellow); border-bottom-color: var(--accent-yellow);
+  }
+  .pro-order-tab:hover { color: var(--text-primary); }
+
+  .pro-order-form { padding: 14px; }
+  .pro-form-row {
+    margin-bottom: 12px;
+  }
+  .pro-form-row label {
+    display: block; font-size: 0.72rem;
+    color: var(--text-secondary); margin-bottom: 4px;
+  }
+  .pro-form-row input, .pro-form-row select {
+    width: 100%; background: var(--bg-tertiary);
+    border: 1px solid var(--border-color); border-radius: 4px;
+    padding: 8px 10px; color: var(--text-primary);
+    font-size: 0.85rem; outline: none;
+    font-family: var(--font-mono);
+  }
+  .pro-form-row input:focus, .pro-form-row select:focus {
+    border-color: var(--accent-yellow);
+  }
+  .pro-form-row .input-group {
+    display: flex; gap: 0;
+  }
+  .pro-form-row .input-group input {
+    border-radius: 4px 0 0 4px;
+  }
+  .pro-form-row .input-group .suffix {
+    background: var(--bg-hover);
+    border: 1px solid var(--border-color);
+    border-left: none; border-radius: 0 4px 4px 0;
+    padding: 8px 12px; color: var(--text-secondary);
+    font-size: 0.78rem; display: flex; align-items: center;
+  }
+
+  .pro-btn {
+    width: 100%; padding: 10px; border: none; border-radius: 4px;
+    font-size: 0.85rem; font-weight: 700; cursor: pointer;
+    transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .pro-btn-buy {
+    background: var(--accent-green); color: #fff;
+  }
+  .pro-btn-buy:hover { background: #0ac281; }
+  .pro-btn-sell {
+    background: var(--accent-red); color: #fff;
+  }
+  .pro-btn-sell:hover { background: #e14055; }
+  .pro-btn:disabled {
+    opacity: 0.4; cursor: not-allowed;
+  }
+
+  .pro-positions { padding: 14px; flex: 1; overflow-y: auto; }
+  .pro-positions .empty {
+    text-align: center; color: var(--text-muted);
+    font-size: 0.8rem; padding: 20px 0;
+  }
+  .pro-position-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color); border-radius: 6px;
+    padding: 10px 12px; margin-bottom: 8px;
+  }
+  .pro-position-card .pos-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 6px;
+  }
+  .pro-position-card .pos-symbol {
+    font-weight: 700; font-size: 0.85rem;
+  }
+  .pro-position-card .pos-side {
+    font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .pos-side.long { background: rgba(14, 203, 129, 0.15); color: var(--accent-green); }
+  .pos-side.short { background: rgba(246, 70, 93, 0.15); color: var(--accent-red); }
+  .pro-position-card .pos-details {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 4px 12px; font-size: 0.72rem;
+  }
+  .pro-position-card .pos-details .label { color: var(--text-secondary); }
+  .pro-position-card .pos-details .value {
+    font-family: var(--font-mono); font-weight: 700; text-align: right;
+  }
+  .pro-position-card .pos-pnl {
+    margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--border-color);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .pro-position-card .pos-pnl .pnl-value {
+    font-family: var(--font-mono); font-weight: 800; font-size: 0.9rem;
+  }
+  .pnl-value.profit { color: var(--accent-green); }
+  .pnl-value.loss { color: var(--accent-red); }
+
+  /* ── Bottom Panel: Recent Trades ── */
+  .pro-bottom {
+    grid-column: 1 / -1;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-color);
+    max-height: 200px;
+  }
+  .pro-trades-table {
+    width: 100%; border-collapse: collapse; font-size: 0.78rem;
+  }
+  .pro-trades-table th, .pro-trades-table td {
+    padding: 8px 12px; text-align: right;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+  }
+  .pro-trades-table th:first-child, .pro-trades-table td:first-child { text-align: left; }
+  .pro-trades-table th {
+    background: var(--bg-secondary);
+    color: var(--text-secondary); font-weight: 600;
+    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .pro-trades-table td { font-family: var(--font-mono); }
+  .pro-trades-table .profit { color: var(--accent-green); }
+  .pro-trades-table .loss { color: var(--accent-red); }
+
+  /* ── Paper Info Banner ── */
+  .pro-paper-banner {
+    grid-column: 1 / -1;
+    background: linear-gradient(90deg, rgba(63,191,127,0.1), rgba(240,185,11,0.1));
+    border-bottom: 1px solid var(--border-color);
+    padding: 8px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .pro-paper-banner .info {
+    display: flex; align-items: center; gap: 16px;
+    font-size: 0.78rem;
+  }
+  .pro-paper-banner .info-item {
+    display: flex; flex-direction: column;
+  }
+  .pro-paper-banner .info-item .label {
+    font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase;
+  }
+  .pro-paper-banner .info-item .value {
+    font-family: var(--font-mono); font-weight: 700; color: var(--text-primary);
+  }
+  .pro-paper-banner .status {
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  /* ── Scrollbar Styling ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg-primary); }
+  ::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+</style>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TRADING PRO — Modern Binance-inspired Layout
+     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- Top Navigation -->
+<nav class="pro-topbar">
+  <span class="brand">Alpha Intelligence OS</span>
+  <span class="nav-item active">Spot</span>
+  <span class="nav-item" style="opacity:0.4;cursor:not-allowed;" title="PAPER modda Futures devre dışı">Futures</span>
+  <span class="nav-item">Geçmiş</span>
+  <span class="nav-item">Portföy</span>
+  <div class="right-section">
+    <span class="pro-pill paper">🟢 PAPER MOD</span>
+    <span class="pro-pill nolive">🔴 CANLI EMİR KAPALI</span>
+  </div>
+</nav>
+
+<!-- Paper Info Banner -->
+<div class="pro-paper-banner">
+  <div class="info">
+    <div class="info-item">
+      <span class="label">Sanal Bakiye</span>
+      <span class="value" id="paper-balance">10,000.00 USDT</span>
+    </div>
+    <div class="info-item">
+      <span class="label">Gün İçi PnL</span>
+      <span class="value" id="paper-daily-pnl" style="color: var(--text-secondary);">+0.00 USDT</span>
+    </div>
+    <div class="info-item">
+      <span class="label">Toplam İşlem</span>
+      <span class="value" id="paper-total-trades">0</span>
+    </div>
+    <div class="info-item">
+      <span class="label">Win Rate</span>
+      <span class="value" id="paper-win-rate">—</span>
+    </div>
+  </div>
+  <div class="status">
+    <span style="font-size:0.72rem;color:var(--text-muted);">Sistem: <span id="system-status" style="color:var(--accent-green);">Çalışıyor</span></span>
+  </div>
+</div>
+
+<!-- Main Layout -->
+<div class="pro-layout">
+
+  <!-- LEFT: Symbol List -->
+  <div class="pro-panel">
+    <div class="pro-panel-header">
+      <span>Piyasa</span>
+      <span style="font-size:0.65rem;color:var(--text-muted);">24s Değişim</span>
+    </div>
+    <div class="pro-symbol-search">
+      <input type="text" placeholder="Sembol ara... (örn: BTC)" id="symbol-search">
+    </div>
+    <div class="pro-symbol-list" id="symbol-list">
+      <!-- Populated by JS -->
+    </div>
+  </div>
+
+  <!-- CENTER: Chart + Market Info -->
+  <div class="pro-panel" style="grid-row: span 2;">
+    <div class="pro-chart-header">
+      <div class="pro-chart-title">
+        BTCUSDT
+        <span class="sub">Perpetual · 20x</span>
+      </div>
+      <div class="pro-chart-price">
+        <div class="big up" id="chart-price">—</div>
+        <div class="small" id="chart-change">—</div>
+      </div>
+    </div>
+    <div class="pro-chart-area">
+      <!-- TradingView Chart Widget -->
+      <div id="tradingview-chart">
+        <div class="pro-chart-placeholder">
+          <div class="candle-animation"></div>
+          <p>Gerçek zamanlı grafik yükleniyor...</p>
+          <p style="font-size:0.7rem;margin-top:8px;">Binance Spot verisi</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Order Form -->
+  <div class="pro-panel">
+    <div class="pro-order-tabs">
+      <div class="pro-order-tab active" data-side="LONG">AL (LONG)</div>
+      <div class="pro-order-tab" data-side="SHORT">SAT (SHORT)</div>
+    </div>
+    <div class="pro-order-form">
+      <div class="pro-form-row">
+        <label>Fiyat (USDT)</label>
+        <div class="input-group">
+          <input type="number" id="order-price" placeholder="Piyasa fiyatı" step="0.01">
+          <span class="suffix">USDT</span>
+        </div>
+      </div>
+      <div class="pro-form-row">
+        <label>Miktar</label>
+        <div class="input-group">
+          <input type="number" id="order-qty" placeholder="0.00" step="0.0001">
+          <span class="suffix">BTC</span>
+        </div>
+      </div>
+      <div class="pro-form-row">
+        <label>Kaldıraç</label>
+        <select id="order-leverage" disabled>
+          <option>1x (PAPER)</option>
+        </select>
+      </div>
+      <div class="pro-form-row">
+        <label>Zarar Durdur (SL)</label>
+        <input type="number" id="order-sl" placeholder="SL fiyatı" step="0.01">
+      </div>
+      <div class="pro-form-row">
+        <label>Kâr Al (TP)</label>
+        <input type="number" id="order-tp" placeholder="TP fiyatı" step="0.01">
+      </div>
+      <button class="pro-btn pro-btn-buy" id="order-btn" disabled>
+        🔒 PAPER — Emir Verilemez
+      </button>
+      <p style="font-size:0.68rem;color:var(--text-muted);text-align:center;margin-top:8px;">
+        Bu PAPER simülasyon ekranıdır. Gerçek emir gönderilmez.
+      </p>
+    </div>
+  </div>
+
+  <!-- RIGHT BELOW: Positions -->
+  <div class="pro-panel">
+    <div class="pro-panel-header">
+      <span>Pozisyonlar</span>
+      <span style="font-size:0.65rem;color:var(--text-muted);" id="pos-count">0 açık</span>
+    </div>
+    <div class="pro-positions" id="positions-list">
+      <div class="empty">Açık pozisyon yok</div>
+    </div>
+  </div>
+
+  <!-- BOTTOM: Recent Trades -->
+  <div class="pro-bottom">
+    <div class="pro-panel-header">
+      <span>Son İşlemler</span>
+    </div>
+    <div style="overflow-x:auto;max-height:160px;">
+      <table class="pro-trades-table">
+        <thead>
+          <tr>
+            <th>Zaman</th>
+            <th>Sembol</th>
+            <th>Yön</th>
+            <th>Giriş</th>
+            <th>Çıkış</th>
+            <th>PnL</th>
+            <th>Süre</th>
+          </tr>
+        </thead>
+        <tbody id="trades-body">
+          <tr>
+            <td colspan="7" style="text-align:center;color:var(--text-muted);padding:16px;">Henüz işlem yok</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// TRADING PRO — JavaScript
+// ═══════════════════════════════════════════════════════════════
+
+(function() {
+  'use strict';
+
+  const state = {
+    currentSymbol: 'BTCUSDT',
+    balance: 10000.0,
+    positions: [],
+    trades: [],
+    prices: {},
+    selectedSide: 'LONG'
+  };
+
+  // ── Demo sembol listesi ──
+  const symbols = [
+    { sym: 'BTCUSDT', name: 'Bitcoin', price: 0, change: 0 },
+    { sym: 'ETHUSDT', name: 'Ethereum', price: 0, change: 0 },
+    { sym: 'SOLUSDT', name: 'Solana', price: 0, change: 0 },
+    { sym: 'BNBUSDT', name: 'BNB', price: 0, change: 0 },
+    { sym: 'XRPUSDT', name: 'Ripple', price: 0, change: 0 },
+    { sym: 'ADAUSDT', name: 'Cardano', price: 0, change: 0 },
+    { sym: 'DOGEUSDT', name: 'Dogecoin', price: 0, change: 0 },
+    { sym: 'TRXUSDT', name: 'TRON', price: 0, change: 0 },
+    { sym: 'AVAXUSDT', name: 'Avalanche', price: 0, change: 0 },
+    { sym: 'LINKUSDT', name: 'Chainlink', price: 0, change: 0 },
+    { sym: 'SUIUSDT', name: 'Sui', price: 0, change: 0 },
+    { sym: 'TONUSDT', name: 'Toncoin', price: 0, change: 0 },
+  ];
+
+  // ── Fetch real prices from Binance ──
+  async function fetchPrices() {
+    try {
+      const res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+      const data = await res.json();
+      data.forEach(t => {
+        if (t.symbol.endsWith('USDT')) {
+          state.prices[t.symbol] = {
+            price: parseFloat(t.lastPrice),
+            change: parseFloat(t.priceChangePercent),
+            high: parseFloat(t.highPrice),
+            low: parseFloat(t.lowPrice),
+            volume: parseFloat(t.volume)
+          };
+        }
+      });
+      renderSymbolList();
+      updateChartHeader();
+    } catch (e) {
+      console.log('Fiyat alınamadı:', e);
+    }
+  }
+
+  // ── Render symbol list ──
+  function renderSymbolList() {
+    const list = document.getElementById('symbol-list');
+    if (!list) return;
+    const filter = (document.getElementById('symbol-search')?.value || '').toUpperCase();
+    let html = '';
+    symbols.forEach(s => {
+      const p = state.prices[s.sym];
+      if (!p) return;
+      if (filter && !s.sym.includes(filter)) return;
+      const changeClass = p.change >= 0 ? 'up' : 'down';
+      const activeClass = s.sym === state.currentSymbol ? 'active' : '';
+      html += `
+        <div class="pro-symbol-row ${activeClass}" data-symbol="${s.sym}">
+          <div class="sym">${s.sym.replace('USDT', '')} <span>/USDT</span></div>
+          <div class="price ${changeClass}">${p.price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+          <div class="change ${changeClass}">${p.change >= 0 ? '+' : ''}${p.change.toFixed(2)}%</div>
+        </div>
+      `;
+    });
+    list.innerHTML = html || '<div class="empty" style="padding:20px;text-align:center;color:var(--text-muted);">Veri yok</div>';
+
+    // Click handlers
+    list.querySelectorAll('.pro-symbol-row').forEach(row => {
+      row.addEventListener('click', () => {
+        state.currentSymbol = row.dataset.symbol;
+        renderSymbolList();
+        updateChartHeader();
+      });
+    });
+  }
+
+  // ── Update chart header ──
+  function updateChartHeader() {
+    const p = state.prices[state.currentSymbol];
+    if (!p) return;
+    const title = document.querySelector('.pro-chart-title');
+    const price = document.getElementById('chart-price');
+    const change = document.getElementById('chart-change');
+    if (title) title.innerHTML = `${state.currentSymbol.replace('USDT', '')}<span class="sub">/USDT Spot</span>`;
+    if (price) {
+      price.textContent = p.price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      price.className = 'big ' + (p.change >= 0 ? 'up' : 'down');
+    }
+    if (change) {
+      change.textContent = `${p.change >= 0 ? '+' : ''}${p.change.toFixed(2)}%  H:${p.high.toFixed(2)}  L:${p.low.toFixed(2)}  V:${(p.volume/1e6).toFixed(2)}M`;
+    }
+  }
+
+  // ── Tab switching ──
+  document.querySelectorAll('.pro-order-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.pro-order-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      state.selectedSide = tab.dataset.side;
+      const btn = document.getElementById('order-btn');
+      if (btn) {
+        btn.className = 'pro-btn ' + (state.selectedSide === 'LONG' ? 'pro-btn-buy' : 'pro-btn-sell');
+        btn.textContent = '🔒 PAPER — ' + (state.selectedSide === 'LONG' ? 'AL' : 'SAT') + ' (Simülasyon)';
+      }
+    });
+  });
+
+  // ── Search filter ──
+  const searchInput = document.getElementById('symbol-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', renderSymbolList);
+  }
+
+  // ── Initialize ──
+  fetchPrices();
+  setInterval(fetchPrices, 5000); // 5s refresh
+
+})();
+</script>
+
+{% endblock %}

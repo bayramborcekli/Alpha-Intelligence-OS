@@ -796,12 +796,23 @@
       return;
     }
     if (lastEl) lastEl.textContent = d.last_refresh || "UNKNOWN";
-    if (errEl) errEl.textContent = d.last_error ?
-      " — Son hata: " + d.last_error : "";
+    var runtimeHealth = d.runtime_health || {};
+    if (errEl) {
+      if (runtimeHealth.status === "RUNTIME_CORRUPT") {
+        errEl.textContent = " — RUNTIME_CORRUPT" +
+          (runtimeHealth.quarantine_path ?
+            " · Karantina: " + runtimeHealth.quarantine_path : "");
+      } else {
+        errEl.textContent = d.last_error ?
+          " — Son hata: " + d.last_error : "";
+      }
+    }
     var c = d.counters || {};
     var coreOk = (c.core_universe || 0) > 0;
     var oppOk = (c.opportunity_universe || 0) > 0;
-    if (d.last_error) {
+    if (runtimeHealth.status === "RUNTIME_CORRUPT") {
+      set("KIRMIZI — RUNTIME_CORRUPT", "#f85149", "#0d1117");
+    } else if (d.last_error) {
       set("KIRMIZI — hata", "#f85149", "#0d1117");
     } else if (coreOk && oppOk) {
       set("YEŞİL", "#3fb950", "#0d1117");

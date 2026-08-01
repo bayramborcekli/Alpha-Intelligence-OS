@@ -151,10 +151,11 @@ LOG_TIMESTAMP_PATTERN = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}
 DEFAULT_CONFIG: dict[str, Any] = {
     "mode": "PAPER",
     "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-    "minimum_score": 65, "scan_seconds": 60,
+    "minimum_score": 72, "scan_seconds": 60,
     "risk_per_trade_pct": 0.5, "daily_loss_limit_pct": 1.5,
     "max_consecutive_losses": 3, "reward_risk_ratio": 2.0,
-    "atr_stop_multiplier": 1.5, "max_open_positions": 1,
+    "atr_stop_multiplier": 3.0, "max_open_positions": 1,
+    "fee_safety_factor": 3.0,
 }
 
 SETTING_RULES: dict[str, tuple[str, float, float]] = {
@@ -166,6 +167,7 @@ SETTING_RULES: dict[str, tuple[str, float, float]] = {
     "reward_risk_ratio":       ("float", 1.0, 5.0),
     "atr_stop_multiplier":     ("float", 0.5, 5.0),
     "max_open_positions":      ("int",   1,   5),
+    "fee_safety_factor":       ("float", 1.0, 5.0),
 }
 
 ADAPTIVE_SETTING_RULES: dict[str, tuple[str, float, float]] = {
@@ -816,6 +818,7 @@ def setting_fields(config: dict[str, Any] | None) -> list[dict[str, Any]]:
         "reward_risk_ratio":      ("Ödül / Risk Oranı",          "number", "0.1"),
         "atr_stop_multiplier":    ("ATR Stop Çarpanı",           "number", "0.1"),
         "max_open_positions":     ("Maks. Açık Pozisyon",        "number", "1"),
+        "fee_safety_factor":      ("Fee Güvenlik Çarpanı",       "number", "0.1"),
     }
     fields = []
     for name, (kind, lo, hi) in SETTING_RULES.items():
@@ -4192,6 +4195,12 @@ def trading_home_page():
     return _render_workspace("trading_home.html", "trading_home")
 
 
+@app.get("/trading-pro")
+def trading_pro_page():
+    # ADR-015: modern Binance-benzeri PAPER trading ekranı.
+    return _render_workspace("trading_pro.html", "trading_pro")
+
+
 @app.get("/operation-center")
 def operation_center_page():
     return _render_workspace("operation_control.html",
@@ -4707,6 +4716,58 @@ def api_paper_state():
     resp = jsonify(payload)
     resp.headers["Cache-Control"] = "no-store, private"
     return resp
+
+
+@app.get("/api/paper/validation")
+def api_paper_validation():
+    """ADR-018 Windows Paper terfi kanıtı — salt okunur.
+
+    Yerel kanonik Paper runtime dosyalarını okur; borsa çağrısı, emir veya
+    dosya yazımı yapmaz. Beklenmeyen hata steril kodla fail-closed döner.
+    Kimlik doğrulama uygulamanın ortak ``before_request`` kapısındadır.
+    """
+    try:
+        import paper_validation_api as pva
+        payload = pva.snapshot()
+    except Exception:
+        payload = {
+            "ok": False,
+            "error": {
+                "code": "PAPER_VALIDATION_UNAVAILABLE",
+                "message": "Paper doğrulama verisi alınamadı.",
+            },
+            "live_orders": "DISABLED",
+            "exchange_write_requests": 0,
+        }
+        status = 503
+    else:
+        status = 200
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = "no-store, private"
+    return resp, status
+
+
+@app.get("/api/paper-profit/evidence")
+def api_paper_profit_evidence():
+    """ADR-024 gerçek 4h Spot kanıt raporu — salt okunur."""
+    try:
+        import paper_profit_api as ppa
+        payload = ppa.snapshot()
+    except Exception:
+        payload = {
+            "ok": False,
+            "status": "DATA_UNAVAILABLE",
+            "activation": "BLOCKED_INVALID_EVIDENCE",
+            "message": "Kârlılık kanıt raporu alınamadı.",
+            "live_orders": "DISABLED",
+            "exchange_write_requests": 0,
+        }
+        status = 503
+    else:
+        status = 200
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = "no-store, private"
+    return resp, status
 
 
 @app.get("/api/risk-profile")

@@ -45,6 +45,10 @@ _last_status: dict[str, Any] = {
     "safe_mode_reason": "",
 }
 _status_lock = threading.Lock()
+_STATE_HEALTH: dict[str, Any] = {
+    "status": "UNKNOWN", "error": None,
+    "quarantine_path": None, "checked_at": None,
+}
 
 
 def get_status() -> dict[str, Any]:
@@ -55,6 +59,7 @@ def get_status() -> dict[str, Any]:
     st["runtime_override"] = bool(RUNTIME_ADAPTIVE_OVERRIDE)
     if RUNTIME_ADAPTIVE_OVERRIDE:
         st["runtime_override_flags"] = dict(RUNTIME_ADAPTIVE_OVERRIDE)
+    st["state_health"] = dict(_STATE_HEALTH)
     return st
 
 
@@ -165,28 +170,193 @@ def _load_config() -> dict[str, Any] | None:
 
 
 def _load_state() -> dict[str, Any] | None:
+    corrupt_path = STATE_PATH.with_suffix(".corrupt")
+    if not STATE_PATH.exists() and corrupt_path.exists():
+        _STATE_HEALTH.update({
+            "status": "RUNTIME_CORRUPT",
+            "error": "Operatör müdahalesi gerekli",
+            "quarantine_path": corrupt_path.name,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return None
     if not STATE_PATH.exists():
+        _STATE_HEALTH.update({
+            "status": "MISSING", "error": None,
+            "quarantine_path": None,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        })
         return None
     try:
         with STATE_PATH.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
+            state = json.load(f)
+        if not isinstance(state, dict):
+            raise ValueError("State root is not a dict")
+        if not isinstance(state.get("trades", []), list):
+            raise ValueError("Corrupt trades field")
+        if state.get("position") is not None and not isinstance(
+                state.get("position"), dict):
+            raise ValueError("Corrupt position field")
+        if not isinstance(state.get("balance"), (int, float)):
+            raise ValueError("Corrupt balance field")
+        _STATE_HEALTH.update({
+            "status": "HEALTHY", "error": None,
+            "quarantine_path": None,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return state
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        target = corrupt_path
+        if target.exists():
+            target = STATE_PATH.with_name(
+                f"{STATE_PATH.stem}.{int(time.time() * 1000)}.corrupt")
+        try:
+            STATE_PATH.replace(target)
+        except OSError as move_exc:
+            log.error("STATE_CORRUPT_QUARANTINE_FAILED | %s", move_exc)
+            target = None
+        _STATE_HEALTH.update({
+            "status": "RUNTIME_CORRUPT", "error": str(exc),
+            "quarantine_path": target.name if target else None,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        })
+        log.error("RUNTIME_CORRUPT | state.json karantinaya alındı: %s", exc)
         return None
 
 
 def _save_state(state: dict[str, Any]) -> None:
-    tmp = STATE_PATH.with_name(".state.tmp")
+    if not isinstance(state, dict) or not isinstance(
+            state.get("trades", []), list):
+        raise ValueError("Geçersiz state mutasyonu")
+    tmp = STATE_PATH.with_name(
+        f".{STATE_PATH.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
+        if STATE_PATH.exists():
+            bak = STATE_PATH.with_suffix(".bak")
+            bak_tmp = bak.with_name(
+                f".{bak.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+            try:
+                with bak_tmp.open("wb") as f:
+                    f.write(STATE_PATH.read_bytes())
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(bak_tmp, bak)
+            finally:
+                bak_tmp.unlink(missing_ok=True)
         with tmp.open("w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
             f.flush()
             os.fsync(f.fileno())
-        tmp.replace(STATE_PATH)
+        os.replace(tmp, STATE_PATH)
+        if os.name != "nt":
+            dir_fd = os.open(str(STATE_PATH.parent), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        _STATE_HEALTH.update({
+            "status": "HEALTHY", "error": None,
+            "quarantine_path": None,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        })
     except OSError as exc:
         log.error("state.json kaydedilemedi: %s", exc)
+        raise RuntimeError("state.json mutation failed") from exc
     finally:
         if tmp.exists():
             tmp.unlink(missing_ok=True)
+
+
+def _fetch_spot_market_snapshot() -> dict[str, dict[str, float]]:
+    """Tek GET ile gerçek Spot 24s hacim, spread ve değişim verisi."""
+    import dual_model
+
+    out: dict[str, dict[str, float]] = {}
+    for row in dual_model.fetch_spot_tickers():
+        if not isinstance(row, dict):
+            continue
+        try:
+            symbol = str(row["symbol"])
+            last = float(row["lastPrice"])
+            bid = float(row["bidPrice"])
+            ask = float(row["askPrice"])
+            quote_volume = float(row["quoteVolume"])
+            change_pct = float(row.get("priceChangePercent", 0.0))
+            trade_count = float(row.get("count", 0.0))
+            if last <= 0 or bid <= 0 or ask <= bid or quote_volume < 0:
+                continue
+            out[symbol] = {
+                "last": last,
+                "quote_volume": quote_volume,
+                "spread_pct": (ask - bid) / last * 100.0,
+                "change_pct": change_pct,
+                "trade_count": trade_count,
+            }
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def _interval_seconds(interval: str) -> int:
+    units = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
+    try:
+        return int(interval[:-1]) * units[interval[-1].lower()]
+    except (KeyError, TypeError, ValueError, IndexError):
+        return 900
+
+
+def _closed_candle_timestamp_ok(df: Any, interval: str,
+                                now: float | None = None) -> bool:
+    """Sinyalde kullanılan son kapanmış mum bayat mı?"""
+    if now is None:
+        now = time.time()
+    try:
+        row = df.iloc[-2]
+        raw = float(row.get("close_time", row.get("open_time")))
+        candle_ts = raw / 1000.0 if raw > 10_000_000_000 else raw
+        age = now - candle_ts
+        return 0 <= age <= _interval_seconds(interval) * 2
+    except (AttributeError, IndexError, TypeError, ValueError):
+        return False
+
+
+def _liquidity_from_market(ticker: dict[str, float]) -> float:
+    """Gerçek 24s hacim ve bid/ask spread'den 0-100 puan."""
+    volume = ticker["quote_volume"]
+    spread = ticker["spread_pct"]
+    if volume >= 5_000_000_000:
+        volume_score = 100.0
+    elif volume >= 1_000_000_000:
+        volume_score = 90.0
+    elif volume >= 500_000_000:
+        volume_score = 80.0
+    elif volume >= 100_000_000:
+        volume_score = 70.0
+    elif volume >= 50_000_000:
+        volume_score = 60.0
+    elif volume >= 10_000_000:
+        volume_score = 45.0
+    else:
+        volume_score = 20.0
+    if spread <= 0.02:
+        spread_score = 100.0
+    elif spread <= 0.05:
+        spread_score = 80.0
+    elif spread <= 0.10:
+        spread_score = 60.0
+    elif spread <= 0.15:
+        spread_score = 40.0
+    else:
+        spread_score = 20.0
+    return min(volume_score, spread_score)
+
+
+def _independent_coin_score(side: str | None,
+                            ticker: dict[str, float]) -> float:
+    """Strateji skorundan bağımsız 24s yönsel göreli-güç puanı."""
+    change = ticker["change_pct"]
+    aligned = change if side == "LONG" else -change if side == "SHORT" \
+        else 0.0
+    return max(0.0, min(100.0, 50.0 + aligned * 5.0))
 
 
 def _validate_adaptive_config(cfg: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
@@ -208,6 +378,7 @@ def _validate_adaptive_config(cfg: dict[str, Any]) -> tuple[bool, dict[str, Any]
         "minimum_learning_trades":    20,
         "max_daily_weight_change_pct": 5,
         "cooldown_minutes":           60,
+        "min_hold_hours":             4.0,
         "break_even_enabled":         False,
         "trailing_stop_enabled":      False,
         "partial_take_profit_enabled": False,
@@ -313,10 +484,32 @@ def _run_single_cycle(
     weights      = le.load_weights()
     weight_dict  = {k: v for k, v in weights.items() if not str(k).startswith("_")}
 
+    market_snapshot: dict[str, dict[str, float]] = {}
+    if symbols:
+        try:
+            market_snapshot = _fetch_spot_market_snapshot()
+        except Exception as exc:
+            ms.append_system_error(
+                component="auto_controller",
+                error_type="SPOT_TICKER_READ_ERROR",
+                message=str(exc)[:200], safe_state_activated=True)
+
     current_pos  = trading_state.get("position")
     pos_symbol   = current_pos.get("symbol") if isinstance(current_pos, dict) else None
 
     for symbol in symbols:
+        market_ticker = market_snapshot.get(symbol)
+        if market_ticker is None:
+            decisions.append({
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "symbol": symbol, "side": None,
+                "strategy_score": None, "regime_score": None,
+                "coin_score": None, "risk_score": None,
+                "final_score": 0.0, "category": "NO_TRADE",
+                "decision": "REJECT",
+                "reason": "DATA_QUALITY — gerçek Spot ticker verisi yok",
+            })
+            continue
         try:
             _process_symbol(
                 symbol=symbol,
@@ -330,12 +523,23 @@ def _run_single_cycle(
                 pos_symbol=pos_symbol,
                 decisions=decisions,
                 reward_risk=reward_risk,
+                market_ticker=market_ticker,
             )
         except Exception as exc:
             log.warning("Sembol işlenirken hata (%s): %s", symbol, exc)
             ms.append_system_error(component="auto_controller",
                                    error_type="SYMBOL_ERROR",
                                    message=f"{symbol}: {str(exc)[:200]}")
+
+    try:
+        _save_state(trading_state)
+    except Exception as exc:
+        ms.append_system_error(
+            component="auto_controller", error_type="STATE_WRITE_ERROR",
+            message=str(exc)[:200], safe_state_activated=True)
+        sg.lock_safety("state.json yazılamadı.")
+        _update_status(safe_mode=True,
+                       safe_mode_reason="state.json yazılamadı.")
 
     ms.update_panel_status({"last_decisions": decisions[:20],
                             "last_cycle": datetime.now(timezone.utc).isoformat()})
@@ -354,6 +558,7 @@ def _process_symbol(
     pos_symbol: str | None,
     decisions: list,
     reward_risk: float,
+    market_ticker: dict[str, float],
 ) -> None:
     import metrics_store   as ms
     import safety_guard    as sg
@@ -369,9 +574,11 @@ def _process_symbol(
     sys.path.insert(0, str(ROOT))
     import alpha20
 
+    fast_interval = config.get("interval", "15m")
+    trend_interval = config.get("trend_interval", "1h")
     try:
-        df_fast  = alpha20.fetch_klines(symbol, config.get("interval", "15m"))
-        df_trend = alpha20.fetch_klines(symbol, config.get("trend_interval", "1h"))
+        df_fast  = alpha20.fetch_klines(symbol, fast_interval)
+        df_trend = alpha20.fetch_klines(symbol, trend_interval)
         df_fast  = alpha20.add_indicators(df_fast)
         df_trend = alpha20.add_indicators(df_trend)
     except Exception as exc:
@@ -386,14 +593,25 @@ def _process_symbol(
     regime_score_val = mr.regime_score(coin_regime_info)
 
     # Veri kalitesi
+    previous_prices = trading_state.setdefault("last_prices", {})
+    previous_price = previous_prices.get(symbol)
+    if not isinstance(previous_price, (int, float)) or previous_price <= 0:
+        previous_price = 0.0
+    timestamp_ok = (
+        _closed_candle_timestamp_ok(df_fast, fast_interval)
+        and _closed_candle_timestamp_ok(df_trend, trend_interval)
+    )
     dq_score = de.calculate_data_quality(
         df_15m_len=len(df_fast), df_1h_len=len(df_trend),
-        timestamp_ok=True, price=price,
-        prev_price=price,  # basit: prev bilinmiyor
+        timestamp_ok=timestamp_ok, price=price,
+        prev_price=float(previous_price),
     )
 
-    # Hacim (ticker'dan al)
-    vol_24h = float(details.get("volume_ratio", 1) * 1e9)  # tahmin
+    # Gerçek Spot ticker girdileri; tahmin/sabit değer yok.
+    vol_24h = market_ticker["quote_volume"]
+    liquidity_score = _liquidity_from_market(market_ticker)
+    coin_score = _independent_coin_score(side, market_ticker)
+    atr_pct = (atr / price * 100.0) if price > 0 else 0.0
 
     # Paper geçmiş puanı
     trades = trading_state.get("trades", [])
@@ -404,9 +622,9 @@ def _process_symbol(
         strategy_score=float(strategy_score),
         regime_score=regime_score_val,
         regime_confidence=float(coin_regime_info.get("confidence", 0)),
-        coin_score=float(strategy_score),   # coin score ≈ strategy score
+        coin_score=coin_score,
         volume_24h_usdt=vol_24h,
-        atr_pct=float(coin_regime_info.get("atr_pct", 2.0)),
+        atr_pct=atr_pct,
         regime=coin_regime_info.get("regime", "Belirsiz"),
         paper_hist_score=ph_score,
         data_quality_score=dq_score,
@@ -432,7 +650,7 @@ def _process_symbol(
         final_score=final_score,
         regime_confidence=float(coin_regime_info.get("confidence", 0)),
         data_quality_score=dq_score,
-        liquidity_score=70.0,   # varsayılan
+        liquidity_score=liquidity_score,
         risk_allowed=risk_res.allowed,
         daily_loss_ok=not sg.get_safety_state().get("daily_loss_block"),
         max_positions_ok=open_count < max_pos,
@@ -479,6 +697,15 @@ def _process_symbol(
                            else "NO_TRADE"),
         "rejection_reason": (decision_reason
                              if decision_type != "OPEN" else ""),
+        "market_data": {
+            "timestamp_ok": timestamp_ok,
+            "previous_price": (float(previous_price)
+                               if previous_price > 0 else None),
+            "quote_volume_24h": vol_24h,
+            "spread_pct": market_ticker["spread_pct"],
+            "liquidity_score": liquidity_score,
+            "coin_score": coin_score,
+        },
     }
     try:
         from services import risk_profiles as rp
@@ -502,13 +729,14 @@ def _process_symbol(
         "symbol": symbol, "side": side,
         "strategy_score": round(float(strategy_score), 1),
         "regime_score": round(regime_score_val, 1),
-        "coin_score": round(float(strategy_score), 1),
+        "coin_score": round(coin_score, 1),
         "risk_score": round(risk_res.risk_pct * 100, 1),
         "final_score": round(final_score, 1),
         "category": category,
         "decision": decision_type,
         "reason": decision_reason,
     })
+    previous_prices[symbol] = price
 
     # Otomatik PAPER modu — işlem aç
     if (approved and auto_paper and mode == "AUTO" and
@@ -610,6 +838,7 @@ def _open_paper_trade(
         "stop": stop, "target": target, "quantity": qty,
         "risk_usdt": round(risk_usdt, 4),
         "opened_at": datetime.now(timezone.utc).isoformat(),
+        "min_hold_hours": float(adaptive_cfg.get("min_hold_hours", 4.0)),
         # Genişletilmiş alanlar
         "regime": coin_regime, "final_score": round(final_score, 2),
         "reason": reason, "atr": atr, "rr": actual_rr,

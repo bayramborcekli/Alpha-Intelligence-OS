@@ -173,6 +173,8 @@
       border:1px solid var(--border,#30363d); border-radius:6px;
       padding:6px 8px; }
 </style>
+<link rel="stylesheet"
+      href="{{ url_for('static', filename='css/trading_home_v2.css') }}?v={{ app_version }}">
 
 <!-- ── ÜST DURUM ŞERİDİ: tek yatay satır ─────────────────────────── -->
 <header id="th-topbar" aria-label="Portföy özeti">
@@ -227,6 +229,43 @@
           aria-label="risk kullanım çubuğu"></span></div>
 </div>
 
+<!-- ADR-024: gerçek 4h Spot validation/holdout kanıtı; sahte sonuç üretmez. -->
+<section class="th-card th-validation" id="th-validation"
+         aria-labelledby="th-h-validation">
+  <div class="th-val-head">
+    <div class="th-val-title">
+      <span class="th-val-mark" aria-hidden="true">P</span>
+      <div>
+        <h2 id="th-h-validation">PAPER PROFIT V1 — 4 SAATLİK KANIT</h2>
+        <p>Trend filtreli kanal kırılımı · Sonraki mumda giriş · Volatiliteye uyumlu zarar kesme · %0,30 maliyet · Validation + dokunulmamış holdout · Canlı emir yok</p>
+      </div>
+    </div>
+    <span class="th-val-status wait" id="th-val-status">VERİ BEKLENİYOR</span>
+  </div>
+  <div class="th-val-grid">
+    <div class="th-val-kpi"><b>Zaman Dilimi</b>
+      <strong id="th-val-hour">4 saat</strong><small>Spot · long only</small></div>
+    <div class="th-val-kpi"><b>Veri Kapsamı</b>
+      <strong id="th-val-coverage">—</strong>
+      <small id="th-val-coverage-note">gerçek Binance mumları</small></div>
+    <div class="th-val-kpi"><b>Validation Net</b>
+      <strong id="th-val-net">—</strong><small>maliyet sonrası %</small></div>
+    <div class="th-val-kpi"><b>Validation PF</b>
+      <strong id="th-val-pf">—</strong><small>hedef ≥ 1,20</small></div>
+    <div class="th-val-kpi"><b>Holdout Net</b>
+      <strong id="th-val-trades">—</strong><small>maliyet sonrası %</small></div>
+    <div class="th-val-kpi"><b>Holdout PF</b>
+      <strong id="th-val-capacity">—</strong><small>hedef ≥ 1,20</small></div>
+  </div>
+  <div class="th-val-foot">
+    <span id="th-val-note">Gerçek 4 saatlik piyasa kanıtı bekleniyor.</span>
+    <span id="th-val-learning">Parametreler yalnız train bölümünden seçilir.</span>
+    <span class="th-val-hours" id="th-val-hours"
+          aria-label="Son tamamlanan saatler"></span>
+    <span id="th-val-updated"></span>
+  </div>
+</section>
+
 <!-- ── Yetim (ORPHAN) legacy kayıt bildirimi — Task 145 ──────────
      state.json'daki ORPHAN_POSITION artığı aktif listede görünmez;
      burada bildirilir ve operatör onayıyla tek tıkla temizlenir. -->
@@ -265,18 +304,19 @@
 
     <!-- ── İKİ MODEL ayrıntısı: sağlık + pozisyonlar + performans
          (tek kanonik /api/dual-model/state snapshot'ından) ─────── -->
-    <section class="th-card" style="margin-top:10px"
+    <details class="th-card th-diagnostics"
              aria-labelledby="th-h-dual">
-      <h2 id="th-h-dual">Kısa Vadeli Modeller
-        <span style="font-size:.68rem;color:var(--muted,#8b949e)">
-          (PAPER — LIVE ORDERS DISABLED)</span>
+      <summary id="th-h-dual">Model Ayrıntıları ve Öğrenme
+        <span style="font-size:.62rem;color:var(--muted,#8b949e)">
+          PAPER · CANLI EMİR KAPALI</span>
         <!-- Task 135: dual-model sağlık rozeti — listeler dolu ve
              hata yoksa YEŞİL, listeler boşsa SARI, last_error /
              state alınamıyorsa KIRMIZI. -->
         <span id="th-dm-health" class="th-badge"
               style="font-size:.68rem;padding:2px 8px;
                      border-radius:10px;background:#30363d;
-                     color:#8b949e">SAĞLIK: UNKNOWN</span></h2>
+                     color:#8b949e">SAĞLIK: UNKNOWN</span></summary>
+      <div class="th-diagnostics-body">
       <div id="th-dm-health-detail" style="font-size:.7rem;
           color:var(--muted,#8b949e);margin:2px 0 4px">
         Son yenileme: <span id="th-dm-last-refresh">UNKNOWN</span>
@@ -397,7 +437,8 @@
             UNKNOWN — lab durumu alınamadı</div>
         </div>
       </div>
-    </section>
+      </div>
+    </details>
   </div>
 
   <div>
@@ -406,6 +447,12 @@
       <h2 id="th-h-ai">🤖 AI Durumu</h2>
       <div class="mode" id="th-ai-mode">UNKNOWN</div>
       <div class="sent" id="th-ai-sentence">Durum alınamadı.</div>
+      <div class="row"><span>Karar Motoru</span>
+        <span id="th-ai-decision-profile" class="th-unknown">UNKNOWN</span></div>
+      <div class="row"><span>Piyasa Rejimi</span>
+        <span id="th-ai-regime" class="th-unknown">UNKNOWN</span></div>
+      <div class="row"><span>En İyi Net-EV Adayı</span>
+        <span id="th-ai-ranked" class="th-unknown">UNKNOWN</span></div>
       <div class="row"><span>İzlenen Piyasalar</span>
         <span id="th-ai-scanned" class="th-unknown">UNKNOWN</span></div>
       <div class="row"><span>Uygun Fırsatlar</span>
@@ -520,9 +567,10 @@
 </div>
 
 <!-- ── WINDOWS RUNTIME (Runtime Control Bridge — salt okunur) ────── -->
-<section class="th-card" style="margin-top:10px" id="th-winrt"
+<details class="th-card th-runtime" style="margin-top:12px" id="th-winrt"
          aria-labelledby="th-h-winrt">
-  <h2 id="th-h-winrt">WINDOWS RUNTIME</h2>
+  <summary id="th-h-winrt">Windows Runtime</summary>
+  <div class="th-runtime-body">
   <div style="display:flex; flex-wrap:wrap; gap:18px; align-items:center">
     <span id="th-winrt-badge" style="font-weight:800">⏳ Yükleniyor…</span>
     <span><b style="color:var(--muted,#8b949e); font-size:.65rem;
@@ -547,7 +595,8 @@
        color:var(--muted,#8b949e)"></div>
   <div id="th-winrt-version" style="margin-top:4px; font-size:.68rem;
        color:var(--muted,#8b949e)"></div>
-</section>
+  </div>
+</details>
 <script>
 (function () {
   function set(id, v) {

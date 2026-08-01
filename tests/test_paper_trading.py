@@ -55,6 +55,7 @@ def base_config(**overrides):
         "reward_risk_ratio": 2.0,
         "atr_stop_multiplier": 1.5,
         "max_open_positions": 1,
+        "min_hold_hours": 0.0,
     }
     cfg.update(overrides)
     return cfg

@@ -680,18 +680,35 @@ def dual_model_open_positions() -> dict[str, Any]:
 
     Çapraz motor risk birleşimi: legacy bot ile dual-model aynı Paper
     portföyünü paylaşır; toplam tavan ve mükerrer-sembol engeli iki
-    yönde de uygulanır. Dosya yoksa/okunamazsa boş dict.
+    yönde de uygulanır. Bozuk runtime boş portföy sayılamaz: dosya
+    karantinaya alınır ve yeni girişler fail-closed durur.
     """
+    corrupt_path = DUAL_MODEL_RUNTIME_PATH.with_suffix(".corrupt")
+    if not DUAL_MODEL_RUNTIME_PATH.exists() and corrupt_path.exists():
+        raise RuntimeError("RUNTIME_CORRUPT — operatör müdahalesi gerekli")
+    if not DUAL_MODEL_RUNTIME_PATH.exists():
+        return {}
     try:
-        if DUAL_MODEL_RUNTIME_PATH.exists():
-            with DUAL_MODEL_RUNTIME_PATH.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-            pos = data.get("positions") if isinstance(data, dict) else None
-            if isinstance(pos, dict):
-                return pos
-    except (OSError, json.JSONDecodeError):
-        pass
-    return {}
+        with DUAL_MODEL_RUNTIME_PATH.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError("Runtime root is not a dict")
+        pos = data.get("positions", {})
+        if not isinstance(pos, dict):
+            raise ValueError("Corrupt positions field")
+        return pos
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        target = corrupt_path
+        if target.exists():
+            target = DUAL_MODEL_RUNTIME_PATH.with_name(
+                f"{DUAL_MODEL_RUNTIME_PATH.stem}."
+                f"{int(time.time() * 1000)}.corrupt")
+        try:
+            DUAL_MODEL_RUNTIME_PATH.replace(target)
+        except OSError as move_exc:
+            log.error("RUNTIME_CORRUPT_QUARANTINE_FAILED | %s", move_exc)
+        log.error("RUNTIME_CORRUPT | %s", exc)
+        raise RuntimeError("RUNTIME_CORRUPT — yeni giriş durduruldu") from exc
 
 
 def can_open(
@@ -702,7 +719,10 @@ def can_open(
         if symbol is not None and position.get("symbol") == symbol:
             return False, f"{symbol} için zaten açık pozisyon var (mükerrer engellendi)."
         return False, "Açık pozisyon var."
-    dual_pos = dual_model_open_positions()
+    try:
+        dual_pos = dual_model_open_positions()
+    except RuntimeError as exc:
+        return False, str(exc)
     if symbol is not None and symbol in dual_pos:
         return False, (
             f"{symbol} için dual-model motorunda zaten açık pozisyon var "
@@ -780,6 +800,10 @@ def open_paper_position(
         opened_at=datetime.now(timezone.utc).isoformat(),
     )
     state["position"] = asdict(position)
+    min_hold_value = (config.get("adaptive_system") or {}).get(
+        "min_hold_hours", config.get("min_hold_hours", 4.0))
+    state["position"]["min_hold_hours"] = max(
+        0.0, float(4.0 if min_hold_value is None else min_hold_value))
     log.info(
         "PAPER AÇILDI | %s %s | giriş=%.4f stop=%.4f hedef=%.4f risk=%.2f USDT",
         symbol, side, entry, stop, target, risk_usdt,
@@ -805,16 +829,24 @@ def manage_position(state: dict[str, Any]) -> None:
     exit_price = None
     result = None
 
-    # Aynı mum içinde hem stop hem hedef görülürse temkinli olarak stop varsayılır.
+    try:
+        opened = datetime.fromisoformat(pos.opened_at.replace("Z", "+00:00"))
+        held_hours = (datetime.now(timezone.utc) - opened).total_seconds() / 3600
+    except (TypeError, ValueError):
+        held_hours = 0.0
+    min_hold_hours = max(0.0, float(raw.get("min_hold_hours", 0.0) or 0.0))
+    hold_satisfied = held_hours >= min_hold_hours
+
+    # Stop-loss daima aktiftir; minimum tutma yalnız kâr çıkışını erteler.
     if pos.side == "LONG":
         if low <= pos.stop:
             exit_price, result = pos.stop, "LOSS"
-        elif high >= pos.target:
+        elif hold_satisfied and high >= pos.target:
             exit_price, result = pos.target, "WIN"
     else:
         if high >= pos.stop:
             exit_price, result = pos.stop, "LOSS"
-        elif low <= pos.target:
+        elif hold_satisfied and low <= pos.target:
             exit_price, result = pos.target, "WIN"
 
     if exit_price is None:

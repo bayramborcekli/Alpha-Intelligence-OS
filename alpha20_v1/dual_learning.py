@@ -217,16 +217,35 @@ def normalize_trade(t: dict) -> dict:
 
 
 def _read_runtime_trades() -> list[dict]:
+    corrupt_path = RUNTIME_PATH.with_suffix(".corrupt")
+    if not RUNTIME_PATH.exists() and corrupt_path.exists():
+        raise RuntimeError("RUNTIME_CORRUPT — öğrenme ingest durduruldu")
+    if not RUNTIME_PATH.exists():
+        return []
     try:
-        if RUNTIME_PATH.exists():
-            with RUNTIME_PATH.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-            trades = data.get("trades") if isinstance(data, dict) else None
-            if isinstance(trades, list):
-                return trades
-    except (OSError, json.JSONDecodeError):
-        pass
-    return []
+        with RUNTIME_PATH.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError("Runtime root is not a dict")
+        trades = data.get("trades", [])
+        positions = data.get("positions", {})
+        if not isinstance(trades, list):
+            raise ValueError("Corrupt trades field")
+        if not isinstance(positions, dict):
+            raise ValueError("Corrupt positions field")
+        return trades
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        target = corrupt_path
+        if target.exists():
+            target = RUNTIME_PATH.with_name(
+                f"{RUNTIME_PATH.stem}.{int(time.time() * 1000)}.corrupt")
+        try:
+            RUNTIME_PATH.replace(target)
+        except OSError as move_exc:
+            log.error("RUNTIME_CORRUPT_QUARANTINE_FAILED | %s", move_exc)
+        log.error("RUNTIME_CORRUPT | Öğrenme ingest durduruldu: %s", exc)
+        raise RuntimeError("RUNTIME_CORRUPT — öğrenme ingest durduruldu") \
+            from exc
 
 
 def ingest_closed_trades() -> dict[str, int]:
